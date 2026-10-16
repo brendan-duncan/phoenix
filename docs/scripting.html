@@ -58,7 +58,19 @@
   <li>Installing an extension that is already there replaces it.</li>
 </ul>
 
-<p>Phoenix runs an extension's JSFL commands and tools. Panels made as SWF movies, and HTML panels, are installed and listed but do not show yet; the dialog says which an extension has.</p>
+<p>Phoenix runs an extension's JSFL commands and tools, and shows its HTML panels (CEP panels). Panels made as SWF movies are installed and listed but do not show.</p>
+
+<h3 id="html-panels">HTML panels</h3>
+
+<p>An extension's HTML panels are listed under <b>Window &rsaquo; Extensions</b>. Each opens as a dock like Phoenix's own panels, and one left open opens again the next time Phoenix starts. A panel shows in the web view the system provides: WebView2 on Windows (part of Windows 11, and a free install on Windows 10) and WebKit on macOS. On Linux, panels are listed but do not show.</p>
+
+<ul>
+  <li><b>Scripts.</b> A panel's <code>evalScript</code> runs JSFL. Each panel has a script context of its own, loaded with the panel's script file (its manifest's <code>ScriptPath</code>), so the functions and values it keeps stay between calls. Each call that changes a document is one undo step, named after the panel. The result comes back as text, or <code>EvalScript error.</code> when the script fails; the error itself goes to the Output panel.</li>
+  <li><b>What a panel can ask of Phoenix.</b> <code>CSInterface</code> works as panels expect: the host environment and theme colors, system paths, other extensions, opening and closing panels, the window title, the panel menu (the <b>&equiv;</b> button at the panel's top right) and context menus, and opening links in your browser. <code>cep.fs</code> reads and writes files and shows file dialogs.</li>
+  <li><b>Events.</b> Panels can send events to each other with <code>dispatchEvent</code>. Phoenix sends <code>com.adobe.csxs.events.ThemeColorChanged</code> when the theme changes, and <code>com.adobe.events.flash.</code> followed by the JSFL event name (<code>documentChanged</code>, <code>selectionChanged</code>, <code>timelineChanged</code> and the rest) whenever scripts' listeners hear one.</li>
+  <li><b>Starting.</b> A panel whose manifest starts it with the application (<code>&lt;StartOn&gt;</code> with <code>com.adobe.csxs.events.ApplicationActivate</code>) runs out of sight from when Phoenix starts until it is opened.</li>
+  <li><b>Not there.</b> Panels have no Node.js (<code>require</code>, <code>cep_node</code>) and cannot start processes (<code>cep.process</code>); installing one that asks for Node.js says so.</li>
+</ul>
 
 <h2>The Output panel</h2>
 

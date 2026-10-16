@@ -977,6 +977,8 @@ private:
     QDockWidget* _palettesDock = nullptr;
     /// JSFL scripts: the Commands menu and the Output panel.
     class ScriptRunner* _scripts = nullptr;
+    /// The installed extensions' HTML panels.
+    class CepPanels* _cepPanels = nullptr;
     /// Edit > Find and Replace, made when first asked for.
     class FindReplaceDialog* _findReplace = nullptr;
     void showFindReplace();

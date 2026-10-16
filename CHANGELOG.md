@@ -2,6 +2,10 @@
 
 What changed in each release of Phoenix, newest first.
 
+## Unreleased
+
+- HTML extension panels (CEP) show in Phoenix: Window > Extensions opens them as docks, their scripts run JSFL in a context that keeps its functions between calls, and their panel menus, context menus, file access and events work
+
 ## 0.14.0
 
 - Native extensions: C and C++ libraries in the External Libraries folder, written for the `mm_jsapi.h` extension API, add functions scripts can call

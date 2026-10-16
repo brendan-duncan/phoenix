@@ -128,9 +128,11 @@ set(HEADERS
     src/gui/claude_code.h
     src/gui/code_editor.h
     src/gui/script_window.h
+    src/gui/cep_panel.h
     src/gui/claude_code_panel.h
     src/gui/pty_process.h
     src/gui/terminal_view.h
+    src/gui/web_view.h
     src/gui/trace_bitmap_dialog.h
     src/gui/test_movie_window.h
     src/gui/command_line.h
@@ -203,6 +205,7 @@ set(HEADERS
     src/jsfl/engine.h
     src/jsfl/behavior_engine.h
     src/jsfl/behavior_frames.h
+    src/jsfl/panel_script.h
     src/jsfl/tool_script.h
     src/jsfl/flfile.h
     src/jsfl/host.h
@@ -408,9 +411,11 @@ set(SOURCES
     src/gui/claude_code.cpp
     src/gui/code_editor.cpp
     src/gui/script_window.cpp
+    src/gui/cep_panel.cpp
     src/gui/claude_code_panel.cpp
     src/gui/pty_process.cpp
     src/gui/terminal_view.cpp
+    src/gui/web_view.cpp
     src/gui/trace_bitmap_dialog.cpp
     src/gui/test_movie_window.cpp
     src/gui/command_line.cpp
@@ -586,7 +591,14 @@ if(PHOENIX_TUTORIAL_FILES)
     qt_add_resources(Phoenix "tutorials" PREFIX "/" BASE "${CMAKE_SOURCE_DIR}/resources"
         FILES ${PHOENIX_TUTORIAL_FILES})
 endif()
+# The CSInterface shim HTML extension panels start with (cep_panel.cpp).
+qt_add_resources(Phoenix "cep" PREFIX "/" BASE "${CMAKE_SOURCE_DIR}/resources"
+    FILES "${CMAKE_SOURCE_DIR}/resources/cep/adobe_cep.js")
 target_compile_definitions(Phoenix PRIVATE PHOENIX_VERSION="${PHOENIX_VERSION}")
+# HTML extension panels: see cmake/PhoenixWebView.cmake.
+include(cmake/PhoenixWebView.cmake)
+phoenix_add_web_view(Phoenix)
+
 if(PHOENIX_UPDATER)
     target_link_libraries(Phoenix PRIVATE velopack)
     target_compile_definitions(Phoenix PRIVATE PHOENIX_UPDATER)

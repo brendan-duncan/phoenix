@@ -17,6 +17,7 @@
 #include "../edit/selection.h"
 #include "../edit/timeline_edit.h"
 #include "../jsfl/engine.h"
+#include "../jsfl/panel_script.h"
 #include "../jsfl/flfile.h"
 #include "../parser/extension_package.h"
 #include "../parser/fla_parser.h"
@@ -716,6 +717,60 @@ private:
     std::map<const fla::FLADocument*, int> _layers;
 };
 
+/// A long run brings up a dialog whose Stop (or Esc) ends it: poll() is
+/// what the engine calls as the script runs.
+class LongRun
+{
+public:
+    LongRun(MainWindow& window, JsflHost& host, QString name, std::function<void()> stop)
+        : _window(window)
+        , _host(host)
+        , _name(std::move(name))
+        , _stop(std::move(stop))
+        , _dialogsShown(host.dialogsShown)
+    {
+        _clock.start();
+    }
+
+    void poll()
+    {
+        if (noOneToAsk(_window))
+            return;
+        // Time the person spends in a script's dialog is not the script
+        // running long.
+        if (_host.dialogsOpen > 0 || _host.dialogsShown != _dialogsShown)
+        {
+            _dialogsShown = _host.dialogsShown;
+            _clock.restart();
+            if (_host.dialogsOpen > 0)
+                return;
+        }
+        if (!_progress && _clock.elapsed() > 1000)
+        {
+            _progress = std::make_unique<QProgressDialog>(QString("Running %1...").arg(_name), "Stop", 0, 0, &_window);
+            _progress->setWindowTitle("Phoenix");
+            _progress->setWindowModality(Qt::WindowModal);
+            _progress->setMinimumDuration(0);
+            _progress->show();
+        }
+        if (_progress)
+        {
+            QCoreApplication::processEvents();
+            if (_progress->wasCanceled())
+                _stop();
+        }
+    }
+
+private:
+    MainWindow& _window;
+    JsflHost& _host;
+    QString _name;
+    std::function<void()> _stop;
+    QElapsedTimer _clock;
+    std::unique_ptr<QProgressDialog> _progress;
+    int _dialogsShown = 0;
+};
+
 ScriptRunner::ScriptRunner(MainWindow& window)
     : QObject(&window)
     , _window(window)
@@ -778,6 +833,36 @@ void ScriptRunner::dispatchEvent(const char* type)
         _engine->dispatch(type);
     if (_python)
         _python->dispatch(type);
+    emit eventDispatched(QString::fromLatin1(type));
+}
+
+QString ScriptRunner::settingsFolder()
+{
+    return settingsBase();
+}
+
+std::unique_ptr<jsfl::PanelScript> ScriptRunner::panelScript(const QString& name)
+{
+    return std::make_unique<jsfl::PanelScript>(*_host, name.toStdString());
+}
+
+jsfl::PanelScript::Result ScriptRunner::evaluate(jsfl::PanelScript& script, const QString& code, const QString& name)
+{
+    jsfl::PanelScript::Result result;
+    if (running() || script.running())
+    {
+        result.ok = false;
+        result.error = "A script is already running.";
+        return result;
+    }
+    _window.settleGestures();
+    if (_window._phoenixView)
+        _window._phoenixView->flushPendingMerge();
+    LongRun watch(_window, *_host, name, [&script]() { script.stop(); });
+    result = script.evaluate(code.toStdString(), [&watch]() { watch.poll(); });
+    if (!result.ok)
+        _output->appendError(QString::fromStdString(result.error));
+    return result;
 }
 
 QString ScriptRunner::configFolder()
@@ -905,42 +990,11 @@ bool ScriptRunner::runFile(const QString& path)
 
     jsfl::RunOptions options;
     options.undoName = QFileInfo(path).completeBaseName().toStdString();
-    // A long run brings up a dialog whose Stop (or Esc) ends it.
-    QElapsedTimer clock;
-    clock.start();
-    std::unique_ptr<QProgressDialog> progress;
-    int dialogsShown = _host->dialogsShown;
-    options.poll = [&]() {
-        if (noOneToAsk(_window))
-            return;
-        // Time the person spends in a script's dialog is not the script
-        // running long.
-        if (_host->dialogsOpen > 0 || _host->dialogsShown != dialogsShown)
-        {
-            dialogsShown = _host->dialogsShown;
-            clock.restart();
-            if (_host->dialogsOpen > 0)
-                return;
-        }
-        if (!progress && clock.elapsed() > 1000)
-        {
-            progress = std::make_unique<QProgressDialog>(QString("Running %1...").arg(QFileInfo(path).fileName()), "Stop", 0, 0, &_window);
-            progress->setWindowTitle("Phoenix");
-            progress->setWindowModality(Qt::WindowModal);
-            progress->setMinimumDuration(0);
-            progress->show();
-        }
-        if (progress)
-        {
-            QCoreApplication::processEvents();
-            if (progress->wasCanceled())
-                stop();
-        }
-    };
+    LongRun watch(_window, *_host, QFileInfo(path).fileName(), [this]() { stop(); });
+    options.poll = [&watch]() { watch.poll(); };
     QApplication::setOverrideCursor(Qt::WaitCursor);
     const jsfl::RunResult result = run(path, options);
     QApplication::restoreOverrideCursor();
-    progress.reset();
     if (!result.ok)
     {
         QString report = QString::fromStdString(result.report());
@@ -1248,7 +1302,7 @@ void ScriptRunner::manageExtensions()
         if (other)
             adds << QString("%1 other file%2").arg(other).arg(other == 1 ? "" : "s");
         for (const extensions::Package::Panel& panel : p.panels)
-            adds << QString("the panel %1 (HTML panels do not show in Phoenix yet)").arg(QString::fromStdString(panel.menu));
+            adds << QString("the panel %1 (in Window > Extensions)").arg(QString::fromStdString(panel.menu));
         if (!adds.isEmpty())
             lines << "Adds " + adds.join(", ") + ".";
         details->setText(lines.join("\n\n"));

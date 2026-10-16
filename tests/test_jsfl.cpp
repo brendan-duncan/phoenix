@@ -22,6 +22,7 @@
 #include "../src/jsfl/flfile.h"
 #include "../src/parser/fla_parser.h"
 #include "../src/writer/fla_writer.h"
+#include "../src/jsfl/panel_script.h"
 
 #include <algorithm>
 #include <cstdlib>
@@ -349,6 +350,41 @@ TEST(jsfl_memory_is_limited)
     CHECK(!result.ok);
     CHECK(result.interrupted);
     CHECK(result.message.find("memory") != std::string::npos);
+}
+
+TEST(jsfl_a_panel_context_keeps_its_functions_between_calls)
+{
+    Fixture f;
+    const std::string folder = scratchFolder("panel");
+    const std::string script = folder + "/host.jsfl";
+    {
+        std::FILE* file = std::fopen(script.c_str(), "wb");
+        const char source[] = "var counter = 0;\nfunction hello(name) { return 'hello ' + name + ' #' + (++counter); }\n";
+        std::fwrite(source, 1, sizeof(source) - 1, file);
+        std::fclose(file);
+    }
+    jsfl::PanelScript panel(f.host, "Test Panel");
+    std::string error;
+    CHECK(panel.load(script, error));
+    CHECK(panel.evaluate("hello('a')").value == "hello a #1");
+    // The same context: what the first call left is still there.
+    CHECK(panel.evaluate("hello('b')").value == "hello b #2");
+    CHECK(panel.evaluate("undefined").value == "undefined");
+    const jsfl::PanelScript::Result thrown = panel.evaluate("throw new Error('boom')");
+    CHECK(!thrown.ok && thrown.error.find("boom") != std::string::npos);
+    // Each call that changes the document is one undo step, named after
+    // the panel.
+    fla::CommandStack& history = f.host.history(f.document);
+    const size_t before = history.count();
+    CHECK(panel.evaluate("var tl = fl.getDocumentDOM().getTimeline(); tl.addNewLayer('A'); tl.addNewLayer('B');").ok);
+    CHECK(history.count() == before + 1);
+    CHECK(history.undoName() == "Test Panel");
+    CHECK(f.scene().layers.size() == 3);
+    CHECK(panel.evaluate("fl.getDocumentDOM().getTimeline().layers.length").value == "3");
+    // A missing script file is an error, but the context still runs calls.
+    jsfl::PanelScript missing(f.host, "Missing");
+    CHECK(!missing.load(folder + "/none.jsfl", error) && !error.empty());
+    CHECK(missing.evaluate("1 + 2").value == "3");
 }
 
 TEST(jsfl_a_run_is_one_undo_step)

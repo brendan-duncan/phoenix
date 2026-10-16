@@ -39,15 +39,30 @@ struct Package
     std::vector<File> files;
 
     /// An HTML panel: its id, its name in the menu, its page and the
-    /// script it runs in the host.
+    /// script it runs in the host, how it shows ("Panel", "Modeless",
+    /// "ModalDialog" or "Custom"), its size in pixels (0 when the manifest
+    /// gives none), its icon, whether it asks for Node.js, whether it shows
+    /// when started, and the events that start it without being opened
+    /// ("com.adobe.csxs.events.ApplicationActivate" at launch).
     struct Panel
     {
         std::string id;
         std::string menu;
         std::string mainPath;
         std::string scriptPath;
+        std::string type = "Panel";
+        int width = 0, height = 0;
+        int minWidth = 0, minHeight = 0;
+        int maxWidth = 0, maxHeight = 0;
+        std::string icon;
+        bool nodeJs = false;
+        bool autoVisible = true;
+        std::vector<std::string> startOn;
     };
     std::vector<Panel> panels;
+    /// The applications the panels were made for ("FLPR" is Animate);
+    /// empty when the manifest names none.
+    std::vector<std::string> hosts;
 };
 
 /// Reads the package at \a path: a ZXP (a zip), or a folder.

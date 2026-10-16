@@ -2,6 +2,7 @@
 // prototypes, values converted both ways, and a run from start to finish.
 
 #include "engine.h"
+#include "panel_script.h"
 #include "tool_script.h"
 
 #include "e4x.h"
@@ -1738,6 +1739,161 @@ std::string ToolScript::setOptions(const std::vector<std::pair<std::string, std:
         failed = d.eval("notifySettingsChanged()", d.path);
     d.settle();
     return failed;
+}
+
+
+// ---------------------------------------------------------------------------
+// Extension panels
+
+struct PanelScript::Impl
+{
+    Host& host;
+    std::string name;
+    std::unique_ptr<Session> session;
+    JSRuntime* runtime = nullptr;
+    JSContext* ctx = nullptr;
+    std::unique_ptr<Binding> binding;
+    std::atomic<bool> stop{false};
+    bool running = false;
+    Guard guard;
+
+    Impl(Host& host, std::string name)
+        : host(host)
+        , name(std::move(name))
+    {}
+
+    ~Impl()
+    {
+        if (ctx)
+        {
+            binding.reset();
+            JS_FreeContext(ctx);
+        }
+        if (runtime)
+            JS_FreeRuntime(runtime);
+        if (session)
+            session->detach();
+    }
+
+    PanelScript::Result eval(const std::string& code, const std::string& file, const std::function<void()>& poll)
+    {
+        PanelScript::Result result;
+        stop = false;
+        guard.poll = poll;
+        guard.lastPoll = Clock::now();
+        guard.timedOut = false;
+        guard.stopped = false;
+        running = true;
+        JSValue value = JS_Eval(ctx, code.c_str(), code.size(), file.c_str(), JS_EVAL_TYPE_GLOBAL);
+        running = false;
+        guard.poll = nullptr;
+        if (JS_IsException(value))
+        {
+            result.ok = false;
+            if (guard.stopped)
+            {
+                JS_FreeValue(ctx, JS_GetException(ctx));
+                result.error = file + ": the script was stopped.";
+            }
+            else
+                result.error = errorOf(ctx);
+        }
+        else
+        {
+            try
+            {
+                result.value = toStd(ctx, value);
+            }
+            catch (const PendingException&)
+            {
+                JS_FreeValue(ctx, JS_GetException(ctx));
+            }
+        }
+        JS_FreeValue(ctx, value);
+        session->setUndoName(name);
+        session->settle();
+        return result;
+    }
+};
+
+PanelScript::PanelScript(Host& host, std::string name)
+    : _impl(std::make_unique<Impl>(host, std::move(name)))
+{}
+
+PanelScript::~PanelScript() = default;
+
+bool PanelScript::load(const std::string& path, std::string& error)
+{
+    Impl& d = *_impl;
+    if (!d.ctx)
+    {
+        d.session = std::make_unique<Session>(d.host, d.name);
+        d.session->scriptPath = path;
+        d.runtime = JS_NewRuntime();
+        JS_SetMemoryLimit(d.runtime, size_t(512) * 1024 * 1024);
+        JS_SetMaxStackSize(d.runtime, size_t(2) * 1024 * 1024);
+        JS_NewClassID(d.runtime, &g_objectClass);
+        JSClassDef objectClass{};
+        objectClass.class_name = "PhoenixObject";
+        objectClass.finalizer = &finalizeObject;
+        JS_NewClass(d.runtime, g_objectClass, &objectClass);
+        d.guard.stop = &d.stop;
+        JS_SetInterruptHandler(d.runtime, &interrupt, &d.guard);
+        d.ctx = JS_NewContext(d.runtime);
+        d.binding = std::make_unique<Binding>(d.ctx);
+        JS_SetContextOpaque(d.ctx, d.binding.get());
+        installGlobals(d.ctx, *d.binding, *d.session, d.host);
+    }
+    if (path.empty())
+        return true;
+    std::string source;
+    if (!readFile(path, source))
+    {
+        error = "Could not read " + path + ".";
+        return false;
+    }
+    const Result result = d.eval(prepare(d.ctx, source), path, {});
+    error = result.error;
+    return result.ok;
+}
+
+PanelScript::Result PanelScript::evaluate(const std::string& code, const std::function<void()>& poll)
+{
+    Impl& d = *_impl;
+    if (!d.ctx)
+    {
+        std::string error;
+        load(std::string(), error);
+    }
+    if (d.running)
+    {
+        Result busy;
+        busy.ok = false;
+        busy.error = d.name + ": a script is already running.";
+        return busy;
+    }
+    return d.eval(prepare(d.ctx, code), d.name, poll);
+}
+
+void PanelScript::stop()
+{
+    _impl->stop = true;
+}
+
+bool PanelScript::running() const
+{
+    return _impl->running;
+}
+
+std::string PanelScript::dispatch(const std::string& type)
+{
+    Impl& d = *_impl;
+    if (!d.ctx || d.running)
+        return {};
+    const Result result = d.eval("fl.__dispatch(" + quoted(type) + ")", d.name, {});
+    if (!result.ok)
+        return result.error;
+    return result.value == "undefined" ? std::string() : result.value;
 }
 
 } // namespace jsfl

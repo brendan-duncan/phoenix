@@ -5,6 +5,8 @@
 #include <QString>
 #include <QStringList>
 
+#include "../jsfl/panel_script.h"
+
 #include <functional>
 #include <memory>
 
@@ -53,6 +55,8 @@ public:
 
     /// Where installed extensions keep their files, beside the settings.
     static QString extensionsFolder();
+    /// The folder settings, scripts and extensions are kept in.
+    static QString settingsFolder();
     /// Installs the extension package (a ZXP or a folder) at \a path,
     /// telling the person in a box over \a parent, or on the console when
     /// there is none.
@@ -98,6 +102,18 @@ public:
     int runBatch(const QString& script, const QStringList& documents, bool save, const QString& out, double timeLimit);
 
     bool running() const;
+
+    /// A script context for an extension panel named \a name, through
+    /// this window.
+    std::unique_ptr<jsfl::PanelScript> panelScript(const QString& name);
+    /// Runs \a code in a panel's context as runFile runs a file: what is
+    /// being drawn settled first, Stop for a long run, errors in the Output
+    /// panel. \a name is what the Stop dialog calls it.
+    jsfl::PanelScript::Result evaluate(jsfl::PanelScript& script, const QString& code, const QString& name);
+
+signals:
+    /// Scripts were told \a type happened (dispatchEvent).
+    void eventDispatched(const QString& type);
 
 private:
     void runCommand();

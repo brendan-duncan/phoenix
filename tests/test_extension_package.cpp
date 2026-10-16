@@ -113,8 +113,13 @@ TEST(extension_packages_read_html_panels_from_their_manifest)
         "  <ExecutionEnvironment><HostList><Host Name=\"FLPR\" Version=\"[16.0,99.9]\" /></HostList>"
         "</ExecutionEnvironment>\n"
         "  <DispatchInfoList><Extension Id=\"com.example.timer.panel\"><DispatchInfo>\n"
-        "    <Resources><MainPath>./index.html</MainPath><ScriptPath>./host/timer.jsfl</ScriptPath></Resources>\n"
-        "    <UI><Type>Panel</Type><Menu>Shot Timer</Menu></UI>\n"
+        "    <Resources><MainPath>./index.html</MainPath><ScriptPath>./host/timer.jsfl</ScriptPath>"
+        "<CEFCommandLine><Parameter>--enable-nodejs</Parameter></CEFCommandLine></Resources>\n"
+        "    <Lifecycle><AutoVisible>false</AutoVisible><StartOn><Event>com.adobe.csxs.events.ApplicationActivate"
+        "</Event></StartOn></Lifecycle>\n"
+        "    <UI><Type>Panel</Type><Menu>Shot Timer</Menu><Geometry><Size><Height>300</Height><Width>240</Width>"
+        "</Size><MinSize><Height>100</Height><Width>120</Width></MinSize></Geometry>"
+        "<Icons><Icon Type=\"Normal\">./icons/timer.png</Icon></Icons></UI>\n"
         "  </DispatchInfo></Extension></DispatchInfoList>\n"
         "</ExtensionManifest>\n");
     put(package / "index.html", "<html></html>");
@@ -128,9 +133,14 @@ TEST(extension_packages_read_html_panels_from_their_manifest)
     {
         CHECK(read.panels[0].menu == "Shot Timer" && read.panels[0].mainPath == "index.html");
         CHECK(read.panels[0].scriptPath == "host/timer.jsfl");
+        CHECK(read.panels[0].width == 240 && read.panels[0].height == 300);
+        CHECK(read.panels[0].minWidth == 120 && read.panels[0].minHeight == 100);
+        CHECK(read.panels[0].icon == "icons/timer.png" && !read.panels[0].autoVisible);
+        CHECK(read.panels[0].startOn.size() == 1 && read.panels[0].type == "Panel" && read.panels[0].nodeJs);
     }
+    CHECK(read.hosts.size() == 1 && read.hosts[0] == "FLPR");
     // Installed: kept whole in its folder, nothing in the Configuration
-    // folder, and a note that its panels do not show yet.
+    // folder, a note that Node.js is missing, and all of it recorded.
     extensions::Installed installed;
     std::vector<std::string> notes;
     const fs::path config = temp.path / "Configuration";
@@ -138,6 +148,15 @@ TEST(extension_packages_read_html_panels_from_their_manifest)
         error));
     CHECK(installed.placed.empty() && notes.size() == 1);
     CHECK(fs::exists(fs::path(installed.folder) / "package" / "index.html"));
+    const std::vector<extensions::Installed> listed = extensions::list((temp.path / "Extensions").string());
+    CHECK(listed.size() == 1 && listed[0].package.panels.size() == 1 && listed[0].package.hosts.size() == 1);
+    if (listed.size() == 1 && listed[0].package.panels.size() == 1)
+    {
+        const extensions::Package::Panel& kept = listed[0].package.panels[0];
+        CHECK(kept.width == 240 && kept.minHeight == 100 && kept.icon == "icons/timer.png" && kept.nodeJs);
+        CHECK(!kept.autoVisible && kept.startOn.size() == 1 &&
+              kept.startOn[0] == "com.adobe.csxs.events.ApplicationActivate");
+    }
     // Not a package at all.
     const fs::path empty = temp.path / "empty";
     fs::create_directories(empty);

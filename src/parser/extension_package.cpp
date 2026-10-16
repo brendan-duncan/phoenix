@@ -8,6 +8,7 @@
 #include <cctype>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <functional>
@@ -209,7 +210,55 @@ bool readManifest(const Source& source, const std::string& name, Package& packag
         panel.menu = text(ui ? ui->FirstChildElement("Menu") : nullptr);
         if (panel.menu.empty())
             panel.menu = panel.id;
+        const std::string type = text(ui ? ui->FirstChildElement("Type") : nullptr);
+        if (!type.empty())
+            panel.type = type;
+        const tinyxml2::XMLElement* geometry = ui ? ui->FirstChildElement("Geometry") : nullptr;
+        const auto size = [geometry](const char* name, int& width, int& height) {
+            const tinyxml2::XMLElement* e = geometry ? geometry->FirstChildElement(name) : nullptr;
+            width = std::atoi(text(e ? e->FirstChildElement("Width") : nullptr).c_str());
+            height = std::atoi(text(e ? e->FirstChildElement("Height") : nullptr).c_str());
+        };
+        size("Size", panel.width, panel.height);
+        size("MinSize", panel.minWidth, panel.minHeight);
+        size("MaxSize", panel.maxWidth, panel.maxHeight);
+        const tinyxml2::XMLElement* icons = ui ? ui->FirstChildElement("Icons") : nullptr;
+        for (const tinyxml2::XMLElement* icon = icons ? icons->FirstChildElement("Icon") : nullptr; icon;
+             icon = icon->NextSiblingElement("Icon"))
+        {
+            const std::string kind = attribute(icon, "Type");
+            if (panel.icon.empty() || kind == "Normal")
+                panel.icon = safePath(base + text(icon));
+        }
+        const tinyxml2::XMLElement* cef = resources ? resources->FirstChildElement("CEFCommandLine") : nullptr;
+        for (const tinyxml2::XMLElement* parameter = cef ? cef->FirstChildElement("Parameter") : nullptr; parameter;
+             parameter = parameter->NextSiblingElement("Parameter"))
+        {
+            const std::string value = text(parameter);
+            if (value == "--enable-nodejs" || value == "--mixed-context")
+                panel.nodeJs = true;
+        }
+        const tinyxml2::XMLElement* lifecycle = info ? info->FirstChildElement("Lifecycle") : nullptr;
+        const std::string autoVisible = text(lifecycle ? lifecycle->FirstChildElement("AutoVisible") : nullptr);
+        panel.autoVisible = lower(autoVisible) != "false";
+        const tinyxml2::XMLElement* startOn = lifecycle ? lifecycle->FirstChildElement("StartOn") : nullptr;
+        for (const tinyxml2::XMLElement* event = startOn ? startOn->FirstChildElement("Event") : nullptr; event;
+             event = event->NextSiblingElement("Event"))
+        {
+            const std::string type = text(event);
+            if (!type.empty() && type.find(',') == std::string::npos)
+                panel.startOn.push_back(type);
+        }
         package.panels.push_back(panel);
+    }
+    const tinyxml2::XMLElement* environment = root ? root->FirstChildElement("ExecutionEnvironment") : nullptr;
+    const tinyxml2::XMLElement* hosts = environment ? environment->FirstChildElement("HostList") : nullptr;
+    for (const tinyxml2::XMLElement* host = hosts ? hosts->FirstChildElement("Host") : nullptr; host;
+         host = host->NextSiblingElement("Host"))
+    {
+        const std::string hostName = attribute(host, "Name");
+        if (!hostName.empty())
+            package.hosts.push_back(hostName);
     }
     for (const std::string& file : source.names())
         package.files.push_back({file, std::string(), false});
@@ -268,6 +317,15 @@ std::string escapeLine(const std::string& value)
     return out;
 }
 
+/// A list of names in one field of the record, separated by commas.
+std::string joined(const std::vector<std::string>& names)
+{
+    std::string out;
+    for (const std::string& name : names)
+        out += (out.empty() ? "" : ",") + name;
+    return out;
+}
+
 void writeRecord(const Installed& installed, const std::map<std::string, uint64_t>& hashes)
 {
     std::ofstream out(fs::u8path(installed.folder) / kRecord, std::ios::binary | std::ios::trunc);
@@ -280,7 +338,12 @@ void writeRecord(const Installed& installed, const std::map<std::string, uint64_
     out << "description\t" << escapeLine(p.description) << "\n";
     for (const Package::Panel& panel : p.panels)
         out << "panel\t" << escapeLine(panel.id) << "\t" << escapeLine(panel.menu) << "\t" << escapeLine(panel.mainPath)
-            << "\t" << escapeLine(panel.scriptPath) << "\n";
+            << "\t" << escapeLine(panel.scriptPath) << "\t" << escapeLine(panel.type) << "\t" << panel.width << "\t"
+            << panel.height << "\t" << panel.minWidth << "\t" << panel.minHeight << "\t" << panel.maxWidth << "\t"
+            << panel.maxHeight << "\t" << escapeLine(panel.icon) << "\t" << (panel.nodeJs ? 1 : 0) << "\t"
+            << (panel.autoVisible ? 1 : 0) << "\t" << escapeLine(joined(panel.startOn)) << "\n";
+    for (const std::string& host : p.hosts)
+        out << "host\t" << escapeLine(host) << "\n";
     for (const std::string& placed : installed.placed)
     {
         const auto found = hashes.find(placed);
@@ -322,7 +385,35 @@ bool readRecord(const fs::path& folder, Installed& installed, std::map<std::stri
         else if (key == "description")
             p.description = at(1);
         else if (key == "panel")
-            p.panels.push_back({at(1), at(2), at(3), at(4)});
+        {
+            Package::Panel panel;
+            panel.id = at(1);
+            panel.menu = at(2);
+            panel.mainPath = at(3);
+            panel.scriptPath = at(4);
+            if (!at(5).empty())
+                panel.type = at(5);
+            const auto number = [&at](size_t i) { return std::atoi(at(i).c_str()); };
+            panel.width = number(6);
+            panel.height = number(7);
+            panel.minWidth = number(8);
+            panel.minHeight = number(9);
+            panel.maxWidth = number(10);
+            panel.maxHeight = number(11);
+            panel.icon = at(12);
+            panel.nodeJs = at(13) == "1";
+            panel.autoVisible = at(14) != "0";
+            std::stringstream events(at(15));
+            std::string event;
+            while (std::getline(events, event, ','))
+            {
+                if (!event.empty())
+                    panel.startOn.push_back(event);
+            }
+            p.panels.push_back(panel);
+        }
+        else if (key == "host" && !at(1).empty())
+            p.hosts.push_back(at(1));
         else if (key == "placed" && !at(1).empty())
         {
             installed.placed.push_back(at(1));
@@ -433,8 +524,20 @@ bool install(const std::string& path, const std::string& configFolder, const std
     }
     writeRecord(installed, hashes);
     if (package.kind == Package::Kind::Panels)
-        notes.push_back("This extension's panels are HTML panels, which Phoenix does not show yet. It is kept "
-                        "installed for when it does.");
+    {
+        bool forAnimate = package.hosts.empty();
+        for (const std::string& host : package.hosts)
+            forAnimate = forAnimate || host == "FLPR";
+        if (!forAnimate)
+            notes.push_back("Its manifest names other applications, not Animate (FLPR); its panels may expect "
+                            "scripts Phoenix does not run.");
+        bool nodeJs = false;
+        for (const Package::Panel& panel : package.panels)
+            nodeJs = nodeJs || panel.nodeJs;
+        if (nodeJs)
+            notes.push_back("Its panels ask for Node.js, which Phoenix's panels do not have; the parts of them that "
+                            "use it will not work.");
+    }
     if (flashPanels)
         notes.push_back("Its SWF panels and effects are kept, but Phoenix does not run them; its JSFL commands and "
                         "tools work.");

@@ -81,6 +81,7 @@
 #include "theme.h"
 #include "claude_code.h"
 #include "actions_panel.h"
+#include "cep_panel.h"
 #include "claude_code_panel.h"
 #include "ik_poser.h"
 #include "script_window.h"
@@ -398,6 +399,10 @@ MainWindow::MainWindow(const QString& initialFile, QWidget* parent, bool startup
     setupToolBar();
     setupPropertiesPanel();
     createPanels();
+    // The installed extensions' HTML panels, docked before the layout comes
+    // back so one left open opens again.
+    _cepPanels = new CepPanels(*this, *_scripts);
+    _cepPanels->refresh();
     setupWindowMenu();
     connect(theme::notifier(), &theme::Notifier::changed, this, [this]() {
         QSettings settings;
@@ -2567,6 +2572,8 @@ void MainWindow::setupWindowMenu()
         _renderQueue->raise();
         _renderQueue->activateWindow();
     });
+    QMenu* extensionsMenu = windowMenu->addMenu("E&xtensions");
+    connect(extensionsMenu, &QMenu::aboutToShow, this, [this, extensionsMenu]() { _cepPanels->fillMenu(extensionsMenu); });
     windowMenu->addSeparator();
 
     QAction* hidePanels = windowMenu->addAction("&Hide Panels");
