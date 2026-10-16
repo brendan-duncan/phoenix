@@ -117,6 +117,15 @@ TEST(dat_with_a_huge_size_and_a_tiny_stream_is_refused)
     fla::DecodedBitmap decoded;
     CHECK(!fla::decodeLosslessBitmap(dat, decoded));
     CHECK(decoded.pixels.empty());
+
+    // Rows far wider than four bytes a pixel are damage too.
+    dat = losslessDat(4, 1, 4, std::vector<uint8_t>(16, 0x40));
+    dat[2] = dat[3] = 0xff;
+    CHECK(!fla::decodeLosslessBitmap(dat, decoded));
+    // Padded to four bytes is still read.
+    dat = losslessDat(1, 2, 4, std::vector<uint8_t>(14, 0x40));
+    dat[2] = 7;
+    CHECK(fla::decodeLosslessBitmap(dat, decoded));
 }
 
 TEST(lossless_bitmaps_encode_as_animate_reads_them)

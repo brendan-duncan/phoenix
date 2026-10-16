@@ -59,7 +59,9 @@ bool decodeLosslessBitmap(const std::vector<uint8_t>& data, DecodedBitmap& out)
     const size_t rowBytes = readU16(data, 2);
     const int width = readU16(data, 4);
     const int height = readU16(data, 6);
-    if (width <= 0 || height <= 0 || rowBytes < static_cast<size_t>(width) * 3)
+    // Rows hold three or four bytes a pixel, padded to four bytes at most.
+    if (width <= 0 || height <= 0 || rowBytes < static_cast<size_t>(width) * 3 ||
+        rowBytes > static_cast<size_t>(width) * 4 + 3)
         return false;
 
     std::vector<uint8_t> packed;
@@ -70,7 +72,7 @@ bool decodeLosslessBitmap(const std::vector<uint8_t>& data, DecodedBitmap& out)
     // could inflate to (deflate shrinks by at most about 1032 to 1), or past
     // a quarter billion pixels, the file is damaged.
     const uint64_t claimed = static_cast<uint64_t>(rowBytes) * static_cast<uint64_t>(height);
-    if (static_cast<uint64_t>(width) * height > (uint64_t(1) << 28) ||
+    if (static_cast<uint64_t>(width) * height > (uint64_t(1) << 28) || claimed > (uint64_t(1) << 30) ||
         claimed > static_cast<uint64_t>(packed.size()) * 1032 + 1024)
         return false;
 
