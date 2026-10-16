@@ -783,8 +783,10 @@ TEST(swf_import_brings_back_a_video_as_an_item_of_its_size)
     CHECK(video.width == 320 && video.height == 240 && std::fabs(video.fps - 24.0) < 1e-9);
     const auto xml = files["DOMDocument.xml"];
     CHECK(std::string(xml.begin(), xml.end()).find("length=\"2\"") != std::string::npos);
-    // Placed on the stage, one keyframe across the pictures it plays.
+    // Placed on the stage, one keyframe across the pictures it plays, on a
+    // hidden layer as Phoenix cannot draw them.
     const fla::Layer* layer = parsed.document->timelines[0]->layers[0];
+    CHECK(!layer->visible);
     CHECK(layer->frames.size() == 1 && layer->frames[0]->duration == 3);
     CHECK(layer->frames[0]->elements.size() == 1 &&
           layer->frames[0]->elements[0]->elementType() == fla::Element::Type::Raw);

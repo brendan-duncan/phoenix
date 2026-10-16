@@ -21,14 +21,15 @@
 /// raw); static text as its glyph outlines, dynamic and input text as text
 /// fields; 9-slice grids, and class names (SymbolClass, ExportAssets) as
 /// symbol names and linkage; videos as items of their size, rate and
-/// length, placed where the movie shows them (their pictures are not
-/// decoded). A shape placed only once goes in where it is placed; one
-/// placed more often becomes a graphic symbol.
+/// length, placed where the movie shows them on hidden layers (their
+/// pictures are not decoded). A shape placed only once goes in where it is
+/// placed; one placed more often becomes a graphic symbol.
 ///
 /// The frames come baked, a placement on each; where a symbol moves, turns,
 /// scales or changes color across frames just as a classic tween between
 /// two of them would show it (evenly or with an ease), those frames go back
-/// to a classic tween; a placement that only moves to where it already is
+/// to a classic tween, and a morph shape whose ratio runs on the same way
+/// to a shape tween; a placement that only moves to where it already is
 /// holds on the keyframe before.
 ///
 /// What cannot come back, and the report says so: tweens that are not that

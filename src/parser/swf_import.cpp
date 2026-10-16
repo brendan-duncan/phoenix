@@ -3571,6 +3571,19 @@ private:
                 layer->SetAttribute("parentLayerIndex", layerIndex[maskOf[depth]]);
                 layer->SetAttribute("locked", "true");
             }
+            // A layer of only video is hidden: Phoenix cannot draw its
+            // pictures, and its stand-in box would cover what is below.
+            bool video = false, other = false;
+            for (const auto& frame : t.frames)
+            {
+                const auto found = frame.find(depth);
+                if (found == frame.end())
+                    continue;
+                const auto c = _characters.find(found->second.character);
+                (c != _characters.end() && c->second.kind == Character::Kind::Video ? video : other) = true;
+            }
+            if (video && !other)
+                layer->SetAttribute("visible", "false");
             tinyxml2::XMLElement* list = doc.NewElement("frames");
             // The spans of frames each placement holds for.
             std::vector<Span> spans;
