@@ -16,7 +16,9 @@
 #include "../play/display/text_field.h"
 #include "../play/movie_runtime.h"
 
+#include <QCoreApplication>
 #include <QDir>
+#include <QMouseEvent>
 #include <QElapsedTimer>
 #include <QFileInfo>
 #include <QImage>
@@ -557,6 +559,23 @@ int movieCheck(const QString& file, const QString& folder, int frames)
         std::printf("under (%g, %g): %s \"%s\"\n", at.x(), at.y(), hit ? (hit->kind() == ObjectKind::SimpleButton ? "button" : "object") : "nothing",
             hit ? hit->name().c_str() : "");
     }
+    // A click through the view, as the window gets it: the display list's
+    // listeners hear it, down, up and click, on what is under the pointer.
+    view.resize(size);
+    std::vector<std::string> heard;
+    for (const char* type : {events::kMouseDown, events::kMouseUp, events::kClick})
+        stage.addEventListener(type, [&heard](Event& e) {
+            heard.push_back(e.type + " " + static_cast<DisplayObject*>(e.target)->name());
+        });
+    const QPointF at = view.mapToWidget(QPointF(65, 260));
+    for (const QEvent::Type type : {QEvent::MouseMove, QEvent::MouseButtonPress, QEvent::MouseButtonRelease})
+    {
+        QMouseEvent event(type, at, view.mapToGlobal(at), type == QEvent::MouseMove ? Qt::NoButton : Qt::LeftButton,
+            type == QEvent::MouseButtonPress ? Qt::LeftButton : Qt::NoButton, Qt::NoModifier);
+        QCoreApplication::sendEvent(&view, &event);
+    }
+    for (const std::string& line : heard)
+        std::printf("heard %s\n", line.c_str());
     view.setMovie(nullptr);
     return ok ? 0 : 1;
 }

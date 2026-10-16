@@ -173,6 +173,9 @@ public:
     /// The display list the movie's scripts and the pointer work with: the
     /// stage, the root clip's display object its first child.
     display::Stage& stage() { return *_stage; }
+    /// How many scripts and handlers have run: one that ran may have
+    /// changed what a text field showing a variable shows.
+    uint64_t scriptRuns() const { return _scriptRuns; }
     /// After the pointer or a key went to the stage's display objects
     /// (their listeners may have sent clips to other frames): goes on with
     /// what they did.
@@ -415,6 +418,7 @@ private:
     double _frameRate;
     std::unique_ptr<as3::VM> _vm;
     std::shared_ptr<display::Stage> _stage;
+    uint64_t _scriptRuns = 0;
     std::unique_ptr<Clip> _root;
     /// The clip whose script runs: what a bare stop() or gotoAndPlay()
     /// moves (tellTarget changes it).

@@ -505,12 +505,14 @@ void TestMovieWindow::showFrame()
     if (_errors > 0)
         status += QString(", %1 script %2 (see the Output panel)").arg(_errors).arg(_errors == 1 ? "error" : "errors");
     _status->setText(status);
-    // Only when something shown changed: a movie stopped on a frame with
-    // nothing moving is not drawn over and over.
+    // Only when something shown changed, or a script ran that may have: a
+    // movie stopped on a frame with nothing moving is not drawn over and
+    // over.
     const uint64_t generation = fla::display::displayGeneration();
-    if (generation != _shownGeneration)
+    if (generation != _shownGeneration || _movie->scriptRuns() != _shownScriptRuns)
     {
         _shownGeneration = generation;
+        _shownScriptRuns = _movie->scriptRuns();
         _view->update();
     }
 }

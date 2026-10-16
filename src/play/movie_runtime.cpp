@@ -1449,6 +1449,7 @@ void MovieRuntime::runFunction(const as3::ValuePtr& function, const std::vector<
 {
     if (!function || !function->isFunction())
         return;
+    ++_scriptRuns;
     Clip* was = _current;
     const DOMElement* wasSource = _source;
     _current = &scope;
@@ -1547,6 +1548,7 @@ void MovieRuntime::run(const DOMElement* key, const std::string& source, Clip& s
     std::shared_ptr<as3::BytecodeFunction> code = compiled(key, source, where);
     if (!code)
         return;
+    ++_scriptRuns;
     Clip* was = _current;
     const DOMElement* wasSource = _source;
     _current = &scope;
