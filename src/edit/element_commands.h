@@ -3,6 +3,8 @@
 #include "command.h"
 
 #include "../data/dom_element.h"
+#include "../data/shape.h"
+#include "../data/stroke_style.h"
 #include "../data/transform.h"
 #include "editable_path.h"
 #include "shape_merge.h"
