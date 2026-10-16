@@ -6,6 +6,7 @@
 #include <QString>
 
 #include <atomic>
+#include <condition_variable>
 #include <memory>
 #include <mutex>
 #include <thread>
@@ -77,42 +78,68 @@ private:
         bool allowed = false;
     };
 
+    /// What the reader threads share with the GUI thread, kept alive by
+    /// them: once the server is closing, a reader touches it no more.
+    struct Shared
+    {
+        std::mutex mutex;
+        /// A reply came, or the readers are to stop waiting for one.
+        std::condition_variable answered;
+        /// The port's connections are being cut (Preferences, or closing).
+        std::atomic<bool> stopping{false};
+        /// The server is going: nothing may reach it any more.
+        std::atomic<bool> closing{false};
+        std::vector<std::intptr_t> sockets;
+        int stdoutFd = -1;
+        std::mutex stdoutMutex;
+    };
+    /// A message handed to the GUI thread, and its reply.
+    struct Pending
+    {
+        bool done = false;
+        bool abandoned = false;
+        QJsonObject reply;
+    };
+
     /// Takes connections on \a port, or on a free one for 0; false when it
     /// cannot.
     bool listen(int port);
     void stopListening();
-    void serveSocket(std::intptr_t socket, int client);
-    /// Handles \a line from a reader thread, on the GUI thread; returns the
-    /// reply line, or an empty one.
-    std::string dispatch(const std::string& line, int client);
-    bool allow(Client& client);
+    void setStopping(bool stopping);
+    static void serveSocket(const std::shared_ptr<Shared>& shared, McpServer* server, std::intptr_t socket, int client);
+    /// Hands \a line from a reader thread to the GUI thread and waits for
+    /// the reply, without holding that thread up; returns the reply line,
+    /// or an empty one (also when the reader is to stop).
+    static std::string dispatch(const std::shared_ptr<Shared>& shared, McpServer* server, const std::string& line,
+        int client, bool stdio);
+    /// The client with \a id, or null: looked up again after anything that
+    /// runs the event loop, as the clients may change meanwhile.
+    Client* clientOf(int id);
+    bool allow(int client);
     void showActivity(const QString& what);
     void stopAll();
     void log(const QString& client, const QString& tool, const QJsonObject& arguments, bool ok);
-    QJsonObject callTool(const QJsonObject& params, Client& client);
+    QJsonObject callTool(const QJsonObject& params, int client);
 
     MainWindow* _window;
     std::unique_ptr<ScriptApi> _api;
     std::vector<Client> _clients;
-    int _nextClient = 1;
+    std::atomic<int> _nextClient{1};
     QSet<QString> _allowedNames;
     QSet<QString> _allowedFolders;
 
-    std::atomic<bool> _stopping{false};
+    std::shared_ptr<Shared> _shared = std::make_shared<Shared>();
     std::intptr_t _listener = -1;
     int _listenPort = 0;
     /// The token of the session openSession made; empty when there is none
     /// or Stop ended it.
     QString _sessionToken;
     std::thread _accepting;
-    std::mutex _socketsMutex;
-    std::vector<std::intptr_t> _sockets;
+    /// The socket readers, guarded by the shared mutex.
     std::vector<std::thread> _readers;
 
     bool _stdio = false;
     std::thread _stdioReader;
-    int _stdout = -1;
-    std::mutex _stdoutMutex;
 
     QLabel* _status = nullptr;
     QToolButton* _stop = nullptr;

@@ -203,12 +203,26 @@ McpServer::McpServer(MainWindow* window)
 
 McpServer::~McpServer()
 {
-    _stopping = true;
+    {
+        std::lock_guard<std::mutex> lock(_shared->mutex);
+        _shared->closing = true;
+    }
+    _shared->answered.notify_all();
+    // The socket readers wake and end, and are waited for.
     stopListening();
-    // A reader blocked on standard input cannot be woken; the process is
-    // ending, so it is let go.
+    // A reader blocked on standard input cannot be woken; it holds only
+    // what it shares, and touches the server no more, so it is let go.
     if (_stdioReader.joinable())
         _stdioReader.detach();
+}
+
+void McpServer::setStopping(bool stopping)
+{
+    {
+        std::lock_guard<std::mutex> lock(_shared->mutex);
+        _shared->stopping = stopping;
+    }
+    _shared->answered.notify_all();
 }
 
 int McpServer::port()
@@ -231,7 +245,7 @@ void McpServer::setEnabled(bool on, int port)
 void McpServer::applySettings()
 {
     stopListening();
-    _stopping = false;
+    setStopping(false);
     if (enabled())
         listen(port());
     else if (!_sessionToken.isEmpty())
@@ -244,7 +258,7 @@ int McpServer::openSession(QString& token)
         _sessionToken = QUuid::createUuid().toString(QUuid::WithoutBraces);
     if (_listener == -1)
     {
-        _stopping = false;
+        setStopping(false);
         if (!(enabled() && listen(port())) && !listen(0))
             return 0;
     }
@@ -285,21 +299,25 @@ bool McpServer::listen(int port)
     getsockname(listener, reinterpret_cast<sockaddr*>(&bound), &length);
     _listenPort = ntohs(bound.sin_port);
     _listener = static_cast<std::intptr_t>(listener);
-    _accepting = std::thread([this, listener]() {
-        while (!_stopping)
+    const std::shared_ptr<Shared> shared = _shared;
+    _accepting = std::thread([this, shared, listener]() {
+        while (!shared->stopping)
         {
             const Socket client = accept(listener, nullptr, nullptr);
             if (client == kNoSocket)
                 break;
-            std::lock_guard<std::mutex> lock(_socketsMutex);
-            if (_stopping)
+            std::lock_guard<std::mutex> lock(shared->mutex);
+            if (shared->stopping)
             {
                 closeSocket(client);
                 break;
             }
-            _sockets.push_back(static_cast<std::intptr_t>(client));
+            shared->sockets.push_back(static_cast<std::intptr_t>(client));
             const int id = _nextClient++;
-            _readers.emplace_back([this, client, id]() { serveSocket(static_cast<std::intptr_t>(client), id); });
+            McpServer* server = this;
+            _readers.emplace_back([shared, server, client, id]() {
+                serveSocket(shared, server, static_cast<std::intptr_t>(client), id);
+            });
         }
     });
     return true;
@@ -307,7 +325,7 @@ bool McpServer::listen(int port)
 
 void McpServer::stopListening()
 {
-    _stopping = true;
+    setStopping(true);
     if (_listener != -1)
     {
         shutdownSocket(static_cast<Socket>(_listener));
@@ -319,47 +337,48 @@ void McpServer::stopListening()
         _accepting.join();
     std::vector<std::thread> readers;
     {
-        std::lock_guard<std::mutex> lock(_socketsMutex);
-        for (std::intptr_t socket : _sockets)
+        std::lock_guard<std::mutex> lock(_shared->mutex);
+        for (std::intptr_t socket : _shared->sockets)
             shutdownSocket(static_cast<Socket>(socket));
         readers.swap(_readers);
     }
-    // Readers waiting on the GUI thread would never finish while it waits
-    // here, so they are let go: each one ends as soon as it sees the stop.
+    // No reader waits on this thread (a reply it waits for gives up at the
+    // stop), and their sockets are shut, so each ends soon.
     for (std::thread& reader : readers)
     {
         if (reader.joinable())
-            reader.detach();
+            reader.join();
     }
 }
 
-void McpServer::serveSocket(std::intptr_t handle, int client)
+void McpServer::serveSocket(const std::shared_ptr<Shared>& shared, McpServer* server, std::intptr_t handle, int client)
 {
     const Socket socket = static_cast<Socket>(handle);
     std::string pending;
     std::string line;
-    while (!_stopping && readLine(socket, pending, line))
+    while (!shared->stopping && !shared->closing && readLine(socket, pending, line))
     {
         if (line.empty())
             continue;
-        const std::string reply = dispatch(line, client);
+        const std::string reply = dispatch(shared, server, line, client, false);
         if (!reply.empty() && !sendAll(socket, reply + "\n"))
             break;
     }
     {
-        std::lock_guard<std::mutex> lock(_socketsMutex);
-        _sockets.erase(std::remove(_sockets.begin(), _sockets.end(), handle), _sockets.end());
+        std::lock_guard<std::mutex> lock(shared->mutex);
+        shared->sockets.erase(std::remove(shared->sockets.begin(), shared->sockets.end(), handle), shared->sockets.end());
+        // The client went of itself: the window lets go of it.
+        if (!shared->stopping && !shared->closing)
+        {
+            QMetaObject::invokeMethod(server, [server, client]() {
+                server->_clients.erase(std::remove_if(server->_clients.begin(), server->_clients.end(),
+                                           [client](const Client& c) { return c.id == client; }),
+                    server->_clients.end());
+                server->showActivity(QString());
+            }, Qt::QueuedConnection);
+        }
     }
     closeSocket(socket);
-    if (!_stopping)
-    {
-        QMetaObject::invokeMethod(this, [this, client]() {
-            _clients.erase(std::remove_if(_clients.begin(), _clients.end(),
-                               [client](const Client& c) { return c.id == client; }),
-                _clients.end());
-            showActivity(QString());
-        });
-    }
 }
 
 void McpServer::serveStdio()
@@ -371,43 +390,50 @@ void McpServer::serveStdio()
     // goes to standard error, so it cannot break a reply.
     std::fflush(stdout);
 #ifdef _WIN32
-    _stdout = _dup(_fileno(stdout));
+    _shared->stdoutFd = _dup(_fileno(stdout));
     _dup2(_fileno(stderr), _fileno(stdout));
-    _setmode(_stdout, _O_BINARY);
+    _setmode(_shared->stdoutFd, _O_BINARY);
     _setmode(_fileno(stdin), _O_BINARY);
 #else
-    _stdout = dup(fileno(stdout));
+    _shared->stdoutFd = dup(fileno(stdout));
     dup2(fileno(stderr), fileno(stdout));
 #endif
     const int id = _nextClient++;
-    _stdioReader = std::thread([this, id]() {
+    const std::shared_ptr<Shared> shared = _shared;
+    McpServer* server = this;
+    _stdioReader = std::thread([shared, server, id]() {
         std::string line;
         while (std::getline(std::cin, line))
         {
+            if (shared->closing)
+                return;
             if (!line.empty() && line.back() == '\r')
                 line.pop_back();
             if (line.empty())
                 continue;
-            const std::string reply = dispatch(line, id);
-            if (!reply.empty() && _stdout >= 0)
+            const std::string reply = dispatch(shared, server, line, id, true);
+            if (!reply.empty() && shared->stdoutFd >= 0)
             {
-                std::lock_guard<std::mutex> lock(_stdoutMutex);
-                writeFd(_stdout, reply + "\n");
+                std::lock_guard<std::mutex> lock(shared->stdoutMutex);
+                writeFd(shared->stdoutFd, reply + "\n");
             }
         }
         // The client went: the window stays, with whatever was made.
-        if (!_stopping)
-            QMetaObject::invokeMethod(this, [this]() {
-                _clients.clear();
-                showActivity(QString());
-            });
+        std::lock_guard<std::mutex> lock(shared->mutex);
+        if (!shared->closing)
+            QMetaObject::invokeMethod(server, [server]() {
+                server->_clients.clear();
+                server->showActivity(QString());
+            }, Qt::QueuedConnection);
     });
 }
 
-std::string McpServer::dispatch(const std::string& line, int client)
+std::string McpServer::dispatch(const std::shared_ptr<Shared>& shared, McpServer* server, const std::string& line,
+    int client, bool stdio)
 {
-    if (_stopping)
-        return std::string();
+    // Standard input's client is cut off only as the server closes; a
+    // port's, when the port stops too.
+    const auto cut = [&shared, stdio]() { return shared->closing || (!stdio && shared->stopping); };
     QJsonParseError error;
     const QJsonDocument json = QJsonDocument::fromJson(QByteArray::fromStdString(line), &error);
     QJsonObject reply;
@@ -416,43 +442,81 @@ std::string McpServer::dispatch(const std::string& line, int client)
     else
     {
         const QJsonObject message = json.object();
-        QMetaObject::invokeMethod(this, [this, &reply, &message, client]() { reply = handle(message, client); },
-            Qt::BlockingQueuedConnection);
+        const auto pending = std::make_shared<Pending>();
+        std::unique_lock<std::mutex> lock(shared->mutex);
+        if (cut())
+            return std::string();
+        // Posted under the lock, so the server cannot be closing as it is;
+        // the reply is waited for here, not on the GUI thread, so a closing
+        // server is never held up by a reader.
+        QMetaObject::invokeMethod(server, [shared, server, pending, message, client]() {
+            {
+                std::lock_guard<std::mutex> lock(shared->mutex);
+                if (pending->abandoned)
+                    return;
+            }
+            QJsonObject answer = server->handle(message, client);
+            {
+                std::lock_guard<std::mutex> lock(shared->mutex);
+                pending->reply = std::move(answer);
+                pending->done = true;
+            }
+            shared->answered.notify_all();
+        }, Qt::QueuedConnection);
+        shared->answered.wait(lock, [&pending, &cut]() { return pending->done || cut(); });
+        if (!pending->done)
+        {
+            pending->abandoned = true;
+            return std::string();
+        }
+        reply = pending->reply;
     }
     if (reply.isEmpty())
         return std::string();
     return QJsonDocument(reply).toJson(QJsonDocument::Compact).toStdString();
 }
 
-bool McpServer::allow(Client& client)
+McpServer::Client* McpServer::clientOf(int id)
 {
-    if (client.allowed)
+    const auto found = std::find_if(_clients.begin(), _clients.end(), [id](const Client& c) { return c.id == id; });
+    return found == _clients.end() ? nullptr : &*found;
+}
+
+bool McpServer::allow(int id)
+{
+    Client* client = clientOf(id);
+    if (!client)
+        return false;
+    if (client->allowed)
         return true;
     // Without a screen (QT_QPA_PLATFORM=offscreen, for automation) there is
     // no one to ask: whoever ran it that way chose to.
     if (QGuiApplication::platformName() == "offscreen")
     {
-        client.allowed = true;
+        client->allowed = true;
         return true;
     }
-    if (_allowedNames.contains(client.name))
+    if (_allowedNames.contains(client->name))
     {
-        client.allowed = true;
+        client->allowed = true;
         return true;
     }
+    const QString name = client->name;
     QMessageBox box(QMessageBox::Question, "AI Assistant",
         QString("<b>%1</b> wants to work with Phoenix: read the documents you have open and change them.<br><br>"
                 "Its changes go into the undo history, and it asks before writing any file. The status bar shows "
                 "while it is connected, with a button that stops it.<br><br>Allow it?")
-            .arg(client.name.toHtmlEscaped()),
+            .arg(name.toHtmlEscaped()),
         QMessageBox::NoButton, _window);
     QPushButton* yes = box.addButton("Allow", QMessageBox::AcceptRole);
     box.addButton("Don't Allow", QMessageBox::RejectRole);
     box.exec();
-    if (box.clickedButton() != yes)
+    // It may have gone, or been stopped, while it was asked about.
+    client = clientOf(id);
+    if (!client || box.clickedButton() != yes)
         return false;
-    client.allowed = true;
-    _allowedNames.insert(client.name);
+    client->allowed = true;
+    _allowedNames.insert(name);
     return true;
 }
 
@@ -463,37 +527,42 @@ QJsonObject McpServer::handle(const QJsonObject& message, int id)
     const QJsonObject params = message.value("params").toObject();
     const bool notification = !message.contains("id");
 
-    auto found = std::find_if(_clients.begin(), _clients.end(), [id](const Client& c) { return c.id == id; });
-    if (found == _clients.end())
-    {
+    if (!clientOf(id))
         _clients.push_back({id, "An AI assistant", false});
-        found = std::prev(_clients.end());
-    }
-    Client& client = *found;
 
     // The client this Phoenix started, through the relay that names its
     // session: let in without asking.
     if (message.contains("phoenixSession"))
     {
         if (!_sessionToken.isEmpty() && message.value("phoenixSession").toString() == _sessionToken)
-            client.allowed = true;
+            clientOf(id)->allowed = true;
         return QJsonObject();
     }
     if (notification)
         return QJsonObject();
     if (method == "ping")
         return resultReply(requestId, QJsonObject());
+    // While a dialog is up (a question asked, Test Movie, the save prompt),
+    // a request would run inside it, on a document that may be mid-change:
+    // it is turned away, as is asking about a new client over the dialog.
+    const bool dialog = QApplication::activeModalWidget() != nullptr;
+    const auto busy = [&requestId]() {
+        return errorReply(requestId, -32003, "Phoenix is showing a dialog; try again when it is closed.");
+    };
+    if (dialog && (!clientOf(id)->allowed || method == "tools/call" || method == "resources/read"))
+        return busy();
     if (method == "initialize")
     {
         const QString name = params.value("clientInfo").toObject().value("name").toString();
         if (!name.isEmpty())
-            client.name = name;
-        if (!allow(client))
+            clientOf(id)->name = name;
+        const QString who = clientOf(id)->name;
+        if (!allow(id))
         {
-            log(client.name, "connect", {}, false);
+            log(who, "connect", {}, false);
             return errorReply(requestId, -32001, "The person using Phoenix did not allow this connection.");
         }
-        log(client.name, "connect", {}, true);
+        log(who, "connect", {}, true);
         showActivity("connected");
         QString version = params.value("protocolVersion").toString();
         if (std::find(std::begin(kProtocolVersions), std::end(kProtocolVersions), version.toStdString()) ==
@@ -510,7 +579,7 @@ QJsonObject McpServer::handle(const QJsonObject& message, int id)
                     "get_timeline, get_elements and render_frame before changing things, and wrap a request that "
                     "takes several changes in begin_edit and end_edit so it undoes in one step."}});
     }
-    if (!client.allowed && !allow(client))
+    if (!allow(id))
         return errorReply(requestId, -32001, "The person using Phoenix did not allow this connection.");
 
     if (method == "tools/list")
@@ -528,7 +597,7 @@ QJsonObject McpServer::handle(const QJsonObject& message, int id)
         return resultReply(requestId, QJsonObject{{"tools", tools}});
     }
     if (method == "tools/call")
-        return resultReply(requestId, callTool(params, client));
+        return resultReply(requestId, callTool(params, id));
     if (method == "resources/list")
         return resultReply(requestId, QJsonObject{{"resources", _api->resources()}});
     if (method == "resources/read")
@@ -545,8 +614,11 @@ QJsonObject McpServer::handle(const QJsonObject& message, int id)
     return errorReply(requestId, -32601, QString("Phoenix does not answer %1.").arg(method));
 }
 
-QJsonObject McpServer::callTool(const QJsonObject& params, Client& client)
+QJsonObject McpServer::callTool(const QJsonObject& params, int id)
 {
+    // Its name now: the call may run the event loop, and the client go.
+    const Client* client = clientOf(id);
+    const QString who = client ? client->name : QString("An AI assistant");
     const QString name = params.value("name").toString();
     const QJsonObject arguments = params.value("arguments").toObject();
     QString title = name;
@@ -557,7 +629,7 @@ QJsonObject McpServer::callTool(const QJsonObject& params, Client& client)
     }
     showActivity(title);
     const ScriptApi::Result result = _api->call(name, arguments);
-    log(client.name, name, arguments, result.ok());
+    log(who, name, arguments, result.ok());
     if (!result.ok())
         return QJsonObject{{"content", QJsonArray{QJsonObject{{"type", "text"}, {"text", result.error}}}},
             {"isError", true}};
@@ -609,8 +681,8 @@ void McpServer::stopAll()
     // from now on, like any other.
     _sessionToken.clear();
     {
-        std::lock_guard<std::mutex> lock(_socketsMutex);
-        for (std::intptr_t socket : _sockets)
+        std::lock_guard<std::mutex> lock(_shared->mutex);
+        for (std::intptr_t socket : _shared->sockets)
             shutdownSocket(static_cast<Socket>(socket));
     }
     _clients.clear();
