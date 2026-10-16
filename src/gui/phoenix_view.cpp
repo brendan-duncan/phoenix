@@ -134,6 +134,15 @@ bool renderFillsFromMap()
     return enabled;
 }
 
+/// Whether a behavior's many copies are each drawn on their own, never
+/// from a picture another made: PHOENIX_NO_FAST_COPIES=1, to compare the
+/// two ways.
+bool fastCopiesOff()
+{
+    static const bool off = qEnvironmentVariableIntValue("PHOENIX_NO_FAST_COPIES") != 0;
+    return off;
+}
+
 const fla::Frame* owningFrame(const fla::DOMElement* element)
 {
     for (const fla::DOMElement* p = element ? element->parent : nullptr; p; p = p->parent)
@@ -4582,6 +4591,7 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
     // Behaviors move, turn, scale and fade it on top of its keys; one
     // that repeats it has each copy drawn in turn.
     fla::behaviors::Delta behaviorDelta;
+    const bool asCopy = element == _copyElement && _copyDelta;
     if (element->elementType() == fla::Element::Type::SymbolInstance)
     {
         const auto* instance = static_cast<const fla::SymbolInstance*>(element);
@@ -4604,6 +4614,13 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
                 const fla::Transform keyed = transform;
                 if (stampCopies(painter, *instance, tweenElement, tweenProgress, keyed, copies))
                     return;
+                // Many that each need a picture of their own share those
+                // that come out the same; a copy drawing copies of its own
+                // keeps them apart.
+                const fla::SymbolInstance* outerOf = _copyPicturesOf;
+                std::vector<CopyPicture> outer;
+                outer.swap(_copyPictures);
+                _copyPicturesOf = copies.size() >= 16 && !_movie && !fastCopiesOff() ? instance : nullptr;
                 for (const fla::behaviors::Delta& copy : copies)
                 {
                     _overrideElement = element;
@@ -4614,6 +4631,8 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
                 }
                 _copyElement = nullptr;
                 _copyDelta = nullptr;
+                _copyPicturesOf = outerOf;
+                _copyPictures.swap(outer);
                 return;
             }
             if (!copies.empty())
@@ -5162,14 +5181,55 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
                 const int shownFrame = this->shownFrame();
                 // Onion frames are drawn once and passed over, so they are
                 // neither looked up nor kept.
-                const bool cacheable = !_maskPass && _frameOverride < 0 && _sampleFrame < 0 && !_movie && _templateStack.empty();
+                // A behavior's copies look different from one another, so
+                // none is kept for the next paint.
+                const bool cacheable =
+                    !_maskPass && _frameOverride < 0 && _sampleFrame < 0 && !_movie && _templateStack.empty() && !asCopy;
                 const auto cached = cacheable ? _filterCache.find(instance) : _filterCache.end();
                 const auto sameLinear = [](const QTransform& a, const QTransform& b) {
                     return std::fabs(a.m11() - b.m11()) < 1.0e-9 && std::fabs(a.m12() - b.m12()) < 1.0e-9 &&
                         std::fabs(a.m21() - b.m21()) < 1.0e-9 && std::fabs(a.m22() - b.m22()) < 1.0e-9;
                 };
+                // One of many copies: a picture an earlier copy that looks
+                // the same made, moved by whole pixels.
+                const bool sharing = asCopy && _copyPicturesOf == instance && !_maskPass && !turned;
+                const CopyPicture* alike = nullptr;
+                const auto samePhase = [](double a, double b) {
+                    const double apart = a - b;
+                    return std::fabs(apart - std::round(apart)) < 1.0e-6;
+                };
+                const auto sameColor = [](const fla::ColorTransform& a, const fla::ColorTransform& b) {
+                    return a.tintMultiplier == b.tintMultiplier && a.brightness == b.brightness &&
+                        a.redMultiplier == b.redMultiplier && a.greenMultiplier == b.greenMultiplier &&
+                        a.blueMultiplier == b.blueMultiplier && a.alphaMultiplier == b.alphaMultiplier &&
+                        a.redOffset == b.redOffset && a.greenOffset == b.greenOffset && a.blueOffset == b.blueOffset &&
+                        a.alphaOffset == b.alphaOffset &&
+                        (a.tintMultiplier == 0.0 || (a.tintColor[0] == b.tintColor[0] && a.tintColor[1] == b.tintColor[1] &&
+                                                         a.tintColor[2] == b.tintColor[2]));
+                };
+                if (sharing)
+                    for (const CopyPicture& picture : _copyPictures)
+                        if (picture.frame == frameOffset && picture.loop == loopType && sameColor(picture.color, color) &&
+                            sameLinear(picture.full, full) && samePhase(picture.full.dx(), full.dx()) &&
+                            samePhase(picture.full.dy(), full.dy()))
+                        {
+                            alike = &picture;
+                            break;
+                        }
+                const QPoint alikeAt = alike ? alike->origin + QPoint(static_cast<int>(std::lround(full.dx() - alike->full.dx())),
+                                                                   static_cast<int>(std::lround(full.dy() - alike->full.dy())))
+                                             : QPoint();
                 const int innerFrame = symbolFrame(*instance);
-                if (cached != _filterCache.end() && !cached->clipped && cached->frame == shownFrame &&
+                // Only where the whole of it falls on the device, as the
+                // picture it would have made is not cut short there.
+                if (alike && deviceArea.toAlignedRect().contains(QRect(alikeAt, alike->image.size())))
+                {
+                    painter.save();
+                    painter.resetTransform();
+                    Filters::composite(painter, alikeAt, alike->image, instance->blendMode, _layerGroupDepth > 0);
+                    painter.restore();
+                }
+                else if (cached != _filterCache.end() && !cached->clipped && cached->frame == shownFrame &&
                     cached->inner == innerFrame && cached->revision == _revision && sameLinear(cached->full, full))
                 {
                     const QPoint shift(static_cast<int>(std::lround(full.dx() - cached->full.dx())),
@@ -5221,6 +5281,10 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
                     Filters::composite(painter, crop.topLeft(), symbolImage, instance->blendMode, _layerGroupDepth > 0);
                     painter.restore();
 
+                    // Kept for the copies after it that look the same.
+                    if (sharing && !clipped && _copyPictures.size() < 64 &&
+                        symbolImage.width() * symbolImage.height() <= 1024 * 1024)
+                        _copyPictures.push_back({frameOffset, loopType, color, full, symbolImage, crop.topLeft()});
                     // Kept for the next paint unless it is huge.
                     if (cacheable && symbolImage.width() * symbolImage.height() <= 4 * 1024 * 1024)
                     {
@@ -6960,15 +7024,21 @@ bool PhoenixView::stampCopies(QPainter& painter, const fla::SymbolInstance& inst
     // A handful draw as quickly one by one, and exactly.
     constexpr size_t kFewest = 16;
     const fla::Symbol* symbol = instance.symbol;
-    // Graphics only: a movie clip in a movie playing is where its scripts
-    // leave it, so its copies are drawn one by one there, and so everywhere
-    // else too, for the movie and the exports to look the same.
-    if (copies.size() < kFewest || !symbol || instance.symbolType != fla::SymbolType::Graphic || _maskPass || _warping || _outlineColor.isValid() ||
-        !_templateStack.empty() || symbol->scale9 || !instance.otherSymbolType.empty())
+    // Graphics and movie clips: a movie clip in a movie playing is where
+    // its scripts leave it, so its copies are drawn one by one there.
+    const bool clip = instance.symbolType == fla::SymbolType::MovieClip;
+    if (copies.size() < kFewest || fastCopiesOff() || !symbol || (instance.symbolType != fla::SymbolType::Graphic && !clip) || (clip && _movie) ||
+        _maskPass || _warping || _outlineColor.isValid() || !_templateStack.empty() || symbol->scale9 ||
+        !instance.otherSymbolType.empty())
         return false;
-    // Only what a picture of it, faded, shows the same.
+    // Only what a picture of it, faded, shows the same; the rest are drawn
+    // one by one, those that look alike from one picture each (see
+    // CopyPictures).
     for (const fla::Filter& filter : instance.filters)
         if (filter.enabled)
+            return false;
+    for (const fla::behaviors::Delta& copy : copies)
+        if (copy.tint > 0.0)
             return false;
     if (!instance.blendMode.empty() && instance.blendMode != "normal")
         return false;
@@ -7017,7 +7087,7 @@ bool PhoenixView::stampCopies(QPainter& painter, const fla::SymbolInstance& inst
                     clips = clips || (element && element->elementType() == fla::Element::Type::SymbolInstance &&
                                          static_cast<const fla::SymbolInstance*>(element)->symbolType != fla::SymbolType::Graphic);
     const auto keyOf = [&](const fla::behaviors::Delta& copy) {
-        if (copy.hold >= 0)
+        if (copy.hold >= 0 && !clip)
             return -1 - std::min(copy.hold, symbolLength(symbol) - 1);
         if (clips)
             return copy.frame;

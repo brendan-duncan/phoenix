@@ -1405,6 +1405,23 @@ private:
     /// the copies its behaviors make.
     const fla::Element* _copyElement = nullptr;
     const fla::behaviors::Delta* _copyDelta = nullptr;
+    /// Many copies of an instance that needs a picture of its own (a
+    /// filter, a blend, a color effect): each picture made while they are
+    /// drawn, kept for the copies that look the same. Those are on the same
+    /// frame of the symbol, with the same color, turn and size, and the
+    /// same part of a pixel across and down, so one is the other moved by
+    /// whole pixels and drawing it there is exact.
+    struct CopyPicture
+    {
+        int frame = 0;
+        fla::LoopType loop = fla::LoopType::SingleFrame;
+        fla::ColorTransform color;
+        QTransform full;
+        QImage image;
+        QPoint origin;
+    };
+    const fla::SymbolInstance* _copyPicturesOf = nullptr;
+    std::vector<CopyPicture> _copyPictures;
     unsigned _behaviorRevision = ~0u;
     /// Each symbol's bounds over all its frames: its visible layers'
     /// (culling, 9-slice) and all its art's (the offscreen a filtered or
@@ -1436,8 +1453,9 @@ private:
     /// largest copy is seen, and each copy stamped from that picture with its
     /// own place, turn, size and fade. False, drawing nothing, when the
     /// instance needs more than that (filters, blends, color effects, 3D,
-    /// 9-slice, a movie clip, a mask or outline pass); the copies are then
-    /// drawn one by one.
+    /// 9-slice, a movie clip in a movie playing, a mask or outline pass);
+    /// the copies are then drawn one by one, sharing pictures where they
+    /// look the same (_copyPictures).
     bool stampCopies(QPainter& painter, const fla::SymbolInstance& instance, const fla::Element* tweenElement,
         double tweenProgress, const fla::Transform& keyed, const fla::behaviors::Copies& copies);
     /// An element's bounds in the space of what holds it, over every frame
