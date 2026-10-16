@@ -11,6 +11,7 @@ releases/
 TODO.md
 PARITY.md
 ANIMATE_COVERAGE.md
+WEBSITE.md
 
 # Working copies Claude Code makes for its agents
 .claude/worktrees/
