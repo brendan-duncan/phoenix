@@ -1539,6 +1539,7 @@ private:
 
     tinyxml2::XMLElement* writeFrame(tinyxml2::XMLDocument& doc, const Object& frame, int index)
     {
+        spend();
         tinyxml2::XMLElement* node = doc.NewElement("DOMFrame");
         node->SetAttribute("index", index);
         if (frame.duration > 1)
@@ -1619,13 +1620,18 @@ private:
     {
         if (!element)
             return;
+        spend();
         if (element->cls == "CPicShape")
         {
+            if (_nesting >= kMaxNesting)
+                throw ParseError("groups nested too deep");
+            ++_nesting;
             if (element->objFlags & 1)
             {
                 parent->InsertEndChild(writeShape(doc, element->matrix, element->shape));
                 for (const Object* child : element->children)
                     writeElement(doc, parent, child);
+                --_nesting;
                 return;
             }
             tinyxml2::XMLElement* group = doc.NewElement("DOMGroup");
@@ -1637,6 +1643,7 @@ private:
                 writeElement(doc, members, child);
             group->InsertEndChild(members);
             parent->InsertEndChild(group);
+            --_nesting;
         }
         else if (element->cls == "CPicSymbol" || element->cls == "CPicSprite" || element->cls == "CPicButton")
         {
@@ -1954,6 +1961,19 @@ private:
     std::map<std::string, const Folder*> _folders;
     std::map<int, std::string> _symbolPaths;
     std::map<int, std::string> _mediaPaths;
+    // An object read once can be referred to again and again, and from
+    // within others it holds: how many frames and elements are written, and
+    // how deep the groups are.
+    static constexpr size_t kMaxWritten = 4000000;
+    static constexpr int kMaxNesting = 200;
+    size_t _written = 0;
+    int _nesting = 0;
+
+    void spend()
+    {
+        if (++_written > kMaxWritten)
+            throw ParseError("objects repeated past reason");
+    }
 };
 
 } // namespace

@@ -321,6 +321,46 @@ TEST(binary_fla_stops_a_stream_at_objects_nested_past_a_limit)
     CHECK(warning.find("too deep") != std::string::npos);
 }
 
+TEST(binary_fla_refuses_objects_repeated_past_reason)
+{
+    // A layer and frame holding shapes, each a group of thirty references
+    // to the one before: a billion groups unless writing stops.
+    std::vector<uint8_t> body = {0, 0};
+    const auto declare = [&body](const std::string& name) {
+        body.insert(body.end(), {0xFF, 0xFF, 0, 0, static_cast<uint8_t>(name.size()), 0});
+        body.insert(body.end(), name.begin(), name.end());
+    };
+    const auto zeros = [&body](size_t count) { body.insert(body.end(), count, 0); };
+    declare("CPicLayer"); // class 3, layer 4
+    zeros(2);
+    declare("CPicFrame"); // class 5, frame 6
+    zeros(2);
+    declare("CPicShape"); // class 7, the first shape 8
+    zeros(4); // no children
+    zeros(43); // its point and empty shape
+    for (int level = 0; level < 6; ++level)
+    {
+        body.insert(body.end(), {0x07, 0x80, 0, 0});
+        for (int i = 0; i < 30; ++i)
+            body.insert(body.end(), {static_cast<uint8_t>(8 + level), 0});
+        zeros(2);
+        zeros(43);
+    }
+    zeros(2); // the end of the frame's children
+    zeros(117); // the rest of the frame
+    zeros(2); // the end of the layer's children
+    zeros(34);
+    zeros(2);
+    std::map<std::string, std::vector<uint8_t>> streams;
+    streams["Contents"] = contentsWithScene(0x43);
+    streams["Page 1"] = pageStream(body);
+    std::map<std::string, std::vector<uint8_t>> files;
+    std::string error;
+    std::string warning;
+    CHECK(!BinaryFla::convert(streams, files, error, &warning));
+    CHECK(error.find("past reason") != std::string::npos);
+}
+
 TEST(binary_fla_keeps_what_comes_before_a_class_it_does_not_know)
 {
     // A layer whose frame holds an object of a class Phoenix cannot read:
