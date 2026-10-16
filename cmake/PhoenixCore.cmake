@@ -195,6 +195,7 @@ set(PHOENIX_CORE_JSFL_SOURCES
     jsfl/session.cpp
     jsfl/xul.cpp
     jsfl/model_xul.cpp
+    jsfl/native_extensions.cpp
 )
 
 set(PHOENIX_CORE_PYTHON_SOURCES
@@ -251,7 +252,8 @@ function(phoenix_add_core target src)
             ${CMAKE_BINARY_DIR}/src/third_party/zlib)
     endif()
     if(CORE_JSFL)
-        target_link_libraries(${target} PUBLIC qjs)
+        # dl for native extension libraries (jsfl/native_extensions.cpp).
+        target_link_libraries(${target} PUBLIC qjs ${CMAKE_DL_LIBS})
     endif()
     if(CORE_PYTHON)
         target_link_libraries(${target} PUBLIC ${CMAKE_DL_LIBS})

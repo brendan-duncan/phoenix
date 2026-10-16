@@ -135,7 +135,8 @@ if(PHOENIX_TESTS_HAVE_PARSER)
 endif()
 
 if(PHOENIX_TESTS_HAVE_JSFL)
-    list(APPEND TEST_SOURCES test_jsfl.cpp test_jsfl_e4x.cpp test_jsfl_xul.cpp test_jsfl_extensions.cpp test_jsfl_document.cpp)
+    list(APPEND TEST_SOURCES test_jsfl.cpp test_jsfl_e4x.cpp test_jsfl_xul.cpp test_jsfl_extensions.cpp test_jsfl_document.cpp
+        test_jsfl_native.cpp)
 endif()
 
 # Playing movies with their scripts, with libas3 in the build.
@@ -156,6 +157,27 @@ if(PHOENIX_TESTS_HAVE_JSFL)
     if(MSVC)
         target_link_options(phoenix_tests PRIVATE /STACK:8388608)
     endif()
+
+    # Native extension libraries the tests put in an External Libraries
+    # folder: one written against mm_jsapi.h, one with no entry point.
+    add_library(test_jsapi_extension SHARED native_extension/test_extension.c)
+    target_include_directories(test_jsapi_extension PRIVATE ${PHOENIX_SRC}/jsfl)
+    add_library(test_jsapi_no_init SHARED native_extension/no_init.c)
+    foreach(library test_jsapi_extension test_jsapi_no_init)
+        set_target_properties(${library} PROPERTIES
+            AUTOMOC OFF AUTOUIC OFF AUTORCC OFF
+            LIBRARY_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/native_extension
+            RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/native_extension)
+    endforeach()
+    # JS_ObjectToValue casts a JSObject* to a long jsval, which 64-bit
+    # Windows warns of; Phoenix's object handles are small enough to fit.
+    if(MSVC)
+        target_compile_options(test_jsapi_extension PRIVATE /wd4311)
+    endif()
+    add_dependencies(phoenix_tests test_jsapi_extension test_jsapi_no_init)
+    target_compile_definitions(phoenix_tests PRIVATE
+        PHOENIX_TEST_EXTENSION="$<TARGET_FILE:test_jsapi_extension>"
+        PHOENIX_TEST_NO_INIT="$<TARGET_FILE:test_jsapi_no_init>")
 endif()
 
 if(MSVC)

@@ -7,6 +7,7 @@
 #include "e4x.h"
 #include "flfile.h"
 #include "model.h"
+#include "native_extensions.h"
 
 #include <quickjs.h>
 
@@ -741,6 +742,9 @@ void installGlobals(JSContext* ctx, Binding& binding, Session& session, Host& ho
     JSValue prelude = JS_Eval(ctx, kPrelude, std::strlen(kPrelude), "<phoenix>", JS_EVAL_TYPE_GLOBAL);
     JS_FreeValue(ctx, prelude);
     JS_FreeValue(ctx, JS_Eval(ctx, kListeners, std::strlen(kListeners), "<phoenix-listeners>", JS_EVAL_TYPE_GLOBAL));
+
+    // Native extension libraries, each an object of functions.
+    native::install(ctx, host.configDirectory(), [&host](const std::string& message) { host.trace(message); });
     JS_FreeValue(ctx, global);
 }
 

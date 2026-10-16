@@ -81,8 +81,13 @@ public:
         reply = initial;
         return true;
     }
+    /// The Configuration folder, when a test gives one.
+    std::string config;
+
     std::string configDirectory() override
     {
+        if (!config.empty())
+            return config;
         return (std::filesystem::temp_directory_path() / "phoenix_jsfl_test_config").u8string();
     }
     std::string version() override { return "0.7.0"; }

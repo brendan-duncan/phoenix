@@ -212,6 +212,8 @@ set(HEADERS
     src/jsfl/xul.h
     src/gui/xul_dialog.h
     src/jsfl/extensions.h
+    src/jsfl/mm_jsapi.h
+    src/jsfl/native_extensions.h
     src/gui/mcp_server.h
     src/gui/stroke_style_dialog.h
     src/gui/safe_zones_dialog.h
