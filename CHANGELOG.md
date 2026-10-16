@@ -2,7 +2,7 @@
 
 What changed in each release of Phoenix, newest first.
 
-## 0.14.0 (Unreleased)
+## 0.13.2
 
 - Many crashes fixed: closing a document tab, adding bones then closing, undoing while an AI assistant edits, objects kept by scripts after they are gone, Test Movie clips made and removed by frame scripts, very large blurs, and high-density screens running out of memory
 - Started from Explorer or a shortcut, Phoenix no longer leaves a console window open beside it
