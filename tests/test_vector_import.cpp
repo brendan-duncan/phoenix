@@ -377,3 +377,28 @@ TEST(svg_uses_that_repeat_themselves_stop)
     const fla::vectors::Artwork art = fla::vectors::readSvg(svg);
     CHECK(art.paths.empty());
 }
+
+TEST(pdf_standard_fonts_without_widths_use_their_own)
+{
+    // Helvetica-Bold with no Widths: A is 722 thousandths, B 722; a CMYK
+    // JPEG reads as ink unless its Decode inverts it.
+    const std::vector<uint8_t> pdf = pagePdf("BT /F1 10 Tf 1 0 0 1 10 80 Tm (AB) Tj (A) Tj ET "
+                                             "q 10 0 0 10 0 0 cm /Im1 Do /Im2 Do Q",
+        "/Font << /F1 5 0 R >> /XObject << /Im1 6 0 R /Im2 7 0 R >>",
+        {"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>",
+            streamObject("/Type /XObject /Subtype /Image /Width 1 /Height 1 /ColorSpace /DeviceCMYK "
+                         "/BitsPerComponent 8 /Filter /DCTDecode",
+                "\xFF\xD8\xFF\xD9"),
+            streamObject("/Type /XObject /Subtype /Image /Width 1 /Height 1 /ColorSpace /DeviceCMYK "
+                         "/BitsPerComponent 8 /Filter /DCTDecode /Decode [1 0 1 0 1 0 1 0]",
+                "\xFF\xD8\xFF\xD9")});
+    const fla::vectors::Artwork art = fla::vectors::readPdf(pdf);
+    CHECK(art.texts.size() == 2);
+    if (art.texts.size() == 2)
+        CHECK(near(art.texts[1].placement.tx, 10.0 + 14.44));
+    CHECK(art.images.size() == 2);
+    if (art.images.size() == 2)
+        CHECK(art.images[0].inkCmyk && !art.images[1].inkCmyk);
+    CHECK(fla::vectors::standardGlyphWidth("Times-Roman", 0xE9) == 444.0);
+    CHECK(fla::vectors::standardGlyphWidth("Courier-Bold", 'W') == 600.0);
+}

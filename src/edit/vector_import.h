@@ -156,6 +156,19 @@ Artwork readSvg(const std::string& text);
 /// PDF page (an Illustrator 8 or older file).
 Artwork readPdf(const std::vector<uint8_t>& bytes);
 
+/// The text (UTF-8) a PostScript glyph name stands for: "eacute" is "é";
+/// empty for names it does not know.
+std::string glyphNameText(const std::string& name);
+
+/// A font's family and style from its PostScript name:
+/// "ABCDEF+TimesNewRomanPS-BoldMT" is "Times New Roman", bold.
+void splitFontName(const std::string& name, std::string& family, bool& bold, bool& italic);
+
+/// A character's width, a thousand to the em, in the standard font the
+/// name is nearest (Helvetica, Times or Courier, bold or italic), for the
+/// Latin-1 letters and common punctuation; an average for the rest.
+double standardGlyphWidth(const std::string& fontName, uint32_t unicode);
+
 /// Base64 decoded, skipping what is not base64.
 std::vector<uint8_t> fromBase64(const std::string& text);
 

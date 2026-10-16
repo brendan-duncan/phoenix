@@ -52,6 +52,21 @@ std::string stream(const std::string& dictionaryExtra, const std::vector<uint8_t
         std::string(data.begin(), data.end()) + "\r\nendstream";
 }
 
+/// \a plain encrypted as Type 1 fonts are, with \a key (55665 for eexec,
+/// 4330 for charstrings), behind four bytes of padding.
+std::string type1Encrypt(const std::string& plain, uint32_t key)
+{
+    std::string out;
+    uint32_t r = key;
+    for (const char ch : std::string(4, '\x2A') + plain)
+    {
+        const uint8_t cipher = static_cast<uint8_t>(static_cast<uint8_t>(ch) ^ (r >> 8));
+        out += static_cast<char>(cipher);
+        r = ((cipher + r) * 52845u + 22719u) & 0xFFFFu;
+    }
+    return out;
+}
+
 std::string ascii85(const std::vector<uint8_t>& data)
 {
     std::string out;
@@ -552,5 +567,92 @@ TEST(postscript_image_masks_and_masked_images_come_in)
         CHECK(art.images[5].encoded.size() == jpeg.size() && art.images[5].encoded[0] == 0xFF);
     }
     // The square after the JPEG's data.
+    CHECK(art.paths.size() == 1);
+}
+
+TEST(postscript_binary_planes_read_in_turn_after_their_operator)
+{
+    // Photoshop's way: a procedure a plane, each reading a row from the
+    // program in turn, the data starting right after "image " (a zero byte
+    // first, which is data, not white space).
+    std::string program =
+        "%!PS-Adobe-3.0 EPSF-3.0\n%%BoundingBox: 0 0 10 10\n/DeviceRGB setcolorspace\n"
+        "/p1 1 string def /p2 1 string def /p3 1 string def\n"
+        "<< /ImageType 1 /Width 1 /Height 2 /BitsPerComponent 8 /ImageMatrix [1 0 0 -2 0 2] /Decode [0 1 0 1 0 1]\n"
+        "   /MultipleDataSources true\n"
+        "   /DataSource [{currentfile p1 readstring pop} {currentfile p2 readstring pop} {currentfile p3 readstring pop}]\n"
+        ">> image ";
+    program += std::string("\x00\xFF\x00\xFF\x00\x00", 6);
+    program += "\n0 0 1 1 rectfill\n";
+    const double box[4] = {0, 0, 10, 10};
+    const fla::vectors::Artwork art = fla::vectors::readPostScript(program, box);
+    CHECK(art.images.size() == 1 && art.paths.size() == 1);
+    if (!art.images.empty())
+    {
+        // Row one green, row two red.
+        const auto& rgba = art.images[0].rgba;
+        CHECK(rgba[0] == 0 && rgba[1] == 255 && rgba[2] == 0);
+        CHECK(rgba[4] == 255 && rgba[5] == 0 && rgba[6] == 0);
+    }
+}
+
+TEST(postscript_fonts_the_file_carries_give_their_widths)
+{
+    // A Type 1 font behind eexec: A 400 units wide, B 700, as their
+    // charstrings' hsbw say (0 400 hsbw endchar).
+    const std::string a = type1Encrypt(std::string("\x8B\xF8\x24\x0D\x0E", 5), 4330);
+    const std::string b = type1Encrypt(std::string("\x8B\xF9\x50\x0D\x0E", 5), 4330);
+    const std::string plain =
+        "dup /Private 8 dict dup begin /RD{string currentfile exch readstring pop}executeonly def\n"
+        "/ND{noaccess def}executeonly def /NP{noaccess put}executeonly def /lenIV 4 def\n"
+        "2 index /CharStrings 3 dict dup begin\n/A " + std::to_string(a.size()) + " RD " + a + " ND\n/B " +
+        std::to_string(b.size()) + " RD " + b + " ND\nend\nend\nreadonly put\nnoaccess put\n"
+        "dup /FontName get exch definefont pop\nmark currentfile closefile\n";
+    const std::string encrypted = type1Encrypt(plain, 55665);
+    std::string hex;
+    for (size_t i = 0; i < encrypted.size(); ++i)
+    {
+        char digits[3];
+        std::snprintf(digits, sizeof(digits), "%02x", static_cast<unsigned char>(encrypted[i]));
+        hex += digits;
+        if (i % 32 == 31)
+            hex += '\n';
+    }
+    std::string zeros;
+    for (int i = 0; i < 8; ++i)
+        zeros += std::string(64, '0') + "\n";
+    const std::string program =
+        "%!PS-Adobe-3.0 EPSF-3.0\n%%BoundingBox: 0 0 400 100\n"
+        "%!PS-AdobeFont-1.0: TestFont\n12 dict begin /FontName /TestFont def /FontType 1 def\n"
+        "/FontMatrix [0.001 0 0 0.001 0 0] readonly def /Encoding StandardEncoding def\n"
+        "/FontBBox {0 0 1000 1000} readonly def currentdict end currentfile eexec\n" +
+        hex + "\n" + zeros + "cleartomark\n"
+        "/TestFont findfont 10 scalefont setfont 0 80 moveto (AB) show (A) show\n"
+        // Metrics in the font's dictionary win.
+        "/TestFont findfont dup length dict copy dup /Metrics << /A 250 >> put /Metered exch definefont pop\n"
+        "/Metered findfont 10 scalefont setfont 0 60 moveto (A) show (B) show\n"
+        // A standard font of its own, and Latin-1 through a reencoding.
+        "/Times-BoldItalic findfont 10 scalefont setfont 0 40 moveto (A) show (B) show\n"
+        "/Times-Roman findfont dup length dict copy dup /Encoding ISOLatin1Encoding put /_Times-Roman exch definefont\n"
+        "10 scalefont setfont 0 20 moveto (caf\\351) show (B) show\n"
+        "0 0 10 10 rectfill\n";
+    const double box[4] = {0, 0, 400, 100};
+    const fla::vectors::Artwork art = fla::vectors::readPostScript(program, box);
+    CHECK(art.notes.empty());
+    for (const std::string& n : art.notes)
+        std::printf("    note: %s\n", n.c_str());
+    CHECK(art.texts.size() == 8);
+    if (art.texts.size() == 8)
+    {
+        CHECK(art.texts[0].family == "Test Font" || art.texts[0].family == "TestFont");
+        CHECK_NEAR(art.texts[1].placement.tx, 11);
+        CHECK_NEAR(art.texts[3].placement.tx, 2.5);
+        // Times-BoldItalic's A is 667.
+        CHECK_NEAR(art.texts[5].placement.tx, 6.67);
+        CHECK(art.texts[6].text == "caf\xC3\xA9" && art.texts[6].family == "Times");
+        // c a f 444 444 333, é as e: 444.
+        CHECK_NEAR(art.texts[7].placement.tx, 16.65);
+    }
+    // The program runs on past the font.
     CHECK(art.paths.size() == 1);
 }

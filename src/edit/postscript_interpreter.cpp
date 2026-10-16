@@ -193,6 +193,9 @@ struct Font
 {
     std::string name = "Helvetica";
     Matrix matrix{0.001, 0, 0, 0.001, 0, 0};
+    /// The font's own FontMatrix scale, before scalefont: a thousandth for
+    /// most fonts.
+    double base = 0.001;
     std::shared_ptr<Dict> dict;
 };
 
@@ -394,6 +397,10 @@ struct Interp
     /// Pattern tiles drawn so far, and how deep patterns paint patterns.
     size_t tiles = 0;
     int patternDepth = 0;
+    /// How deep encrypted font programs run inside others.
+    int eexecDepth = 0;
+    /// Charstring widths worked out, by charstring.
+    mutable std::map<std::pair<const void*, size_t>, double> widthCache;
     unsigned seed = 1;
 
     explicit Interp(Artwork& a)
@@ -750,48 +757,136 @@ struct Interp
         return std::sqrt(std::fabs(m.a * m.d - m.b * m.c)) * 1000.0 / 1000.0;
     }
 
-    /// A glyph's width, a thousand to the em: the standard metrics of the
-    /// font the name is nearest (Courier, Times or Helvetica, bold or
-    /// italic), for the printable ASCII; an average for the rest.
+    /// The name of the glyph code \a c shows in the current font: through
+    /// its Encoding, else the standard one.
+    std::string glyphName(unsigned char c) const
+    {
+        const Obj* encoding = nullptr;
+        if (gs.font.dict)
+        {
+            const auto found = gs.font.dict->find("Encoding");
+            if (found != gs.font.dict->end())
+                encoding = &found->second;
+        }
+        if (!encoding || encoding->t != Obj::T::Array)
+        {
+            const auto found = systemdict->find("StandardEncoding");
+            encoding = found != systemdict->end() ? &found->second : nullptr;
+        }
+        if (encoding && encoding->t == Obj::T::Array && encoding->arr && c < encoding->arr->size())
+        {
+            const Obj& name = (*encoding->arr)[c];
+            if ((name.t == Obj::T::Name || name.t == Obj::T::String) && name.str)
+                return *name.str;
+        }
+        return std::string();
+    }
+
+    /// A glyph's width in the font's own units (a thousand to the em for
+    /// most): its Metrics entry, else what its charstring sets (a font the
+    /// file carries), else the standard metrics of the font the name is
+    /// nearest.
     double glyphWidth(unsigned char c) const
     {
-        static const short helvetica[95] = {278, 278, 355, 556, 556, 889, 667, 222, 333, 333, 389, 584, 278, 333, 278,
-            278, 556, 556, 556, 556, 556, 556, 556, 556, 556, 556, 278, 278, 584, 584, 584, 556, 1015, 667, 667, 722,
-            722, 667, 611, 778, 722, 278, 500, 667, 556, 833, 722, 778, 667, 778, 722, 667, 611, 722, 667, 944, 667,
-            667, 611, 278, 278, 278, 469, 556, 222, 556, 556, 500, 556, 556, 278, 556, 556, 222, 222, 500, 222, 833,
-            556, 556, 556, 556, 333, 500, 278, 556, 500, 722, 500, 500, 500, 334, 260, 334, 584};
-        static const short helveticaBold[95] = {278, 333, 474, 556, 556, 889, 722, 278, 333, 333, 389, 584, 278, 333,
-            278, 278, 556, 556, 556, 556, 556, 556, 556, 556, 556, 556, 333, 333, 584, 584, 584, 611, 975, 722, 722,
-            722, 722, 667, 611, 778, 722, 278, 556, 722, 611, 833, 722, 778, 667, 778, 722, 667, 611, 722, 667, 944,
-            667, 667, 611, 333, 278, 333, 584, 556, 278, 556, 611, 556, 611, 556, 333, 611, 611, 278, 278, 556, 278,
-            889, 611, 611, 611, 611, 389, 556, 333, 611, 556, 778, 556, 556, 500, 389, 280, 389, 584};
-        static const short times[95] = {250, 333, 408, 500, 500, 833, 778, 333, 333, 333, 500, 564, 250, 333, 250, 278,
-            500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 278, 278, 564, 564, 564, 444, 921, 722, 667, 667, 722,
-            611, 556, 722, 722, 333, 389, 722, 611, 889, 722, 722, 556, 722, 667, 556, 611, 722, 722, 944, 722, 722,
-            611, 333, 278, 333, 469, 500, 333, 444, 500, 444, 500, 444, 333, 500, 500, 278, 278, 500, 278, 778, 500,
-            500, 500, 500, 333, 389, 278, 500, 500, 722, 500, 500, 444, 480, 200, 480, 541};
-        static const short timesBold[95] = {250, 333, 555, 500, 500, 1000, 833, 333, 333, 333, 500, 570, 250, 333, 250,
-            278, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 333, 333, 570, 570, 570, 500, 930, 722, 667, 722,
-            722, 667, 611, 778, 778, 389, 500, 778, 667, 944, 722, 778, 611, 778, 722, 556, 667, 722, 722, 1000, 722,
-            722, 667, 333, 278, 333, 581, 500, 333, 500, 556, 444, 556, 444, 333, 500, 556, 278, 333, 556, 278, 833,
-            556, 500, 556, 556, 444, 389, 333, 556, 500, 722, 500, 500, 444, 394, 220, 394, 520};
-        static const short timesItalic[95] = {250, 333, 420, 500, 500, 833, 778, 333, 333, 333, 500, 675, 250, 333, 250,
-            278, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 333, 333, 675, 675, 675, 500, 920, 611, 611, 667,
-            722, 611, 611, 722, 722, 333, 444, 667, 556, 833, 667, 722, 611, 722, 611, 500, 556, 722, 611, 833, 611,
-            556, 556, 389, 278, 389, 422, 500, 333, 500, 500, 444, 500, 444, 278, 500, 500, 278, 278, 444, 278, 722,
-            500, 500, 500, 500, 389, 389, 278, 500, 444, 667, 444, 444, 389, 400, 275, 400, 541};
-        const std::string& name = gs.font.name;
-        const auto has = [&name](const char* part) { return name.find(part) != std::string::npos; };
-        if (has("Courier") || has("Mono"))
-            return 600.0;
-        const bool bold = has("Bold") || has("Black") || has("Heavy");
-        const bool serif = has("Times") || has("Roman") || has("Serif") || has("Georgia") || has("Garamond") ||
-            has("Palatino") || has("Bookman") || has("Century");
-        const short* table = serif ? (bold ? timesBold : has("Italic") ? timesItalic : times)
-                                   : (bold ? helveticaBold : helvetica);
-        if (c >= 32 && c <= 126)
-            return table[c - 32];
-        return serif ? 500.0 : 556.0;
+        const std::string name = glyphName(c);
+        if (gs.font.dict && !name.empty())
+        {
+            const Dict& font = *gs.font.dict;
+            const auto metrics = font.find("Metrics");
+            if (metrics != font.end() && metrics->second.t == Obj::T::Dict)
+            {
+                const auto m = metrics->second.dict->find(name);
+                if (m != metrics->second.dict->end())
+                {
+                    if (m->second.isNumber())
+                        return m->second.num;
+                    // [sbx wx] or [sbx sby wx wy].
+                    if (m->second.t == Obj::T::Array && m->second.arr->size() >= 2)
+                        return (*m->second.arr)[m->second.arr->size() == 4 ? 2 : 1].num;
+                }
+            }
+            const auto strings = font.find("CharStrings");
+            if (strings != font.end() && strings->second.t == Obj::T::Dict)
+            {
+                const auto glyph = strings->second.dict->find(name);
+                if (glyph != strings->second.dict->end() && glyph->second.t == Obj::T::String && glyph->second.str)
+                {
+                    const auto key = std::make_pair(static_cast<const void*>(glyph->second.str.get()), size_t(0));
+                    const auto cached = widthCache.find(key);
+                    if (cached != widthCache.end())
+                        return cached->second;
+                    int lenIV = 4;
+                    const auto priv = font.find("Private");
+                    if (priv != font.end() && priv->second.t == Obj::T::Dict)
+                    {
+                        const auto iv = priv->second.dict->find("lenIV");
+                        if (iv != priv->second.dict->end() && iv->second.isNumber())
+                            lenIV = toInt(iv->second.num);
+                    }
+                    const double width = charstringWidth(*glyph->second.str, lenIV);
+                    widthCache[key] = width;
+                    if (width >= 0.0)
+                        return width;
+                }
+            }
+        }
+        const std::string text = name.empty() ? std::string() : glyphNameText(name);
+        uint32_t u = c;
+        if (!text.empty())
+        {
+            u = static_cast<unsigned char>(text[0]);
+            if (u >= 0xC0 && text.size() >= 2)
+            {
+                const size_t n = u >= 0xF0 ? 4 : u >= 0xE0 ? 3 : 2;
+                u &= n == 4 ? 0x07 : n == 3 ? 0x0F : 0x1F;
+                for (size_t k = 1; k < n && k < text.size(); ++k)
+                    u = (u << 6) | (static_cast<unsigned char>(text[k]) & 0x3F);
+            }
+        }
+        // The standard metrics are a thousand to the em: in a font of other
+        // units, scaled to them.
+        const double units = std::fabs(gs.font.base) > 1e-12 ? 0.001 / gs.font.base : 1.0;
+        return standardGlyphWidth(gs.font.name, u) * units;
+    }
+
+    /// The advance a Type 1 charstring sets with hsbw or sbw, after its
+    /// encryption (and \a lenIV bytes of it) is undone; -1 when it sets none.
+    static double charstringWidth(const std::string& data, int lenIV)
+    {
+        std::vector<int> plain;
+        uint32_t r = 4330;
+        for (const char ch : data)
+        {
+            const uint8_t cipher = static_cast<uint8_t>(ch);
+            plain.push_back(cipher ^ static_cast<uint8_t>(r >> 8));
+            r = ((cipher + r) * 52845u + 22719u) & 0xFFFFu;
+        }
+        std::vector<double> args;
+        for (size_t i = lenIV < 0 ? 0 : static_cast<size_t>(lenIV); i < plain.size() && args.size() < 24;)
+        {
+            const int v = plain[i++];
+            if (v >= 32 && v <= 246)
+                args.push_back(v - 139);
+            else if (v >= 247 && v <= 250 && i < plain.size())
+                args.push_back((v - 247) * 256 + plain[i++] + 108);
+            else if (v >= 251 && v <= 254 && i < plain.size())
+                args.push_back(-(v - 251) * 256 - plain[i++] - 108);
+            else if (v == 255 && i + 4 <= plain.size())
+            {
+                const int32_t n = static_cast<int32_t>(static_cast<uint32_t>(plain[i]) << 24 |
+                    static_cast<uint32_t>(plain[i + 1]) << 16 | static_cast<uint32_t>(plain[i + 2]) << 8 |
+                    static_cast<uint32_t>(plain[i + 3]));
+                args.push_back(n);
+                i += 4;
+            }
+            else if (v == 13)
+                return args.size() >= 2 ? args[1] : -1.0;
+            else if (v == 12 && i < plain.size() && plain[i] == 7)
+                return args.size() >= 4 ? args[2] : -1.0;
+            else
+                return -1.0;
+        }
+        return -1.0;
     }
 
     /// The width of \a text in the current font, in user space.
@@ -804,26 +899,45 @@ struct Interp
         wy = glyphs * gs.font.matrix.b;
     }
 
+    /// \a text as UTF-8: each code through the font's encoding to the
+    /// character its glyph name stands for, else as Latin-1.
+    std::string textOf(const std::string& text) const
+    {
+        std::string out;
+        for (unsigned char c : text)
+        {
+            const std::string name = glyphName(c);
+            const std::string mapped = name.empty() ? std::string() : glyphNameText(name);
+            if (!mapped.empty())
+                out += mapped;
+            else if (c < 0x80)
+                out += static_cast<char>(c);
+            else
+            {
+                out += static_cast<char>(0xC0 | (c >> 6));
+                out += static_cast<char>(0x80 | (c & 0x3F));
+            }
+        }
+        return out;
+    }
+
     /// Shows \a text, then moves on by its width and by \a extraX, \a
     /// extraY more in user space (the spacing ashow and the rest add).
     void show(const std::string& text, double extraX = 0.0, double extraY = 0.0)
     {
         if (!gs.hasPoint)
             throw PsError{"nocurrentpoint"};
-        // The font's own matrix (glyph space, a thousand units to the em, to
-        // user space) and the CTM.
+        // The font's own matrix (glyph space to user space) and the CTM;
+        // the size is what one unit of a thousand-unit em comes to.
         const Matrix toDevice = gs.ctm.after(gs.font.matrix);
-        const double size = 1000.0 * std::sqrt(std::fabs(toDevice.a * toDevice.d - toDevice.b * toDevice.c));
+        const double units = std::fabs(gs.font.base) > 1e-12 ? 1.0 / std::fabs(gs.font.base) : 1000.0;
+        const double size = units * std::sqrt(std::fabs(toDevice.a * toDevice.d - toDevice.b * toDevice.c));
         Text item;
-        item.text = text;
-        std::string family = gs.font.name;
-        const auto has = [&family](const char* part) { return family.find(part) != std::string::npos; };
-        item.bold = has("Bold") || has("Black") || has("Heavy");
-        item.italic = has("Italic") || has("Oblique");
-        const size_t dash = family.find('-');
-        if (dash != std::string::npos)
-            family = family.substr(0, dash);
-        item.family = family;
+        item.text = textOf(text);
+        // A reencoded font's name may carry marks before it ("_Helvetica").
+        std::string name = gs.font.name;
+        name.erase(0, std::min(name.size(), name.find_first_not_of("_|*%")));
+        splitFontName(name, item.family, item.bold, item.italic);
         item.size = std::max(1.0, size);
         item.color = gs.color;
         // Text space (y down, a unit a pixel) to the stage: the direction
@@ -833,8 +947,11 @@ struct Interp
         const double uy = length > 0 ? toDevice.b / length : 0.0;
         const Point at = stage(gs.px, gs.py);
         item.placement = Placement{ux, -uy, uy, ux, at.x, at.y};
-        art.order.emplace_back(Artwork::Kind::Text, art.texts.size());
-        art.texts.push_back(item);
+        if (item.text.find_first_not_of(' ') != std::string::npos)
+        {
+            art.order.emplace_back(Artwork::Kind::Text, art.texts.size());
+            art.texts.push_back(item);
+        }
         // On by the width, in user space through the CTM.
         double wx, wy;
         textWidth(text, wx, wy);
@@ -865,6 +982,9 @@ struct Interp
     }
 
     void setup();
+    /// Runs \a source as the program (currentfile reads it) to its end,
+    /// then goes back to the program that was running.
+    void runNested(const std::shared_ptr<Source>& source);
     void image(ImageSpec spec);
     void placeImage(Image image, const Matrix& matrix);
     /// What  proc leaves of numbers, run on  in; empty when it fails.
@@ -3264,9 +3384,25 @@ void opMakepattern(Interp& I)
 
 // -- fonts and text
 
+/// The fonts definefont made, by name.
+Dict& fontDirectory(Interp& I)
+{
+    Obj& directory = (*I.systemdict)["FontDirectory"];
+    if (directory.t != Obj::T::Dict)
+        directory = Obj::dictionary();
+    return *directory.dict;
+}
 void opFindfont(Interp& I)
 {
     Obj name = I.pop();
+    // A font the program defined, else one standing for a standard font.
+    const Dict& directory = fontDirectory(I);
+    const auto defined = directory.find(I.keyOf(name));
+    if (defined != directory.end() && defined->second.t == Obj::T::Dict)
+    {
+        I.push(defined->second);
+        return;
+    }
     Obj font = Obj::dictionary();
     (*font.dict)["FontName"] = Obj::name(name.str ? *name.str : "Helvetica", false);
     (*font.dict)["FontMatrix"] = matrixObj(Matrix{0.001, 0, 0, 0.001, 0, 0});
@@ -3281,7 +3417,14 @@ void opFindfont(Interp& I)
 void opDefinefont(Interp& I)
 {
     Obj font = I.pop();
-    I.pop();
+    Obj key = I.pop();
+    if (font.t != Obj::T::Dict)
+        throw PsError{"typecheck"};
+    if (!font.dict->count("FontName") && (key.t == Obj::T::Name || key.t == Obj::T::String))
+        (*font.dict)["FontName"] = Obj::name(*key.str, false);
+    Dict& directory = fontDirectory(I);
+    if (directory.size() < 10000)
+        directory[I.keyOf(key)] = font;
     I.push(font);
 }
 Obj scaledFont(const Obj& font, const Matrix& by)
@@ -3293,6 +3436,9 @@ Obj scaledFont(const Obj& font, const Matrix& by)
     const auto found = copy.dict->find("FontMatrix");
     if (found != copy.dict->end() && found->second.t == Obj::T::Array && found->second.arr->size() == 6)
         base = matrixOf(found->second);
+    // The font's own units, kept through scaling for its widths.
+    if (!copy.dict->count("#UnitScale"))
+        (*copy.dict)["#UnitScale"] = Obj::real(base.a);
     (*copy.dict)["FontMatrix"] = matrixObj(by.after(base));
     return copy;
 }
@@ -3319,6 +3465,8 @@ void opSetfont(Interp& I)
     I.gs.font.matrix = matrix != font.dict->end() && matrix->second.t == Obj::T::Array && matrix->second.arr->size() == 6
         ? matrixOf(matrix->second)
         : Matrix{0.001, 0, 0, 0.001, 0, 0};
+    const auto unit = font.dict->find("#UnitScale");
+    I.gs.font.base = unit != font.dict->end() && unit->second.isNumber() ? unit->second.num : I.gs.font.matrix.a;
     I.gs.font.dict = font.dict;
 }
 void opCurrentfont(Interp& I)
@@ -3580,7 +3728,89 @@ void opFlushfile(Interp& I)
         file.file->at = file.file->bytes.size();
     }
 }
-void opClosefile(Interp& I) { I.pop(); }
+void opClosefile(Interp& I)
+{
+    // Closing the program being run (an encrypted font's end) ends it.
+    Obj file = I.pop();
+    if (file.t == Obj::T::File && file.file && file.file == I.program && I.eexecDepth > 0)
+        file.file->at = file.file->bytes.size();
+}
+void opEexec(Interp& I)
+{
+    // An encrypted font program: hex or binary from where the file stands
+    // to the zeros that close it, decrypted and run as the program.
+    Obj file = I.pop();
+    std::shared_ptr<Source> src = sourceOf(I, file);
+    ready(I, *src);
+    if (I.eexecDepth >= 4)
+        throw PsError{"limitcheck"};
+    const std::vector<uint8_t>& bytes = src->bytes;
+    size_t at = std::min(src->at, bytes.size());
+    while (at < bytes.size() && Scanner::white(bytes[at]))
+        ++at;
+    const auto hexDigit = [](int d) {
+        return d >= '0' && d <= '9' ? d - '0' : d >= 'a' && d <= 'f' ? d - 'a' + 10 : d >= 'A' && d <= 'F' ? d - 'A' + 10 : -1;
+    };
+    bool hex = true;
+    for (size_t k = at, n = 0; n < 4; ++k)
+    {
+        if (k >= bytes.size() || hexDigit(bytes[k]) < 0)
+        {
+            hex = false;
+            break;
+        }
+        ++n;
+    }
+    // The end: a run of 64 zeros (white space between them aside).
+    size_t end = bytes.size();
+    size_t run = 0, runStart = at;
+    for (size_t k = at; k < bytes.size(); ++k)
+    {
+        const uint8_t b = bytes[k];
+        if (b == '0')
+        {
+            if (run++ == 0)
+                runStart = k;
+            if (run >= 64)
+            {
+                end = runStart;
+                break;
+            }
+        }
+        else if (!(b == '\r' || b == '\n') || run == 0)
+            run = 0;
+    }
+    auto plain = std::make_shared<Source>();
+    plain->program = true;
+    uint32_t r = 55665;
+    const auto decrypt = [&](uint8_t cipher) {
+        plain->bytes.push_back(cipher ^ static_cast<uint8_t>(r >> 8));
+        r = ((cipher + r) * 52845u + 22719u) & 0xFFFFu;
+    };
+    int high = -1;
+    for (size_t k = at; k < end; ++k)
+    {
+        if (!hex)
+        {
+            decrypt(bytes[k]);
+            continue;
+        }
+        const int v = hexDigit(bytes[k]);
+        if (v < 0)
+            continue;
+        if (high < 0)
+            high = v;
+        else
+        {
+            decrypt(static_cast<uint8_t>(high * 16 + v));
+            high = -1;
+        }
+    }
+    // The first four bytes are random.
+    plain->bytes.erase(plain->bytes.begin(), plain->bytes.begin() + static_cast<std::ptrdiff_t>(std::min<size_t>(4, plain->bytes.size())));
+    src->at = end;
+    I.runNested(plain);
+}
 void opBytesavailable(Interp& I)
 {
     Obj file = I.pop();
@@ -4031,6 +4261,43 @@ void opImagemask(Interp& I)
     I.image(std::move(spec));
 }
 
+void Interp::runNested(const std::shared_ptr<Source>& source)
+{
+    std::shared_ptr<Source> outerProgram = program;
+    std::unique_ptr<Scanner> outerScanner = std::move(scanner);
+    struct Restore
+    {
+        Interp& I;
+        std::shared_ptr<Source>& program;
+        std::unique_ptr<Scanner>& scanner;
+        ~Restore()
+        {
+            I.program = program;
+            I.scanner = std::move(scanner);
+            --I.eexecDepth;
+        }
+    } restore{*this, outerProgram, outerScanner};
+    program = source;
+    scanner = std::make_unique<Scanner>(source);
+    ++eexecDepth;
+    try
+    {
+        Obj token;
+        while (scanner->next(token, *this))
+        {
+            if (token.isProc())
+                push(token);
+            else
+                execute(token);
+        }
+    }
+    catch (const PsError&)
+    {
+        // A font that fails to load leaves the rest of the program to run.
+        note(art, "A font the file carries could not be read; its text came in with standard widths.");
+    }
+}
+
 void Interp::setup()
 {
     systemdict = std::make_shared<Dict>();
@@ -4097,7 +4364,7 @@ void Interp::setup()
         {"readhexstring", opReadhexstring}, {"readstring", opReadstring}, {"readline", opReadline},
         {"read", opRead}, {"flushfile", opFlushfile}, {"closefile", opClosefile},
         {"bytesavailable", opBytesavailable}, {"image", opImage}, {"colorimage", opColorimage},
-        {"imagemask", opImagemask}, {"currenttransfer", opEmptyProc},
+        {"imagemask", opImagemask}, {"eexec", opEexec}, {"currenttransfer", opEmptyProc},
         {"currentblackgeneration", opEmptyProc}, {"currentundercolorremoval", opEmptyProc},
         {"currentcolortransfer", opFourProcs}, {"currentscreen", opCurrentscreen},
         {"currenthalftone", opCurrenthalftone}, {"setscreen", opSetscreen}, {"setcolorscreen", opClear},
@@ -4135,7 +4402,25 @@ void Interp::setup()
         for (int i = 0; i < 4; ++i)
             standard[static_cast<size_t>(123 + i)] = Obj::name(end[i], false);
         (*systemdict)["StandardEncoding"] = Obj::array(standard);
-        (*systemdict)["ISOLatin1Encoding"] = Obj::array(standard);
+        // ISO Latin-1: the same printable ASCII (but quoteright and
+        // quoteleft), then the Latin-1 letters and signs.
+        Array latin = standard;
+        static const char* const high[] = {"space", "exclamdown", "cent", "sterling", "currency", "yen", "brokenbar",
+            "section", "dieresis", "copyright", "ordfeminine", "guillemotleft", "logicalnot", "hyphen", "registered",
+            "macron", "degree", "plusminus", "twosuperior", "threesuperior", "acute", "mu", "paragraph",
+            "periodcentered", "cedilla", "onesuperior", "ordmasculine", "guillemotright", "onequarter", "onehalf",
+            "threequarters", "questiondown", "Agrave", "Aacute", "Acircumflex", "Atilde", "Adieresis", "Aring", "AE",
+            "Ccedilla", "Egrave", "Eacute", "Ecircumflex", "Edieresis", "Igrave", "Iacute", "Icircumflex", "Idieresis",
+            "Eth", "Ntilde", "Ograve", "Oacute", "Ocircumflex", "Otilde", "Odieresis", "multiply", "Oslash", "Ugrave",
+            "Uacute", "Ucircumflex", "Udieresis", "Yacute", "Thorn", "germandbls", "agrave", "aacute", "acircumflex",
+            "atilde", "adieresis", "aring", "ae", "ccedilla", "egrave", "eacute", "ecircumflex", "edieresis", "igrave",
+            "iacute", "icircumflex", "idieresis", "eth", "ntilde", "ograve", "oacute", "ocircumflex", "otilde",
+            "odieresis", "divide", "oslash", "ugrave", "uacute", "ucircumflex", "udieresis", "yacute", "thorn",
+            "ydieresis"};
+        for (size_t i = 0; i < 96; ++i)
+            latin[0xA0 + i] = Obj::name(high[i], false);
+        latin[0x60] = Obj::name("quoteleft", false);
+        (*systemdict)["ISOLatin1Encoding"] = Obj::array(latin);
     }
     // Fonts and the error machinery programs look for.
     (*systemdict)["FontDirectory"] = Obj::dictionary();

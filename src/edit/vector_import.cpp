@@ -2540,6 +2540,27 @@ PdfFont readFont(PdfFile& file, const std::string& dictionary)
         const std::vector<double> widths = numbersOf(resolved(file, valueOf(dictionary, "/Widths")));
         for (size_t g = 0; g < widths.size(); ++g)
             font.widths[first + static_cast<uint32_t>(g)] = widths[g];
+        // The standard fonts may leave out their widths: theirs, by what
+        // each code reads as.
+        if (widths.empty() && subtype != "/Type3")
+        {
+            const std::string baseFont = valueOf(dictionary, "/BaseFont");
+            for (uint32_t c = 0x20; c < 0x100; ++c)
+            {
+                const std::string& text = font.encoded[c];
+                if (text.empty())
+                    continue;
+                uint32_t u = static_cast<unsigned char>(text[0]);
+                if (u >= 0xC0 && text.size() >= 2)
+                {
+                    const size_t n = u >= 0xF0 ? 4 : u >= 0xE0 ? 3 : 2;
+                    u &= n == 4 ? 0x07 : n == 3 ? 0x0F : 0x1F;
+                    for (size_t k = 1; k < n && k < text.size(); ++k)
+                        u = (u << 6) | (static_cast<unsigned char>(text[k]) & 0x3F);
+                }
+                font.widths[c] = standardGlyphWidth(baseFont, u);
+            }
+        }
         if (subtype == "/Type3")
         {
             const std::vector<double> matrix = numbersOf(valueOf(dictionary, "/FontMatrix"));
@@ -3242,6 +3263,130 @@ void runContent(const std::string& content, PdfRun& run, const std::string& reso
 }
 
 } // namespace
+
+std::string glyphNameText(const std::string& name)
+{
+    return glyphText(name);
+}
+
+void splitFontName(const std::string& name, std::string& family, bool& bold, bool& italic)
+{
+    fontNameParts(name, family, bold, italic);
+}
+
+double standardGlyphWidth(const std::string& fontName, uint32_t unicode)
+{
+    // The printable ASCII, from each font's metrics (the standard
+    // encoding's quoteright and quoteleft at 0x27 and 0x60).
+    static const short helvetica[95] = {278, 278, 355, 556, 556, 889, 667, 222, 333, 333, 389, 584, 278, 333, 278,
+        278, 556, 556, 556, 556, 556, 556, 556, 556, 556, 556, 278, 278, 584, 584, 584, 556, 1015, 667, 667, 722, 722,
+        667, 611, 778, 722, 278, 500, 667, 556, 833, 722, 778, 667, 778, 722, 667, 611, 722, 667, 944, 667, 667, 611,
+        278, 278, 278, 469, 556, 222, 556, 556, 500, 556, 556, 278, 556, 556, 222, 222, 500, 222, 833, 556, 556, 556,
+        556, 333, 500, 278, 556, 500, 722, 500, 500, 500, 334, 260, 334, 584};
+    static const short helveticaBold[95] = {278, 333, 474, 556, 556, 889, 722, 278, 333, 333, 389, 584, 278, 333, 278,
+        278, 556, 556, 556, 556, 556, 556, 556, 556, 556, 556, 333, 333, 584, 584, 584, 611, 975, 722, 722, 722, 722,
+        667, 611, 778, 722, 278, 556, 722, 611, 833, 722, 778, 667, 778, 722, 667, 611, 722, 667, 944, 667, 667, 611,
+        333, 278, 333, 584, 556, 278, 556, 611, 556, 611, 556, 333, 611, 611, 278, 278, 556, 278, 889, 611, 611, 611,
+        611, 389, 556, 333, 611, 556, 778, 556, 556, 500, 389, 280, 389, 584};
+    static const short times[95] = {250, 333, 408, 500, 500, 833, 778, 333, 333, 333, 500, 564, 250, 333, 250, 278,
+        500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 278, 278, 564, 564, 564, 444, 921, 722, 667, 667, 722, 611,
+        556, 722, 722, 333, 389, 722, 611, 889, 722, 722, 556, 722, 667, 556, 611, 722, 722, 944, 722, 722, 611, 333,
+        278, 333, 469, 500, 333, 444, 500, 444, 500, 444, 333, 500, 500, 278, 278, 500, 278, 778, 500, 500, 500, 500,
+        333, 389, 278, 500, 500, 722, 500, 500, 444, 480, 200, 480, 541};
+    static const short timesBold[95] = {250, 333, 555, 500, 500, 1000, 833, 333, 333, 333, 500, 570, 250, 333, 250,
+        278, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 333, 333, 570, 570, 570, 500, 930, 722, 667, 722, 722,
+        667, 611, 778, 778, 389, 500, 778, 667, 944, 722, 778, 611, 778, 722, 556, 667, 722, 722, 1000, 722, 722, 667,
+        333, 278, 333, 581, 500, 333, 500, 556, 444, 556, 444, 333, 500, 556, 278, 333, 556, 278, 833, 556, 500, 556,
+        556, 444, 389, 333, 556, 500, 722, 500, 500, 444, 394, 220, 394, 520};
+    static const short timesItalic[95] = {250, 333, 420, 500, 500, 833, 778, 333, 333, 333, 500, 675, 250, 333, 250,
+        278, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 333, 333, 675, 675, 675, 500, 920, 611, 611, 667, 722,
+        611, 611, 722, 722, 333, 444, 667, 556, 833, 667, 722, 611, 722, 611, 500, 556, 722, 611, 833, 611, 556, 556,
+        389, 278, 389, 422, 500, 333, 500, 500, 444, 500, 444, 278, 500, 500, 278, 278, 444, 278, 722, 500, 500, 500,
+        500, 389, 389, 278, 500, 444, 667, 444, 444, 389, 400, 275, 400, 541};
+    static const short timesBoldItalic[95] = {250, 389, 555, 500, 500, 833, 778, 333, 333, 333, 500, 570, 250, 333,
+        250, 278, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 333, 333, 570, 570, 570, 500, 832, 667, 667, 667,
+        722, 667, 667, 722, 778, 389, 500, 667, 611, 889, 722, 722, 611, 722, 667, 556, 611, 722, 667, 889, 667, 611,
+        611, 333, 278, 333, 570, 500, 333, 500, 500, 444, 500, 444, 333, 500, 556, 278, 278, 500, 278, 778, 556, 500,
+        500, 500, 389, 389, 278, 556, 444, 667, 500, 444, 389, 348, 220, 348, 570};
+    const auto has = [&fontName](const char* part) { return fontName.find(part) != std::string::npos; };
+    if (has("Courier") || has("Mono"))
+        return 600.0;
+    const bool bold = has("Bold") || has("Black") || has("Heavy");
+    const bool italic = has("Italic") || has("Oblique");
+    const bool serif = has("Times") || has("Roman") || has("Serif") || has("Georgia") || has("Garamond") ||
+        has("Palatino") || has("Bookman") || has("Century");
+    const short* table = serif ? (bold ? (italic ? timesBoldItalic : timesBold) : italic ? timesItalic : times)
+                               : (bold ? helveticaBold : helvetica);
+    const auto ascii = [table](char c) { return static_cast<double>(table[static_cast<unsigned char>(c) - 32]); };
+    if (unicode >= 32 && unicode <= 126)
+        return ascii(static_cast<char>(unicode));
+    // Latin-1: accented letters as wide as their base letters, the rest
+    // like what they resemble.
+    if (unicode >= 0xC0 && unicode <= 0xFF)
+    {
+        static const char base[] = "AAAAAA?CEEEEIIIIDNOOOOO?OUUUUYP?aaaaaa?ceeeeiiiionooooo?ouuuuypy";
+        const char b = base[unicode - 0xC0];
+        if (b != '?')
+            return ascii(b);
+        if (unicode == 0xC6)
+            return serif ? (bold ? 1000.0 : 889.0) : 1000.0;
+        if (unicode == 0xE6)
+            return serif ? (bold ? 722.0 : 667.0) : 889.0;
+        if (unicode == 0xDF)
+            return serif ? (bold && !italic ? 556.0 : 500.0) : 611.0;
+        return ascii('+');
+    }
+    switch (unicode)
+    {
+    case 0xA0: return ascii(' ');
+    case 0xA1: return ascii('!');
+    case 0xA2:
+    case 0xA3:
+    case 0xA4:
+    case 0xA5:
+    case 0xA7:
+    case 0xB6:
+    case 0xAB:
+    case 0xBB:
+    case 0x2020:
+    case 0x2021: return ascii('0');
+    case 0xA6: return ascii('|');
+    case 0xA9:
+    case 0xAE: return serif ? (bold ? 747.0 : 760.0) : 737.0;
+    case 0xAA:
+    case 0xBA: return serif ? 300.0 : 370.0;
+    case 0xAC:
+    case 0xB1: return ascii('+');
+    case 0xAD: return ascii('-');
+    case 0xB0: return 400.0;
+    case 0xB2:
+    case 0xB3:
+    case 0xB9: return serif ? 300.0 : 333.0;
+    case 0xB5: return ascii('u');
+    case 0xB7: return ascii('.');
+    case 0xBC:
+    case 0xBD:
+    case 0xBE: return serif ? 750.0 : 834.0;
+    case 0xBF: return ascii('?');
+    case 0x2013: return serif ? 500.0 : 556.0;
+    case 0x2014:
+    case 0x2026:
+    case 0x2030: return 1000.0;
+    case 0x2018:
+    case 0x2019:
+    case 0x201A: return ascii('\'');
+    case 0x201C:
+    case 0x201D:
+    case 0x201E: return serif ? (bold ? 500.0 : 444.0) : (bold ? 500.0 : 333.0);
+    case 0x2022: return 350.0;
+    case 0x2122: return serif ? (bold ? 1000.0 : 980.0) : 1000.0;
+    case 0x2212: return ascii('+');
+    default: break;
+    }
+    if ((unicode >= 0xA8 && unicode <= 0xAF) || (unicode >= 0x2C6 && unicode <= 0x2DD))
+        return 333.0;
+    return serif ? 500.0 : 556.0;
+}
 
 std::vector<uint8_t> fromBase64(const std::string& text)
 {
