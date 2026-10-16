@@ -4,6 +4,7 @@ What changed in each release of Phoenix, newest first.
 
 ## 0.14.0 (Unreleased)
 
+- Opening a SWF movie finds its tweens: smooth movement, fades, turns and eases come back as classic tweens, and morphs as shape tweens, instead of a keyframe on every frame; embedded video comes back as a video item of its size and length
 - JSFL: adding, duplicating, renaming, reordering and deleting scenes, `importFile`, sounds and videos renamed and deleted in the library, `exportToFile` for every bitmap and sound, filters, text strings, union, punch, crop, space, match, distribute to layers or keyframes, and finding objects by name or kind
 - Python as a module: `import phoenix` from your own Python opens, changes, renders and saves documents in a windowless Phoenix
 - Python scripts: keyword arguments (`timeline.insert_frames(5, all_layers=True)`), and `fl.runScript` runs JSFL scripts too; `Phoenix batch --python` runs scripts inside Phoenix, like `--jsfl`
