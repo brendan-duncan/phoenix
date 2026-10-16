@@ -2,8 +2,10 @@
 
 What changed in each release of Phoenix, newest first.
 
-## Unreleased
+## 0.15.0
 
+- Node graphs: Time Offset and Frame Hold nodes; a renamed layer keeps its Layer nodes; SVG exports show the graph; Export FLA for Other Apps bakes each graph into a layer of pictures; scripts and AI assistants can list, read and set graphs
+- Command-line renders no longer stop with a "no platform plugin" box in fresh builds and installs: the offscreen platform is deployed with Phoenix
 - Layers show badges for the effects they have on (motion blur, echo or posterize time, layer mode, mask edge, effect layer, node graph); hover for what each does, click to change its settings
 - Motion blur follows what animates inside graphics and movie clips in Test Movie too, and leaves a stopped or held symbol sharp inside
 - Time Remap works on movie clips too, which follow it instead of playing on their own (in Test Movie as well), and its Frame shown can be shaped as a curve in the Motion Editor
