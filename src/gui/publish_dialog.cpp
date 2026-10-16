@@ -154,7 +154,7 @@ PublishSettingsDialog::PublishSettingsDialog(const fla::publish::Settings& setti
         _soundQuality->clear();
         if (codec == "mp3")
         {
-            for (int kbps : {16, 24, 32, 48, 64, 80, 96, 112, 128, 160, 192})
+            for (int kbps : {8, 16, 20, 24, 32, 48, 56, 64, 80, 96, 112, 128, 160, 192})
                 _soundQuality->addItem(QString("%1 kbps").arg(kbps), kbps);
             _soundQuality->setCurrentIndex(std::max(0, _soundQuality->findData(bitRate)));
         }

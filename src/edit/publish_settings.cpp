@@ -186,6 +186,19 @@ Settings read(const std::string& xml, const std::string& name)
     settings.gifLoopCount = numberOf(gif, "LoopCount", 0);
     settings.gifColors = numberOf(gif, "MaxColors", 255);
     const XMLElement* flash = profile->FirstChildElement("PublishFlashProperties");
+    settings.overrideSounds = flagOf(flash, "OverrideSounds", false);
+    // The file's own codes, for a profile Phoenix has not set its own in.
+    const bool own = flash && flash->FirstChildElement("PhoenixSoundCompression");
+    if (!own && flash && flash->FirstChildElement("StreamCompress"))
+    {
+        const Settings::SoundFormat stream =
+            soundFormat(numberOf(flash, "StreamFormat", 0), numberOf(flash, "StreamCompress", 7));
+        settings.soundCompression = stream.compression;
+        settings.soundBitRate = stream.bitRate;
+        settings.soundAdpcmBits = stream.adpcmBits;
+        settings.soundRate = stream.rate;
+        settings.soundStereo = stream.stereo;
+    }
     settings.soundCompression = textOf(flash, "PhoenixSoundCompression", settings.soundCompression);
     if (settings.soundCompression != "adpcm" && settings.soundCompression != "raw" && settings.soundCompression != "none")
         settings.soundCompression = "mp3";
@@ -193,6 +206,10 @@ Settings read(const std::string& xml, const std::string& name)
     settings.soundAdpcmBits = std::clamp(numberOf(flash, "PhoenixSoundAdpcmBits", settings.soundAdpcmBits), 2, 5);
     settings.soundRate = numberOf(flash, "PhoenixSoundRate", settings.soundRate);
     settings.soundStereo = flagOf(flash, "PhoenixSoundStereo", settings.soundStereo);
+    settings.event = {settings.soundCompression, settings.soundBitRate, settings.soundAdpcmBits, settings.soundRate,
+        settings.soundStereo};
+    if (!own && flash && flash->FirstChildElement("EventCompress"))
+        settings.event = soundFormat(numberOf(flash, "EventFormat", 0), numberOf(flash, "EventCompress", 7));
     for (const XMLElement* group = profile->FirstChildElement("PublishProperties"); group;
          group = group->NextSiblingElement("PublishProperties"))
     {
@@ -205,6 +222,31 @@ Settings read(const std::string& xml, const std::string& name)
             settings.svgFile = propertyOf(group, "filename", settings.svgFile);
     }
     return settings;
+}
+
+Settings::SoundFormat soundFormat(int format, int compress)
+{
+    Settings::SoundFormat sound;
+    static const int kRates[4] = {5512, 11025, 22050, 44100};
+    static const int kBitRates[12] = {8, 16, 20, 24, 32, 48, 56, 64, 80, 112, 128, 160};
+    if (compress == 0 || (compress >= 2 && compress <= 5) || compress == 18)
+    {
+        sound.compression = compress == 0 ? "raw" : "adpcm";
+        sound.adpcmBits = compress >= 2 && compress <= 5 ? compress : 4;
+        sound.rate = kRates[(format >> 2) & 3];
+        sound.stereo = compress != 18 && (format & 1) != 0;
+    }
+    else if (compress == 1)
+        sound.compression = "none";
+    else if (compress >= 6 && compress <= 17)
+    {
+        sound.compression = "mp3";
+        sound.bitRate = kBitRates[compress - 6];
+        // The rate the bit rate calls for; stereo from 20 kbps.
+        sound.rate = sound.bitRate <= 24 ? 11025 : sound.bitRate <= 56 ? 22050 : 44100;
+        sound.stereo = (format & 1) == 0 && sound.bitRate >= 20;
+    }
+    return sound;
 }
 
 std::string write(const std::string& xml, const Settings& settings, const std::string& name)

@@ -65,7 +65,33 @@ struct Settings
     int soundAdpcmBits = 4;
     int soundRate = 22050;
     bool soundStereo = true;
+
+    /// SWF event sounds' compression, the same way: the soundtrack's when
+    /// Phoenix's own settings are there, else the file's EventFormat and
+    /// EventCompress (as the soundtrack's come from StreamFormat and
+    /// StreamCompress). Library sounds can set their own unless
+    /// overrideSounds (OverrideSounds) says these win.
+    struct SoundFormat
+    {
+        std::string compression = "mp3";
+        int bitRate = 64;
+        int adpcmBits = 4;
+        int rate = 22050;
+        bool stereo = true;
+    };
+    SoundFormat event;
+    bool overrideSounds = false;
 };
+
+/// A sound's compression as the FLA codes it, in a profile's StreamFormat
+/// and StreamCompress (EventFormat and EventCompress) or a library sound's
+/// exportFormat and exportBits. \a compress picks the codec: 0 raw, 1
+/// disabled, 2 to 5 ADPCM's bits a sample, 6 to 17 an MP3 bit rate (8,
+/// 16, 20, 24, 32, 48, 56, 64, 80, 112, 128 or 160 kbps), 18 speech.
+/// \a format holds the rest: for raw and ADPCM the rate (bits 2 and 3, 5.5
+/// to 44 kHz) and stereo (bit 0); for MP3 mono (bit 0) and quality. Speech,
+/// which Phoenix cannot write, comes back as mono ADPCM at its rate.
+Settings::SoundFormat soundFormat(int format, int compress);
 
 /// The current profile of a PublishSettings.xml; the defaults for a
 /// document named \a name when \a xml is empty or not one.

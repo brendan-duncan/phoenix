@@ -90,4 +90,39 @@ TEST(publish_settings_keep_the_movie_sound_beside_animates)
     const fla::publish::Settings back = fla::publish::read(written, "shot");
     CHECK(back.soundCompression == "adpcm" && back.soundAdpcmBits == 3);
     CHECK(back.soundRate == 11025 && !back.soundStereo);
+    // Phoenix's own setting is for event sounds too.
+    CHECK(back.event.compression == "adpcm" && back.event.adpcmBits == 3 && back.event.rate == 11025);
+}
+
+TEST(publish_settings_read_animates_sound_codes)
+{
+    using fla::publish::soundFormat;
+    // The usual MP3 at 16 kbps, mono as it must be that low.
+    fla::publish::Settings::SoundFormat sound = soundFormat(0, 7);
+    CHECK(sound.compression == "mp3" && sound.bitRate == 16 && !sound.stereo && sound.rate == 11025);
+    // 160 kbps converted to mono, and 64 kbps in stereo.
+    sound = soundFormat(3, 17);
+    CHECK(sound.compression == "mp3" && sound.bitRate == 160 && !sound.stereo && sound.rate == 44100);
+    sound = soundFormat(4, 13);
+    CHECK(sound.compression == "mp3" && sound.bitRate == 64 && sound.stereo);
+    // Raw at 11 kHz in stereo; 4-bit ADPCM at 44 kHz in mono.
+    sound = soundFormat(7, 0);
+    CHECK(sound.compression == "raw" && sound.rate == 11025 && sound.stereo);
+    sound = soundFormat(14, 4);
+    CHECK(sound.compression == "adpcm" && sound.adpcmBits == 4 && sound.rate == 44100 && !sound.stereo);
+    // Disabled; speech, which Phoenix writes as ADPCM.
+    CHECK(soundFormat(0, 1).compression == "none");
+    sound = soundFormat(10, 18);
+    CHECK(sound.compression == "adpcm" && sound.rate == 22050 && !sound.stereo);
+
+    // A profile from Animate: the stream and event sounds each as set.
+    const std::string xml = "<flash_profiles><flash_profile name=\"Default\" current=\"true\">"
+                            "<PublishFlashProperties enabled=\"true\"><StreamFormat>7</StreamFormat>"
+                            "<StreamCompress>0</StreamCompress><EventFormat>0</EventFormat>"
+                            "<EventCompress>12</EventCompress><OverrideSounds>1</OverrideSounds>"
+                            "</PublishFlashProperties></flash_profile></flash_profiles>";
+    const fla::publish::Settings settings = fla::publish::read(xml, "shot");
+    CHECK(settings.soundCompression == "raw" && settings.soundRate == 11025 && settings.soundStereo);
+    CHECK(settings.event.compression == "mp3" && settings.event.bitRate == 56 && settings.event.stereo);
+    CHECK(settings.overrideSounds);
 }
