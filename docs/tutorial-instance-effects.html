@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Effects on one instance · Phoenix User Guide</title>
+<meta name="description" content="Give one of two signs a glowing outline and a ripple of its own, effects on the instance rather than on a layer.">
+<meta name="keywords" content="tutorial lesson step by step instance effects outline ripple glow behaviors panel">
+<link rel="icon" href="assets/img/logo.png">
+<link rel="stylesheet" href="assets/site.css">
+<script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<main>
+<article class="content">
+
+<p class="eyebrow">Tutorials</p>
+
+<h1>Effects on one instance</h1>
+
+<p class="lead">Give one of two signs a glowing outline and a ripple of its own, effects on the instance rather than on a layer.</p>
+
+<div class="callout">
+  <span class="label">Try it in Phoenix</span>
+  <p>This page is also a lesson inside Phoenix: choose <span class="menu-path">Help &rsaquo; Tutorials...</span> and start <strong>Effects on one instance</strong>, and Phoenix points at each control as you go. It takes about 6 minutes.</p>
+</div>
+
+<p>To follow along here instead, download the starting document, <a href="assets/tutorials/instance-effects.fla" download>instance-effects.fla</a>, and open it with <span class="menu-path">File &rsaquo; Open...</span>.</p>
+
+<figure>
+  <img src="assets/shots/tutorial-instance-effects.webp" alt="Two teal OPEN signs on a dark stage: the left one plain, the right one rippling with a glowing yellow outline" width="1000" height="563">
+  <figcaption>The same symbol twice: only the instance on the right has effects.</figcaption>
+</figure>
+
+<p>An adjustment layer changes everything below it. A single symbol instance can carry the same effects on its own picture, leaving the rest alone.</p><p>The two signs on the stage are instances of one symbol, <i>Sign</i>. Only the one on the right will change.</p>
+
+<h2>1. Pick the Selection tool</h2>
+
+<p>Press <kbd>V</kbd>, or click the Selection tool.</p>
+
+<h2>2. Select the right sign</h2>
+
+<p>Click the sign on the right. A single click selects the whole instance.</p>
+
+<h2>3. Show its effects</h2>
+
+<p>At the top of the Behaviors panel, click <b>Effects</b>. The panel now lists the instance's effects, which work on its picture, rather than its behaviors, which move it. The list is empty.</p>
+
+<h2>4. Add an outline</h2>
+
+<p>Click <b>Add Effect</b> and choose <b>Outline</b>. A white line goes round the sign on the right; the one on the left stays plain.</p>
+
+<h2>5. Make it glow</h2>
+
+<p>Set <b>Width (pixels)</b> to 8, and <b>Color</b> to #FFE060 for a warm neon edge.</p>
+
+<h2>6. Add a ripple</h2>
+
+<p>Click <b>Add Effect</b> again and choose <b>Ripple</b>. Rings of waves spread from the sign's middle, through the outline too: effects apply top to bottom.</p>
+
+<h2>7. Play it</h2>
+
+<p>Press <kbd>Enter</kbd>, or click the play button in the timeline header. The right sign ripples, outline and all.</p>
+
+<h2>What you did</h2>
+
+<p>You gave one instance effects of its own. They go wherever the instance goes, and its filters, such as a Drop Shadow, apply after them.</p><p><b>File &gt; Export &gt; Export FLA for Other Apps</b> carries the outline as a Glow filter; the ripple has no counterpart there, so the sign is drawn into a bitmap on each frame.</p>
+
+<p>For everything this tutorial touches on, see <a href="behaviors.html#instance-effects">Behaviors</a>.</p>
+
+</article>
+</main>
+</body>
+</html>

@@ -199,6 +199,7 @@ are kept, and an FLA export lists them as possibly lost.
 | `shape-operators` | Shape operators | the shapes as drawn, without Trim Paths, Wiggle Path or Zig-zag |
 | `text-animators` | Text animators | the text as typed, its letters still |
 | `compositing` | Track mattes and adjustment layers | matte layers drawn plainly and adjustment layers without their blur or color |
+| `instance-effects` | Effects on instances | the instances without their blurs, glows, distortions and wipes |
 | `node-graph` | Node graphs | the layers stacked as usual, without the graph's effects, merges and mattes |
 | `mask-edges` | Mask edges and layer modes | masks hard-edged and not inverted, layers drawn normally |
 | `motion-blur` | Motion blur, echo and posterize time | the layers drawn sharp, every frame, without echoes |

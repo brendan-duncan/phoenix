@@ -268,14 +268,35 @@
 
 <ul>
   <li>An alpha track matte becomes a mask over the layer, hard-edged; a luma matte the same, by the matte's shape rather than its light. An inverted matte puts the layer and its matte in a movie clip with Layer blending, the matte's art over the layer with Erase blending, so the art cuts the layer away, soft edges and all (an inverted luma matte cuts by the art's shape); the clip plays on its own when the movie plays.</li>
-  <li>An adjustment layer's effects go on a movie clip holding the layers below it: Blur as a blur filter, Color Correction as an Adjust Color filter, Tint as a color effect, keyed a frame at a time where they change. Turbulent and Wave Displace have no counterpart and are left out. The movie clip plays on its own when the movie plays. Art on the adjustment layer becomes a mask over the filtered clip, with the clip unfiltered under both, so the effects reach only where the art is, hard-edged.</li>
+  <li>An adjustment layer's effects go on a movie clip holding the layers below it, as filters and a color effect, keyed a frame at a time where they change (see the list below). The movie clip plays on its own when the movie plays. Art on the adjustment layer becomes a mask over the filtered clip, with the clip unfiltered under both, so the effects reach only where the art is, hard-edged.</li>
+  <li>When an effect has no counterpart, Phoenix draws the adjustment layer and everything below it into a bitmap on each frame, as the movie shows it, and puts the bitmaps on the layer, a keyframe only where the picture changes. The bitmaps are in a <b>Baked effects</b> folder in the library, and the layers themselves are kept in the movie clip <b>Adjusted by</b> the layer's name, unused, to edit or place again.</li>
 </ul>
+
+<p>The effects carried as what other apps have:</p>
+
+<table>
+  <thead><tr><th>Effect</th><th>Becomes</th></tr></thead>
+  <tbody>
+    <tr><td>Blur</td><td class="wrap">A Blur filter</td></tr>
+    <tr><td>Directional Blur</td><td class="wrap">A Blur filter on one axis, when it runs across or down (within 15 degrees)</td></tr>
+    <tr><td>Lens Blur</td><td class="wrap">A Blur filter, when its highlight boost is 0</td></tr>
+    <tr><td>Color Correction</td><td class="wrap">An Adjust Color filter</td></tr>
+    <tr><td>Hue/Saturation</td><td class="wrap">An Adjust Color filter (hue, saturation, and lightness as brightness), unless it colorizes</td></tr>
+    <tr><td>Glow</td><td class="wrap">A Glow filter in its color, round the whole shape rather than its bright parts</td></tr>
+    <tr><td>Outline</td><td class="wrap">A strong Glow filter, solid near the edge as the outline is</td></tr>
+    <tr><td>Tint, Fill</td><td class="wrap">A tint color effect (Fill is a full tint)</td></tr>
+    <tr><td>Levels</td><td class="wrap">A color effect, when its gamma is 1 and it narrows the range rather than stretching it</td></tr>
+    <tr><td>Wipes, Block Dissolve</td><td class="wrap">Nothing at 0 percent, no alpha at 100; part way, a bitmap</td></tr>
+  </tbody>
+</table>
+
+<p>Only one color effect fits: a second one (or one on an instance that already has a color effect) is drawn into bitmaps. Every other effect, at a setting that changes anything, is drawn into bitmaps too.</p>
 
 <p>The Output panel lists what was carried only in part.</p>
 
 <h3 id="effects">Adjustment effects</h3>
 
-<p>An adjustment layer can have any number of these, applied top to bottom, each with an <b>Amount</b> where it makes sense. Generators and transitions are at their most useful with art on the layer: a Gradient Ramp then fills just that art, and a wipe takes away just what is under it.</p>
+<p>An adjustment layer can have any number of these, applied top to bottom, each with an <b>Amount</b> where it makes sense; so can a single instance (see <a href="#instance-effects">Effects on one instance</a>). Generators and transitions are at their most useful with art on the layer: a Gradient Ramp then fills just that art, and a wipe takes away just what is under it.</p>
 
 <table>
   <thead><tr><th>Effect</th><th>What it does</th></tr></thead>
@@ -316,6 +337,19 @@
     <tr><td>Block Dissolve</td><td class="wrap">Dissolves it in random blocks.</td></tr>
   </tbody>
 </table>
+
+<h3 id="instance-effects">Effects on one instance</h3>
+
+<p>A symbol instance can have the same effects on its own picture, rather than on everything below a layer: an outline round one character, a glow on one sign, a ripple through one picture. Select the instance, click <b>Effects</b> at the top of the Behaviors panel (beside <b>Behaviors</b>), and use <b>Add Effect</b> as for an adjustment layer. With several instances selected, an effect added goes on each.</p>
+
+<ul>
+  <li>The effects work on the instance as drawn with its color effect, before its filters, so a Drop Shadow falls from the outline an Outline adds.</li>
+  <li>Positions in percent (a ramp's ends, a bulge's middle, a wipe's sweep) are across the box round the instance as it shows, so they move with it.</li>
+  <li>Generators paint only on the instance's art: a Gradient Ramp or Fractal Noise fills its shape, a Vignette darkens its edges. Displacement Map reads another layer, so it does nothing on an instance.</li>
+  <li>Settings key as an adjustment layer's do, on the frames of the timeline the instance is on.</li>
+</ul>
+
+<p>They show on the stage, in Test Movie and in every export. In other apps the instance carries them as filters and a color effect, as in the list above; when one has no counterpart, the instance is drawn into a bitmap on each frame where it changes, in its place on its layer. Scripts and AI assistants set them with <code>set_effects</code> and <code>"picture": true</code>. The lesson <a href="tutorial-instance-effects.html">Effects on one instance</a> (<span class="menu-path">Help &rsaquo; Tutorials...</span>) walks through it.</p>
 
 <figure>
   <img src="assets/shots/mg-effects.webp" alt="A contact sheet of the adjustment effects on a striped picture with a title: blurs, generators, distortions, color changes and wipes" width="1600" height="900">

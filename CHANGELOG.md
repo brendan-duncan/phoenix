@@ -8,6 +8,8 @@ What changed in each release of Phoenix, newest first.
 - Motion blur follows what animates inside graphics and movie clips in Test Movie too, and leaves a stopped or held symbol sharp inside
 - Time Remap works on movie clips too, which follow it instead of playing on their own (in Test Movie as well), and its Frame shown can be shaped as a curve in the Motion Editor
 - Bone springs bend boned shapes too: a shape's sprung bones trail, swing past and settle, on the stage, in Test Movie and in exports
+- Effects on one instance: a symbol instance can carry any of the adjustment effects (outline, glow, ripple, gradients, color grades, wipes...) on its own picture, from the new Effects side of the Behaviors panel, keyed like any other, on the stage, in Test Movie and in every export
+- Export FLA for Other Apps carries more effects: Glow and Outline as Glow filters, Hue/Saturation as Adjust Color, Fill and Levels as color effects, Directional Blur as a one-axis Blur; effects with no counterpart are drawn into bitmaps a frame at a time, so the look survives
 - Node graphs: Window > Node Graph composites a timeline's layers through nodes (Layer, Merge with 13 blend modes, Composite, Matte, Mix, Transform and every adjustment effect), each node showing a picture of its result; search to add nodes, drop links on empty space, view any node on the stage, bypass, backdrops, a minimap, and keyed settings
 - HTML extension panels (CEP) show in Phoenix: Window > Extensions opens them as docks, their scripts run JSFL in a context that keeps its functions between calls, and their panel menus, context menus, file access and events work
 - FLA files with components (Button, ColorPicker, ComboBox and the rest) open instead of failing, and keep their components when saved
