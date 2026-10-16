@@ -123,11 +123,13 @@ public:
     }
     int32_t sb(int count)
     {
-        if (count == 0)
+        if (count <= 0)
             return 0;
         const uint32_t value = ub(count);
-        if (value & (1u << (count - 1)))
-            return static_cast<int32_t>(value | ~((count >= 32) ? 0u : ((1u << count) - 1u)));
+        // Past 32 bits only the low 32 are kept.
+        const int bits = std::min(count, 32);
+        if (value & (1u << (bits - 1)))
+            return static_cast<int32_t>(value | ~((bits >= 32) ? 0u : ((1u << bits) - 1u)));
         return static_cast<int32_t>(value);
     }
     double fb(int count) { return sb(count) / 65536.0; }
@@ -792,6 +794,9 @@ std::vector<uint8_t> inflate(const std::vector<uint8_t>& data, size_t expected =
         return out;
     stream.next_in = const_cast<Bytef*>(data.data());
     stream.avail_in = static_cast<uInt>(data.size());
+    // Deflate never grows data more than about 1032 times, so a larger
+    // claimed size is only a damaged header.
+    expected = std::min(expected, data.size() * 1032 + 1024);
     out.resize(expected > 0 ? expected : data.size() * 4 + 1024);
     for (;;)
     {
@@ -920,6 +925,14 @@ private:
     std::set<std::string> _names;
     std::set<std::string> _folders;
     int _dataCount = 0;
+    // Guards against damaged movies: placements copied into frames, sprites
+    // being read and how deep, and how deep symbols are being written.
+    static constexpr size_t kMaxPlacements = 8000000;
+    static constexpr int kMaxNesting = 64;
+    static constexpr size_t kMaxFontRecords = 4000000;
+    size_t _placements = 0;
+    std::set<int> _reading;
+    int _symbolDepth = 0;
 
     void leftOut(const std::string& what) { ++_unread[what]; }
 
@@ -929,7 +942,8 @@ private:
     {
         std::map<int, Placement> list;
         int frame = 0;
-        while (!in.atEnd())
+        bool full = false;
+        while (!in.atEnd() && !full)
         {
             const uint16_t header = in.u16();
             const int code = header >> 6;
@@ -944,6 +958,15 @@ private:
             switch (code)
             {
             case 1: // ShowFrame
+                // Each frame keeps its own copy of the display list, so a
+                // movie past the budget ends there.
+                _placements += list.size() + 1;
+                if (_placements > kMaxPlacements)
+                {
+                    leftOut("frames past the size limit");
+                    full = true;
+                    break;
+                }
                 timeline.frames.push_back(list);
                 ++frame;
                 break;
@@ -1431,8 +1454,8 @@ private:
         {
             const int id = tag.u16();
             const int nameLength = tag.u8();
-            std::string name(reinterpret_cast<const char*>(tag.bytes(static_cast<size_t>(nameLength)).data()),
-                static_cast<size_t>(nameLength));
+            const std::vector<uint8_t> bytes = tag.bytes(static_cast<size_t>(nameLength));
+            const std::string name(bytes.begin(), bytes.end());
             auto found = _characters.find(id);
             if (found != _characters.end())
                 found->second.font.name = name.c_str();
@@ -1637,13 +1660,23 @@ private:
     {
         const int id = tag.u16();
         tag.u16(); // frame count
+        // A sprite defined again inside itself, or nested past reason, is
+        // left out.
+        if (_reading.count(id) || static_cast<int>(_reading.size()) >= kMaxNesting)
+        {
+            leftOut("sprites nested too deeply");
+            return;
+        }
+        std::shared_ptr<TimelineData> timeline = std::make_shared<TimelineData>();
         Character& c = _characters[id];
         c.kind = Character::Kind::Sprite;
-        c.timeline = std::make_shared<TimelineData>();
+        c.timeline = timeline;
         // The sprite's tags, read as a timeline of their own.
         (void)length;
         Reader sprite(tag.data() + tag.position(), tag.left());
-        readTags(sprite, *c.timeline, false);
+        _reading.insert(id);
+        readTags(sprite, *timeline, false);
+        _reading.erase(id);
     }
 
     void defineButton(Reader& tag, bool two)
@@ -1654,6 +1687,8 @@ private:
             tag.u8();
             tag.u16(); // action offset
         }
+        if (_reading.count(id))
+            return;
         Character& c = _characters[id];
         c.kind = Character::Kind::Button;
         c.timeline = std::make_shared<TimelineData>();
@@ -1801,11 +1836,18 @@ private:
         if (format == 3)
             tableSize = tag.u8() + 1;
         (void)length;
-        const std::vector<uint8_t> packed = tag.bytes(tag.left());
         const size_t w = static_cast<size_t>(width), h = static_cast<size_t>(height);
-        std::vector<uint32_t> pixels(w * h, 0);
         Character& c = _characters[id];
         c.kind = Character::Kind::Bitmap;
+        // Larger than any player draws: a damaged header.
+        if (width > 16383 || height > 16383 || w * h > (size_t(1) << 28))
+        {
+            leftOut("bitmaps too large to read");
+            c.data.clear();
+            return;
+        }
+        const std::vector<uint8_t> packed = tag.bytes(tag.left());
+        std::vector<uint32_t> pixels(w * h, 0);
         c.width = width;
         c.height = height;
         if (format == 3)
@@ -1913,13 +1955,20 @@ private:
             std::vector<uint32_t> offsets{first};
             for (size_t i = 1; i < first / 2u; ++i)
                 offsets.push_back(tag.u16());
+            size_t records = 0;
             for (size_t i = 0; i < offsets.size(); ++i)
             {
+                if (records > kMaxFontRecords)
+                {
+                    font.glyphs.emplace_back();
+                    continue;
+                }
                 tag.seek(base + offsets[i]);
                 tag.align();
                 const int fillBits = static_cast<int>(tag.ub(4));
                 const int lineBits = static_cast<int>(tag.ub(4));
                 font.glyphs.push_back(readRecords(tag, fillBits, lineBits, 1, nullptr, nullptr));
+                records += font.glyphs.back().size();
             }
             (void)length;
             return;
@@ -1938,14 +1987,25 @@ private:
         std::vector<uint32_t> offsets;
         for (int i = 0; i < glyphs; ++i)
             offsets.push_back(wideOffsets ? tag.u32() : tag.u16());
+        size_t records = 0;
         for (int i = 0; i < glyphs; ++i)
         {
+            // Offsets can point many glyphs at the same long run of records;
+            // past a budget the rest are left empty.
+            if (records > kMaxFontRecords)
+            {
+                font.glyphs.emplace_back();
+                continue;
+            }
             tag.seek(base + offsets[static_cast<size_t>(i)]);
             tag.align();
             const int fillBits = static_cast<int>(tag.ub(4));
             const int lineBits = static_cast<int>(tag.ub(4));
             font.glyphs.push_back(readRecords(tag, fillBits, lineBits, 1, nullptr, nullptr));
+            records += font.glyphs.back().size();
         }
+        if (records > kMaxFontRecords)
+            leftOut("font outlines past the size limit");
     }
 
     void defineText(Reader& tag, bool two)
@@ -2648,7 +2708,17 @@ private:
         _symbolFiles[id] = name;
         Character& c = _characters[id];
         std::shared_ptr<TimelineData> timeline = c.timeline;
+        // Symbols nested past reason are written empty.
+        if (!timeline || _symbolDepth >= kMaxNesting)
+        {
+            leftOut("symbols nested too deeply");
+            timeline = std::make_shared<TimelineData>();
+            timeline->frames.emplace_back();
+            timeline->frameCount = 1;
+        }
+        ++_symbolDepth;
         writeSymbol(id, name, c.kind == Character::Kind::Button ? "button" : "", *timeline);
+        --_symbolDepth;
         return name;
     }
 

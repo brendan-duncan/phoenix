@@ -96,6 +96,30 @@ void squareEdges(Bits& bits, int size)
     }
 }
 
+/// A tag with a long header, as nested in a sprite's body.
+std::vector<uint8_t> rawTag(int code, const std::vector<uint8_t>& body)
+{
+    std::vector<uint8_t> out = {static_cast<uint8_t>(((code << 6) | 0x3F) & 0xFF), static_cast<uint8_t>(code >> 2)};
+    for (int i = 0; i < 4; ++i)
+        out.push_back(static_cast<uint8_t>((body.size() >> (8 * i)) & 0xFF));
+    out.insert(out.end(), body.begin(), body.end());
+    return out;
+}
+
+/// A DefineSprite body: its id, one frame, then \a tags.
+std::vector<uint8_t> spriteBody(int id, const std::vector<uint8_t>& tags)
+{
+    std::vector<uint8_t> body = {static_cast<uint8_t>(id & 0xFF), static_cast<uint8_t>(id >> 8), 1, 0};
+    body.insert(body.end(), tags.begin(), tags.end());
+    return body;
+}
+
+/// PlaceObject2 of character \a id at depth 1.
+std::vector<uint8_t> placeTag(int id)
+{
+    return rawTag(26, {0x02, 1, 0, static_cast<uint8_t>(id & 0xFF), static_cast<uint8_t>(id >> 8)});
+}
+
 } // namespace
 
 TEST(swf_import_brings_back_the_stage_shapes_and_frames)
@@ -417,4 +441,66 @@ TEST(swf_import_stacks_each_style_chunk_of_a_shape)
     const auto* above = dynamic_cast<const fla::Shape*>(group->members[1]);
     CHECK(below && below->fills.size() == 1 && below->strokes.size() == 1);
     CHECK(above && above->fills.size() == 1 && above->strokes.empty());
+}
+
+TEST(swf_import_survives_sprites_nested_in_themselves)
+{
+    // Sprite 5 holds a sprite also numbered 5, which places itself; then a
+    // tower of sprites nested 300 deep.
+    const std::vector<uint8_t> frame = rawTag(1, {});
+    std::vector<uint8_t> outerTags = rawTag(39, spriteBody(5, placeTag(5)));
+    outerTags.insert(outerTags.end(), frame.begin(), frame.end());
+    swf::Writer writer(100, 100, 24.0, {255, 255, 255, 255});
+    writer.tag(39, spriteBody(5, outerTags));
+    std::vector<uint8_t> tower = frame;
+    for (int level = 300; level >= 10; --level)
+        tower = rawTag(39, spriteBody(level, tower));
+    writer.tag(39, std::vector<uint8_t>(tower.begin() + 6, tower.end()));
+    writer.place(5, 1);
+    writer.place(10, 2);
+    writer.showFrame();
+    std::map<std::string, std::vector<uint8_t>> files;
+    std::string error, report;
+    CHECK(SwfImport::convert(writer.finish(false), files, error, &report));
+    CHECK(report.find("nested too deeply") != std::string::npos);
+}
+
+TEST(swf_import_survives_a_long_chain_of_sprites)
+{
+    // Each sprite places the one before it, 2000 deep.
+    swf::Writer writer(100, 100, 24.0, {255, 255, 255, 255});
+    const std::vector<uint8_t> frame = rawTag(1, {});
+    for (int id = 1; id <= 2000; ++id)
+    {
+        std::vector<uint8_t> tags = id > 1 ? placeTag(id - 1) : std::vector<uint8_t>();
+        tags.insert(tags.end(), frame.begin(), frame.end());
+        writer.tag(39, spriteBody(id, tags));
+    }
+    writer.place(2000, 1);
+    writer.showFrame();
+    std::map<std::string, std::vector<uint8_t>> files;
+    std::string error, report;
+    CHECK(SwfImport::convert(writer.finish(false), files, error, &report));
+    CHECK(report.find("nested too deeply") != std::string::npos);
+}
+
+TEST(swf_import_survives_damaged_headers)
+{
+    // A font name longer than its tag, a bitmap claiming 65535 pixels a
+    // side, and a compressed movie claiming 4 GB.
+    swf::Writer writer(100, 100, 24.0, {255, 255, 255, 255});
+    writer.tag(10, {1, 0, 2, 0});
+    writer.tag(13, {1, 0, 200, 'A'});
+    writer.tag(20, {2, 0, 5, 0xFF, 0xFF, 0xFF, 0xFF, 0x78, 0x9C, 0x03, 0x00, 0x00, 0x00, 0x00, 0x01});
+    writer.showFrame();
+    std::vector<uint8_t> movie = writer.finish(true);
+    for (size_t i = 4; i < 8; ++i)
+        movie[i] = 0xFF;
+    std::map<std::string, std::vector<uint8_t>> files;
+    std::string error, report;
+    CHECK(SwfImport::convert(movie, files, error, &report));
+    CHECK(report.find("too large") != std::string::npos);
+    // ADPCM claiming far more samples than its data holds.
+    const std::vector<int16_t> samples = swf::decodeAdpcm({0x00, 0x00, 0x00}, 1, 0xFFFFFFFFu);
+    CHECK(samples.size() <= 13);
 }

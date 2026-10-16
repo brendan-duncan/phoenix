@@ -189,6 +189,9 @@ std::vector<uint8_t> encodeAdpcm(const std::vector<int16_t>& samples, int channe
 std::vector<int16_t> decodeAdpcm(const std::vector<uint8_t>& data, int channels, size_t count)
 {
     channels = channels == 2 ? 2 : 1;
+    // Each sample takes at least two bits, so the data holds no more than
+    // four a byte, whatever count the header claims.
+    count = std::min(count, data.size() * 4 + 1);
     std::vector<int16_t> samples;
     samples.reserve(count * static_cast<size_t>(channels));
     BitReader in(data);
