@@ -1,7 +1,7 @@
 // The web view on Windows: WebView2, the Edge runtime that comes with
 // Windows, in a native child window of the widget.
 
-#include "web_view.h"
+#include "html_view.h"
 
 #include <QCoreApplication>
 #include <QDesktopServices>
@@ -45,21 +45,21 @@ std::wstring wide(const QString& text)
 
 } // namespace
 
-struct WebViewBridge
+struct HtmlViewBridge
 {
-    static void answer(WebView& view, const QString& kind, const QString& message, const QString& defaultText,
+    static void answer(HtmlView& view, const QString& kind, const QString& message, const QString& defaultText,
         bool& accepted, QString& text)
     {
         view.answerDialog(kind, message, defaultText, accepted, text);
     }
-    static void unavailable(WebView& view, const QString& why)
+    static void unavailable(HtmlView& view, const QString& why)
     {
         view._unavailable = why;
         view.update();
     }
 };
 
-struct WebView::Impl
+struct HtmlView::Impl
 {
     ComPtr<ICoreWebView2Controller> controller;
     ComPtr<ICoreWebView2> webview;
@@ -71,7 +71,7 @@ struct WebView::Impl
     QStringList scripts;
 };
 
-WebView::WebView(QWidget* parent)
+HtmlView::HtmlView(QWidget* parent)
     : QWidget(parent)
     , _impl(std::make_unique<Impl>())
 {
@@ -84,13 +84,13 @@ WebView::WebView(QWidget* parent)
         update();
 }
 
-WebView::~WebView()
+HtmlView::~HtmlView()
 {
     if (_impl->controller)
         _impl->controller->Close();
 }
 
-bool WebView::available(QString* why)
+bool HtmlView::available(QString* why)
 {
     LPWSTR version = nullptr;
     const HRESULT hr = GetAvailableCoreWebView2BrowserVersionString(nullptr, &version);
@@ -102,17 +102,17 @@ bool WebView::available(QString* why)
     return found;
 }
 
-void WebView::setStartScript(const QString& script)
+void HtmlView::setStartScript(const QString& script)
 {
     _impl->startScript = script;
 }
 
-void WebView::setProfileFolder(const QString& folder)
+void HtmlView::setProfileFolder(const QString& folder)
 {
     _impl->profile = folder;
 }
 
-void WebView::load(const QString& folder, const QString& page, const QString& host)
+void HtmlView::load(const QString& folder, const QString& page, const QString& host)
 {
     Impl& d = *_impl;
     d.folder = folder;
@@ -137,7 +137,7 @@ void WebView::load(const QString& folder, const QString& page, const QString& ho
     showEvent(nullptr);
 }
 
-void WebView::runScript(const QString& script)
+void HtmlView::runScript(const QString& script)
 {
     Impl& d = *_impl;
     if (!d.webview)
@@ -149,7 +149,7 @@ void WebView::runScript(const QString& script)
         Callback<ICoreWebView2ExecuteScriptCompletedHandler>([](HRESULT, LPCWSTR) -> HRESULT { return S_OK; }).Get());
 }
 
-bool WebView::event(QEvent* event)
+bool HtmlView::event(QEvent* event)
 {
     // Moving between a dock and a floating window can give the widget a
     // new native window; the browser follows it.
@@ -160,7 +160,7 @@ bool WebView::event(QEvent* event)
     return QWidget::event(event);
 }
 
-void WebView::resizeEvent(QResizeEvent* event)
+void HtmlView::resizeEvent(QResizeEvent* event)
 {
     QWidget::resizeEvent(event);
     if (_impl->controller)
@@ -170,14 +170,14 @@ void WebView::resizeEvent(QResizeEvent* event)
     }
 }
 
-void WebView::hideEvent(QHideEvent* event)
+void HtmlView::hideEvent(QHideEvent* event)
 {
     QWidget::hideEvent(event);
     if (_impl->controller)
         _impl->controller->put_IsVisible(FALSE);
 }
 
-void WebView::showEvent(QShowEvent* event)
+void HtmlView::showEvent(QShowEvent* event)
 {
     if (event)
         QWidget::showEvent(event);
@@ -193,7 +193,7 @@ void WebView::showEvent(QShowEvent* event)
 
     // The browser comes up in the background: the environment, then the
     // controller in this widget's window, then the page.
-    QPointer<WebView> self(this);
+    QPointer<HtmlView> self(this);
     const HWND window = reinterpret_cast<HWND>(winId());
     auto options = Microsoft::WRL::Make<CoreWebView2EnvironmentOptions>();
     const HRESULT started = CreateCoreWebView2EnvironmentWithOptions(nullptr,
@@ -204,7 +204,7 @@ void WebView::showEvent(QShowEvent* event)
                     return S_OK;
                 if (FAILED(result) || !environment)
                 {
-                    WebViewBridge::unavailable(*self, "The web view could not start (WebView2 error 0x" +
+                    HtmlViewBridge::unavailable(*self, "The web view could not start (WebView2 error 0x" +
                                                           QString::number(static_cast<uint>(result), 16) + ").");
                     return S_OK;
                 }
@@ -219,7 +219,7 @@ void WebView::showEvent(QShowEvent* event)
                             }
                             if (FAILED(result) || !controller)
                             {
-                                WebViewBridge::unavailable(*self, "The web view could not start (WebView2 error 0x" +
+                                HtmlViewBridge::unavailable(*self, "The web view could not start (WebView2 error 0x" +
                                                                       QString::number(static_cast<uint>(result), 16) + ").");
                                 return S_OK;
                             }
@@ -232,12 +232,12 @@ void WebView::showEvent(QShowEvent* event)
     if (FAILED(started))
     {
         d.creating = false;
-        WebViewBridge::unavailable(*this, "The web view could not start (WebView2 error 0x" +
+        HtmlViewBridge::unavailable(*this, "The web view could not start (WebView2 error 0x" +
                                               QString::number(static_cast<uint>(started), 16) + ").");
     }
 }
 
-void WebView::started(void* handle)
+void HtmlView::started(void* handle)
 {
     Impl& d = *_impl;
     auto* controller = static_cast<ICoreWebView2Controller*>(handle);
@@ -261,7 +261,7 @@ void WebView::started(void* handle)
     if (!d.startScript.isEmpty())
         d.webview->AddScriptToExecuteOnDocumentCreated(wide(d.startScript).c_str(), nullptr);
 
-    QPointer<WebView> self(this);
+    QPointer<HtmlView> self(this);
     EventRegistrationToken token;
     d.webview->add_ScriptDialogOpening(
         Callback<ICoreWebView2ScriptDialogOpeningEventHandler>(
@@ -285,15 +285,15 @@ void WebView::started(void* handle)
                 QTimer::singleShot(0, self, [self, kind, text, preset, deferral, held]() {
                     bool accepted = true;
                     QString answer;
-                    const QString mark = QString::fromLatin1(WebView::kCallMark);
+                    const QString mark = QString::fromLatin1(HtmlView::kCallMark);
                     if (kind == COREWEBVIEW2_SCRIPT_DIALOG_KIND_PROMPT && text.startsWith(mark))
                         answer = self->onCall ? self->onCall(text.mid(mark.size())) : QString();
                     else if (kind == COREWEBVIEW2_SCRIPT_DIALOG_KIND_ALERT)
-                        WebViewBridge::answer(*self, "alert", text, preset, accepted, answer);
+                        HtmlViewBridge::answer(*self, "alert", text, preset, accepted, answer);
                     else if (kind == COREWEBVIEW2_SCRIPT_DIALOG_KIND_CONFIRM)
-                        WebViewBridge::answer(*self, "confirm", text, preset, accepted, answer);
+                        HtmlViewBridge::answer(*self, "confirm", text, preset, accepted, answer);
                     else if (kind == COREWEBVIEW2_SCRIPT_DIALOG_KIND_PROMPT)
-                        WebViewBridge::answer(*self, "prompt", text, preset, accepted, answer);
+                        HtmlViewBridge::answer(*self, "prompt", text, preset, accepted, answer);
                     if (accepted)
                     {
                         held->put_ResultText(wide(answer).c_str());

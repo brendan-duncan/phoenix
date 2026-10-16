@@ -17,7 +17,7 @@ class QMainWindow;
 class QMenu;
 class QToolButton;
 class ScriptRunner;
-class WebView;
+class HtmlView;
 class CepPanels;
 
 namespace jsfl {
@@ -70,7 +70,7 @@ private:
     extensions::Package::Panel _panel;
     QString _id;
     QString _root;
-    WebView* _view = nullptr;
+    HtmlView* _view = nullptr;
     QToolButton* _flyoutButton = nullptr;
     QString _flyoutXml;
     std::unique_ptr<jsfl::PanelScript> _script;

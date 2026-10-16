@@ -14,7 +14,7 @@
 /// message starts with kCallMark goes to onCall, which answers it at once,
 /// so a page's calls into Phoenix can be synchronous. Other alerts,
 /// confirms and prompts come up as Phoenix's own dialogs.
-class WebView : public QWidget
+class HtmlView : public QWidget
 {
     Q_OBJECT
 
@@ -22,8 +22,8 @@ public:
     /// What starts a prompt meant for onCall.
     static constexpr const char* kCallMark = "\x01phoenix-call\x01";
 
-    explicit WebView(QWidget* parent = nullptr);
-    ~WebView() override;
+    explicit HtmlView(QWidget* parent = nullptr);
+    ~HtmlView() override;
 
     /// Whether pages can show here; \a why gets the reason when not.
     static bool available(QString* why = nullptr);
@@ -68,5 +68,5 @@ private:
     std::unique_ptr<Impl> _impl;
     QString _unavailable;
 
-    friend struct WebViewBridge;
+    friend struct HtmlViewBridge;
 };

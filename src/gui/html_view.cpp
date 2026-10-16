@@ -1,15 +1,15 @@
 // What every platform's web view shares: the page's own dialogs, and the
-// note painted where no page can show. The engines are in web_view_win.cpp
-// (WebView2) and web_view_mac.mm (WKWebView); without either, the stand-in
+// note painted where no page can show. The engines are in html_view_win.cpp
+// (WebView2) and html_view_mac.mm (WKWebView); without either, the stand-in
 // at the end of this file only says why.
 
-#include "web_view.h"
+#include "html_view.h"
 
 #include <QInputDialog>
 #include <QMessageBox>
 #include <QPainter>
 
-void WebView::answerDialog(const QString& kind, const QString& message, const QString& defaultText, bool& accepted,
+void HtmlView::answerDialog(const QString& kind, const QString& message, const QString& defaultText, bool& accepted,
     QString& answer)
 {
     accepted = true;
@@ -27,7 +27,7 @@ void WebView::answerDialog(const QString& kind, const QString& message, const QS
     }
 }
 
-void WebView::paintEvent(QPaintEvent*)
+void HtmlView::paintEvent(QPaintEvent*)
 {
     if (_unavailable.isEmpty())
         return;
@@ -39,33 +39,33 @@ void WebView::paintEvent(QPaintEvent*)
 
 #ifndef PHOENIX_WEBVIEW
 
-struct WebView::Impl
+struct HtmlView::Impl
 {
 };
 
-WebView::WebView(QWidget* parent)
+HtmlView::HtmlView(QWidget* parent)
     : QWidget(parent)
 {
     available(&_unavailable);
 }
 
-WebView::~WebView() = default;
+HtmlView::~HtmlView() = default;
 
-bool WebView::available(QString* why)
+bool HtmlView::available(QString* why)
 {
     if (why)
         *why = "HTML panels need a web view, which this Phoenix was built without (they show on Windows and macOS).";
     return false;
 }
 
-void WebView::setStartScript(const QString&) {}
-void WebView::setProfileFolder(const QString&) {}
-void WebView::load(const QString&, const QString&, const QString&) {}
-void WebView::runScript(const QString&) {}
-void WebView::started(void*) {}
-bool WebView::event(QEvent* event) { return QWidget::event(event); }
-void WebView::resizeEvent(QResizeEvent* event) { QWidget::resizeEvent(event); }
-void WebView::showEvent(QShowEvent* event) { QWidget::showEvent(event); }
-void WebView::hideEvent(QHideEvent* event) { QWidget::hideEvent(event); }
+void HtmlView::setStartScript(const QString&) {}
+void HtmlView::setProfileFolder(const QString&) {}
+void HtmlView::load(const QString&, const QString&, const QString&) {}
+void HtmlView::runScript(const QString&) {}
+void HtmlView::started(void*) {}
+bool HtmlView::event(QEvent* event) { return QWidget::event(event); }
+void HtmlView::resizeEvent(QResizeEvent* event) { QWidget::resizeEvent(event); }
+void HtmlView::showEvent(QShowEvent* event) { QWidget::showEvent(event); }
+void HtmlView::hideEvent(QHideEvent* event) { QWidget::hideEvent(event); }
 
 #endif

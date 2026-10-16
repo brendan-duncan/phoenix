@@ -1,4 +1,4 @@
-# The web view that shows HTML extension panels (src/gui/web_view*).
+# The web view that shows HTML extension panels (src/gui/html_view*).
 #
 # On Windows it is WebView2, the Edge runtime Windows ships with: its SDK
 # (a header and a static loader) is downloaded from the NuGet package
@@ -35,14 +35,14 @@ function(phoenix_add_web_view target)
             DOWNLOAD_NAME webview2.zip
         )
         FetchContent_MakeAvailable(webview2)
-        target_sources(${target} PRIVATE ${CMAKE_SOURCE_DIR}/src/gui/web_view_win.cpp)
+        target_sources(${target} PRIVATE ${CMAKE_SOURCE_DIR}/src/gui/html_view_win.cpp)
         target_include_directories(${target} PRIVATE "${webview2_SOURCE_DIR}/build/native/include")
         target_link_libraries(${target} PRIVATE
             "${webview2_SOURCE_DIR}/build/native/${arch}/WebView2LoaderStatic.lib" version advapi32 ole32 shell32)
         target_compile_definitions(${target} PRIVATE PHOENIX_WEBVIEW)
     elseif(APPLE)
-        target_sources(${target} PRIVATE ${CMAKE_SOURCE_DIR}/src/gui/web_view_mac.mm)
-        set_source_files_properties(${CMAKE_SOURCE_DIR}/src/gui/web_view_mac.mm PROPERTIES COMPILE_FLAGS "-fobjc-arc")
+        target_sources(${target} PRIVATE ${CMAKE_SOURCE_DIR}/src/gui/html_view_mac.mm)
+        set_source_files_properties(${CMAKE_SOURCE_DIR}/src/gui/html_view_mac.mm PROPERTIES COMPILE_FLAGS "-fobjc-arc")
         target_link_libraries(${target} PRIVATE "-framework WebKit" "-framework AppKit")
         target_compile_definitions(${target} PRIVATE PHOENIX_WEBVIEW)
     endif()

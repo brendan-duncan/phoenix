@@ -1,7 +1,7 @@
 // The web view on macOS: WKWebView, from the system's WebKit, in the
 // widget's own NSView.
 
-#include "web_view.h"
+#include "html_view.h"
 
 #include <QDesktopServices>
 #include <QEvent>
@@ -12,9 +12,9 @@
 #import <AppKit/AppKit.h>
 #import <WebKit/WebKit.h>
 
-struct WebViewBridge
+struct HtmlViewBridge
 {
-    static void answer(WebView& view, const QString& kind, const QString& message, const QString& defaultText,
+    static void answer(HtmlView& view, const QString& kind, const QString& message, const QString& defaultText,
         bool& accepted, QString& text)
     {
         view.answerDialog(kind, message, defaultText, accepted, text);
@@ -27,7 +27,7 @@ static NSString* toNS(const QString& text)
 }
 
 @interface PhoenixWebDelegate : NSObject <WKUIDelegate, WKNavigationDelegate>
-@property (nonatomic, assign) QPointer<WebView>* owner;
+@property (nonatomic, assign) QPointer<HtmlView>* owner;
 @end
 
 @implementation PhoenixWebDelegate
@@ -37,7 +37,7 @@ static NSString* toNS(const QString& text)
                       initiatedByFrame:(WKFrameInfo*)frame
                      completionHandler:(void (^)(void))completionHandler
 {
-    QPointer<WebView> view = *self.owner;
+    QPointer<HtmlView> view = *self.owner;
     if (!view)
     {
         completionHandler();
@@ -48,7 +48,7 @@ static NSString* toNS(const QString& text)
     QTimer::singleShot(0, view, [view, text, done]() {
         bool accepted = true;
         QString answer;
-        WebViewBridge::answer(*view, "alert", text, QString(), accepted, answer);
+        HtmlViewBridge::answer(*view, "alert", text, QString(), accepted, answer);
         done();
     });
 }
@@ -58,7 +58,7 @@ static NSString* toNS(const QString& text)
                         initiatedByFrame:(WKFrameInfo*)frame
                        completionHandler:(void (^)(BOOL))completionHandler
 {
-    QPointer<WebView> view = *self.owner;
+    QPointer<HtmlView> view = *self.owner;
     const QString text = QString::fromNSString(message);
     void (^done)(BOOL) = [completionHandler copy];
     if (!view)
@@ -69,7 +69,7 @@ static NSString* toNS(const QString& text)
     QTimer::singleShot(0, view, [view, text, done]() {
         bool accepted = true;
         QString answer;
-        WebViewBridge::answer(*view, "confirm", text, QString(), accepted, answer);
+        HtmlViewBridge::answer(*view, "confirm", text, QString(), accepted, answer);
         done(accepted ? YES : NO);
     });
 }
@@ -80,7 +80,7 @@ static NSString* toNS(const QString& text)
                          initiatedByFrame:(WKFrameInfo*)frame
                         completionHandler:(void (^)(NSString*))completionHandler
 {
-    QPointer<WebView> view = *self.owner;
+    QPointer<HtmlView> view = *self.owner;
     if (!view)
     {
         completionHandler(nil);
@@ -92,7 +92,7 @@ static NSString* toNS(const QString& text)
     // The page waits for the answer, given once the window's events have
     // run, so what answers it is not inside WebKit's callback.
     QTimer::singleShot(0, view, [view, text, preset, done]() {
-        const QString mark = QString::fromLatin1(WebView::kCallMark);
+        const QString mark = QString::fromLatin1(HtmlView::kCallMark);
         if (text.startsWith(mark))
         {
             const QString answer = view->onCall ? view->onCall(text.mid(mark.size())) : QString();
@@ -101,7 +101,7 @@ static NSString* toNS(const QString& text)
         }
         bool accepted = true;
         QString answer;
-        WebViewBridge::answer(*view, "prompt", text, preset, accepted, answer);
+        HtmlViewBridge::answer(*view, "prompt", text, preset, accepted, answer);
         done(accepted ? answer.toNSString() : nil);
     });
 }
@@ -120,7 +120,7 @@ static NSString* toNS(const QString& text)
 
 - (void)webView:(WKWebView*)webView didFinishNavigation:(WKNavigation*)navigation
 {
-    if (QPointer<WebView> view = *self.owner)
+    if (QPointer<HtmlView> view = *self.owner)
     {
         emit view->loaded(true);
         emit view->titleChanged(QString::fromNSString(webView.title ?: @""));
@@ -129,7 +129,7 @@ static NSString* toNS(const QString& text)
 
 - (void)webView:(WKWebView*)webView didFailNavigation:(WKNavigation*)navigation withError:(NSError*)error
 {
-    if (QPointer<WebView> view = *self.owner)
+    if (QPointer<HtmlView> view = *self.owner)
         emit view->loaded(false);
 }
 
@@ -137,23 +137,23 @@ static NSString* toNS(const QString& text)
     didFailProvisionalNavigation:(WKNavigation*)navigation
                        withError:(NSError*)error
 {
-    if (QPointer<WebView> view = *self.owner)
+    if (QPointer<HtmlView> view = *self.owner)
         emit view->loaded(false);
 }
 
 @end
 
-struct WebView::Impl
+struct HtmlView::Impl
 {
     WKWebView* webview = nil;
     PhoenixWebDelegate* delegate = nil;
-    QPointer<WebView> owner;
+    QPointer<HtmlView> owner;
     QString startScript;
     QString folder, page;
     bool loadWanted = false;
 };
 
-WebView::WebView(QWidget* parent)
+HtmlView::HtmlView(QWidget* parent)
     : QWidget(parent)
     , _impl(std::make_unique<Impl>())
 {
@@ -163,7 +163,7 @@ WebView::WebView(QWidget* parent)
     _impl->owner = this;
 }
 
-WebView::~WebView()
+HtmlView::~HtmlView()
 {
     Impl& d = *_impl;
     if (d.webview)
@@ -174,22 +174,22 @@ WebView::~WebView()
     }
 }
 
-bool WebView::available(QString*)
+bool HtmlView::available(QString*)
 {
     return true;
 }
 
-void WebView::setStartScript(const QString& script)
+void HtmlView::setStartScript(const QString& script)
 {
     _impl->startScript = script;
 }
 
-void WebView::setProfileFolder(const QString&)
+void HtmlView::setProfileFolder(const QString&)
 {
     // WebKit keeps one store for the app.
 }
 
-void WebView::load(const QString& folder, const QString& page, const QString&)
+void HtmlView::load(const QString& folder, const QString& page, const QString&)
 {
     Impl& d = *_impl;
     d.folder = folder;
@@ -208,13 +208,13 @@ void WebView::load(const QString& folder, const QString& page, const QString&)
     d.loadWanted = false;
 }
 
-void WebView::runScript(const QString& script)
+void HtmlView::runScript(const QString& script)
 {
     if (_impl->webview)
         [_impl->webview evaluateJavaScript:toNS(script) completionHandler:nil];
 }
 
-bool WebView::event(QEvent* event)
+bool HtmlView::event(QEvent* event)
 {
     if (event->type() == QEvent::WinIdChange && _impl->webview)
     {
@@ -226,21 +226,21 @@ bool WebView::event(QEvent* event)
     return QWidget::event(event);
 }
 
-void WebView::resizeEvent(QResizeEvent* event)
+void HtmlView::resizeEvent(QResizeEvent* event)
 {
     QWidget::resizeEvent(event);
     if (_impl->webview)
         _impl->webview.frame = NSMakeRect(0, 0, width(), height());
 }
 
-void WebView::hideEvent(QHideEvent* event)
+void HtmlView::hideEvent(QHideEvent* event)
 {
     QWidget::hideEvent(event);
     if (_impl->webview)
         _impl->webview.hidden = YES;
 }
 
-void WebView::showEvent(QShowEvent* event)
+void HtmlView::showEvent(QShowEvent* event)
 {
     if (event)
         QWidget::showEvent(event);
@@ -270,7 +270,7 @@ void WebView::showEvent(QShowEvent* event)
     started(nullptr);
 }
 
-void WebView::started(void*)
+void HtmlView::started(void*)
 {
     if (_impl->loadWanted)
         load(_impl->folder, _impl->page, QString());

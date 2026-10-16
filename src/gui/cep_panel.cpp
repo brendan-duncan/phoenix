@@ -3,7 +3,7 @@
 #include "output_panel.h"
 #include "script_runner.h"
 #include "theme.h"
-#include "web_view.h"
+#include "html_view.h"
 
 #include "../jsfl/panel_script.h"
 
@@ -275,7 +275,7 @@ CepPanel::CepPanel(CepPanels& panels, const extensions::Installed& extension, co
     bar->addWidget(_flyoutButton);
     layout->addLayout(bar);
 
-    _view = new WebView(this);
+    _view = new HtmlView(this);
     _view->setProfileFolder(QDir(ScriptRunner::settingsFolder()).filePath("WebView"));
     _view->setStartScript(startScript());
     _view->onCall = [this](const QString& request) { return answer(request); };

@@ -136,7 +136,7 @@ set(HEADERS
     src/gui/claude_code_panel.h
     src/gui/pty_process.h
     src/gui/terminal_view.h
-    src/gui/web_view.h
+    src/gui/html_view.h
     src/gui/trace_bitmap_dialog.h
     src/gui/test_movie_window.h
     src/gui/command_line.h
@@ -424,7 +424,7 @@ set(SOURCES
     src/gui/claude_code_panel.cpp
     src/gui/pty_process.cpp
     src/gui/terminal_view.cpp
-    src/gui/web_view.cpp
+    src/gui/html_view.cpp
     src/gui/trace_bitmap_dialog.cpp
     src/gui/test_movie_window.cpp
     src/gui/command_line.cpp
