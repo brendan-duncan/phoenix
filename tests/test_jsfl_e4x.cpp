@@ -130,6 +130,25 @@ TEST(jsfl_e4x_rewrite)
     CHECK(!jsfl::e4x::mayUse("var a = 1; if (a < b) fl.trace(a);"));
     CHECK(jsfl::e4x::mayUse("var a = <a/>;"));
     CHECK(jsfl::e4x::mayUse("var a = x.@id;"));
+
+    // Literals nested past all reason are left as written, not followed
+    // down until the stack runs out; nor are a few that never close tried
+    // over and over through the rest. Shallower ones are still rewritten.
+    for (const char* each : {"<a>{", "<>{", "x.(", "x.@["})
+    {
+        std::string deep = "a = ";
+        for (int i = 0; i < 20000; ++i)
+            deep += each;
+        CHECK(!jsfl::e4x::rewrite(deep).empty());
+    }
+    std::string unclosed = "a = ";
+    for (int i = 0; i < 30; ++i)
+        unclosed += "<a>{";
+    for (int i = 0; i < 5000; ++i)
+        unclosed += "b < c; ";
+    CHECK(!jsfl::e4x::rewrite(unclosed).empty());
+    CHECK_REWRITE("a = <a>{<b>{<c/>}</b>}</a>;", "a = XML(\"<a>\" + __e4x.hole(XML(\"<b>\" + __e4x.hole(XML(\"<c/>\"), 0) + "
+                                                "\"</b>\"), 0) + \"</a>\");");
 }
 
 TEST(jsfl_e4x_attributes)

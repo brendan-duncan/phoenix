@@ -178,6 +178,12 @@ private:
         int depth = 0;
         while (i < s.size())
         {
+            // Given up on: the rest as written.
+            if (gaveUp || spent())
+            {
+                copyTo(s.size());
+                return;
+            }
             const char c = s[i];
             const char next = i + 1 < s.size() ? s[i + 1] : '\0';
             if (c == '/' && next == '/')
@@ -367,8 +373,9 @@ private:
             regexAllowed = false;
             return;
         }
-        if (next == '(')
+        if (next == '(' && !gaveUp && nesting < kDeepest)
         {
+            const Nest nest(nesting);
             out += "[__e4x.filter]((__e4xIt) => { with (__e4xIt) return (";
             i += 2;
             regexAllowed = true;
@@ -456,9 +463,16 @@ private:
             }
         }
         const std::string index = s.substr(start, j - start);
-        Rewriter inner(index);
-        inner.filterDepth = filterDepth;
-        out += inner.run();
+        if (gaveUp || nesting >= kDeepest)
+            out += index;
+        else
+        {
+            Rewriter inner(index);
+            inner.filterDepth = filterDepth;
+            inner.nesting = nesting + 1;
+            out += inner.run();
+            gaveUp = inner.gaveUp;
+        }
         i = j;
     }
 
@@ -466,6 +480,12 @@ private:
     /// one.
     bool literal()
     {
+        if (!deepEnough())
+        {
+            gaveUp = true;
+            return false;
+        }
+        const Nest nest(nesting);
         const size_t start = i;
         const size_t outStart = out.size();
         Literal parts;
@@ -512,6 +532,12 @@ private:
 
     bool element(Literal& parts)
     {
+        if (!deepEnough())
+        {
+            gaveUp = true;
+            return false;
+        }
+        const Nest nest(nesting);
         // At '<'.
         ++i;
         parts.text("<");
@@ -593,6 +619,8 @@ private:
     {
         while (i < s.size())
         {
+            if (gaveUp || spent())
+                return false;
             if (s.compare(i, 3, "</{") == 0 && !list)
             {
                 i += 2;
@@ -656,11 +684,38 @@ private:
         return false;
     }
 
+    /// How deep literals, their holes and filters nest. Past kDeepest, or
+    /// once literals that do not close have been tried over and over (each
+    /// try may look through the rest of the script), the rewriting gives up
+    /// and leaves the rest as written, to fail as JavaScript, rather than
+    /// run out of stack or take for ever.
+    bool deepEnough() const { return !gaveUp && nesting < kDeepest; }
+    bool spent()
+    {
+        if (++work > 64 * s.size() + 100000)
+            gaveUp = true;
+        return gaveUp;
+    }
+    struct Nest
+    {
+        explicit Nest(int& depth) : depth(depth) { ++depth; }
+        ~Nest() { --depth; }
+        Nest(const Nest&) = delete;
+        Nest& operator=(const Nest&) = delete;
+        int& depth;
+    };
+    static constexpr int kDeepest = 64;
+
     const std::string& s;
     std::string out;
     size_t i = 0;
     bool regexAllowed = true;
     int filterDepth = 0;
+    int nesting = 0;
+    /// Characters looked at, counting each look again after a literal
+    /// that did not close.
+    size_t work = 0;
+    bool gaveUp = false;
 };
 
 const char* const kPrelude = R"JS(
