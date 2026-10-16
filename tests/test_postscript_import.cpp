@@ -370,6 +370,17 @@ TEST(postscript_hostile_programs_stop_cleanly)
         "1 1 3 [1 0 0 1 0 0] (x) image",
         "20000 20000 8 [1 0 0 1 0 0] (x) image",
         "<< /Width 1e300 /Height 1e300 /DataSource (x) >> imagemask",
+        "/P << /PatternType 1 /PaintType 1 /TilingType 1 /BBox [0 0 1 1] /XStep 1 /YStep 1 "
+        "/PaintProc { pop P setpattern 0 0 1 1 rectfill } >> matrix makepattern def P setpattern 0 0 40 40 rectfill",
+        "<< /PatternType 1 /BBox [0 0 1 1] /XStep 1e-300 /YStep 1e300 /PaintProc {} >> matrix makepattern setpattern "
+        "0 0 100 100 rectfill",
+        "<< /ShadingType 2 /Coords [0 0 1 0] /Function << /FunctionType 0 /Domain [0 1] /Range [0 1] "
+        "/Size [100000000] /BitsPerSample 32 /DataSource (x) >> >> shfill",
+        "<< /ShadingType 3 /Coords [0 0 0 0 0 -5] /Function << /FunctionType 3 /Functions [] >> >> shfill",
+        "currentfile 100 { /ASCIIHexDecode filter } repeat",
+        "currentfile eexec 0123456789abcdef",
+        "(abc) eexec (abc) eexec",
+        "[/Indexed /DeviceRGB 1e9 {}] setcolorspace 5 setcolor 0 0 1 1 rectfill",
     };
     const double box[4] = {0, 0, 100, 100};
     for (const char* program : programs)
@@ -404,6 +415,156 @@ TEST(postscript_text_moves_on_by_the_fonts_widths)
     }
     // stringwidth gives the same width.
     CHECK(art.paths.size() == 1);
+}
+
+TEST(illustrator_patterns_fill_with_their_tiles)
+{
+    // A 10-point tile with a magenta square in its corner, filling a 30 by
+    // 20 rectangle; a plain fill after it is plain again.
+    const std::string text = "%!PS-Adobe-3.0\r%%BoundingBox: 0 0 100 100\r%AI5_FileFormat 3\r"
+                             "%AI3_BeginPattern: (Dots)\r(Dots) 0 0 10 10 [\r%AI3_Tile\r(0 O 0 R 0 1 0 0 k\r) @\r"
+                             "(\r0 0 m\r5 0 L\r5 5 L\r0 5 L\rf\r) &\r] E\r%AI3_EndPattern\r%%EndSetup\r"
+                             "(Dots) 0 0 1 1 0 0 0 0 0 [1 0 0 1 0 0] p\r0 0 m\r30 0 L\r30 20 L\r0 20 L\rf\r"
+                             "0 g\r50 50 m\r60 50 L\r60 60 L\rf\r";
+    const fla::vectors::Artwork art = fla::vectors::readIllustrator(text);
+    CHECK(art.notes.empty());
+    size_t magenta = 0;
+    for (const fla::vectors::Painted& p : art.paths)
+        if (p.fill && (*p.fill)[0] == 255 && (*p.fill)[1] == 0 && (*p.fill)[2] == 255 && p.clips.size() == 1)
+            ++magenta;
+    // Cells from one before the area to one past it, each cut to it.
+    CHECK(magenta == 20);
+    CHECK(art.paths.size() == 21 && art.paths.back().fill && (*art.paths.back().fill)[0] == 0);
+    if (!art.paths.empty())
+    {
+        // The first tile's square: (-10, -10) on the page, to the stage.
+        const fla::Point& p = art.paths[0].subpaths[0].segments[0].points[0];
+        CHECK(p.x == -10 && p.y == 110);
+    }
+}
+
+TEST(illustrator_images_come_in_from_their_samples)
+{
+    // Illustrator 9's: RGB samples, then an alpha plane; Illustrator 8's:
+    // a JPEG in base-85 lines behind "%".
+    std::string text = "%!PS-Adobe-3.0\r%%BoundingBox: 0 0 100 100\r%AI5_FileFormat 9.0\r%%EndSetup\r"
+                       "%AI5_BeginRaster\r() 1 XG\r[ 1 0 0 1 10 90 ] 2 1 0 Xh\r"
+                       "[ 1 0 0 1 10 90 ] 0 0 2 1 2 1 8 3 1 0 1 0 4 4 0 0\r%%BeginData: 9\rXI\n";
+    text += std::string("\xFF\x00\x00\x00\xFF\x00\xFF\x00", 8);
+    text += "%%EndData\rXH\r%AI5_EndRaster\r";
+    const std::vector<uint8_t> jpeg = {0xFF, 0xD8, 0xFF, 0xD9};
+    text += "[0.5 0 0 0.5 20 60] 0 0 1 1 1 1 8 4 0 0 514 0 XI\r%" + ascii85(jpeg) + "\rXH\r";
+    text += "0 0 m\r1 0 L\r1 1 L\rf\r";
+    const fla::vectors::Artwork art = fla::vectors::readIllustrator(text);
+    CHECK(art.notes.empty());
+    CHECK(art.images.size() == 2 && art.paths.size() == 1);
+    if (art.images.size() == 2)
+    {
+        const fla::vectors::Image& rgb = art.images[0];
+        CHECK(rgb.width == 2 && rgb.height == 1 && rgb.rgba.size() == 8);
+        if (rgb.rgba.size() == 8)
+            CHECK(rgb.rgba[0] == 255 && rgb.rgba[3] == 255 && rgb.rgba[5] == 255 && rgb.rgba[7] == 0);
+        // Its top left at (10, 90) on the page, a point a pixel.
+        CHECK(rgb.placement.a == 2 && rgb.placement.d == 1 && rgb.placement.tx == 10 && rgb.placement.ty == 10);
+        CHECK(art.images[1].encoded == jpeg && art.images[1].inkCmyk);
+        CHECK(art.images[1].placement.a == 0.5 && art.images[1].placement.ty == 40);
+    }
+}
+
+TEST(illustrator_area_and_path_text_come_in)
+{
+    // Area text: its lines where Td places them, the frame not drawn.
+    // Path text: a glyph at a time along its path.
+    const std::string text = "%!PS-Adobe-3.0\r%%BoundingBox: 0 0 100 100\r%AI5_FileFormat 3\r%%EndSetup\r"
+                             "1 To\r1 0 0 1 10 80 0 Tp\r10 80 m\r90 80 L\r90 40 L\r10 40 L\rn\rTP\r0 -10 Td\r"
+                             "/_Helvetica 10 Tf\r0 g\r(One) Tx\r( \\r) Tx\r0 -12 Td\r(Two) Tx\rTO\r"
+                             "2 To\r1 0 0 1 10 50 0 Tp\r10 50 m\r90 50 L\rN\rTP\r/_Helvetica 10 Tf\r(AB) Tx\rTO\r";
+    const fla::vectors::Artwork art = fla::vectors::readIllustrator(text);
+    CHECK(art.paths.empty());
+    CHECK(art.texts.size() == 4);
+    if (art.texts.size() == 4)
+    {
+        CHECK(art.texts[0].text == "One" && art.texts[0].placement.tx == 10 && art.texts[0].placement.ty == 30);
+        CHECK(art.texts[1].text == "Two" && art.texts[1].placement.ty == 42);
+        CHECK(art.texts[2].text == "A" && art.texts[2].placement.tx == 10 && art.texts[2].placement.ty == 50);
+        // Helvetica's A is 667 thousandths.
+        CHECK(art.texts[3].text == "B");
+        CHECK_NEAR(art.texts[3].placement.tx, 16.67);
+    }
+}
+
+TEST(illustrator_11_text_comes_in_where_the_text_engine_laid_it)
+{
+    // The text engine's document: a font, a point text frame at (1010, 1020)
+    // from a ruler origin of (1000, 1100), and a story of two lines, a tab
+    // in the first, laid out by its strikes.
+    const auto utf16 = [](const std::string& ascii) {
+        std::string out = "\xFE\xFF";
+        for (const char c : ascii)
+        {
+            out += '\0';
+            out += c;
+        }
+        return out;
+    };
+    const std::string doc =
+        "/DocumentResources << /FontSet << /Resources [ << /Resource << /Identifier << /Name (" + utf16("Times-Roman") +
+        ") /Type 0 >> >> >> ] >> /StyleSheetSet << /Resources [ << /Resource << /Features << /Font 0 /FontSize 12.0 "
+        ">> >> >> ] >> /TextFrameSet << /Resources [ << /Resource << /Bezier << /Points [ 0.0 0.0 ] >> /Data << /Type 0 "
+        "/FrameMatrix [ 1.0 0.0 0.0 1.0 1010.0 1020.0 ] >> >> >> ] >> >> "
+        "/DocumentObjects << /TextObjects [ << /Model << /Text (" + utf16("Hi\tX\rYo\r") + ") "
+        "/StyleRun << /RunArray [ << /RunData << /StyleSheet << /Parent 0 /Features << /FontSize 10.0 /FillColor << "
+        "/StreamTag /SimplePaint /Color << /Type 1 /Values [ 1.0 1.0 0.0 0.0 ] >> >> >> >> >> /Length 8 >> ] >> "
+        "/ParagraphRun << /RunArray [ << /RunData << /ParagraphSheet << /Features << /TabStops << /TabStops [ << "
+        "/TabAdvance 50.0 /TabType 0 >> ] >> >> >> >> /Length 8 >> ] >> >> "
+        "/View << /Frames [ << /Resource 0 >> ] /Strikes [ << /StreamTag /PathSelectGroupCharacter /Children [ << "
+        "/StreamTag /FrameStrike /Frame 0 /Transform << /Origin [ 0.0 0.0 ] >> /Children [ "
+        "<< /StreamTag /LineStrike /Transform << /Origin [ 0.0 0.0 ] >> /Children [ << /StreamTag /Segment "
+        "/Mapping << /CharacterCount 5 >> >> ] >> "
+        "<< /StreamTag /LineStrike /Transform << /Origin [ 0.0 12.0 ] >> /Children [ << /StreamTag /Segment "
+        "/Mapping << /CharacterCount 3 >> >> ] >> ] >> ] >> ] >> >> ] >>";
+    const std::string encoded = ascii85(std::vector<uint8_t>(doc.begin(), doc.end()));
+    std::string text = "%!PS-Adobe-3.0\r%%BoundingBox: 0 0 100 100\r%AI5_FileFormat 14.0\r%AI11_BeginTextDocument\r"
+                       "/AI11TextDocument : /ASCII85Decode ,\r";
+    for (size_t i = 0; i < encoded.size(); i += 80)
+        text += "%" + encoded.substr(i, 80) + "\r";
+    text += "1000 1100 /RulerOrigin ,\r;\r%AI11_EndTextDocument\r%%EndSetup\r"
+            "/AI11Text :\r0 /FreeUndo ,\r0 /FrameIndex ,\r0 /StoryIndex ,\r;\r";
+    const fla::vectors::Artwork art = fla::vectors::readIllustrator(text);
+    CHECK(art.notes.empty());
+    CHECK(art.texts.size() == 3);
+    if (art.texts.size() == 3)
+    {
+        CHECK(art.texts[0].text == "Hi" && art.texts[0].family == "Times" && art.texts[0].size == 10);
+        CHECK(art.texts[0].color[0] == 255 && art.texts[0].color[1] == 0);
+        CHECK(art.texts[0].placement.tx == 10 && art.texts[0].placement.ty == 20 && art.texts[0].placement.d == 1);
+        // The tab stop 50 points along the line.
+        CHECK(art.texts[1].text == "X" && art.texts[1].placement.tx == 60);
+        CHECK(art.texts[2].text == "Yo" && art.texts[2].placement.ty == 32);
+    }
+}
+
+TEST(illustrator_hostile_native_data_stops_cleanly)
+{
+    // A pattern that fills its own tile with itself, images claiming more
+    // than they hold or past any size, a text document nested past reason
+    // and one that is not one: each stops, nothing read out of bounds.
+    const std::string deep = ascii85(std::vector<uint8_t>(200000, '['));
+    const std::string texts[] = {
+        "%%BoundingBox: 0 0 100 100\r%AI3_BeginPattern: (P)\r(P) 0 0 10 10 [\r(\r(P) 0 0 1 1 0 0 0 0 0 [1 0 0 1 0 0] p\r"
+        "0 0 m\r10 0 L\r10 10 L\rf\r) &\r] E\r%AI3_EndPattern\r%%EndSetup\r"
+        "(P) 0 0 1 1 0 0 0 0 0 [1 0 0 1 0 0] p\r0 0 m\r100 0 L\r100 100 L\rf\r",
+        "%%EndSetup\r[ 1 0 0 1 0 0 ] 0 0 9 9 4000 4000 8 4 1 0 1 0 XI\n\x01\x02",
+        "%%EndSetup\r[ 1 0 0 1 0 0 ] 0 0 9 9 1e300 -5 8 4 1 0 1 0 XI\n",
+        "%%EndSetup\r[ 1 0 0 1 0 0 ] 0 0 1 1 1 1 8 4 0 0 514 0 XI\r%zz~>\r",
+        "/AI11TextDocument : /ASCII85Decode ,\r%" + deep + "\r%%EndSetup\r/AI11Text :\r0 /StoryIndex ,\r;\r",
+        "/AI11TextDocument : /ASCII85Decode ,\r%!!!!!~>\r%%EndSetup\r/AI11Text :\r7 /StoryIndex ,\r-3 /FrameIndex ,\r;\r",
+    };
+    for (const std::string& text : texts)
+    {
+        const fla::vectors::Artwork art = fla::vectors::readIllustrator(text);
+        CHECK(art.paths.size() <= 25000);
+    }
 }
 
 TEST(illustrator_eps_reads_its_private_data_behind_a_binary_header)

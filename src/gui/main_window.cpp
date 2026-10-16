@@ -11786,6 +11786,21 @@ void MainWindow::importArtwork(const QString& path, bool toStage, const QPointF*
                         for (int x = 0; x < pixels.width() * 4; ++x)
                             line[x] = static_cast<uchar>(255 - line[x]);
                     }
+                // Pixels in order at the size the file gives rather than the
+                // JPEG's own, as PostScript reads them (Illustrator 8 swaps
+                // its JPEGs' width and height).
+                const qint64 count = static_cast<qint64>(source.width) * source.height;
+                if (!pixels.isNull() && source.width > 0 && source.height > 0 &&
+                    pixels.size() != QSize(source.width, source.height) &&
+                    static_cast<qint64>(pixels.width()) * pixels.height() == count)
+                {
+                    const QImage from = pixels.convertToFormat(QImage::Format_ARGB32);
+                    QImage shaped(source.width, source.height, QImage::Format_ARGB32);
+                    for (qint64 i = 0; i < count; ++i)
+                        reinterpret_cast<QRgb*>(shaped.scanLine(static_cast<int>(i / source.width)))[i % source.width] =
+                            reinterpret_cast<const QRgb*>(from.constScanLine(static_cast<int>(i / from.width())))[i % from.width()];
+                    pixels = shaped;
+                }
             }
             else if (!source.rgba.empty())
             {

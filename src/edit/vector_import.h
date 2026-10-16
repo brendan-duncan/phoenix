@@ -160,6 +160,9 @@ Artwork readPdf(const std::vector<uint8_t>& bytes);
 /// empty for names it does not know.
 std::string glyphNameText(const std::string& name);
 
+/// Mac OS Roman text as UTF-8.
+std::string fromMacRoman(const std::string& text);
+
 /// A font's family and style from its PostScript name:
 /// "ABCDEF+TimesNewRomanPS-BoldMT" is "Times New Roman", bold.
 void splitFontName(const std::string& name, std::string& family, bool& bold, bool& italic);

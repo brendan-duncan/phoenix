@@ -3269,6 +3269,19 @@ std::string glyphNameText(const std::string& name)
     return glyphText(name);
 }
 
+std::string fromMacRoman(const std::string& text)
+{
+    std::string out;
+    for (const unsigned char c : text)
+    {
+        if (c < 0x80)
+            out += static_cast<char>(c);
+        else
+            appendUtf8(out, kMacRomanHigh[c - 0x80]);
+    }
+    return out;
+}
+
 void splitFontName(const std::string& name, std::string& family, bool& bold, bool& italic)
 {
     fontNameParts(name, family, bold, italic);
