@@ -262,6 +262,28 @@ TEST(python_objects_belong_to_their_run)
     // Globals do not carry over either.
     CHECK(f.run("x = 1").ok);
     CHECK(!f.run("print(x)", "Test Script", true).ok);
+
+    // Nor are they for a thread the script starts.
+    f.host.output.clear();
+    CHECK(f.run("import threading\n"
+                "doc = fl.getDocumentDOM()\n"
+                "seen = []\n"
+                "def work():\n"
+                "    try:\n"
+                "        seen.append(doc.width)\n"
+                "    except Exception as e:\n"
+                "        seen.append(str(e))\n"
+                "    try:\n"
+                "        fl.getDocumentDOM()\n"
+                "    except Exception as e:\n"
+                "        seen.append(str(e))\n"
+                "t = threading.Thread(target=work)\n"
+                "t.start()\n"
+                "t.join()\n"
+                "print(len(seen), all('thread the script runs on' in s for s in seen))\n"
+                "print(doc.width)\n")
+              .ok);
+    CHECK_OUTPUT(f, "2 True\n550\n");
 }
 
 TEST(python_values_convert_both_ways)

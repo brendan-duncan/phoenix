@@ -101,6 +101,22 @@ Binding g;
 jsfl::Host* g_host = nullptr;
 bool g_inRun = false;
 unsigned g_generation = 0;
+/// The thread the run goes on (the main one): the object model and the
+/// dialogs are its alone.
+std::thread::id g_runThread;
+
+bool onRunThread()
+{
+    return std::this_thread::get_id() == g_runThread;
+}
+
+/// Turns away a thread a script started: the object model is not safe to
+/// use from two threads at once.
+void requireRunThread()
+{
+    if (!onRunThread())
+        throw jsfl::Error("Phoenix's objects can only be used on the thread the script runs on, not one it started.");
+}
 
 /// A reference Phoenix owns, given back when it goes.
 class Ref
@@ -212,6 +228,7 @@ ObjectPtr objectOf(PyObject* self)
         throw jsfl::Error("This object was not made by Phoenix; get objects from fl.");
     if (!g_inRun || instance->generation != g_generation)
         throw jsfl::Error("This object belongs to a script run that has ended; get it again from fl.");
+    requireRunThread();
     return *instance->object;
 }
 
@@ -552,6 +569,7 @@ PyObject* callBound(PyObject* self, PyObject* args, PyObject* keywords)
         }
         if (!g_inRun || bound->generation != g_generation)
             throw jsfl::Error("This method belongs to a script run that has ended; get it again from fl.");
+        requireRunThread();
         Args list;
         const Py_ssize_t count = PY.PyTuple_Size(args);
         for (Py_ssize_t i = 0; i < count; ++i)
@@ -645,7 +663,8 @@ PyObject* moduleTrace(PyObject*, PyObject* args)
     return guarded([args]() -> PyObject* {
         std::string text;
         argumentText(args, 0, text);
-        if (g_host && g_inRun)
+        // From a thread the script started, output is let go.
+        if (g_host && g_inRun && onRunThread())
             g_host->trace(text);
         return newNone();
     });
@@ -656,6 +675,7 @@ PyObject* moduleAlert(PyObject*, PyObject* args)
     return guarded([args]() -> PyObject* {
         std::string text;
         argumentText(args, 0, text);
+        requireRunThread();
         if (g_host && g_inRun)
             g_host->alert(text);
         return newNone();
@@ -667,6 +687,7 @@ PyObject* moduleConfirm(PyObject*, PyObject* args)
     return guarded([args]() -> PyObject* {
         std::string text;
         argumentText(args, 0, text);
+        requireRunThread();
         return PY.PyBool_FromLong(g_host && g_inRun && g_host->confirm(text) ? 1 : 0);
     });
 }
@@ -678,6 +699,7 @@ PyObject* modulePrompt(PyObject*, PyObject* args)
         std::string initial;
         argumentText(args, 0, text);
         argumentText(args, 1, initial);
+        requireRunThread();
         std::string answer;
         if (!g_host || !g_inRun || !g_host->prompt(text, initial, answer))
             return newNone();
@@ -1280,6 +1302,7 @@ jsfl::RunResult Engine::run(const std::string& source, const std::string& name, 
     const int state = PY.PyGILState_Ensure();
     ++g_generation;
     g_inRun = true;
+    g_runThread = std::this_thread::get_id();
     g_host = &_host;
 
     Guard guard;
@@ -1456,6 +1479,7 @@ void Engine::dispatch(const std::string& type)
     const int state = PY.PyGILState_Ensure();
     ++g_generation;
     g_inRun = true;
+    g_runThread = std::this_thread::get_id();
     g_host = &_host;
     Guard guard;
     guard.stop = &_stop;
