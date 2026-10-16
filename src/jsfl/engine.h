@@ -1,6 +1,7 @@
 #pragma once
 
 #include "host.h"
+#include "object.h"
 
 #include <atomic>
 #include <cstddef>
@@ -25,6 +26,10 @@ struct RunOptions
     std::function<void()> poll;
     /// Only compile the script, to find syntax errors without running it.
     bool compileOnly = false;
+    /// Once the script has run, its function of this name is called with
+    ///  callArguments (fl.runScript with a function, from Python).
+    std::string callFunction;
+    Args callArguments;
 };
 
 /// How a run went.
@@ -40,6 +45,10 @@ struct RunResult
     int line = 0;
     /// The script's call stack at the error.
     std::string stack;
+    /// What the script came to (its last statement's value), or what
+    /// callFunction gave back. Plain values only: Phoenix's objects in it
+    /// are null, as they end with the run.
+    Value returned;
     /// "file:line: message", or empty when it went well.
     std::string report() const;
 };

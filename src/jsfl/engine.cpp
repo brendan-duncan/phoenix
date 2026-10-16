@@ -362,6 +362,19 @@ private:
     std::map<std::tuple<const ClassInfo*, const void*, const void*>, JSValue> _identities;
 };
 
+/// \a value with Phoenix's objects in it made null: they belong to the run's
+/// session, which ends with it.
+Value plainValue(Value value)
+{
+    if (value.type == Value::Type::Object)
+        return Value::null();
+    for (Value& item : value.items)
+        item = plainValue(std::move(item));
+    for (auto& field : value.fields)
+        field.second = plainValue(std::move(field.second));
+    return value;
+}
+
 /// What the interrupt check needs.
 struct Guard
 {
@@ -1043,6 +1056,42 @@ RunResult Engine::run(const std::string& source, const std::string& name, const 
             }
             else
                 JS_Throw(ctx, error);
+        }
+        // The function asked for, called once the script has run.
+        if (!JS_IsException(value) && !options.compileOnly && !options.callFunction.empty())
+        {
+            JS_FreeValue(ctx, value);
+            JSValue function = JS_GetPropertyStr(ctx, global, options.callFunction.c_str());
+            if (!JS_IsFunction(ctx, function))
+                value = JS_ThrowReferenceError(ctx, "%s has no function %s.", name.c_str(), options.callFunction.c_str());
+            else
+            {
+                std::vector<JSValue> argv;
+                try
+                {
+                    for (const Value& argument : options.callArguments)
+                        argv.push_back(binding.toJS(argument));
+                    value = JS_Call(ctx, function, JS_UNDEFINED, static_cast<int>(argv.size()), argv.data());
+                }
+                catch (const PendingException&)
+                {
+                    value = JS_EXCEPTION;
+                }
+                for (JSValue argument : argv)
+                    JS_FreeValue(ctx, argument);
+            }
+            JS_FreeValue(ctx, function);
+        }
+        if (!JS_IsException(value) && !options.compileOnly)
+        {
+            try
+            {
+                result.returned = plainValue(binding.fromJS(value));
+            }
+            catch (const PendingException&)
+            {
+                JS_FreeValue(ctx, JS_GetException(ctx));
+            }
         }
         if (JS_IsException(value))
         {

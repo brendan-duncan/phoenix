@@ -257,6 +257,30 @@ TEST(jsfl_runs_a_script_and_traces)
     CHECK_OUTPUT(f, "1,2,3\n");
 }
 
+TEST(jsfl_a_run_gives_back_its_value)
+{
+    Fixture f;
+    // The last statement's value, plain values only.
+    jsfl::RunResult last = f.run("var w = fl.getDocumentDOM().width;\n({width: w, list: [1, 'a'], doc: fl.getDocumentDOM()});");
+    CHECK(last.ok);
+    CHECK(last.returned.type == jsfl::Value::Type::Map);
+    CHECK(last.returned.field("width") && last.returned.field("width")->number == 550);
+    CHECK(last.returned.field("list") && last.returned.field("list")->items.size() == 2);
+    CHECK(last.returned.field("doc") && last.returned.field("doc")->type == jsfl::Value::Type::Null);
+
+    // A function called once the script has run, with arguments.
+    jsfl::RunOptions options;
+    options.callFunction = "add";
+    options.callArguments = {jsfl::Value(2.0), jsfl::Value(3.0)};
+    const jsfl::RunResult called = f.engine.runString("function add(a, b) { return a + b; }", "add.jsfl", options);
+    CHECK(called.ok);
+    CHECK(called.returned.number == 5);
+    options.callFunction = "missing";
+    const jsfl::RunResult missing = f.engine.runString("var x = 1;", "add.jsfl", options);
+    CHECK(!missing.ok);
+    CHECK(missing.message.find("no function missing") != std::string::npos);
+}
+
 TEST(jsfl_dialogs_answer_without_blocking)
 {
     Fixture f;
