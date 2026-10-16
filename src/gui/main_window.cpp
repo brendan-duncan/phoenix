@@ -5690,22 +5690,26 @@ bool MainWindow::writeForOtherApps(const QString& path, QString& error, int* bak
                     const fla::Timeline* timeline = drawing.timeline;
                     if (!timeline)
                         return picture;
-                    // A scene's stage (with room round it for an instance
-                    // partly off it), or what a symbol draws on the frame.
+                    // A scene's stage, just as a movie's frame shows it, so
+                    // an adjustment's effects work on the same picture
+                    // (with room round it for an instance partly off it);
+                    // or what a symbol draws on the frame, and as far as
+                    // the effects reach past it.
                     QRectF area;
                     const auto& scenes = drawnDocument->timelines;
+                    const double margin = std::min(drawing.margin, 2000.0) + 2.0;
                     if (std::find(scenes.begin(), scenes.end(), timeline) != scenes.end())
                     {
                         area = QRectF(0, 0, drawnDocument->width, drawnDocument->height);
                         if (drawing.element)
-                            area.adjust(-area.width() / 4.0, -area.height() / 4.0, area.width() / 4.0, area.height() / 4.0);
+                            area.adjust(-area.width() / 4.0 - margin, -area.height() / 4.0 - margin,
+                                area.width() / 4.0 + margin, area.height() / 4.0 + margin);
                     }
                     else if (const auto* symbol = dynamic_cast<const fla::Symbol*>(timeline->parent))
-                        area = view.symbolFramesBounds(symbol, drawing.frame, drawing.frame);
+                        area = view.symbolFramesBounds(symbol, drawing.frame, drawing.frame)
+                                   .adjusted(-margin, -margin, margin, margin);
                     if (!area.isValid() || area.isEmpty())
                         return picture;
-                    const double margin = std::min(drawing.margin, 2000.0) + 2.0;
-                    area.adjust(-margin, -margin, margin, margin);
                     // A pixel a stage pixel, unless that is huge.
                     const double scale = std::min(1.0, 4096.0 / std::max(area.width(), area.height()));
                     const QImage image =
