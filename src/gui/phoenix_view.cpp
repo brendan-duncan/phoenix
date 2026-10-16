@@ -112,6 +112,18 @@ static const int supersampleFactor = 2;
 
 namespace {
 
+/// The size of  device in its own pixels, whatever it is: a widget
+/// measures in logical units, an image or a pixmap already in pixels.
+QSize devicePixels(const QPaintDevice* device)
+{
+    const qreal ratio = std::max<qreal>(1.0, device->devicePixelRatioF());
+    const bool pixels = device->devType() == QInternal::Image || device->devType() == QInternal::Pixmap;
+    const qreal width = pixels ? device->width() : device->width() * ratio;
+    const qreal height = pixels ? device->height() : device->height() * ratio;
+    return QSize(std::max(1, qCeil(width - 1e-6)), std::max(1, qCeil(height - 1e-6)));
+}
+
+
 /// Whether shapes' fills are drawn from their planar map rather than traced
 /// from their edges: PHOENIX_RENDER_FROM_MAP=1. Off by default; see
 /// fla::fillOutlinesFromMap.
@@ -393,6 +405,7 @@ void PhoenixView::setDocument(const fla::FLADocument* document)
     _motionCache.clear();
     _armatureCache.clear();
     clearCaches();
+    cancelStagePicks();
     _flaDocument = document;
     _panX = 0;
     _panY = 0;
@@ -1038,8 +1051,13 @@ void PhoenixView::drawAdjustmentLayer(QPainter& painter, const fla::Layer* layer
             for (int x = 0; x < art.width(); ++x)
                 coverage[static_cast<size_t>(y) * art.width() + x] = static_cast<uint8_t>(qAlpha(line[x]));
         }
+        // Out of memory for the picture: the effects apply everywhere.
+        if (coverage.empty())
+            hasArt = false;
     }
     QImage changed = canvas->copy();
+    if (changed.isNull() || (hasArt && coverage.size() != static_cast<size_t>(changed.width()) * changed.height()))
+        return;
     const double pixelsPerUnit = std::sqrt(std::fabs(painter.transform().determinant())) * canvas->devicePixelRatio();
     // Other layers an effect draws from (Displacement Map's map), each drawn
     // as a picture the size of the canvas, by name, hidden or not.
@@ -1051,6 +1069,8 @@ void PhoenixView::drawAdjustmentLayer(QPainter& painter, const fla::Layer* layer
             if (other && other != layer && other->name == name)
             {
                 QImage picture(canvas->size(), QImage::Format_ARGB32_Premultiplied);
+                if (picture.isNull())
+                    break;
                 picture.setDevicePixelRatio(canvas->devicePixelRatio());
                 picture.fill(Qt::transparent);
                 QPainter into(&picture);
@@ -1084,6 +1104,8 @@ bool PhoenixView::drawLayerMode(QPainter& painter, const fla::Layer* layer, fla:
     if (!canvas || canvas->format() != QImage::Format_ARGB32_Premultiplied)
         return false;
     QImage art(canvas->size(), QImage::Format_ARGB32_Premultiplied);
+    if (art.isNull())
+        return false;
     art.setDevicePixelRatio(canvas->devicePixelRatio());
     art.fill(Qt::transparent);
     {
@@ -1093,6 +1115,8 @@ bool PhoenixView::drawLayerMode(QPainter& painter, const fla::Layer* layer, fla:
         drawLayer(artPainter, layer, loopType, firstFrame, nullptr);
     }
     QImage changed = canvas->copy();
+    if (changed.isNull())
+        return false;
     const auto scaled = [](uint32_t p, double k) {
         uint32_t out = 0;
         for (int shift = 0; shift < 32; shift += 8)
@@ -1136,9 +1160,11 @@ void PhoenixView::drawMattedLayer(QPainter& painter, const fla::Layer* layer, co
     fla::compositing::Matte matte, fla::LoopType loopType, int firstFrame)
 {
     const qreal ratio = painter.device()->devicePixelRatioF();
-    const QSize size(std::max(1, qRound(painter.device()->width() * ratio)), std::max(1, qRound(painter.device()->height() * ratio)));
+    const QSize size = devicePixels(painter.device());
     const auto render = [&](const fla::Layer* which) {
         QImage image(size, QImage::Format_ARGB32_Premultiplied);
+        if (image.isNull())
+            return image;
         image.setDevicePixelRatio(ratio);
         image.fill(Qt::transparent);
         QPainter imagePainter(&image);
@@ -1150,6 +1176,12 @@ void PhoenixView::drawMattedLayer(QPainter& painter, const fla::Layer* layer, co
     };
     const QImage matteImage = render(source);
     QImage content = render(layer);
+    // Out of memory for either: the layer drawn plainly.
+    if (matteImage.isNull() || content.isNull() || matteImage.size() != content.size())
+    {
+        drawLayer(painter, layer, loopType, firstFrame, nullptr);
+        return;
+    }
     const std::vector<uint8_t> strength = fla::compositing::matteStrength(
         reinterpret_cast<const uint32_t*>(matteImage.constBits()), matteImage.width(), matteImage.height(), matte);
     // The content scaled by the matte's strength, channel by channel, as
@@ -1924,8 +1956,16 @@ void PhoenixView::drawTimeline(QPainter& painter, const fla::Timeline* timeline,
     {
         // At the device's own resolution, on a high-density screen too.
         const qreal ratio = painter.device()->devicePixelRatioF();
-        const QSize size(std::max(1, qRound(painter.device()->width() * ratio)), std::max(1, qRound(painter.device()->height() * ratio)));
+        const QSize size = devicePixels(painter.device());
         QImage canvas(size, QImage::Format_ARGB32_Premultiplied);
+        if (canvas.isNull())
+        {
+            // Out of memory for it: drawn straight, without the effects.
+            _compositing.insert(timeline);
+            drawTimeline(painter, timeline, loopType, firstFrame);
+            _compositing.remove(timeline);
+            return;
+        }
         canvas.setDevicePixelRatio(ratio);
         canvas.fill(Qt::transparent);
         QPainter canvasPainter(&canvas);
@@ -3291,7 +3331,7 @@ bool PhoenixView::drawBlurredLayer(QPainter& painter, const fla::Layer* layer, f
         return false;
     // Pictures the size of what is drawn on, at its resolution.
     const qreal ratio = painter.device()->devicePixelRatioF();
-    const QSize size(std::max(1, qRound(painter.device()->width() * ratio)), std::max(1, qRound(painter.device()->height() * ratio)));
+    const QSize size = devicePixels(painter.device());
     const int frame = shownFrame();
     const QTransform transform = painter.transform();
     const auto drawBlurred = [&painter, ratio](const QImage& image, const QPoint& at) {
@@ -3325,8 +3365,10 @@ bool PhoenixView::drawBlurredLayer(QPainter& painter, const fla::Layer* layer, f
             view._blurring = false;
         }
     } restore{*this, _sampleFrame, _subframe};
-    _blurring = true;
     QImage picture(size, QImage::Format_ARGB32_Premultiplied);
+    if (picture.isNull())
+        return false;
+    _blurring = true;
     picture.setDevicePixelRatio(ratio);
     picture.fill(Qt::transparent);
     // Sums of the samples (64 of 255 at most fit), touched only where
@@ -3378,8 +3420,16 @@ bool PhoenixView::drawBlurredLayer(QPainter& painter, const fla::Layer* layer, f
     }
     drawBlurred(done.image, done.at);
     _blurCache.push_back(std::move(done));
-    while (_blurCache.size() > 96)
+    // Kept to a size, the oldest let go first.
+    constexpr qsizetype kMostBytes = 256 * 1024 * 1024;
+    qsizetype bytes = 0;
+    for (const BlurredLayer& each : _blurCache)
+        bytes += each.image.sizeInBytes();
+    while (_blurCache.size() > 1 && (_blurCache.size() > 96 || bytes > kMostBytes))
+    {
+        bytes -= _blurCache.front().image.sizeInBytes();
         _blurCache.pop_front();
+    }
     return true;
 }
 
@@ -3410,10 +3460,11 @@ bool PhoenixView::drawTimedLayer(QPainter& painter, const fla::Layer* layer, fla
     if (time.echoes > 0)
     {
         const qreal ratio = painter.device()->devicePixelRatioF();
-        const QSize size(std::max(1, qRound(painter.device()->width() * ratio)), std::max(1, qRound(painter.device()->height() * ratio)));
+        const QSize size = devicePixels(painter.device());
         QImage picture(size, QImage::Format_ARGB32_Premultiplied);
         picture.setDevicePixelRatio(ratio);
-        for (int k = time.echoes; k >= 1; --k)
+        // Out of memory for it: no echoes, the layer itself still drawn.
+        for (int k = picture.isNull() ? 0 : time.echoes; k >= 1; --k)
         {
             const int at = frame - k * time.interval;
             if (at < 0)
@@ -3429,7 +3480,7 @@ bool PhoenixView::drawTimedLayer(QPainter& painter, const fla::Layer* layer, fla
             painter.save();
             painter.resetTransform();
             painter.setOpacity(painter.opacity() * std::pow(time.decay, k));
-            painter.drawImage(QRectF(0, 0, painter.device()->width(), painter.device()->height()), picture);
+            painter.drawImage(0, 0, picture);
             painter.restore();
         }
     }
@@ -5614,6 +5665,23 @@ void PhoenixView::drawShape(QPainter& painter, const fla::Shape* shape, const fl
     }
 }
 
+void PhoenixView::cancelStagePicks()
+{
+    if (_sketching && _player && _player->isPlaying() && _sketchDone)
+        _sketchDone(std::vector<std::pair<int, QPointF>>());
+    _sketchDone = nullptr;
+    _sketchStarted = nullptr;
+    _sketching = false;
+    _sketch.clear();
+    if (_pickInstance)
+    {
+        const auto picked = std::move(_pickInstance);
+        _pickInstance = nullptr;
+        picked(nullptr);
+    }
+    unsetCursor();
+}
+
 void PhoenixView::beginMotionSketch(std::function<void()> started,
     std::function<void(const std::vector<std::pair<int, QPointF>>&)> done)
 {
@@ -7185,6 +7253,11 @@ void PhoenixView::keyPressEvent(QKeyEvent* event)
         _pickInstance = nullptr;
         unsetCursor();
         picked(nullptr);
+        return;
+    }
+    if (_sketchDone && !_sketching && event->key() == Qt::Key_Escape)
+    {
+        cancelStagePicks();
         return;
     }
     if (_activeTool && _activeTool->keyPress(*this, event))

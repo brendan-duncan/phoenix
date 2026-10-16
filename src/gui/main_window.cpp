@@ -4336,8 +4336,10 @@ void MainWindow::addBone(const BoneTool::Link& link)
         attributes.emplace_back("referenceID", reference);
         attributes.emplace_back("animationSymbolMode", "2");
         attributes.emplace_back("animationFrameOffset", "0");
+        // Onto the pose layer: one step that moves it, so the instance always
+        // has exactly one owner, whichever frame it is in.
         if (from != pose)
-            stack.push(fla::CommandPtr(new fla::RemoveElementCommand(from, instance, name, &_selection)));
+            stack.push(fla::CommandPtr(new fla::MoveElementCommand(from, pose, instance, name)));
         if (invertible)
         {
             stack.push(fla::CommandPtr(new fla::SetPropertyCommand<fla::Point>(instance->transformationPoint,
@@ -4346,11 +4348,6 @@ void MainWindow::addBone(const BoneTool::Link& link)
         stack.push(fla::CommandPtr(new fla::SetPropertyCommand<std::vector<std::pair<std::string, std::string>>>(
             instance->extraAttributes, instance->extraAttributes, attributes, name)));
         stack.push(fla::CommandPtr(new fla::SetPropertyCommand<std::string>(instance->name, instance->name, node, name)));
-        if (from != pose)
-        {
-            stack.push(fla::CommandPtr(new fla::SetPropertyCommand<fla::DOMElement*>(instance->parent, instance->parent, pose, name)));
-            stack.push(fla::CommandPtr(new fla::AddElementCommand(pose, instance, name, &_selection)));
-        }
     };
     const auto jointFor = [](fla::SymbolInstance* instance, const QPointF& at, int parent, const std::string& node,
                               const std::string& reference) {
@@ -9626,6 +9623,13 @@ void MainWindow::fillWorkspaceMenu(QMenu* menu)
 void MainWindow::undo()
 {
     settleGestures();
+    // Not while an edit is still being put together (an AI assistant's or a
+    // script's): its steps point at what the history holds now.
+    if (_editContext.commandStack().isInMacro())
+    {
+        statusBar()->showMessage("An edit is still in progress; Undo is available once it is done.", 4000);
+        return;
+    }
     _editContext.commandStack().undo();
     pruneToDocument();
 }
@@ -9633,6 +9637,13 @@ void MainWindow::undo()
 void MainWindow::redo()
 {
     settleGestures();
+    // Not while an edit is still being put together (an AI assistant's or a
+    // script's): its steps point at what the history holds now.
+    if (_editContext.commandStack().isInMacro())
+    {
+        statusBar()->showMessage("An edit is still in progress; Redo is available once it is done.", 4000);
+        return;
+    }
     _editContext.commandStack().redo();
     pruneToDocument();
 }
@@ -9649,6 +9660,13 @@ void MainWindow::settleGestures()
         _motionEditor->cancelDrag();
     if (_layerDepth)
         _layerDepth->cancelDrag();
+}
+
+bool MainWindow::stillInDocument(const fla::FLADocument* document, const fla::DOMElement* element) const
+{
+    if (!document || document != _flaDocument || !_flaDocument->document || !element)
+        return false;
+    return _flaDocument->document->reachable().count(element) > 0;
 }
 
 void MainWindow::pruneToDocument()
@@ -9762,7 +9780,7 @@ void MainWindow::updateEditState()
 
     if (_undoAction)
     {
-        _undoAction->setEnabled(stack.canUndo());
+        _undoAction->setEnabled(stack.canUndo() && !stack.isInMacro());
         // Name the specific edit: "Undo Draw Rectangle".
         const QString name = QString::fromStdString(stack.undoName());
         _undoAction->setText(name.isEmpty() ? QString("&Undo") : QString("&Undo %1").arg(name));
@@ -9770,7 +9788,7 @@ void MainWindow::updateEditState()
 
     if (_redoAction)
     {
-        _redoAction->setEnabled(stack.canRedo());
+        _redoAction->setEnabled(stack.canRedo() && !stack.isInMacro());
         const QString name = QString::fromStdString(stack.redoName());
         _redoAction->setText(name.isEmpty() ? QString("&Redo") : QString("&Redo %1").arg(name));
     }
@@ -14480,6 +14498,11 @@ void MainWindow::editTemplateFields()
     if (dialog.exec() != QDialog::Accepted)
         return;
 
+    // Any that went while the dialog was up are left alone.
+    const fla::FLADocument* filled = _flaDocument;
+    instances.erase(std::remove_if(instances.begin(), instances.end(),
+                        [this, filled](const fla::SymbolInstance* instance) { return !stillInDocument(filled, instance); }),
+        instances.end());
     fla::templates::Values after = before;
     for (const auto& [name, edit] : edits)
     {
@@ -15387,6 +15410,9 @@ void MainWindow::pinToText(fla::SymbolInstance* instance)
     dialog.resize(420, dialog.sizeHint().height());
     if (dialog.exec() != QDialog::Accepted)
         return;
+    // While the dialog was up, the instance may have gone.
+    if (!stillInDocument(_flaDocument, instance))
+        return;
     fla::templates::Pin pin;
     pin.text = field->currentData().toString().toStdString();
     if (!pin.text.empty())
@@ -15420,11 +15446,14 @@ void MainWindow::motionSketch()
         if (panel && _player && _player->isPlaying() != play)
             panel->playStop();
     };
+    const fla::FLADocument* sketched = _flaDocument;
     _phoenixView->beginMotionSketch([playStop]() { playStop(true); },
-        [this, instance, playStop](const std::vector<std::pair<int, QPointF>>& points) {
+        [this, instance, playStop, sketched](const std::vector<std::pair<int, QPointF>>& points) {
         playStop(false);
         statusBar()->clearMessage();
-        if (points.size() < 2)
+        // Still the document, and the instance still in it: an undo or a
+        // tab change while it waited may have taken it away.
+        if (points.size() < 2 || !stillInDocument(sketched, instance))
             return;
         // How far from where the press began, as keys a frame on the
         // Recorded Motion behavior, which replaces one recorded before.

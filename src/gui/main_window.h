@@ -1021,6 +1021,9 @@ private:
 
     /// The Color panel's Apply to Selection: the selected shapes' fills
     /// become what new art is filled with, fitted to each.
+    /// Whether \a element is still in \a document and that is the one open:
+    /// for code that kept a pointer across a dialog or a wait.
+    bool stillInDocument(const fla::FLADocument* document, const fla::DOMElement* element) const;
     void pinToText(fla::SymbolInstance* instance);
     void motionSketch();
     void applyFillToStrokes();

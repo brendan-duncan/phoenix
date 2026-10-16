@@ -608,6 +608,9 @@ public:
     /// up; \a started plays the movie when the press comes, and then
     /// \a done has each frame and the place (in the document).
     void beginMotionSketch(std::function<void()> started, std::function<void(const std::vector<std::pair<int, QPointF>>&)> done);
+    /// Lets go of a Motion Sketch or an instance pick waiting for the stage:
+    /// they point at what was there when they began.
+    void cancelStagePicks();
     /// Values for template fields everywhere in the document, over what
     /// instances give them: a row of data being rendered. Empty for none.
     void setTemplateValues(const fla::templates::Values& values);
