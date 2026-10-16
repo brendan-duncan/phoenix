@@ -239,6 +239,47 @@ TEST(postscript_programs_run_and_paint)
     }
 }
 
+TEST(postscript_hostile_programs_stop_cleanly)
+{
+    // Each stops with an error (or runs to its end) rather than hanging,
+    // overflowing the stack or reading out of bounds.
+    const std::string deepBraces = std::string(100000, '{');
+    const char* programs[] = {
+        "0 1e-300 1 {} for",
+        "/x /x cvx def x",
+        "(x) cvx /x exch def x",
+        deepBraces.c_str(),
+        "0 0 1 5000 { pop [ exch ] } for",
+        "-2147483648 -1 idiv -2147483648 -1 mod",
+        "(abc) 5 search",
+        "5 (abc) anchorsearch",
+        "{} 5 kshow",
+        "5 (xx) readstring",
+        "5 (xx) readhexstring",
+        "5 (xx) readline",
+        "5 read",
+        "true 5 if",
+        "{gsave} loop",
+        "{1} loop",
+        "0 0 moveto 0 0 10 -1e20 0 arc 0 0 10 0 1e20 arcn",
+        "1 1 8 [1 0 0 1 0 0] (x) false 7 colorimage",
+        "/DeviceRGB setcolorspace << /ImageType 1 /Width 1 /Height 1 /BitsPerComponent 8 /ImageMatrix [1 0 0 1 0 0] "
+        "/DataSource [(a)] /MultipleDataSources true >> image",
+        "1 1 3 [1 0 0 1 0 0] (x) image",
+        "20000 20000 8 [1 0 0 1 0 0] (x) image",
+        "<< /Width 1e300 /Height 1e300 /DataSource (x) >> imagemask",
+    };
+    const double box[4] = {0, 0, 100, 100};
+    for (const char* program : programs)
+    {
+        const fla::vectors::Artwork art = fla::vectors::readPostScript(program, box);
+        CHECK(art.images.empty());
+    }
+    // An empty procedure looped still ends at the step limit.
+    const fla::vectors::Artwork art = fla::vectors::readPostScript("{} loop", box);
+    CHECK(art.notes.size() == 1 && art.notes[0].find("limitcheck") != std::string::npos);
+}
+
 TEST(postscript_text_moves_on_by_the_fonts_widths)
 {
     // Helvetica's A is 667 thousandths of the size, Times-Roman's 722,

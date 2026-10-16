@@ -65,6 +65,8 @@ struct Obj
     };
     T t = T::Null;
     bool exec = false;
+    /// For an array, how deep arrays nest in it when it was made.
+    uint16_t nest = 0;
     double num = 0.0;
     std::shared_ptr<std::string> str;
     std::shared_ptr<Array> arr;
@@ -113,6 +115,11 @@ struct Obj
         Obj o;
         o.t = T::Array;
         o.exec = executable;
+        int deepest = 0;
+        for (const Obj& item : a)
+            if (item.t == T::Array)
+                deepest = std::max<int>(deepest, item.nest);
+        o.nest = static_cast<uint16_t>(std::min(deepest + 1, 0xFFFF));
         o.arr = std::make_shared<Array>(std::move(a));
         return o;
     }
@@ -242,6 +249,9 @@ public:
     bool next(Obj& out, Interp& interp);
 
 private:
+    static constexpr int kMaxNesting = 256;
+    int nest = 0;
+
     std::string word()
     {
         const size_t start = src->at;
@@ -359,7 +369,21 @@ struct Interp
         ops.pop_back();
         return o;
     }
-    void push(Obj o) { ops.push_back(std::move(o)); }
+    // Limits a damaged or hostile program meets: the operand stack, how
+    // deep arrays nest (each level costs stack to free), and gsave.
+    static constexpr size_t kMaxOperands = 1000000;
+    static constexpr int kMaxArrayNesting = 1000;
+    static constexpr size_t kMaxSaved = 1000;
+    static constexpr size_t kMaxImagePixels = size_t(1) << 27;
+
+    void push(Obj o)
+    {
+        if (ops.size() >= kMaxOperands)
+            throw PsError{"stackoverflow"};
+        if (o.t == Obj::T::Array && o.nest > kMaxArrayNesting)
+            throw PsError{"limitcheck"};
+        ops.push_back(std::move(o));
+    }
     double num()
     {
         Obj o = pop();
@@ -367,7 +391,14 @@ struct Interp
             throw PsError{"typecheck"};
         return o.num;
     }
-    int integer() { return static_cast<int>(num()); }
+    int integer() { return toInt(num()); }
+    /// \a v as an int, held to the range of one.
+    static int toInt(double v)
+    {
+        if (!(v == v))
+            return 0;
+        return static_cast<int>(std::clamp(v, -2147483648.0, 2147483647.0));
+    }
     bool boolean()
     {
         Obj o = pop();
@@ -437,7 +468,16 @@ struct Interp
                                    value->t == Obj::T::String))
             {
                 const Obj copy = *value;
-                execute(copy.t == Obj::T::Array ? runnable(copy) : copy);
+                if (copy.t == Obj::T::Name)
+                {
+                    // A name standing for another name counts toward the
+                    // depth as a procedure does.
+                    enter();
+                    Leave leave{depth};
+                    execute(copy);
+                }
+                else
+                    execute(copy.t == Obj::T::Array ? runnable(copy) : copy);
             }
             else
                 push(*value);
@@ -452,6 +492,8 @@ struct Interp
         case Obj::T::String:
         {
             // A string run as code.
+            enter();
+            Leave leave{depth};
             auto source = std::make_shared<Source>();
             source->bytes.assign(o.str->begin(), o.str->end());
             Scanner inner(source);
@@ -475,18 +517,28 @@ struct Interp
         return marker;
     }
 
-    void run(const Obj& proc)
+    void enter()
     {
         if (++depth > 400)
         {
             --depth;
             throw PsError{"execstackoverflow"};
         }
-        struct Leave
-        {
-            int& d;
-            ~Leave() { --d; }
-        } leave{depth};
+    }
+    struct Leave
+    {
+        int& d;
+        ~Leave() { --d; }
+    };
+
+    void run(const Obj& proc)
+    {
+        if (proc.t != Obj::T::Array || !proc.arr)
+            throw PsError{"typecheck"};
+        // An empty procedure still counts, so a loop of one ends.
+        tick();
+        enter();
+        Leave leave{depth};
         const std::shared_ptr<Array> body = proc.arr;
         for (const Obj& element : *body)
         {
@@ -882,6 +934,15 @@ bool Scanner::next(Obj& out, Interp& interp)
     }
     if (c == '{')
     {
+        // Each brace is read a level deeper.
+        if (nest >= kMaxNesting)
+            throw PsError{"limitcheck"};
+        ++nest;
+        struct Leave
+        {
+            int& d;
+            ~Leave() { --d; }
+        } leave{nest};
         ++src->at;
         Array body;
         for (;;)
@@ -1023,7 +1084,8 @@ std::vector<uint8_t> inflateBytes(const std::vector<uint8_t>& data)
         stream.avail_out = sizeof(buffer);
         const int status = ::inflate(&stream, Z_NO_FLUSH);
         out.insert(out.end(), buffer, buffer + (sizeof(buffer) - stream.avail_out));
-        if (status != Z_OK || (stream.avail_in == 0 && stream.avail_out != 0))
+        // Past a quarter of a gigabyte the data is damage, or a bomb.
+        if (status != Z_OK || (stream.avail_in == 0 && stream.avail_out != 0) || out.size() > (size_t(1) << 28))
             break;
     }
     inflateEnd(&stream);
@@ -1261,19 +1323,20 @@ void opDiv(Interp& I)
 }
 void opIdiv(Interp& I)
 {
-    const int b = I.integer();
-    const int a = I.integer();
+    // In 64 bits, so the most negative int over -1 does not trap.
+    const long long b = I.integer();
+    const long long a = I.integer();
     if (b == 0)
         throw PsError{"undefinedresult"};
-    I.push(Obj::integer(a / b));
+    I.push(Obj::integer(static_cast<double>(a / b)));
 }
 void opMod(Interp& I)
 {
-    const int b = I.integer();
-    const int a = I.integer();
+    const long long b = I.integer();
+    const long long a = I.integer();
     if (b == 0)
         throw PsError{"undefinedresult"};
-    I.push(Obj::integer(a % b));
+    I.push(Obj::integer(static_cast<double>(a % b)));
 }
 void unary(Interp& I, double (*f)(double), bool keepInt)
 {
@@ -1433,7 +1496,12 @@ void opExec(Interp& I)
     if (o.t == Obj::T::Array && o.exec)
         I.run(o);
     else
+    {
+        // exec of exec of exec... counts toward the depth too.
+        I.enter();
+        Interp::Leave leave{I.depth};
         I.execute(o);
+    }
 }
 void opIf(Interp& I)
 {
@@ -1458,7 +1526,8 @@ void opFor(Interp& I)
     {
         for (double v = init.num; step.num >= 0 ? v <= limit.num : v >= limit.num; v += step.num)
         {
-            if (step.num == 0)
+            // A step too small to move the count would never end.
+            if (step.num == 0 || v + step.num == v)
                 throw PsError{"limitcheck"};
             I.push(integer ? Obj::integer(v) : Obj::real(v));
             I.run(proc);
@@ -1501,6 +1570,8 @@ void opStopped(Interp& I)
     const size_t dictDepth = I.dicts.size();
     try
     {
+        I.enter();
+        Interp::Leave leave{I.depth};
         I.execute(proc.t == Obj::T::Array ? Interp::runnable(proc) : proc);
         I.push(Obj::boolean(false));
     }
@@ -1706,14 +1777,14 @@ void opGet(Interp& I)
     Obj o = I.pop();
     if (o.t == Obj::T::Array)
     {
-        const int i = static_cast<int>(key.num);
+        const int i = Interp::toInt(key.num);
         if (i < 0 || static_cast<size_t>(i) >= o.arr->size())
             throw PsError{"rangecheck"};
         I.push((*o.arr)[static_cast<size_t>(i)]);
     }
     else if (o.t == Obj::T::String)
     {
-        const int i = static_cast<int>(key.num);
+        const int i = Interp::toInt(key.num);
         if (i < 0 || static_cast<size_t>(i) >= o.str->size())
             throw PsError{"rangecheck"};
         I.push(Obj::integer(static_cast<unsigned char>((*o.str)[static_cast<size_t>(i)])));
@@ -1735,14 +1806,14 @@ void opPut(Interp& I)
     Obj o = I.pop();
     if (o.t == Obj::T::Array)
     {
-        const int i = static_cast<int>(key.num);
+        const int i = Interp::toInt(key.num);
         if (i < 0 || static_cast<size_t>(i) >= o.arr->size())
             throw PsError{"rangecheck"};
         (*o.arr)[static_cast<size_t>(i)] = value;
     }
     else if (o.t == Obj::T::String)
     {
-        const int i = static_cast<int>(key.num);
+        const int i = Interp::toInt(key.num);
         if (i < 0 || static_cast<size_t>(i) >= o.str->size())
             throw PsError{"rangecheck"};
         (*o.str)[static_cast<size_t>(i)] = static_cast<char>(static_cast<int>(value.num));
@@ -1761,14 +1832,14 @@ void opGetinterval(Interp& I)
         throw PsError{"rangecheck"};
     if (o.t == Obj::T::Array)
     {
-        if (static_cast<size_t>(index + count) > o.arr->size())
+        if (static_cast<size_t>(index) + static_cast<size_t>(count) > o.arr->size())
             throw PsError{"rangecheck"};
         Obj part = Obj::array(Array(o.arr->begin() + index, o.arr->begin() + index + count), o.exec);
         I.push(part);
     }
     else if (o.t == Obj::T::String)
     {
-        if (static_cast<size_t>(index + count) > o.str->size())
+        if (static_cast<size_t>(index) + static_cast<size_t>(count) > o.str->size())
             throw PsError{"rangecheck"};
         I.push(Obj::string(o.str->substr(static_cast<size_t>(index), static_cast<size_t>(count))));
     }
@@ -1780,6 +1851,8 @@ void opPutinterval(Interp& I)
     Obj from = I.pop();
     const int index = I.integer();
     Obj to = I.pop();
+    if (index < 0)
+        throw PsError{"rangecheck"};
     if (to.t == Obj::T::Array && from.t == Obj::T::Array)
     {
         for (size_t i = 0; i < from.arr->size() && static_cast<size_t>(index) + i < to.arr->size(); ++i)
@@ -1811,10 +1884,24 @@ void opAstore(Interp& I)
         (*a.arr)[i] = I.pop();
     I.push(a);
 }
+/// Throws unless \a o is a string (or a name, read as one).
+const Obj& textOperand(const Obj& o)
+{
+    if ((o.t != Obj::T::String && o.t != Obj::T::Name) || !o.str)
+        throw PsError{"typecheck"};
+    return o;
+}
+/// Throws unless \a o is a file.
+Source& fileOperand(const Obj& o)
+{
+    if (o.t != Obj::T::File || !o.file)
+        throw PsError{"typecheck"};
+    return *o.file;
+}
 void opSearch(Interp& I)
 {
-    Obj seek = I.pop();
-    Obj s = I.pop();
+    Obj seek = textOperand(I.pop());
+    Obj s = textOperand(I.pop());
     const size_t at = s.str->find(*seek.str);
     if (at == std::string::npos)
     {
@@ -1829,8 +1916,8 @@ void opSearch(Interp& I)
 }
 void opAnchorsearch(Interp& I)
 {
-    Obj seek = I.pop();
-    Obj s = I.pop();
+    Obj seek = textOperand(I.pop());
+    Obj s = textOperand(I.pop());
     if (s.str->compare(0, seek.str->size(), *seek.str) == 0)
     {
         I.push(Obj::string(s.str->substr(seek.str->size())));
@@ -1846,6 +1933,8 @@ void opAnchorsearch(Interp& I)
 void opBind(Interp&) {}
 void opSave(Interp& I)
 {
+    if (I.saved.size() >= Interp::kMaxSaved)
+        throw PsError{"limitcheck"};
     I.saved.push_back(I.gs);
     Obj s;
     s.t = Obj::T::Save;
@@ -1939,6 +2028,8 @@ void opCurrentpagedevice(Interp& I)
 
 void opGsave(Interp& I)
 {
+    if (I.saved.size() >= Interp::kMaxSaved)
+        throw PsError{"limitcheck"};
     I.saved.push_back(I.gs);
 }
 void opGrestore(Interp& I)
@@ -2227,12 +2318,24 @@ void arcOp(Interp& I, bool clockwise)
     double a2 = I.num(), a1 = I.num();
     const double r = I.num(), cy = I.num(), cx = I.num();
     const double pi = 3.14159265358979323846;
-    if (!clockwise)
-        while (a2 < a1)
-            a2 += 360.0;
-    else
-        while (a2 > a1)
-            a2 -= 360.0;
+    if (!std::isfinite(a1) || !std::isfinite(a2) || !std::isfinite(a2 - a1))
+        throw PsError{"undefinedresult"};
+    // The second angle brought within a turn of the first, in the arc's
+    // direction; past ten turns an arc only draws over itself.
+    double sweep360 = a2 - a1;
+    if (!clockwise && sweep360 < 0)
+    {
+        sweep360 = std::fmod(sweep360, 360.0);
+        if (sweep360 < 0)
+            sweep360 += 360.0;
+    }
+    else if (clockwise && sweep360 > 0)
+    {
+        sweep360 = std::fmod(sweep360, 360.0);
+        if (sweep360 > 0)
+            sweep360 -= 360.0;
+    }
+    a2 = a1 + std::clamp(sweep360, -3600.0, 3600.0);
     const double start = a1 * pi / 180.0;
     const double sweep = (a2 - a1) * pi / 180.0;
     const double sx = cx + r * std::cos(start), sy = cy + r * std::sin(start);
@@ -2557,7 +2660,7 @@ void opYshow(Interp& I) { displacedShow(I, false, true); }
 void opXyshow(Interp& I) { displacedShow(I, true, true); }
 void opKshow(Interp& I)
 {
-    Obj s = I.pop();
+    Obj s = textOperand(I.pop());
     I.pop();
     I.show(*s.str);
 }
@@ -2622,9 +2725,9 @@ void opFilter(Interp& I)
 }
 void opReadhexstring(Interp& I)
 {
-    Obj buffer = I.pop();
+    Obj buffer = textOperand(I.pop());
     Obj file = I.pop();
-    Source& src = *file.file;
+    Source& src = fileOperand(file);
     std::string& out = *buffer.str;
     size_t filled = 0;
     int high = -1;
@@ -2649,9 +2752,9 @@ void opReadhexstring(Interp& I)
 }
 void opReadstring(Interp& I)
 {
-    Obj buffer = I.pop();
+    Obj buffer = textOperand(I.pop());
     Obj file = I.pop();
-    Source& src = *file.file;
+    Source& src = fileOperand(file);
     // After the operator's own white space, the data.
     if (src.program && src.at < src.bytes.size() && Scanner::white(src.bytes[src.at]))
         ++src.at;
@@ -2665,9 +2768,9 @@ void opReadstring(Interp& I)
 }
 void opReadline(Interp& I)
 {
-    Obj buffer = I.pop();
+    Obj buffer = textOperand(I.pop());
     Obj file = I.pop();
-    Source& src = *file.file;
+    Source& src = fileOperand(file);
     std::string out;
     bool found = false;
     while (src.at < src.bytes.size())
@@ -2688,7 +2791,7 @@ void opReadline(Interp& I)
 void opRead(Interp& I)
 {
     Obj file = I.pop();
-    Source& src = *file.file;
+    Source& src = fileOperand(file);
     if (src.at < src.bytes.size())
     {
         I.push(Obj::integer(src.bytes[src.at++]));
@@ -2758,11 +2861,20 @@ std::vector<uint8_t> imageData(Interp& I, const Obj& source, size_t wanted)
 void Interp::image(int width, int height, int bits, const Matrix& matrix, std::vector<Obj> sources, int components,
     bool multiple)
 {
-    if (width <= 0 || height <= 0 || width > 20000 || height > 20000)
+    if (width <= 0 || height <= 0 || width > 20000 || height > 20000 ||
+        static_cast<size_t>(width) * static_cast<size_t>(height) > kMaxImagePixels)
+        throw PsError{"rangecheck"};
+    if (bits != 1 && bits != 2 && bits != 4 && bits != 8 && bits != 12 && bits != 16)
+        throw PsError{"rangecheck"};
+    // Gray, RGB or CMYK; with a source for each when there are several.
+    if (components < 1 || components > 4 || (multiple && sources.size() < static_cast<size_t>(components)) ||
+        sources.empty())
         throw PsError{"rangecheck"};
     const size_t row = (static_cast<size_t>(width) * static_cast<size_t>(bits) *
                            static_cast<size_t>(multiple ? 1 : components) + 7) / 8;
     const size_t total = row * static_cast<size_t>(height);
+    if (total > (size_t(1) << 29))
+        throw PsError{"limitcheck"};
     std::vector<std::vector<uint8_t>> planes;
     for (const Obj& source : sources)
         planes.push_back(imageData(*this, source, total));
@@ -2830,7 +2942,7 @@ void opImage(Interp& I)
         }
         else
             sources = {*source};
-        I.image(static_cast<int>(w->num), static_cast<int>(h->num), static_cast<int>(b->num), matrixOf(*m), sources,
+        I.image(Interp::toInt(w->num), Interp::toInt(h->num), Interp::toInt(b->num), matrixOf(*m), sources,
             std::max(1, I.gs.spaceComponents), multiple);
         return;
     }
@@ -2844,6 +2956,8 @@ void opImage(Interp& I)
 void opColorimage(Interp& I)
 {
     const int components = I.integer();
+    if (components < 1 || components > 4)
+        throw PsError{"rangecheck"};
     const bool multiple = I.boolean();
     std::vector<Obj> sources;
     for (int i = 0; i < (multiple ? components : 1); ++i)
@@ -2853,6 +2967,17 @@ void opColorimage(Interp& I)
     const int height = I.integer();
     const int width = I.integer();
     I.image(width, height, bits, m, sources, components, multiple);
+}
+/// The bytes of a mask \a width by \a height, which is read past and left
+/// out; refused when no image could be that large.
+size_t maskBytes(int width, int height)
+{
+    if (width <= 0 || height <= 0)
+        return 0;
+    if (width > 20000 || height > 20000 ||
+        static_cast<size_t>(width) * static_cast<size_t>(height) > Interp::kMaxImagePixels)
+        throw PsError{"rangecheck"};
+    return (static_cast<size_t>(width) + 7) / 8 * static_cast<size_t>(height);
 }
 void opImagemask(Interp& I)
 {
@@ -2864,7 +2989,7 @@ void opImagemask(Interp& I)
         const auto w = d.dict->find("Width");
         const auto h = d.dict->find("Height");
         if (f != d.dict->end() && w != d.dict->end() && h != d.dict->end())
-            imageData(I, f->second, (static_cast<size_t>(w->second.num) + 7) / 8 * static_cast<size_t>(h->second.num));
+            imageData(I, f->second, maskBytes(Interp::toInt(w->second.num), Interp::toInt(h->second.num)));
         return;
     }
     Obj source = I.pop();
@@ -2872,7 +2997,7 @@ void opImagemask(Interp& I)
     I.pop();
     const int height = I.integer();
     const int width = I.integer();
-    imageData(I, source, (static_cast<size_t>(std::max(0, width)) + 7) / 8 * static_cast<size_t>(std::max(0, height)));
+    imageData(I, source, maskBytes(width, height));
 }
 
 void Interp::setup()

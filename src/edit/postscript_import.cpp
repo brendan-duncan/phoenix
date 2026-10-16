@@ -56,7 +56,8 @@ std::vector<uint8_t> inflateAll(const uint8_t* data, size_t size)
         stream.avail_out = sizeof(buffer);
         const int status = ::inflate(&stream, Z_NO_FLUSH);
         out.insert(out.end(), buffer, buffer + (sizeof(buffer) - stream.avail_out));
-        if (status != Z_OK)
+        // Past a quarter of a gigabyte the data is damage, or a bomb.
+        if (status != Z_OK || out.size() > (size_t(1) << 28))
             break;
         if (stream.avail_in == 0 && stream.avail_out != 0)
             break;
