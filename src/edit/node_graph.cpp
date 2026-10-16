@@ -11,6 +11,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <mutex>
 #include <set>
 #include <unordered_map>
@@ -145,7 +146,19 @@ std::vector<Type> makeTypes()
         std::vector<std::string> inputs{"In"};
         if (effect.id == "displace")
             inputs.push_back("Map");
-        add(effect.id.c_str(), effect.name.c_str(), effectCategory(effect.id), effect.description.c_str(), inputs, params);
+        // Said of the picture coming in, not of what is below a layer.
+        std::string description = effect.description;
+        for (const auto& [from, to] : {std::pair<const char*, const char*>{"everything below the layer", "the picture"},
+                 {"everything drawn below", "what the picture holds"}, {" With art on the layer, it fills just the art.", ""}})
+        {
+            const size_t at = description.find(from);
+            if (at != std::string::npos)
+                description.replace(at, std::strlen(from), to);
+        }
+        if (effect.id == "displace")
+            description = "Pushes the picture about by the picture linked into Map: lighter parts push one way, darker "
+                          "the other. Fractal Noise or a gradient makes a good map.";
+        add(effect.id.c_str(), effect.name.c_str(), effectCategory(effect.id), description.c_str(), inputs, params);
     }
 
     add("dot", "Reroute", "Utility", "A point a link passes through, to tidy the graph.", {"In"}, {});

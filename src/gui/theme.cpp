@@ -66,6 +66,17 @@ const std::vector<Role> kRoles = {
     {"graph.area", "Graphs", "Unit area", QColor(48, 48, 48), QColor(238, 238, 238)},
     {"graph.grid", "Graphs", "Grid", QColor(70, 70, 70), QColor(208, 208, 208)},
     {"graph.text", "Graphs", "Labels", QColor(150, 150, 150), QColor(90, 90, 90)},
+
+    {"nodes.background", "Node Graph", "Background", QColor(24, 25, 29), QColor(226, 228, 233)},
+    {"nodes.grid", "Node Graph", "Grid", QColor(33, 35, 40), QColor(214, 216, 222)},
+    {"nodes.gridMajor", "Node Graph", "Grid every fifth line", QColor(42, 44, 51), QColor(200, 203, 210)},
+    {"nodes.node", "Node Graph", "Nodes", QColor(40, 42, 49), QColor(250, 250, 252)},
+    {"nodes.border", "Node Graph", "Node edges", QColor(60, 63, 73), QColor(188, 191, 199)},
+    {"nodes.text", "Node Graph", "Text", QColor(232, 233, 238), QColor(32, 33, 38)},
+    {"nodes.dimText", "Node Graph", "Input names", QColor(150, 154, 166), QColor(98, 101, 110)},
+    {"nodes.link", "Node Graph", "Links", QColor(128, 134, 150), QColor(120, 126, 140)},
+    {"nodes.picture", "Node Graph", "Picture inputs and outputs", QColor(108, 166, 255), QColor(36, 108, 222)},
+    {"nodes.matte", "Node Graph", "Matte and map inputs", QColor(214, 214, 222), QColor(84, 86, 96)},
 };
 
 const QStringList kBuiltIn = {"Follow System", "Dark", "Light", "Turquoise"};

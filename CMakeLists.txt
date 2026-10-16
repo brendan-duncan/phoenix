@@ -129,6 +129,10 @@ set(HEADERS
     src/gui/code_editor.h
     src/gui/script_window.h
     src/gui/cep_panel.h
+    src/gui/node_graph_panel.h
+    src/gui/node_graph_style.h
+    src/gui/node_graph_view.h
+    src/gui/node_search.h
     src/gui/claude_code_panel.h
     src/gui/pty_process.h
     src/gui/terminal_view.h
@@ -413,6 +417,10 @@ set(SOURCES
     src/gui/code_editor.cpp
     src/gui/script_window.cpp
     src/gui/cep_panel.cpp
+    src/gui/node_graph_panel.cpp
+    src/gui/node_graph_style.cpp
+    src/gui/node_graph_view.cpp
+    src/gui/node_search.cpp
     src/gui/claude_code_panel.cpp
     src/gui/pty_process.cpp
     src/gui/terminal_view.cpp

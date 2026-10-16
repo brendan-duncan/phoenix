@@ -972,6 +972,9 @@ private:
     /// Function Curves: any property of the current layer over time.
     class FunctionCurvesPanel* _functionCurves = nullptr;
     QDockWidget* _functionCurvesDock = nullptr;
+    /// The node graph of the timeline being edited.
+    class NodeGraphPanel* _nodeGraph = nullptr;
+    QDockWidget* _nodeGraphDock = nullptr;
     /// Palettes: linked palettes.
     class PalettesPanel* _palettes = nullptr;
     QDockWidget* _palettesDock = nullptr;

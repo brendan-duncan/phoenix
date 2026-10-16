@@ -58,6 +58,7 @@
 #include "notes_panel.h"
 #include "controllers_panel.h"
 #include "function_curves_panel.h"
+#include "node_graph_panel.h"
 #include "../edit/palettes.h"
 #include "../edit/shape_recognition.h"
 #include <QButtonGroup>
@@ -2361,6 +2362,82 @@ void MainWindow::createPanels()
         connect(_timelineView, &TimelineView::currentLayerChanged, _functionCurves, refreshShown);
     }
 
+    // The Node Graph, closed until asked, a tab beside the Timeline.
+    if (!_nodeGraphDock)
+    {
+        NodeGraphLinks links;
+        links.commands = [this]() { return &_editContext.commandStack(); };
+        links.timeline = [this]() { return editedTimeline(); };
+        links.timelineName = [this]() {
+            const fla::Timeline* timeline = editedTimeline();
+            return timeline ? QString::fromStdString(timeline->name) : QString();
+        };
+        links.layerNames = [this]() {
+            QStringList names;
+            if (const fla::Timeline* timeline = editedTimeline())
+                for (const fla::Layer* layer : timeline->layers)
+                    if (layer && !names.contains(QString::fromStdString(layer->name)))
+                        names << QString::fromStdString(layer->name);
+            return names;
+        };
+        links.pictures = [this](const fla::nodegraph::Graph& graph, const QSize& size, QMap<int, QString>* problems) {
+            return _phoenixView ? _phoenixView->nodePictures(editedTimeline(), graph, size, problems) : QMap<int, QImage>();
+        };
+        links.stageAspect = [this]() {
+            const fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
+            return document && document->height > 0 ? double(document->width) / document->height : 16.0 / 9.0;
+        };
+        links.view = [this](int node) {
+            if (_phoenixView)
+                _phoenixView->setGraphView(editedTimeline(), node);
+        };
+        links.changed = [this]() {
+            if (_phoenixView)
+            {
+                _phoenixView->clearCaches();
+                _phoenixView->update();
+            }
+        };
+        links.currentFrame = [this]() { return _player ? _player->currentFrame() : 0; };
+        links.pickLayer = [this](const QString& name) {
+            const fla::Timeline* timeline = editedTimeline();
+            if (!timeline || !_timelineView)
+                return;
+            for (const fla::Layer* layer : timeline->layers)
+                if (layer && QString::fromStdString(layer->name) == name)
+                {
+                    _timelineView->setCurrentLayer(layer);
+                    break;
+                }
+        };
+        _nodeGraph = new NodeGraphPanel(links);
+        _nodeGraphDock = new QDockWidget("Node Graph", this);
+        _nodeGraphDock->setObjectName("nodeGraphDock");
+        _nodeGraphDock->setAllowedAreas(Qt::AllDockWidgetAreas);
+        _nodeGraph->setParent(_nodeGraphDock);
+        _nodeGraphDock->setWidget(_nodeGraph);
+        addDockWidget(Qt::BottomDockWidgetArea, _nodeGraphDock);
+        if (_timelineDock)
+            tabifyDockWidget(_timelineDock, _nodeGraphDock);
+        _nodeGraphDock->hide();
+        connect(_nodeGraphDock, &QDockWidget::visibilityChanged, this, [this](bool shown) {
+            if (shown)
+                _nodeGraph->refresh();
+            else if (_phoenixView)
+                _phoenixView->setGraphView(nullptr, 0);
+        });
+        // The pictures follow the frame shown, and the timeline being
+        // edited.
+        connect(_player, &Player::currentFrameChanged, _nodeGraph, [this]() {
+            if (_nodeGraphDock->isVisible() && !_player->isPlaying())
+                _nodeGraph->refreshPictures();
+        });
+        connect(_phoenixView, &PhoenixView::scopeChanged, _nodeGraph, [this]() {
+            if (_nodeGraphDock->isVisible())
+                _nodeGraph->refresh();
+        });
+    }
+
     // Palettes, closed until asked.
     if (!_palettesDock)
     {
@@ -2504,6 +2581,7 @@ void MainWindow::setupWindowMenu()
             {"Sc&ene", _scenesDock, QKeySequence(Qt::SHIFT | Qt::Key_F2), "The document's scenes: switch, add, duplicate, delete, rename and reorder them"},
             {"Mo&vie Explorer", _movieExplorerDock, QKeySequence(Qt::ALT | Qt::Key_F3), "The whole document as a tree: scenes, layers, frames, objects and symbols"},
             {"F&unction Curves", _functionCurvesDock, QKeySequence(), "Any property of the current layer as a curve over time, its keyframes dragged up or down"},
+            {"&Node Graph", _nodeGraphDock, QKeySequence(), "Composite the timeline's layers through a graph of nodes: effects, merges, mattes"},
             {"Pale&ttes", _palettesDock, QKeySequence(), "Linked palettes: named colors that recolor everything linked to them, swapped whole"},
         },
     };
@@ -9757,6 +9835,8 @@ void MainWindow::updateEditState()
         _controllers->refresh();
     if (_behaviors && _behaviorsDock && _behaviorsDock->isVisible() && !_editContext.commandStack().isInMacro())
         _behaviors->refresh();
+    if (_nodeGraph && _nodeGraphDock && _nodeGraphDock->isVisible() && !_editContext.commandStack().isInMacro())
+        _nodeGraph->refresh();
     if (_palettes && _palettesDock && _palettesDock->isVisible() && !_editContext.commandStack().isInMacro())
         _palettes->refresh();
     if (_functionCurves && _functionCurvesDock && _functionCurvesDock->isVisible() && !_editContext.commandStack().isInMacro())
