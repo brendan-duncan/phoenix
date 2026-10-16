@@ -147,6 +147,17 @@ TEST(jsfl_shape_edits_delete_edges_and_move_vertices)
         true);
     CHECK(!stale.ok);
     CHECK(stale.message.find("changed") != std::string::npos);
+
+    // An edit a script began and never ended goes with its run: the next
+    // run's changes are its own, made at once.
+    CHECK(f.run("var s = fl.getDocumentDOM().getTimeline().layers[0].frames[0].elements[0];\n"
+                "s.beginEdit(); s.deleteEdge(0);\n")
+              .ok);
+    CHECK(f.run("var s = fl.getDocumentDOM().getTimeline().layers[0].frames[0].elements[0];\n"
+                "var before = s.edges.length; s.deleteEdge(0);\n"
+                "fl.trace((before - s.edges.length) + '');\n")
+              .ok);
+    expectOutput(f, "1\n");
 }
 
 TEST(jsfl_shape_reads_rectangle_objects)

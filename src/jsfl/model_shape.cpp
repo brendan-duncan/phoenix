@@ -364,10 +364,17 @@ struct Cache
     std::map<const fla::Element*, GeometryPtr> editing;
 };
 
-Cache& cache()
+/// Each session's, kept until it finishes or settles: after that its
+/// elements may be freed, and another made where one was.
+std::map<const Session*, Cache>& caches()
 {
-    static Cache c;
-    return c;
+    static std::map<const Session*, Cache> all;
+    return all;
+}
+
+Cache& cache(const Element& e)
+{
+    return caches()[&e.session];
 }
 
 /// The element's drawing now: the one being edited, the one read before
@@ -375,7 +382,7 @@ Cache& cache()
 GeometryPtr geometryOf(Element& e)
 {
     fla::Element& element = e.get();
-    Cache& c = cache();
+    Cache& c = cache(e);
     const auto editing = c.editing.find(&element);
     if (editing != c.editing.end())
         return editing->second;
@@ -568,7 +575,7 @@ GeometryPtr beginEdits(Element& e)
         geometry->splits.assign(geometry->edges.size(), {});
         geometry->controls.clear();
         geometry->changed = false;
-        cache().editing[e.element] = geometry;
+        cache(e).editing[e.element] = geometry;
     }
     return geometry;
 }
@@ -671,7 +678,7 @@ void applyEdits(Element& e, Geometry& g)
 
 void endEdits(Element& e)
 {
-    Cache& c = cache();
+    Cache& c = cache(e);
     const auto found = c.editing.find(e.element);
     if (found == c.editing.end())
         return;
@@ -688,7 +695,7 @@ void endEdits(Element& e)
 /// was read from, which must still be the shape's.
 void edit(Element& e, const GeometryPtr& seen, const std::function<void(Geometry&)>& change)
 {
-    Cache& c = cache();
+    Cache& c = cache(e);
     const auto found = c.editing.find(e.element);
     const bool open = found != c.editing.end();
     const GeometryPtr current = open ? found->second : geometryOf(e);
@@ -880,6 +887,11 @@ const ClassInfo& ContourPart::classInfo() const
 
 } // namespace
 
+void forgetShapes(const Session& session)
+{
+    caches().erase(&session);
+}
+
 void describeShapeGeometry(ClassDef<Element>& def)
 {
     def.get("vertices", [](Element& e) {
@@ -939,8 +951,8 @@ void describeShapeGeometry(ClassDef<Element>& def)
         return Value();
     });
     def.method("deleteEdge", 1, [](Element& e, const Args& args) {
-        const auto open = cache().editing.find(e.element);
-        const GeometryPtr geometry = open != cache().editing.end() ? open->second : geometryOf(e);
+        const auto open = cache(e).editing.find(e.element);
+        const GeometryPtr geometry = open != cache(e).editing.end() ? open->second : geometryOf(e);
         const int index = arg(args, 0).toInt();
         if (index < 0 || index >= static_cast<int>(geometry->edges.size()))
             throw Error("The shape has no edge " + std::to_string(index) + ".");

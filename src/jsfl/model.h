@@ -180,6 +180,11 @@ private:
     const ClassInfo* _info;
 };
 
+/// Lets go of the drawings shape scripts read and edited in \a session
+/// (model_shape.cpp), edits not ended with endEdit among them: once it
+/// finishes or settles, its elements may be gone.
+void forgetShapes(const Session& session);
+
 /// The objects scripts start from.
 std::shared_ptr<Flash> makeFlash(Session& session);
 std::shared_ptr<FileSystem> makeFileSystem();

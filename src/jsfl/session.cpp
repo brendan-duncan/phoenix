@@ -1,5 +1,7 @@
 #include "session.h"
 
+#include "model.h"
+
 #include "../data/document.h"
 #include "../data/fla_document.h"
 #include "../edit/command_stack.h"
@@ -17,6 +19,8 @@ Session::Session(Host& host, std::string undoName)
 Session::~Session()
 {
     finish();
+    // Also when detached: another session may be made where this one was.
+    forgetShapes(*this);
 }
 
 void Session::finish()
@@ -25,6 +29,7 @@ void Session::finish()
         return;
     _finished = true;
     closeSteps();
+    forgetShapes(*this);
     _host.refresh();
 }
 
@@ -36,6 +41,7 @@ void Session::settle()
         state.reachableValid = false;
         state.reachable.clear();
     }
+    forgetShapes(*this);
     _host.refresh();
 }
 
