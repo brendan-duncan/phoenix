@@ -66,8 +66,12 @@ namespace play {
 struct Clip;
 class MovieRuntime;
 }
+namespace display {
+class DisplayObject;
+}
 }
 
+class DisplayPainter;
 class Player;
 
 class PhoenixView : public QWidget
@@ -751,6 +755,27 @@ protected:
     /// Whether \a timeline's art on \a frame, drawn through \a toStage, is
     /// at \a at on the stage.
     bool movieArtAt(const fla::Timeline& timeline, int frame, const QTransform& toStage, const QPointF& at);
+    /// The movie's scene, with the display objects scripts put on the
+    /// stage itself under and over it.
+    void drawScene(QPainter& painter, const fla::Timeline* scene);
+    /// The stage's children under the main timeline (\a below) or over it.
+    void drawStageChildren(QPainter& painter, bool below);
+    /// A movie clip's timeline is being drawn: what of its display list
+    /// does not draw in the timeline's own order (added by scripts, or
+    /// moved) is drawn in turn as the timeline's own are met.
+    void beginDisplayDraw(fla::play::Clip* clip);
+    void endDisplayDraw(QPainter& painter);
+    /// Draws what of the display list goes under \a element, a timeline
+    /// object of the clip being drawn; false when the element is not to be
+    /// drawn here (a script took it off or moved it).
+    bool displayBefore(QPainter& painter, const fla::Element* element);
+    void drawDisplayChild(QPainter& painter, const fla::display::DisplayObject& child);
+    /// What a timeline placed, for the display painter: timeline art, a
+    /// button's state frame, or a movie clip's frame, in its own space.
+    void drawDisplayTimeline(QPainter& painter, const fla::display::DisplayObject& object);
+    /// Whether a clip's display object needs the display painter: effects
+    /// a script gave it, or a button showing another object as a state.
+    bool displayPainted(const fla::display::DisplayObject& object) const;
 
     void mouseMoveEvent(QMouseEvent *event) override;
 
@@ -949,6 +974,21 @@ private:
     /// root's at the bottom), and its buttons' hit areas as last drawn.
     fla::play::MovieRuntime* _movie = nullptr;
     std::vector<fla::play::Clip*> _movieClips;
+    /// Draws the movie's display objects, and is the display engine's
+    /// renderer while a movie plays here.
+    std::unique_ptr<DisplayPainter> _displayPainter;
+    /// The timelines of clips being drawn, and what of their display lists
+    /// is drawn among their own objects.
+    struct DisplayDraw
+    {
+        fla::play::Clip* clip = nullptr;
+        std::set<const fla::display::DisplayObject*> inPlace;
+        int next = 0;
+    };
+    std::vector<DisplayDraw> _displayDraws;
+    /// An element drawElement draws as it is, not where the display list
+    /// puts it (the display list is drawing it).
+    const fla::Element* _displayDirect = nullptr;
     struct ButtonArea
     {
         QPolygonF area;

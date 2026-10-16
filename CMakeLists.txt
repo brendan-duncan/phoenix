@@ -229,6 +229,8 @@ set(HEADERS
     src/gui/draw_placement.h
     src/gui/selection_tool.h
     src/gui/filters.h
+    src/gui/display_painter.h
+    src/gui/display_check.h
     src/gui/lines_to_fills.h
     src/gui/free_transform_tool.h
     src/gui/primitive_tool.h
@@ -500,6 +502,8 @@ set(SOURCES
     src/gui/navigation_tools.cpp
     src/gui/draw_placement.cpp
     src/gui/filters.cpp
+    src/gui/display_painter.cpp
+    src/gui/display_check.cpp
     src/gui/stroke_effects.cpp
     src/gui/lines_to_fills.cpp
     src/gui/shape_outline.cpp

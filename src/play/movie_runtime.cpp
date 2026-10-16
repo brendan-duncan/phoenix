@@ -10,6 +10,7 @@
 #include "../data/symbol_list.h"
 #include "../data/timeline.h"
 #include "../edit/script_edit.h"
+#include "display/backend.h"
 #include "display/bitmap_filter.h"
 #include "display/display_object.h"
 #include "display/stage.h"
@@ -529,8 +530,7 @@ void MovieRuntime::start()
     _stage->setFrameRate(_frameRate);
     _stage->stopDrag();
     _stage->setFocus(nullptr);
-    if (_root && _root->display)
-        _stage->removeChild(_root->display.get());
+    _stage->removeChildren();
     _root = std::make_unique<Clip>();
     _root->timeline = _scenes.empty() ? nullptr : _scenes.front();
     _root->length = lengthOf(_root->timeline);
@@ -1652,6 +1652,7 @@ void MovieRuntime::attachDisplay(Clip& clip)
             auto art = std::make_shared<display::TimelineArt>();
             art->frameOf = clip.timeline;
             art->frame = frame;
+            art->clip = &clip;
             return art;
         };
         bool hitFrame = false;
@@ -1914,6 +1915,7 @@ void MovieRuntime::goTo(Clip& clip, int frame, bool play)
     if (frame == clip.frame)
         return;
     clip.frame = std::clamp(frame, 0, std::max(0, clip.length - 1));
+    display::markDisplayChanged();
     if (std::find(_sent.begin(), _sent.end(), &clip) == _sent.end())
         _sent.push_back(&clip);
 }
@@ -2033,6 +2035,8 @@ void MovieRuntime::advance(Clip& clip, std::vector<Clip*>& entered, std::vector<
         const int to = std::clamp(held, 0, std::max(0, clip.length - 1));
         const bool moved = to != clip.frame;
         clip.frame = to;
+        if (moved)
+            display::markDisplayChanged();
         syncChildren(clip, entered);
         if (moved)
             scripts.push_back(&clip);
@@ -2040,6 +2044,8 @@ void MovieRuntime::advance(Clip& clip, std::vector<Clip*>& entered, std::vector<
     else if (clip.playing && !clip.button && clip.length > 1)
     {
         clip.frame = (clip.frame + 1) % clip.length;
+        // What shows has moved on: drawn again.
+        display::markDisplayChanged();
         syncChildren(clip, entered);
         scripts.push_back(&clip);
     }

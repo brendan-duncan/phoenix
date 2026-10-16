@@ -70,6 +70,9 @@ private:
     /// gone since it started, not by how many ticks there were.
     QElapsedTimer _clock;
     qint64 _stepsDone = 0;
+    /// The display engine's generation when the movie was last drawn: a
+    /// frame that changed nothing is not drawn again.
+    uint64_t _shownGeneration = 0;
     double _frameRate = 24.0;
     QLabel* _status = nullptr;
     QPushButton* _pause = nullptr;

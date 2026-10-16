@@ -89,11 +89,13 @@ void Matrix::translate(double dx, double dy)
 
 void Matrix::createBox(double scaleX, double scaleY, double rotation, double x, double y)
 {
+    // As Flash Player builds it: turned, then scaled along the stage's
+    // axes (so b goes with the y scale and c with the x).
     const double cs = std::cos(rotation);
     const double sn = std::sin(rotation);
     a = scaleX * cs;
-    b = scaleX * sn;
-    c = -scaleY * sn;
+    b = scaleY * sn;
+    c = -scaleX * sn;
     d = scaleY * cs;
     tx = x;
     ty = y;

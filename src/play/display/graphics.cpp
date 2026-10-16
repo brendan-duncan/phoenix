@@ -10,6 +10,9 @@ namespace display {
 
 namespace {
 
+/// Every Graphics' revisions come from one count, so no two are alike.
+uint64_t graphicsRevisions = 0;
+
 double clamp(double value, double low, double high)
 {
     return std::max(low, std::min(high, value));
@@ -105,7 +108,7 @@ LineStyle::Joints LineStyle::jointsNamed(const std::string& name)
 
 void Graphics::changed()
 {
-    ++_revision;
+    _revision = ++graphicsRevisions;
     _shownValid = false;
     if (_owner)
         _owner->invalidate();

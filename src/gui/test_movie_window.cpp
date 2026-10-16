@@ -12,6 +12,7 @@
 #include "../data/timeline.h"
 #include "../edit/frame_sound.h"
 #include "../play/movie_runtime.h"
+#include "../play/display/backend.h"
 #include "../third_party/tinyxml2/tinyxml2.h"
 
 #include <QDesktopServices>
@@ -367,10 +368,14 @@ bool TestMovieWindow::eventFilter(QObject* watched, QEvent* event)
         const int character = text.size() == 1 && text.at(0).unicode() >= 32 ? text.at(0).unicode() : 0;
         if (code != 0 || character != 0)
         {
+            const Qt::KeyboardModifiers held = key->modifiers();
+            const bool shift = held & Qt::ShiftModifier;
+            const bool ctrl = held & Qt::ControlModifier;
+            const bool alt = held & Qt::AltModifier;
             if (event->type() == QEvent::KeyPress)
-                _movie->keyDown(code, character);
+                _movie->keyDown(code, character, shift, ctrl, alt);
             else if (!key->isAutoRepeat())
-                _movie->keyUp(code, character);
+                _movie->keyUp(code, character, shift, ctrl, alt);
             showFrame();
         }
         return true;
@@ -500,5 +505,12 @@ void TestMovieWindow::showFrame()
     if (_errors > 0)
         status += QString(", %1 script %2 (see the Output panel)").arg(_errors).arg(_errors == 1 ? "error" : "errors");
     _status->setText(status);
-    _view->update();
+    // Only when something shown changed: a movie stopped on a frame with
+    // nothing moving is not drawn over and over.
+    const uint64_t generation = fla::display::displayGeneration();
+    if (generation != _shownGeneration)
+    {
+        _shownGeneration = generation;
+        _view->update();
+    }
 }

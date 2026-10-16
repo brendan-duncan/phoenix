@@ -1,4 +1,5 @@
 #include "command_line.h"
+#include "display_check.h"
 
 #include "main_window.h"
 #include "script_runner.h"
@@ -136,6 +137,12 @@ const char* const kHelp =
     "      one after another, playing a few frames after each. --image draws\n"
     "      the frame it is then on, as Test Movie shows it. Exits 1 when a\n"
     "      script stopped on an error.\n"
+    "\n"
+    "  display-check <folder> [--fla <file> [--frames N]]\n"
+    "      Draws display lists built in code (shapes, gradients, bitmaps,\n"
+    "      blend modes, filters, masks, text, a paint program's canvas) as\n"
+    "      Test Movie draws them, to PNGs in the folder; with --fla, the\n"
+    "      movie after N frames with display objects put among its own.\n"
     "\n"
     "  benchmark <file> [--frames N] [--json <out.json>] [--against <animate.json>]\n"
     "      Times opening, drawing (first with nothing cached, then cached),\n"
@@ -900,7 +907,7 @@ int play(const QStringList& args)
 
 bool isCommand(const QString& name)
 {
-    return name == "play" || name == "benchmark" || name == "render" || name == "run-script" || name == "doctor" || name == "diff" || name == "batch" || name == "shots" || name == "links" || name == "shortcuts" || name == "lessons" || name == "help" ||
+    return name == "play" || name == "display-check" || name == "benchmark" || name == "render" || name == "run-script" || name == "doctor" || name == "diff" || name == "batch" || name == "shots" || name == "links" || name == "shortcuts" || name == "lessons" || name == "help" ||
            name == "--help";
 }
 
@@ -1018,6 +1025,8 @@ int run(const QStringList& arguments)
         return benchmark(args);
     if (name == "play")
         return play(args);
+    if (name == "display-check")
+        return displayCheck(args);
     if (name == "diff")
         return diff(args);
     if (name == "batch")

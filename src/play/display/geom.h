@@ -88,7 +88,7 @@ struct Matrix
     void rotate(double radians);
     void scale(double sx, double sy);
     void translate(double dx, double dy);
-    /// Matrix.createBox: scale, then rotate, then move.
+    /// Matrix.createBox: rotate, then scale, then move.
     void createBox(double scaleX, double scaleY, double rotation = 0.0, double tx = 0.0, double ty = 0.0);
     /// Matrix.createGradientBox: the matrix that stretches the gradient
     /// square (-819.2 to 819.2 twips, so 1638.4 units across) over a box

@@ -9,6 +9,10 @@
 #include "../jsfl/behavior_frames.h"
 #include "theme.h"
 #include "../play/movie_runtime.h"
+#include "../play/display/display_object.h"
+#include "../play/display/stage.h"
+#include "../play/display/text_field.h"
+#include "display_painter.h"
 #include "../edit/pegs.h"
 #include "preferences.h"
 #include "../edit/three_d.h"
@@ -355,10 +359,37 @@ PhoenixView::PhoenixView(Player* player, QWidget *parent)
     connect(_player, &Player::currentFrameChanged, this, &PhoenixView::onPlayerFrameChanged);
     // Inside a symbol the tools snap to the guides in the symbol's space.
     connect(this, &PhoenixView::scopeChanged, this, [this]() { pushGuidesToSnapper(); });
+
+    // A movie's display list: what timelines placed is drawn, measured and
+    // hit here.
+    _displayPainter = std::make_unique<DisplayPainter>();
+    _displayPainter->drawTimeline = [this](QPainter& painter, const fla::display::DisplayObject& object) {
+        drawDisplayTimeline(painter, object);
+    };
+    _displayPainter->timelineArtBounds = [this](const fla::display::TimelineArt& art, bool) {
+        if (art.element)
+            return getElementBounds(art.element);
+        if (art.frameOf && art.clip && art.clip->symbol)
+            return symbolFramesBounds(art.clip->symbol, art.frame, art.frame);
+        return QRectF();
+    };
+    _displayPainter->timelineArtHits = [this](const fla::display::TimelineArt& art, double x, double y) {
+        if (art.element)
+        {
+            HitResult result;
+            auto* element = const_cast<fla::Element*>(art.element);
+            hitTestElement(*element, dynamic_cast<fla::Frame*>(element->parent), fla::LoopType::SingleFrame, QTransform(),
+                QPointF(x, y), 0.0, result, nullptr);
+            return !result.isEmpty();
+        }
+        return art.frameOf && movieArtAt(*art.frameOf, art.frame, QTransform(), QPointF(x, y));
+    };
 }
 
 PhoenixView::~PhoenixView()
 {
+    if (fla::display::backend() == _displayPainter.get())
+        fla::display::setBackend(nullptr);
 }
 
 void PhoenixView::onPlayerFrameChanged(int frame)
@@ -2187,7 +2218,7 @@ void PhoenixView::drawDocument(QPainter& painter, const fla::Document* document)
     QPaintDevice* device = painter.device();
     if (color.isIdentity() || !device)
     {
-        drawTimeline(painter, scene);
+        drawScene(painter, scene);
         return;
     }
     const qreal ratio = std::max<qreal>(1.0, device->devicePixelRatioF());
@@ -2199,7 +2230,7 @@ void PhoenixView::drawDocument(QPainter& painter, const fla::Document* document)
     QImage image(qCeil(logical.width() * ratio), qCeil(logical.height() * ratio), QImage::Format_ARGB32_Premultiplied);
     if (image.isNull())
     {
-        drawTimeline(painter, scene);
+        drawScene(painter, scene);
         return;
     }
     image.setDevicePixelRatio(ratio);
@@ -2208,7 +2239,7 @@ void PhoenixView::drawDocument(QPainter& painter, const fla::Document* document)
         QPainter into(&image);
         into.setRenderHints(painter.renderHints());
         into.setTransform(painter.transform());
-        drawTimeline(into, scene);
+        drawScene(into, scene);
     }
     applyColorTransform(image, color);
     painter.save();
@@ -2593,6 +2624,12 @@ void PhoenixView::drawTimeline(QPainter& painter, const fla::Timeline* timeline,
         painter.restore();
         return;
     }
+
+    // In a movie playing, the clip's display list: what scripts added or
+    // moved is drawn among the timeline's own as they are met.
+    const bool displayDrawing = _movie && !_maskPass && !_movieClips.empty() && _movieClips.back()->timeline == timeline;
+    if (displayDrawing)
+        beginDisplayDraw(_movieClips.back());
 
     struct MaskData
     {
@@ -3114,14 +3151,12 @@ void PhoenixView::drawTimeline(QPainter& painter, const fla::Timeline* timeline,
         }
     }
 
-    // In a movie playing, the clips its scripts made, over what the
-    // timeline has.
-    if (_movie && !_maskPass && !_movieClips.empty() && _movieClips.back()->timeline == timeline)
+    // In a movie playing, what of its display list is over what the
+    // timeline has: what scripts added, and what they moved up.
+    if (displayDrawing)
     {
         painter.setTransform(painterTransform);
-        for (const fla::play::Clip* made : _movie->madeChildren(*_movieClips.back()))
-            if (made->made)
-                drawElement(painter, made->made.get(), nullptr, 0.0);
+        endDisplayDraw(painter);
     }
 }
 
@@ -4673,6 +4708,15 @@ int PhoenixView::calculateLayerDuration(const fla::Layer* layer)
 
 void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, const fla::Element* tweenElement, double tweenProgress)
 {
+    // In a movie playing, a timeline object of the clip being drawn goes
+    // where its display list has it: under it, what that puts there; one a
+    // script took off or moved is not drawn here.
+    if (element == _displayDirect)
+        _displayDirect = nullptr;
+    else if (!_displayDraws.empty() && !_maskPass && !_movieClips.empty() && _displayDraws.back().clip == _movieClips.back() &&
+        dynamic_cast<const fla::Frame*>(element->parent) && !displayBefore(painter, element))
+        return;
+
     // Text and bitmaps are color, not line.
     if (_renderPass == RenderPass::Lines && (element->elementType() == fla::Element::Type::StaticText ||
                                                 element->elementType() == fla::Element::Type::BitmapInstance))
@@ -4772,6 +4816,18 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
         {
             if (!movieClip->shown())
                 return;
+            // Where the timeline has it now, a tween's in-between, for what
+            // reads its place.
+            if (movieClip->display)
+                movieClip->display->updatePlacedMatrix(
+                    fla::display::Matrix(transform.m11, transform.m12, transform.m21, transform.m22, transform.tx, transform.ty));
+            // Given effects of its own by a script, it is drawn as the
+            // display list draws it.
+            if (movieClip->display && displayPainted(*movieClip->display))
+            {
+                _displayPainter->draw(painter, *movieClip->display);
+                return;
+            }
             transform = movieClip->transform(transform);
         }
     }
@@ -4862,6 +4918,15 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
             if (movieClip)
             {
                 frameOffset = movieClip->button ? _movie->buttonFrame(*movieClip) : movieClip->frame;
+                // A button shows the state its display object is in, which
+                // may be a frame a script swapped in for another.
+                if (movieClip->button && movieClip->display &&
+                    movieClip->display->kind() == fla::display::ObjectKind::SimpleButton)
+                    if (const auto* state =
+                            static_cast<const fla::display::SimpleButton*>(movieClip->display.get())->shownState())
+                        if (state->kind() == fla::display::ObjectKind::TimelineArt &&
+                            static_cast<const fla::display::TimelineArt*>(state)->frameOf == movieClip->timeline)
+                            frameOffset = static_cast<const fla::display::TimelineArt*>(state)->frame;
                 _movieClips.push_back(movieClip);
                 // Where it was drawn, for the movie's scripts: its parent's
                 // space on the stage, its box, and what its art is for an
@@ -5506,6 +5571,16 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
         // the style of its first run; an input field is where a click puts
         // the typing, with a caret while it has it.
         std::optional<std::string> shown;
+        // One its display object's text field has had changed from outside
+        // the runtime (formats, HTML, typing): drawn as that has it.
+        if (_movie && !_movieClips.empty() && text->textType != fla::StaticText::TextType::Static)
+            if (const fla::display::TextField* field = _movie->displayField(*_movieClips.back(), *text);
+                field && field->layoutRevision() != field->timelineRevision)
+            {
+                _displayPainter->drawText(painter, *field);
+                painter.restore();
+                return;
+            }
         if (_movie && !_movieClips.empty() && text->textType != fla::StaticText::TextType::Static)
         {
             fla::play::Clip* clip = _movieClips.back();
@@ -8064,6 +8139,20 @@ void PhoenixView::setMovie(fla::play::MovieRuntime* movie)
 {
     _movie = movie;
     _movieClips.clear();
+    _displayDraws.clear();
+    if (_movie)
+    {
+        fla::display::setBackend(_displayPainter.get());
+        if (_flaDocument && _flaDocument->document)
+        {
+            const fla::Document& document = *_flaDocument->document;
+            _movie->stage().setSize(document.width, document.height);
+            _movie->stage().color = (static_cast<uint32_t>(document.backgroundColor[0]) << 16) |
+                (static_cast<uint32_t>(document.backgroundColor[1]) << 8) | document.backgroundColor[2];
+        }
+    }
+    else if (fla::display::backend() == _displayPainter.get())
+        fla::display::setBackend(nullptr);
     _buttonAreas.clear();
     _movieArt.clear();
     if (_movie)
@@ -8095,6 +8184,179 @@ bool PhoenixView::movieArtAt(const fla::Timeline& timeline, int frame, const QTr
     HitResult result;
     hitTestTimeline(timeline, fla::LoopType::SingleFrame, frame, toStage, at, 0.0, result);
     return !result.isEmpty();
+}
+
+void PhoenixView::drawScene(QPainter& painter, const fla::Timeline* scene)
+{
+    if (!_movie)
+    {
+        drawTimeline(painter, scene);
+        return;
+    }
+    // The painter is in the stage's space here: masks are drawn through it.
+    _displayPainter->stageToDevice = painter.transform();
+    // Drawn for an image (renderFrame) rather than the window: the root is
+    // what the scene's instances are looked up in all the same.
+    if (_movieClips.empty())
+        _movieClips.assign(1, &_movie->root());
+    drawStageChildren(painter, true);
+    drawTimeline(painter, scene);
+    drawStageChildren(painter, false);
+}
+
+void PhoenixView::drawStageChildren(QPainter& painter, bool below)
+{
+    const fla::display::Stage& stage = _movie->stage();
+    const int root = stage.getChildIndex(_movie->root().display.get());
+    const std::vector<std::shared_ptr<fla::display::DisplayObject>> children = stage.children();
+    for (int i = below ? 0 : root + 1; i < (below ? root : static_cast<int>(children.size())); ++i)
+        if (children[static_cast<size_t>(i)])
+            _displayPainter->draw(painter, *children[static_cast<size_t>(i)]);
+}
+
+bool PhoenixView::displayPainted(const fla::display::DisplayObject& object) const
+{
+    if (object.effectsScripted())
+        return true;
+    if (object.kind() != fla::display::ObjectKind::SimpleButton)
+        return false;
+    const fla::display::DisplayObject* state = static_cast<const fla::display::SimpleButton&>(object).shownState();
+    return state && !(state->kind() == fla::display::ObjectKind::TimelineArt && object.clip &&
+                        static_cast<const fla::display::TimelineArt*>(state)->frameOf == object.clip->timeline);
+}
+
+void PhoenixView::beginDisplayDraw(fla::play::Clip* clip)
+{
+    DisplayDraw draw;
+    draw.clip = clip;
+    // The timeline's own objects still in their timeline order are drawn
+    // as the timeline meets them; the rest where the list has them.
+    if (clip->display && clip->display->isContainer())
+    {
+        const auto& children = static_cast<const fla::display::DisplayObjectContainer*>(clip->display.get())->children();
+        int last = std::numeric_limits<int>::min();
+        for (const auto& child : children)
+            if (child && child->timeline && child->timeline->depth > last &&
+                std::find(clip->timelineObjects.begin(), clip->timelineObjects.end(), child) != clip->timelineObjects.end())
+            {
+                draw.inPlace.insert(child.get());
+                last = child->timeline->depth;
+            }
+    }
+    _displayDraws.push_back(std::move(draw));
+}
+
+void PhoenixView::endDisplayDraw(QPainter& painter)
+{
+    if (_displayDraws.empty())
+        return;
+    DisplayDraw draw = std::move(_displayDraws.back());
+    _displayDraws.pop_back();
+    const fla::play::Clip* clip = draw.clip;
+    if (!clip->display || !clip->display->isContainer())
+        return;
+    const std::vector<std::shared_ptr<fla::display::DisplayObject>> children =
+        static_cast<const fla::display::DisplayObjectContainer*>(clip->display.get())->children();
+    for (size_t i = static_cast<size_t>(std::max(0, draw.next)); i < children.size(); ++i)
+        if (children[i] && !draw.inPlace.count(children[i].get()))
+            drawDisplayChild(painter, *children[i]);
+}
+
+bool PhoenixView::displayBefore(QPainter& painter, const fla::Element* element)
+{
+    DisplayDraw& draw = _displayDraws.back();
+    const fla::play::Clip* clip = draw.clip;
+    const fla::display::DisplayObject* object = nullptr;
+    for (const auto& each : clip->timelineObjects)
+        if (each && each->timeline && each->timeline->element == element)
+        {
+            object = each.get();
+            break;
+        }
+    // Not one of the timeline's own (inside a graphic, say): as it is.
+    if (!object || !clip->display || !clip->display->isContainer())
+        return true;
+    const auto* container = static_cast<const fla::display::DisplayObjectContainer*>(clip->display.get());
+    if (object->parent() != container || !draw.inPlace.count(object))
+        return false;
+    const int index = container->getChildIndex(object);
+    const std::vector<std::shared_ptr<fla::display::DisplayObject>> children = container->children();
+    for (; draw.next < index; ++draw.next)
+    {
+        const fla::display::DisplayObject* under = children[static_cast<size_t>(draw.next)].get();
+        if (under && !draw.inPlace.count(under))
+            drawDisplayChild(painter, *under);
+    }
+    draw.next = std::max(draw.next, index + 1);
+    return true;
+}
+
+void PhoenixView::drawDisplayChild(QPainter& painter, const fla::display::DisplayObject& child)
+{
+    // A clip of the movie's, placed by a timeline or made from the library,
+    // with nothing but what the timeline path draws: drawn that way, so its
+    // buttons and art are found by the movie's scripts as before.
+    if (child.clip && child.clip->placed && child.visible() && !displayPainted(child))
+    {
+        _displayDirect = child.clip->placed;
+        drawElement(painter, child.clip->placed, nullptr, 0.0);
+        _displayDirect = nullptr;
+        return;
+    }
+    _displayPainter->draw(painter, child);
+}
+
+void PhoenixView::drawDisplayTimeline(QPainter& painter, const fla::display::DisplayObject& object)
+{
+    struct ClipScope
+    {
+        std::vector<fla::play::Clip*>& stack;
+        bool pushed = false;
+        ClipScope(std::vector<fla::play::Clip*>& s, fla::play::Clip* clip)
+            : stack(s)
+        {
+            if (clip && (stack.empty() || stack.back() != clip))
+            {
+                stack.push_back(clip);
+                pushed = true;
+            }
+        }
+        ~ClipScope()
+        {
+            if (pushed)
+                stack.pop_back();
+        }
+    };
+    if (object.kind() == fla::display::ObjectKind::TimelineArt)
+    {
+        const auto& art = static_cast<const fla::display::TimelineArt&>(object);
+        if (art.element)
+        {
+            // In its parent clip's space, as its timeline draws it.
+            ClipScope scope(_movieClips, art.parent() ? art.parent()->clip : nullptr);
+            _displayDirect = art.element;
+            drawElement(painter, art.element, nullptr, 0.0);
+            _displayDirect = nullptr;
+        }
+        else if (art.frameOf)
+        {
+            ClipScope scope(_movieClips, art.clip);
+            drawTimeline(painter, art.frameOf, fla::LoopType::SingleFrame, art.frame);
+        }
+        return;
+    }
+    fla::play::Clip* clip = object.clip;
+    if (!clip || !_movie)
+        return;
+    ClipScope scope(_movieClips, clip);
+    if (clip->symbol)
+    {
+        for (const fla::Timeline* timeline : clip->symbol->timelines)
+            if (timeline && timeline->visible)
+                drawTimeline(painter, timeline, fla::LoopType::SingleFrame, clip->frame);
+    }
+    else if (clip->timeline)
+        drawTimeline(painter, clip->timeline, fla::LoopType::SingleFrame, clip->frame);
 }
 
 fla::play::Clip* PhoenixView::movieButtonAt(const QPointF& widgetPos)
@@ -8137,7 +8399,22 @@ void PhoenixView::movieMouse(QMouseEvent* event)
         _movie->pointerOver(button);
         _movie->pointerUp();
     }
-    setCursor(button ? Qt::PointingHandCursor : field ? Qt::IBeamCursor : Qt::ArrowCursor);
+    // The display list's mouse events, from what is under the pointer.
+    fla::display::Stage& stage = _movie->stage();
+    const Qt::KeyboardModifiers held = event->modifiers();
+    const fla::display::Modifiers modifiers{
+        (held & Qt::ShiftModifier) != 0, (held & Qt::ControlModifier) != 0, (held & Qt::AltModifier) != 0};
+    if (event->type() == QEvent::MouseMove)
+        stage.pointerMove(onStage.x(), onStage.y(), modifiers);
+    else if (event->type() == QEvent::MouseButtonPress && event->button() == Qt::LeftButton)
+        stage.pointerDown(onStage.x(), onStage.y(), modifiers, static_cast<double>(event->timestamp()) / 1000.0);
+    else if (event->type() == QEvent::MouseButtonRelease && event->button() == Qt::LeftButton)
+        stage.pointerUp(onStage.x(), onStage.y(), modifiers);
+    _movie->afterEvents();
+    const fla::display::InteractiveObject* over = stage.hovered();
+    const bool typing = over && over->kind() == fla::display::ObjectKind::TextField &&
+        static_cast<const fla::display::TextField*>(over)->type() == fla::display::TextField::Type::Input;
+    setCursor(button || stage.handCursor() ? Qt::PointingHandCursor : field || typing ? Qt::IBeamCursor : Qt::ArrowCursor);
     update();
     event->accept();
 }
@@ -9849,6 +10126,23 @@ void PhoenixView::drawShapeHighlight(QPainter& painter, const fla::Shape* shape,
 
 void PhoenixView::wheelEvent(QWheelEvent *event)
 {
+    // A movie playing has the wheel: MOUSE_WHEEL, three lines a notch.
+    if (_movie)
+    {
+        const QPointF onStage = mapToDocument(event->position());
+        const Qt::KeyboardModifiers held = event->modifiers();
+        const int lines = event->angleDelta().y() / 40;
+        if (lines != 0)
+        {
+            _movie->stage().wheel(onStage.x(), onStage.y(), lines,
+                fla::display::Modifiers{(held & Qt::ShiftModifier) != 0, (held & Qt::ControlModifier) != 0,
+                    (held & Qt::AltModifier) != 0});
+            _movie->afterEvents();
+            update();
+        }
+        event->accept();
+        return;
+    }
     // The wheel scrolls the stage, shift scrolls it sideways,
     // and ctrl zooms about the cursor.
     if (event->modifiers() & Qt::ControlModifier)

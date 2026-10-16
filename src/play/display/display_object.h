@@ -131,6 +131,9 @@ public:
     Matrix matrixOver(const Matrix& placed) const;
     /// Where its parent's timeline puts it now.
     void setPlacedMatrix(const Matrix& placed);
+    /// The same as it is being drawn (a tween's in-between), which does
+    /// not ask for it to be drawn again.
+    void updatePlacedMatrix(const Matrix& placed) { _placed = placed; }
     const Matrix& placedMatrix() const { return _placed; }
     /// Whether a script has set any of its transform.
     bool transformScripted() const;
