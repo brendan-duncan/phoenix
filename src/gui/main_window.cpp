@@ -12088,6 +12088,13 @@ void MainWindow::chooseTool(Tool* tool)
 
 void MainWindow::scriptEvent(const char* type)
 {
+    // Not in the middle of an edit (a selection changing as a command runs):
+    // a script that edits in answer would land inside it. Told just after.
+    if (_editContext.commandStack().isExecuting())
+    {
+        QTimer::singleShot(0, this, [this, type]() { scriptEvent(type); });
+        return;
+    }
     if (_scripts)
         _scripts->dispatchEvent(type);
     for (const auto& tool : _scriptTools)

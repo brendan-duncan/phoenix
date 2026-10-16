@@ -200,6 +200,9 @@ void CommandStack::swapHistory(CommandStack& other)
     std::swap(_commands, other._commands);
     std::swap(_index, other._index);
     std::swap(_cleanIndex, other._cleanIndex);
+    // An edit still being put together belongs to the history it was begun
+    // in, and goes with it.
+    std::swap(_macroStack, other._macroStack);
     _mergeAllowed = false;
     other._mergeAllowed = false;
     notifyChanged();
