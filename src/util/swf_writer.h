@@ -66,6 +66,47 @@ struct Segment
     double cx = 0.0, cy = 0.0;
 };
 
+/// How a StartSound plays its sound (SOUNDINFO): stopped, not again while
+/// it plays (noMultiple), how many times round (0 for as many as SWF
+/// allows, 65535), the part played and a volume envelope. In and out
+/// points and envelope positions count samples at 44.1 kHz from the
+/// sound's start; levels run 0 to 32768 (full).
+struct SoundInfo
+{
+    bool stop = false;
+    bool noMultiple = false;
+    int loops = 1;
+    /// 0 for from the start, or to the end.
+    uint32_t inPoint = 0;
+    uint32_t outPoint = 0;
+    struct EnvelopePoint
+    {
+        uint32_t pos44 = 0;
+        uint16_t left = 32768;
+        uint16_t right = 32768;
+    };
+    std::vector<EnvelopePoint> envelope;
+};
+
+/// A movie clip's own timeline (DefineSprite): characters placed and
+/// removed and sounds started frame by frame, as a movie's are. Written
+/// with Writer::defineSprite.
+class Sprite
+{
+public:
+    void place(int id, int depth);
+    void remove(int depth);
+    void startSound(int id, const SoundInfo& info);
+    void showFrame();
+
+    int frames() const { return _frames; }
+    const std::vector<uint8_t>& tags() const { return _tags; }
+
+private:
+    int _frames = 0;
+    std::vector<uint8_t> _tags;
+};
+
 class Writer
 {
 public:
@@ -115,6 +156,11 @@ public:
     /// (at least once), not again while it plays with \a noMultiple, or
     /// stops it with \a stop.
     void startSound(int id, int loops, bool noMultiple, bool stop);
+    /// Starts sound \a id on this frame as \a info says.
+    void startSound(int id, const SoundInfo& info);
+
+    /// A movie clip of \a sprite's frames (at least one); its character id.
+    int defineSprite(const Sprite& sprite);
 
     void showFrame();
 

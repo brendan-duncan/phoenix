@@ -162,6 +162,7 @@ set(PHOENIX_CORE_FILE_SOURCES
     util/swf_writer.cpp
     util/lzma.cpp
     util/swf_sound.cpp
+    edit/swf_event_sounds.cpp
     util/zip_writer.cpp
     writer/fla_writer.cpp
     writer/xfl_content.cpp

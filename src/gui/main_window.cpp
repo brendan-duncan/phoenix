@@ -114,6 +114,7 @@
 #include "../util/swf_sound.h"
 #include "../util/swf_writer.h"
 #include "../edit/publish_settings.h"
+#include "../edit/swf_event_sounds.h"
 #include "../edit/brush_presets.h"
 #include "image_export.h"
 #include "timeline_view.h"
@@ -8845,7 +8846,7 @@ bool MainWindow::exportSwf(const QString& path, const QSize& size, QString& erro
     bool streaming = false;
     if (_timelineAudio && publish.soundCompression != "none")
     {
-        // The scene's own event sounds go in as events, the rest streamed.
+        // Event, start and stop sounds go in as events (below), streams mixed.
         const std::vector<float> mixed = _timelineAudio->mixdown(0, frames - 1, false);
         const bool audible = std::any_of(mixed.begin(), mixed.end(), [](float sample) { return sample != 0.0f; });
         if (audible)
@@ -8882,83 +8883,17 @@ bool MainWindow::exportSwf(const QString& path, const QSize& size, QString& erro
             writer.soundStream(sound.codec, sound.rate, sound.stereo, sound.samplesPerFrame, sound.latency);
         }
     }
-    // Event, start and stop sounds: each part of a sound played defined once
-    // (DefineSound), in the Publish Settings' compression, and started on
-    // its frame (StartSound).
-    std::map<int, std::vector<std::pair<int, const TimelineAudio::EventCue*>>> starts;
-    std::vector<TimelineAudio::EventCue> cues;
-    if (_timelineAudio && publish.soundCompression != "none")
-    {
-        cues = _timelineAudio->eventCues(0, frames - 1);
-        const int channels = publish.soundStereo ? 2 : 1;
-        const int rate = publish.soundRate >= 44100 ? 44100
-            : publish.soundRate >= 22050            ? 22050
-            : publish.soundRate >= 11025            ? 11025
-                                                    : 5512;
-        std::map<std::string, int> defined;
-        std::map<std::string, std::vector<int>> byName;
-        for (const TimelineAudio::EventCue& cue : cues)
-        {
-            if (cue.sync == "stop")
-                continue;
-            const std::string key = cue.name + "|" + std::to_string(cue.in) + "|" + std::to_string(cue.out);
-            if (defined.count(key))
-                continue;
-            std::shared_ptr<const PcmBuffer> pcm = _timelineAudio->librarySound(cue.name);
-            if (!pcm)
-                continue;
-            const std::vector<float> part(pcm->samples.begin() + static_cast<std::ptrdiff_t>(cue.in * 2),
-                pcm->samples.begin() + static_cast<std::ptrdiff_t>(cue.out * 2));
-            int id = 0;
-            std::vector<uint8_t> mp3;
+    // Event, start and stop sounds, the scene's and its movie clips': each
+    // sound defined once (DefineSound), as its library item or the Publish
+    // Settings say, and started on its frame (StartSound).
+    fla::SwfEventSounds events(*document, publish,
+        [](const std::vector<float>& samples, int rate, int channels, int kbps, std::vector<uint8_t>& mp3) {
             QString mp3Error;
-            if (publish.soundCompression == "mp3" && MovieExport::canEncodeMp3() &&
-                MovieExport::encodeMp3(part, std::max(rate, 11025), channels, std::clamp(publish.soundBitRate, 8, 320), mp3, mp3Error))
-            {
-                // An event MP3 starts with its seek: LAME's own 1105 samples.
-                const int mp3Rate = std::max(rate, 11025);
-                std::vector<uint8_t> data{0x51, 0x04};
-                data.insert(data.end(), mp3.begin(), mp3.end());
-                const uint32_t samples = static_cast<uint32_t>(
-                    std::llround(static_cast<double>(cue.out - cue.in) * mp3Rate / PcmBuffer::kRate));
-                id = writer.defineSound(2, mp3Rate, channels == 2, samples, data);
-            }
-            else
-            {
-                const std::vector<int16_t> samples = swf::pcm16(part, PcmBuffer::kRate, rate, channels);
-                const uint32_t count = static_cast<uint32_t>(samples.size() / static_cast<size_t>(channels));
-                if (publish.soundCompression == "raw")
-                {
-                    std::vector<uint8_t> data;
-                    data.reserve(samples.size() * 2);
-                    for (const int16_t sample : samples)
-                    {
-                        data.push_back(static_cast<uint8_t>(sample & 0xFF));
-                        data.push_back(static_cast<uint8_t>((sample >> 8) & 0xFF));
-                    }
-                    id = writer.defineSound(3, rate, channels == 2, count, data);
-                }
-                else
-                    id = writer.defineSound(1, rate, channels == 2, count,
-                        swf::encodeAdpcm(samples, channels, publish.soundAdpcmBits));
-            }
-            defined[key] = id;
-            byName[cue.name].push_back(id);
-        }
-        for (const TimelineAudio::EventCue& cue : cues)
-        {
-            if (cue.sync == "stop")
-            {
-                // Every part of the sound playing stops.
-                for (const int id : byName[cue.name])
-                    starts[cue.frame].push_back({id, &cue});
-                continue;
-            }
-            const auto found = defined.find(cue.name + "|" + std::to_string(cue.in) + "|" + std::to_string(cue.out));
-            if (found != defined.end())
-                starts[cue.frame].push_back({found->second, &cue});
-        }
-    }
+            return MovieExport::canEncodeMp3() && MovieExport::encodeMp3(samples, rate, channels, kbps, mp3, mp3Error);
+        });
+    events.define(writer, frames);
+    if (events.mp3Missing())
+        statusBar()->showMessage("MP3 is not available here: the SWF's event sounds are ADPCM.", 6000);
     QProgressDialog progress("Exporting SWF...", "Cancel", 0, frames, this);
     progress.setWindowModality(Qt::WindowModal);
     progress.setMinimumDuration(400);
@@ -9076,10 +9011,7 @@ bool MainWindow::exportSwf(const QString& path, const QSize& size, QString& erro
         }
         if (streaming && static_cast<size_t>(frame) < sound.blocks.size())
             writer.soundBlock(sound.blocks[static_cast<size_t>(frame)]);
-        const auto started = starts.find(frame);
-        if (started != starts.end())
-            for (const auto& [id, cue] : started->second)
-                writer.startSound(id, cue->loops, cue->sync == "start", cue->sync == "stop");
+        events.frame(writer, frame);
         writer.showFrame();
     }
     progress.setValue(frames);

@@ -223,46 +223,7 @@ std::vector<TimelineAudio::Sounding> TimelineAudio::soundingAt(int frame, bool c
     return sounding;
 }
 
-std::vector<TimelineAudio::EventCue> TimelineAudio::eventCues(int first, int last)
-{
-    std::vector<EventCue> cues;
-    const fla::Document* doc = _document ? _document->document : nullptr;
-    const fla::Timeline* scene = doc ? doc->currentScene() : nullptr;
-    if (!scene)
-        return cues;
-    for (int frame = first; frame <= last; ++frame)
-        for (const fla::Layer* layer : scene->layers)
-        {
-            if (!layer || !layer->visible)
-                continue;
-            for (const fla::Frame* key : layer->frames)
-            {
-                FrameSound sound;
-                if (!key || key->index != frame || !soundSettings(*key, sound) || sound.envelope ||
-                    (sound.sync != "event" && sound.sync != "start" && sound.sync != "stop"))
-                    continue;
-                EventCue cue;
-                cue.frame = frame;
-                cue.name = sound.name;
-                cue.sync = sound.sync;
-                if (sound.sync != "stop")
-                {
-                    std::shared_ptr<const PcmBuffer> pcm = buffer(sound.name);
-                    if (!pcm)
-                        continue;
-                    cue.in = std::min(sound.in, pcm->frames());
-                    cue.out = sound.hasOut && sound.out > cue.in ? std::min(sound.out, pcm->frames()) : pcm->frames();
-                    if (cue.out <= cue.in)
-                        continue;
-                    cue.loops = sound.loops;
-                }
-                cues.push_back(cue);
-            }
-        }
-    return cues;
-}
-
-std::vector<float> TimelineAudio::mixdown(int first, int last, bool sceneEvents)
+std::vector<float> TimelineAudio::mixdown(int first, int last, bool events)
 {
     std::vector<float> mixed;
     const fla::Document* doc = _document ? _document->document : nullptr;
@@ -315,8 +276,7 @@ std::vector<float> TimelineAudio::mixdown(int first, int last, bool sceneEvents)
                     if (!soundSettings(*key, sound))
                         continue;
                     // Left to the movie's own event sounds.
-                    if (!sceneEvents && where.timeline == doc->currentScene() && !sound.envelope &&
-                        (sound.sync == "event" || sound.sync == "start" || sound.sync == "stop"))
+                    if (!events && (sound.sync == "event" || sound.sync == "start" || sound.sync == "stop"))
                         continue;
                     // A stream is placed from the start of its span, or from
                     // part way in at the first frame of the range.

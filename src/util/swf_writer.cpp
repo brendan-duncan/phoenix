@@ -147,7 +147,104 @@ std::vector<uint8_t> compress(const std::vector<uint8_t>& data)
     return out;
 }
 
+/// A tag, its header then its body, on the end of \a out.
+void appendTag(std::vector<uint8_t>& out, int code, const std::vector<uint8_t>& body)
+{
+    const size_t length = body.size();
+    if (length < 63)
+    {
+        const int header = (code << 6) | static_cast<int>(length);
+        out.push_back(static_cast<uint8_t>(header & 0xFF));
+        out.push_back(static_cast<uint8_t>(header >> 8));
+    }
+    else
+    {
+        const int header = (code << 6) | 0x3F;
+        out.push_back(static_cast<uint8_t>(header & 0xFF));
+        out.push_back(static_cast<uint8_t>(header >> 8));
+        for (int i = 0; i < 4; ++i)
+            out.push_back(static_cast<uint8_t>((length >> (8 * i)) & 0xFF));
+    }
+    out.insert(out.end(), body.begin(), body.end());
+}
+
+/// StartSound's body: the sound's id, then its SOUNDINFO.
+std::vector<uint8_t> startSoundBody(int id, const SoundInfo& info)
+{
+    Bits body;
+    body.u16(id);
+    // Stop, no multiple, then envelope, loops, out and in point flags; what
+    // they say is there follows in the order in, out, loops, envelope.
+    if (info.stop)
+    {
+        body.u8(0x20);
+        return body.bytes;
+    }
+    const bool looped = info.loops != 1;
+    const bool in = info.inPoint > 0;
+    const bool out = info.outPoint > 0;
+    const size_t points = std::min<size_t>(info.envelope.size(), 255);
+    body.u8((info.noMultiple ? 0x10 : 0) | (points > 0 ? 0x08 : 0) | (looped ? 0x04 : 0) | (out ? 0x02 : 0) |
+        (in ? 0x01 : 0));
+    if (in)
+        body.u32(info.inPoint);
+    if (out)
+        body.u32(info.outPoint);
+    if (looped)
+        body.u16(info.loops <= 0 ? 0xFFFF : std::min(info.loops, 0xFFFF));
+    if (points > 0)
+    {
+        body.u8(static_cast<int>(points));
+        for (size_t i = 0; i < points; ++i)
+        {
+            const SoundInfo::EnvelopePoint& point = info.envelope[i];
+            body.u32(point.pos44);
+            body.u16(std::min<int>(point.left, 32768));
+            body.u16(std::min<int>(point.right, 32768));
+        }
+    }
+    return body.bytes;
+}
+
+/// PlaceObject2's body for character \a id at \a depth, as it is.
+std::vector<uint8_t> placeBody(int id, int depth)
+{
+    Bits body;
+    body.u8(0x02); // character
+    body.u16(depth);
+    body.u16(id);
+    return body.bytes;
+}
+
+std::vector<uint8_t> removeBody(int depth)
+{
+    Bits body;
+    body.u16(depth);
+    return body.bytes;
+}
+
 } // namespace
+
+void Sprite::place(int id, int depth)
+{
+    appendTag(_tags, 26, placeBody(id, depth)); // PlaceObject2
+}
+
+void Sprite::remove(int depth)
+{
+    appendTag(_tags, 28, removeBody(depth)); // RemoveObject2
+}
+
+void Sprite::startSound(int id, const SoundInfo& info)
+{
+    appendTag(_tags, 15, startSoundBody(id, info)); // StartSound
+}
+
+void Sprite::showFrame()
+{
+    appendTag(_tags, 1, {});
+    ++_frames;
+}
 
 Writer::Writer(int width, int height, double fps, Color background)
     : _width(std::max(1, width))
@@ -167,22 +264,7 @@ Writer::Writer(int width, int height, double fps, Color background)
 
 void Writer::tag(int code, const std::vector<uint8_t>& body)
 {
-    const size_t length = body.size();
-    if (length < 63)
-    {
-        const int header = (code << 6) | static_cast<int>(length);
-        _tags.push_back(static_cast<uint8_t>(header & 0xFF));
-        _tags.push_back(static_cast<uint8_t>(header >> 8));
-    }
-    else
-    {
-        const int header = (code << 6) | 0x3F;
-        _tags.push_back(static_cast<uint8_t>(header & 0xFF));
-        _tags.push_back(static_cast<uint8_t>(header >> 8));
-        for (int i = 0; i < 4; ++i)
-            _tags.push_back(static_cast<uint8_t>((length >> (8 * i)) & 0xFF));
-    }
-    _tags.insert(_tags.end(), body.begin(), body.end());
+    appendTag(_tags, code, body);
 }
 
 int Writer::defineBitmap(int width, int height, const std::vector<uint8_t>& argb)
@@ -393,9 +475,7 @@ void Writer::place(int id, int depth, double alpha, Blend blend)
 
 void Writer::remove(int depth)
 {
-    Bits body;
-    body.u16(depth);
-    tag(28, body.bytes); // RemoveObject2
+    tag(28, removeBody(depth)); // RemoveObject2
 }
 
 void Writer::soundStream(int codec, int rate, bool stereo, int samplesPerFrame, int latency)
@@ -434,15 +514,31 @@ int Writer::defineSound(int codec, int rate, bool stereo, uint32_t samples, cons
 
 void Writer::startSound(int id, int loops, bool noMultiple, bool stop)
 {
+    SoundInfo info;
+    info.loops = loops;
+    info.noMultiple = noMultiple;
+    info.stop = stop;
+    startSound(id, info);
+}
+
+void Writer::startSound(int id, const SoundInfo& info)
+{
+    tag(15, startSoundBody(id, info)); // StartSound
+}
+
+int Writer::defineSprite(const Sprite& sprite)
+{
+    const int id = _nextId++;
     Bits body;
     body.u16(id);
-    // SOUNDINFO: stop, no multiple, then envelope, loops, out and in point
-    // flags; the loop count follows when there is one.
-    const bool looped = !stop && loops != 1;
-    body.u8((stop ? 0x20 : 0) | (noMultiple ? 0x10 : 0) | (looped ? 0x04 : 0));
-    if (looped)
-        body.u16(loops <= 0 ? 0xFFFF : std::min(loops, 0xFFFF));
-    tag(15, body.bytes); // StartSound
+    body.u16(std::max(1, sprite.frames()));
+    std::vector<uint8_t> tags = sprite.tags();
+    if (sprite.frames() == 0)
+        appendTag(tags, 1, {});
+    appendTag(tags, 0, {});
+    body.append(tags);
+    tag(39, body.bytes); // DefineSprite
+    return id;
 }
 
 void Writer::showFrame()

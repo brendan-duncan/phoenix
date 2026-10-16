@@ -387,6 +387,7 @@ set(HEADERS
     src/util/swf_writer.h
     src/util/lzma.h
     src/util/swf_sound.h
+    src/edit/swf_event_sounds.h
 )
 
 set(SOURCES
