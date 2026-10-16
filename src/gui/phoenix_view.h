@@ -2,6 +2,7 @@
 
 #include "../edit/behaviors.h"
 #include "../edit/adjustments.h"
+#include "../edit/node_graph.h"
 #include "../edit/templates.h"
 #include "../edit/text_animators.h"
 
@@ -686,6 +687,16 @@ public:
     /// mask still masking it), for exporting a sequence per layer.
     void setOnlyLayer(const fla::Layer* layer) { _onlyLayer = layer; }
 
+    /// Shows node \a node of \a timeline's node graph on the stage in place
+    /// of the graph's output (0 for the output), while the graph is worked
+    /// on.
+    void setGraphView(const fla::Timeline* timeline, int node);
+    /// The pictures of \a graph's nodes on the frame shown, as \a timeline
+    /// would make them, each the stage fitted into \a size; \a problems gets
+    /// what is wrong with a node, by its id.
+    QMap<int, QImage> nodePictures(const fla::Timeline* timeline, const fla::nodegraph::Graph& graph, const QSize& size,
+        QMap<int, QString>* problems = nullptr);
+
     /// The document shown, or null.
     const fla::FLADocument* flaDocument() const { return _flaDocument; }
 
@@ -1255,6 +1266,25 @@ private:
     /// The timelines being drawn on a canvas of their own for their
     /// adjustment layers.
     QSet<const fla::Timeline*> _compositing;
+    /// \a timeline composited through its node graph onto the painter's
+    /// device.
+    void drawNodeGraph(QPainter& painter, const fla::Timeline* timeline, const fla::nodegraph::Graph& graph,
+        fla::LoopType loopType, int firstFrame);
+    /// What a graph's evaluation draws from: \a timeline's layers through
+    /// \a transform (stage to the device's logical pixels) at \a ratio,
+    /// \a size device pixels.
+    fla::nodegraph::Context graphContext(const QTransform& transform, qreal ratio, const QSize& size,
+        const fla::Timeline* timeline, fla::LoopType loopType, int firstFrame, QPainter::RenderHints hints);
+    /// The frame \a timeline is on, drawn as asked.
+    int timelineFrame(const fla::Timeline* timeline, fla::LoopType loopType, int firstFrame);
+    /// While a graph draws some of a timeline's layers: the timeline, the
+    /// layers, and whether they are the ones drawn or the ones left out.
+    const fla::Timeline* _graphTimeline = nullptr;
+    QSet<const fla::Layer*> _graphLayers;
+    bool _graphKeep = false;
+    /// The node shown on the stage in place of a graph's output.
+    const fla::Timeline* _graphViewTimeline = nullptr;
+    int _graphViewNode = 0;
     std::function<void(fla::SymbolInstance*)> _pickInstance;
     std::function<void()> _sketchStarted;
     std::function<void(const std::vector<std::pair<int, QPointF>>&)> _sketchDone;

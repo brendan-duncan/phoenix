@@ -50,6 +50,8 @@ const std::vector<Feature>& all()
         {"compositing", "Track mattes and adjustment layers",
             "matte layers drawn plainly and adjustment layers without their blur or color",
             {"phoenixMatte", "phoenixAdjustmentLayer", "phoenixAdjustments"}},
+        {"node-graph", "Node graphs", "the layers stacked as usual, without the graph's effects, merges and mattes",
+            {"phoenixNodeGraph"}},
         {"mask-edges", "Mask edges and layer modes", "masks hard-edged and not inverted, layers drawn normally", {"phoenixMaskFeather", "phoenixMaskExpand", "phoenixMaskInvert", "phoenixLayerMode"}},
         {"motion-blur", "Motion blur, echo and posterize time", "the layers drawn sharp, every frame, without echoes", {"phoenixMotionBlur", "phoenixShutterAngle", "phoenixMotionBlurSamples", "phoenixEcho", "phoenixPosterize"}},
         {"templates", "Template fields", "the symbols' text and colors as drawn, the same in every instance, nothing pinned to the text",

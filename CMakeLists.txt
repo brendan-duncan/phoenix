@@ -355,6 +355,7 @@ set(HEADERS
     src/edit/shape_operators.h
     src/edit/text_animators.h
     src/edit/adjustments.h
+    src/edit/node_graph.h
     src/edit/templates.h
     src/edit/other_apps.h
     src/edit/filter_presets.h

@@ -134,6 +134,7 @@ set(PHOENIX_CORE_SOURCES
 )
 
 set(PHOENIX_CORE_FILE_SOURCES
+    edit/node_graph.cpp
     edit/psd_import.cpp
     edit/motion_object.cpp
     edit/ik_pose.cpp

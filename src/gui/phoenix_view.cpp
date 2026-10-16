@@ -1020,6 +1020,170 @@ bool PhoenixView::editingTrackMattes(bool) const
     return false;
 }
 
+int PhoenixView::timelineFrame(const fla::Timeline* timeline, fla::LoopType loopType, int firstFrame)
+{
+    // As its layers show it: the frame of the first layer that has one.
+    for (const fla::Layer* layer : timeline->layers)
+    {
+        if (!layer || layer->frames.empty() || layer->layerType == fla::Layer::Type::Folder)
+            continue;
+        const LayerFrame state = resolveLayerFrame(layer, loopType, firstFrame);
+        if (state.frame)
+            return state.frame->index + std::max(0, state.offset);
+    }
+    return loopType == fla::LoopType::SingleFrame ? firstFrame : firstFrame + shownFrame();
+}
+
+void PhoenixView::setGraphView(const fla::Timeline* timeline, int node)
+{
+    if (_graphViewTimeline == timeline && _graphViewNode == node)
+        return;
+    _graphViewTimeline = node ? timeline : nullptr;
+    _graphViewNode = node;
+    clearCaches();
+    update();
+}
+
+fla::nodegraph::Context PhoenixView::graphContext(const QTransform& transform, qreal ratio, const QSize& size,
+    const fla::Timeline* timeline, fla::LoopType loopType, int firstFrame, QPainter::RenderHints hints)
+{
+    fla::nodegraph::Context context;
+    context.width = size.width();
+    context.height = size.height();
+    context.frame = timelineFrame(timeline, loopType, firstFrame);
+    const fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
+    if (document)
+    {
+        context.frameRate = document->frameRate > 0.0 ? document->frameRate : 24.0;
+        context.stageWidth = document->width;
+        context.stageHeight = document->height;
+    }
+    context.a = transform.m11() * ratio;
+    context.b = transform.m12() * ratio;
+    context.c = transform.m21() * ratio;
+    context.d = transform.m22() * ratio;
+    context.tx = transform.dx() * ratio;
+    context.ty = transform.dy() * ratio;
+
+    // Some of the timeline's layers drawn into a picture of the graph's.
+    const auto draw = [this, transform, ratio, timeline, loopType, firstFrame, hints](
+                          const QSet<const fla::Layer*>& layers, bool keep, fla::nodegraph::Image& into) {
+        QImage canvas(reinterpret_cast<uchar*>(into.pixels.data()), into.width, into.height, into.width * 4,
+            QImage::Format_ARGB32_Premultiplied);
+        canvas.setDevicePixelRatio(ratio);
+        QPainter painter(&canvas);
+        painter.setRenderHints(hints);
+        painter.setTransform(transform);
+        const fla::Timeline* timelineBefore = _graphTimeline;
+        const QSet<const fla::Layer*> layersBefore = _graphLayers;
+        const bool keepBefore = _graphKeep;
+        _graphTimeline = timeline;
+        _graphLayers = layers;
+        _graphKeep = keep;
+        _compositing.insert(timeline);
+        drawTimeline(painter, timeline, loopType, firstFrame);
+        _compositing.remove(timeline);
+        _graphTimeline = timelineBefore;
+        _graphLayers = layersBefore;
+        _graphKeep = keepBefore;
+        painter.end();
+    };
+    // A layer by name, with what is inside it when it is a folder.
+    const auto named = [timeline](const std::string& name, QSet<const fla::Layer*>& found) {
+        for (size_t i = 0; i < timeline->layers.size(); ++i)
+        {
+            const fla::Layer* layer = timeline->layers[i];
+            if (!layer || layer->name != name)
+                continue;
+            found.insert(layer);
+            if (layer->layerType != fla::Layer::Type::Folder)
+                continue;
+            for (const fla::Layer* other : timeline->layers)
+            {
+                for (int up = other ? other->parentLayerIndex : -1, guard = 0; up >= 0 && guard < 64; ++guard)
+                {
+                    if (up == static_cast<int>(i))
+                    {
+                        found.insert(other);
+                        break;
+                    }
+                    up = up < static_cast<int>(timeline->layers.size()) && timeline->layers[up]
+                             ? timeline->layers[up]->parentLayerIndex
+                             : -1;
+                }
+            }
+        }
+    };
+    context.layer = [draw, named](const std::string& name, fla::nodegraph::Image& into) {
+        QSet<const fla::Layer*> layers;
+        named(name, layers);
+        if (layers.isEmpty())
+            return false;
+        draw(layers, true, into);
+        return true;
+    };
+    context.rest = [draw, named](const std::vector<std::string>& taken, fla::nodegraph::Image& into) {
+        QSet<const fla::Layer*> layers;
+        for (const std::string& name : taken)
+            named(name, layers);
+        draw(layers, false, into);
+        return true;
+    };
+    return context;
+}
+
+void PhoenixView::drawNodeGraph(QPainter& painter, const fla::Timeline* timeline, const fla::nodegraph::Graph& graph,
+    fla::LoopType loopType, int firstFrame)
+{
+    const qreal ratio = painter.device()->devicePixelRatioF();
+    const QSize size = devicePixels(painter.device());
+    if (size.isEmpty())
+        return;
+    const fla::nodegraph::Context context =
+        graphContext(painter.transform(), ratio, size, timeline, loopType, firstFrame, painter.renderHints());
+    fla::nodegraph::Evaluation evaluation(graph, context);
+    // The node being looked at, while the graph is worked on.
+    const int shown = !_exporting && _graphViewTimeline == timeline && graph.node(_graphViewNode) ? _graphViewNode
+                                                                                                  : graph.output();
+    const fla::nodegraph::Image& out = evaluation.at(shown);
+    if (out.empty())
+        return;
+    QImage image(reinterpret_cast<const uchar*>(out.pixels.data()), out.width, out.height, out.width * 4,
+        QImage::Format_ARGB32_Premultiplied);
+    image.setDevicePixelRatio(ratio);
+    painter.save();
+    painter.resetTransform();
+    painter.drawImage(QPointF(0, 0), image);
+    painter.restore();
+}
+
+QMap<int, QImage> PhoenixView::nodePictures(const fla::Timeline* timeline, const fla::nodegraph::Graph& graph,
+    const QSize& size, QMap<int, QString>* problems)
+{
+    QMap<int, QImage> pictures;
+    const fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
+    if (!timeline || !document || size.isEmpty() || document->width <= 0 || document->height <= 0)
+        return pictures;
+    // The stage fitted into the picture.
+    const double scale = std::min(size.width() / double(document->width), size.height() / double(document->height));
+    const QTransform fit(scale, 0, 0, scale, (size.width() - document->width * scale) / 2.0,
+        (size.height() - document->height * scale) / 2.0);
+    const fla::nodegraph::Context context = graphContext(fit, 1.0, size, timeline, fla::LoopType::PlayOnce, 0,
+        QPainter::Antialiasing | QPainter::SmoothPixmapTransform | QPainter::TextAntialiasing);
+    fla::nodegraph::Evaluation evaluation(graph, context);
+    for (const fla::nodegraph::Node& node : graph.nodes)
+    {
+        const fla::nodegraph::Image& image = evaluation.at(node.id);
+        if (!image.empty())
+            pictures[node.id] = QImage(reinterpret_cast<const uchar*>(image.pixels.data()), image.width, image.height,
+                image.width * 4, QImage::Format_ARGB32_Premultiplied)
+                                    .copy();
+        if (problems && !evaluation.problem(node.id).empty())
+            (*problems)[node.id] = QString::fromStdString(evaluation.problem(node.id));
+    }
+    return pictures;
+}
+
 void PhoenixView::drawAdjustmentLayer(QPainter& painter, const fla::Layer* layer, fla::LoopType loopType, int firstFrame)
 {
     auto* canvas = dynamic_cast<QImage*>(painter.device());
@@ -1945,6 +2109,16 @@ void PhoenixView::drawTimeline(QPainter& painter, const fla::Timeline* timeline,
         }
     }
 
+    // A timeline with a node graph is composited through it.
+    if (!_vectorMasks && painter.device() && !_compositing.contains(timeline) && fla::nodegraph::active(*timeline))
+    {
+        if (const std::shared_ptr<const fla::nodegraph::Graph> graph = fla::nodegraph::of(*timeline))
+        {
+            drawNodeGraph(painter, timeline, *graph, loopType, firstFrame);
+            return;
+        }
+    }
+
     // Adjustment layers change what is under them, so the timeline's layers
     // are drawn on an image of their own that they can work on, then that
     // image onto the painter.
@@ -2182,6 +2356,9 @@ void PhoenixView::drawTimeline(QPainter& painter, const fla::Timeline* timeline,
         // One layer of the scene on its own, for a sequence per layer.
         if (_onlyLayer && layer != _onlyLayer &&
             std::find(timeline->layers.begin(), timeline->layers.end(), _onlyLayer) != timeline->layers.end())
+            continue;
+        // Some of the layers, for a node graph.
+        if (_graphTimeline == timeline && _graphLayers.contains(layer) != _graphKeep)
             continue;
         // A layer serving as the matte of the layer below it is not drawn
         // itself.
