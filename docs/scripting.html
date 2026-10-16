@@ -137,6 +137,17 @@ print(phoenix.jsfl("fl.getDocumentDOM().getTimeline().frameCount"))</code></pre>
 
 <p>Another Python package called <code>phoenix</code> (from a different project) installs a module of the same name; if you have it, use a virtual environment or put Phoenix's folder first on the path.</p>
 
+<h2 id="native-extensions">Native extensions</h2>
+
+<p>Scripts can call functions written in C or C++. Put a native extension library (<code>.dll</code> on Windows, <code>.dylib</code> or <code>.bundle</code> on macOS, <code>.so</code> on Linux) in the <code>External Libraries</code> folder of your Configuration folder (<code>fl.configURI + "External Libraries"</code>); the next script that runs loads it. Each library becomes an object named after its file, so <code>Sample.dll</code> defining <code>computeSum</code> is called as <code>Sample.computeSum(2, 3)</code>.</p>
+
+<p>Libraries are written against <code>mm_jsapi.h</code>, which comes with Phoenix's source in <code>src/jsfl</code>. It keeps the C interface and layout of the extension API Animate documents, so libraries built for it are meant to load unchanged: a library includes the header, puts <code>MM_STATE</code> in one source file, and defines <code>MM_Init</code>, which registers its functions with <code>JS_DefineFunction</code>. A library that cannot be loaded, or has no <code>MM_InitWrapper</code>, is reported in the Output panel and left out.</p>
+
+<div class="callout">
+  <span class="label">Only install libraries you trust</span>
+  <p>Native code runs inside Phoenix, so a faulty library can crash it. To run without them, set the environment variable <code>PHOENIX_NATIVE_EXTENSIONS=off</code>, or pass <code>--no-native-extensions</code> to <code>Phoenix run-script</code> or <code>batch</code>.</p>
+</div>
+
 <h2>What scripts can reach</h2>
 
 <p>Phoenix builds the scripting objects in the order real scripts use them. This release covers:</p>

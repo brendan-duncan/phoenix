@@ -4,6 +4,7 @@ What changed in each release of Phoenix, newest first.
 
 ## 0.14.0 (Unreleased)
 
+- Native extensions: C and C++ libraries in the External Libraries folder, written for the `mm_jsapi.h` extension API, add functions scripts can call
 - Illustrator and EPS import: area and path text (Illustrator 11 and later too), patterns, placed images, Zstandard-compressed Illustrator files, shadings as gradients, image masks, and the widths of fonts the file carries; Photoshop EPS images and CMYK JPEGs come in with the right colors
 - Opening a SWF movie finds its tweens: smooth movement, fades, turns and eases come back as classic tweens, and morphs as shape tweens, instead of a keyframe on every frame; embedded video comes back as a video item of its size and length
 - JSFL: adding, duplicating, renaming, reordering and deleting scenes, `importFile`, sounds and videos renamed and deleted in the library, `exportToFile` for every bitmap and sound, filters, text strings, union, punch, crop, space, match, distribute to layers or keyframes, and finding objects by name or kind
