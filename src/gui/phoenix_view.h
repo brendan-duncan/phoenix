@@ -763,7 +763,7 @@ protected:
     /// A movie clip's timeline is being drawn: what of its display list
     /// does not draw in the timeline's own order (added by scripts, or
     /// moved) is drawn in turn as the timeline's own are met.
-    void beginDisplayDraw(fla::play::Clip* clip);
+    void beginDisplayDraw(QPainter& painter, fla::play::Clip* clip);
     void endDisplayDraw(QPainter& painter);
     /// Draws what of the display list goes under \a element, a timeline
     /// object of the clip being drawn; false when the element is not to be

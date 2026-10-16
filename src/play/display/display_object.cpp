@@ -871,6 +871,8 @@ Rect TimelineArt::contentBounds(bool strokes) const
 
 bool TimelineArt::contentHits(double x, double y) const
 {
+    if (maskArt)
+        return false;
     Backend* renderer = backend();
     return renderer && renderer->artHits(*this, x, y);
 }

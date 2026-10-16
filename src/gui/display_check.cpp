@@ -507,6 +507,28 @@ int movieCheck(const QString& file, const QString& folder, int frames)
             child->setVisible(false);
         ++changed;
     }
+    // The main timeline's own drawing, under all of it, as a document class
+    // draws; and the timeline's art hidden, faded and turned.
+    Graphics& rootDrawing = static_cast<MovieClip*>(root)->graphics;
+    rootDrawing.lineStyle(8, 0x000000, 0.8);
+    rootDrawing.beginFill(0xffee88, 0.5);
+    rootDrawing.drawRoundRect(doc.width * 0.55, doc.height * 0.05, doc.width * 0.4, doc.height * 0.3, 40);
+    rootDrawing.endFill();
+    int art = 0;
+    for (int i = 0; i < root->numChildren(); ++i)
+    {
+        const std::shared_ptr<DisplayObject> child = root->getChildAt(i);
+        if (child->kind() != ObjectKind::TimelineArt)
+            continue;
+        if (art == 1)
+            child->setVisible(false);
+        else if (art == 2)
+        {
+            child->setAlpha(0.3);
+            child->setRotation(5);
+        }
+        ++art;
+    }
     // Under the first clip, a shape added at its index.
     for (int i = 0; i < root->numChildren(); ++i)
         if (root->getChildAt(i)->clip)

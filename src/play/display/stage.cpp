@@ -418,7 +418,7 @@ void Stage::pointerMove(double x, double y, const Modifiers& modifiers)
     moveOver(target);
     mouseEvent(_over.get(), events::kMouseMove, true);
     // Dragging across a field selects.
-    if (_buttonDown && _pressed && _pressed->kind() == ObjectKind::TextField)
+    if (_buttonDown && _pressed && _pressed->kind() == ObjectKind::TextField && !_pressed->timeline)
     {
         auto* field = static_cast<TextField*>(_pressed.get());
         const Point local = field->globalToLocal({x, y});
@@ -449,7 +449,7 @@ void Stage::pointerDown(double x, double y, const Modifiers& modifiers, double t
     else if (focus() && focus()->kind() == ObjectKind::TextField)
         setFocus(nullptr);
     mouseEvent(_pressed.get(), events::kMouseDown, true);
-    if (_pressed && _pressed->kind() == ObjectKind::TextField)
+    if (_pressed && _pressed->kind() == ObjectKind::TextField && !_pressed->timeline)
     {
         auto* field = static_cast<TextField*>(_pressed.get());
         const Point local = field->globalToLocal({x, y});
@@ -536,8 +536,9 @@ void Stage::keyDown(uint32_t keyCode, uint32_t charCode, const Modifiers& modifi
     event.ctrlKey = modifiers.ctrl;
     event.altKey = modifiers.alt;
     (to ? static_cast<EventDispatcher*>(to) : this)->dispatchEvent(event);
-    // Typing goes into the field with the focus, if it still has it.
-    if (to && focus() == to && to->kind() == ObjectKind::TextField)
+    // Typing goes into the field with the focus, if it still has it (a
+    // field a timeline placed is the movie runtime's to type into).
+    if (to && focus() == to && to->kind() == ObjectKind::TextField && !to->timeline)
         static_cast<TextField*>(to)->keyTyped(keyCode, charCode, modifiers.shift, modifiers.ctrl);
 }
 

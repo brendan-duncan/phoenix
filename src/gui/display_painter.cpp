@@ -323,14 +323,14 @@ void DisplayPainter::drawContent(QPainter& painter, const DisplayObject& object)
     case ObjectKind::MovieClip:
     {
         const auto& sprite = static_cast<const Sprite&>(object);
-        drawGraphics(painter, sprite.graphics);
-        // A clip a timeline plays: its frame, with what scripts added in
-        // it, is drawn by what draws timelines.
+        // A clip a timeline plays: its drawing, its frame and what scripts
+        // added in it are drawn by what draws timelines.
         if (object.clip && drawTimeline)
         {
             drawTimeline(painter, object);
             break;
         }
+        drawGraphics(painter, sprite.graphics);
         const std::vector<std::shared_ptr<DisplayObject>> children = sprite.children();
         for (const std::shared_ptr<DisplayObject>& child : children)
             if (child)

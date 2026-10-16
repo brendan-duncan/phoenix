@@ -1767,7 +1767,9 @@ void MovieRuntime::syncDisplay(Clip& clip)
                 object = had(key);
                 if (!object || object->kind() != display::ObjectKind::TimelineArt)
                     object = std::make_shared<display::TimelineArt>();
-                static_cast<display::TimelineArt*>(object.get())->element = element;
+                auto* art = static_cast<display::TimelineArt*>(object.get());
+                art->element = element;
+                art->maskArt = layer->layerType == Layer::Type::Mask;
             }
             object->timeline = display::TimelinePlacement{element, layer, depth, key};
             now.push_back(object);

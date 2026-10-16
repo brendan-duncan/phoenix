@@ -2629,7 +2629,7 @@ void PhoenixView::drawTimeline(QPainter& painter, const fla::Timeline* timeline,
     // moved is drawn among the timeline's own as they are met.
     const bool displayDrawing = _movie && !_maskPass && !_movieClips.empty() && _movieClips.back()->timeline == timeline;
     if (displayDrawing)
-        beginDisplayDraw(_movieClips.back());
+        beginDisplayDraw(painter, _movieClips.back());
 
     struct MaskData
     {
@@ -8225,10 +8225,14 @@ bool PhoenixView::displayPainted(const fla::display::DisplayObject& object) cons
                         static_cast<const fla::display::TimelineArt*>(state)->frameOf == object.clip->timeline);
 }
 
-void PhoenixView::beginDisplayDraw(fla::play::Clip* clip)
+void PhoenixView::beginDisplayDraw(QPainter& painter, fla::play::Clip* clip)
 {
     DisplayDraw draw;
     draw.clip = clip;
+    // What a script drew with its Graphics, under all it holds.
+    if (clip->display && (clip->display->kind() == fla::display::ObjectKind::MovieClip ||
+                             clip->display->kind() == fla::display::ObjectKind::Sprite))
+        _displayPainter->drawGraphics(painter, static_cast<const fla::display::Sprite*>(clip->display.get())->graphics);
     // The timeline's own objects still in their timeline order are drawn
     // as the timeline meets them; the rest where the list has them.
     if (clip->display && clip->display->isContainer())
@@ -8279,6 +8283,12 @@ bool PhoenixView::displayBefore(QPainter& painter, const fla::Element* element)
     const auto* container = static_cast<const fla::display::DisplayObjectContainer*>(clip->display.get());
     if (object->parent() != container || !draw.inPlace.count(object))
         return false;
+    // Hidden by a script, or given what only the display painter shows
+    // (art moved, faded or filtered): drawn here, but not as the timeline
+    // has it.
+    const bool scriptedArt = object->kind() != fla::display::ObjectKind::MovieClip &&
+        object->kind() != fla::display::ObjectKind::SimpleButton &&
+        (object->effectsScripted() || object->transformScripted() || object->alphaScripted() || object->colorScripted());
     const int index = container->getChildIndex(object);
     const std::vector<std::shared_ptr<fla::display::DisplayObject>> children = container->children();
     for (; draw.next < index; ++draw.next)
@@ -8288,6 +8298,13 @@ bool PhoenixView::displayBefore(QPainter& painter, const fla::Element* element)
             drawDisplayChild(painter, *under);
     }
     draw.next = std::max(draw.next, index + 1);
+    if (!object->visible())
+        return false;
+    if (scriptedArt)
+    {
+        _displayPainter->draw(painter, *object);
+        return false;
+    }
     return true;
 }
 

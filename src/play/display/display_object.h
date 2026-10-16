@@ -369,6 +369,9 @@ public:
 
     /// The element it draws, or null for a whole frame...
     const Element* element = nullptr;
+    /// On a mask layer: it shapes what shows under it, and is not drawn or
+    /// found by the pointer itself.
+    bool maskArt = false;
     /// ...of this timeline.
     const Timeline* frameOf = nullptr;
     int frame = 0;
