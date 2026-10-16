@@ -603,6 +603,11 @@ struct SvgDefs
 
 /// The document being read.
 const SvgDefs* gDefs = nullptr;
+/// Elements <use> can repeat many times over: how many have been walked,
+/// against a budget, and the ones being walked through a <use>.
+size_t gSvgWalked = 0;
+constexpr size_t kMaxSvgElements = 1000000;
+std::vector<const tinyxml2::XMLElement*> gSvgUsing;
 
 std::string trimmed(std::string s)
 {
@@ -933,7 +938,7 @@ void addText(const tinyxml2::XMLElement& element, const SvgStyle& style, const A
 
 void walkSvg(const tinyxml2::XMLElement& element, SvgStyle style, const Affine& outer, Artwork& artwork, int depth)
 {
-    if (depth > 32)
+    if (depth > 32 || ++gSvgWalked > kMaxSvgElements)
         return;
     const std::string name = localName(element);
     if (name == "defs" || name == "clipPath" || name == "mask" || name == "symbol" || name == "metadata" ||
@@ -1082,6 +1087,17 @@ void walkSvg(const tinyxml2::XMLElement& element, SvgStyle style, const Affine& 
         const auto found = gDefs->ids.find(href + 1);
         if (found == gDefs->ids.end())
             return;
+        // A use inside what it uses would repeat itself.
+        if (std::find(gSvgUsing.begin(), gSvgUsing.end(), found->second) != gSvgUsing.end())
+            return;
+        for (const tinyxml2::XMLNode* up = element.Parent(); up; up = up->Parent())
+            if (up == found->second)
+                return;
+        gSvgUsing.push_back(found->second);
+        struct Leave
+        {
+            ~Leave() { gSvgUsing.pop_back(); }
+        } leave;
         const Affine placed = m.after(Affine{1.0, 0.0, 0.0, 1.0, number("x"), number("y")});
         if (localName(*found->second) == "symbol")
         {
@@ -1282,12 +1298,16 @@ struct PdfFile
         return true;
     }
 
+    /// An object's dictionary alone: a stream's data is not decoded for it.
     std::string dictionaryOf(int number)
     {
-        std::string dictionary;
-        std::vector<uint8_t> data;
-        bool isStream = false;
-        return object(number, dictionary, data, isStream) ? dictionary : std::string();
+        const pdf::Object* found = file.object(number);
+        if (!found)
+            return std::string();
+        if (found->type != pdf::Object::Type::Stream)
+            return pdf::File::text(*found);
+        const std::string remaining = file.remainingFilter(*found);
+        return pdf::File::text(*found, &remaining);
     }
 };
 
@@ -1492,10 +1512,16 @@ std::vector<double> calculate(const std::string& program, std::vector<double> st
     size_t at = program.find('{');
     if (at == std::string::npos)
         return stack;
-    std::function<Node(size_t&)> parse = [&](size_t& i) {
+    // Braces nested past reason end the program there.
+    std::function<Node(size_t&, int)> parse = [&](size_t& i, int depth) {
         Node node;
         node.block = true;
         ++i;
+        if (depth > 64)
+        {
+            i = program.size();
+            return node;
+        }
         while (i < program.size())
         {
             const char c = program[i];
@@ -1506,7 +1532,7 @@ std::vector<double> calculate(const std::string& program, std::vector<double> st
             }
             if (c == '{')
             {
-                node.body.push_back(parse(i));
+                node.body.push_back(parse(i, depth + 1));
                 continue;
             }
             if (c == '}')
@@ -1524,13 +1550,15 @@ std::vector<double> calculate(const std::string& program, std::vector<double> st
         }
         return node;
     };
-    const Node root = parse(at);
+    const Node root = parse(at, 0);
     int steps = 0;
     std::function<void(const Node&)> run = [&](const Node& proc) {
         std::vector<const Node*> pending;
         for (size_t k = 0; k < proc.body.size(); ++k)
         {
-            if (++steps > 100000)
+            // The calculator's stack holds 100 values; well past that the
+            // program is damaged.
+            if (++steps > 100000 || stack.size() > 1000)
                 return;
             const Node& n = proc.body[k];
             if (n.block)
@@ -1578,7 +1606,7 @@ std::vector<double> calculate(const std::string& program, std::vector<double> st
             else if (w == "pop") pop();
             else if (w == "exch") { const double b = pop(), a = pop(); stack.push_back(b); stack.push_back(a); }
             else if (w == "index") { const int n2 = static_cast<int>(pop()); stack.push_back(n2 >= 0 && static_cast<size_t>(n2) < stack.size() ? stack[stack.size() - 1 - static_cast<size_t>(n2)] : 0); }
-            else if (w == "copy") { const int n2 = static_cast<int>(pop()); if (n2 > 0 && static_cast<size_t>(n2) <= stack.size()) { const size_t s = stack.size() - static_cast<size_t>(n2); for (int q = 0; q < n2; ++q) stack.push_back(stack[s + static_cast<size_t>(q)]); } }
+            else if (w == "copy") { const int n2 = static_cast<int>(pop()); if (n2 > 0 && static_cast<size_t>(n2) <= stack.size() && stack.size() <= 1000) { const size_t s = stack.size() - static_cast<size_t>(n2); for (int q = 0; q < n2; ++q) stack.push_back(stack[s + static_cast<size_t>(q)]); } }
             else if (w == "roll")
             {
                 int j = static_cast<int>(pop());
@@ -1702,14 +1730,20 @@ std::vector<double> evaluate(PdfFile& file, const std::string& value, const std:
         const int bits = std::atoi(valueOf(dictionary, "/BitsPerSample").c_str());
         const std::vector<double> range = numbersOf(valueOf(dictionary, "/Range"));
         std::vector<double> decode = numbersOf(valueOf(dictionary, "/Decode"));
-        if (decode.empty())
-            decode = range;
         const size_t outputs = range.size() / 2;
-        if (size.empty() || outputs == 0 || (bits != 8 && bits != 16))
+        // A Decode too short for the outputs falls back to the range.
+        if (decode.size() < 2 * outputs)
+            decode = range;
+        // At least one sample, and no more than the data could hold.
+        if (size.empty() || outputs == 0 || (bits != 8 && bits != 16) || !(size[0] >= 1) ||
+            size[0] > static_cast<double>(data.size()))
             return in;
         const int samples = static_cast<int>(size[0]);
         const double low = domain.size() >= 2 ? domain[0] : 0.0, high = domain.size() >= 2 ? domain[1] : 1.0;
-        const double position = high > low ? (x - low) / (high - low) * (samples - 1) : 0.0;
+        double position = high > low ? (x - low) / (high - low) * (samples - 1) : 0.0;
+        if (!(position == position))
+            position = 0.0;
+        position = std::clamp(position, 0.0, static_cast<double>(samples - 1));
         const int i0 = std::clamp(static_cast<int>(std::floor(position)), 0, samples - 1);
         const int i1 = std::min(samples - 1, i0 + 1);
         const double f = position - i0;
@@ -1746,8 +1780,8 @@ int componentsOf(PdfFile& file, const std::string& space)
         if (items.size() >= 2)
         {
             const std::vector<double> n = numbersOf(valueOf(resolved(file, items[1]), "/N"));
-            if (!n.empty())
-                return static_cast<int>(n.front());
+            if (!n.empty() && n.front() == n.front())
+                return static_cast<int>(std::clamp(n.front(), 1.0, 32.0));
         }
     }
     return 1;
@@ -1974,7 +2008,8 @@ bool pdfImage(PdfFile& file, const std::string& dictionary, const std::vector<ui
         if (items.size() < 4)
             return false;
         base = resolved(file, items[1]);
-        const int high = std::atoi(items[2].c_str());
+        // A palette holds 256 colors at most.
+        const int high = std::clamp(std::atoi(items[2].c_str()), 0, 255);
         std::vector<uint8_t> lookup;
         const int reference = referenceOf(items[3]);
         if (reference >= 0)
@@ -2008,11 +2043,13 @@ bool pdfImage(PdfFile& file, const std::string& dictionary, const std::vector<ui
     }
     else
         components = componentsOf(file, space);
-    components = std::max(1, components);
+    // Up to the 32 colorants a space can have.
+    components = std::clamp(components, 1, 32);
     const std::vector<double> decode = numbersOf(valueOf(dictionary, "/Decode"));
     const bool inverted = palette.empty() && components == 1 && decode.size() >= 2 && decode[0] > decode[1];
     const size_t row = (static_cast<size_t>(image.width) * static_cast<size_t>(components) * static_cast<size_t>(bits) + 7) / 8;
-    if (data.size() < row * static_cast<size_t>(image.height))
+    // Divided rather than multiplied, so a huge size cannot wrap around.
+    if (row == 0 || static_cast<size_t>(image.height) > data.size() / row)
         return false;
     const size_t sourcePixels = static_cast<size_t>(image.width) * static_cast<size_t>(image.height);
     const int maxValue = (1 << bits) - 1;
@@ -2374,21 +2411,23 @@ void readToUnicode(const std::string& cmap, std::map<uint32_t, std::string>& out
         if (end == std::string::npos)
             break;
         const std::vector<std::string> list = tokens(cmap, at + 12, end);
-        for (size_t k = 0; k + 2 < list.size(); k += 3)
+        // Counted in 64 bits so a range at the top of the codes ends, and
+        // no more than a million codes in all.
+        for (size_t k = 0; k + 2 < list.size() && out.size() < (1u << 20); k += 3)
         {
-            const uint32_t low = code(list[k]);
-            const uint32_t high = std::min(code(list[k + 1]), low + 0xFFFF);
+            const uint64_t low = code(list[k]);
+            const uint64_t high = std::min<uint64_t>(code(list[k + 1]), low + 0xFFFF);
             if (list[k + 2][0] == '[')
             {
                 const std::vector<std::string> each = tokens(list[k + 2], 1, list[k + 2].size() - 1);
-                for (uint32_t c = low; c <= high && c - low < each.size(); ++c)
-                    out[c] = utf16(each[c - low]);
+                for (uint64_t c = low; c <= high && c - low < each.size(); ++c)
+                    out[static_cast<uint32_t>(c)] = utf16(each[static_cast<size_t>(c - low)]);
             }
             else
             {
                 // Each code after the first adds to the last unit.
                 std::vector<uint8_t> first = stringBytes(list[k + 2]);
-                for (uint32_t c = low; c <= high && !first.empty(); ++c)
+                for (uint64_t c = low; c <= high && !first.empty(); ++c)
                 {
                     std::string hex = "<";
                     char digits[3];
@@ -2397,7 +2436,7 @@ void readToUnicode(const std::string& cmap, std::map<uint32_t, std::string>& out
                         std::snprintf(digits, sizeof(digits), "%02X", b);
                         hex += digits;
                     }
-                    out[c] = utf16(hex + ">");
+                    out[static_cast<uint32_t>(c)] = utf16(hex + ">");
                     if (++first.back() == 0 && first.size() >= 2)
                         ++first[first.size() - 2];
                 }
@@ -2426,7 +2465,9 @@ PdfFont readFont(PdfFile& file, const std::string& dictionary)
             font.missing = dw.empty() ? 1000.0 : std::atof(dw.c_str());
             // W: "c [w1 w2 ...]" or "first last w".
             const std::vector<std::string> w = arrayItems(resolved(file, valueOf(descendant, "/W")));
-            for (size_t k = 0; k + 1 < w.size();)
+            // Counted in 64 bits so a range at the top of the codes ends,
+            // and no more than a million widths in all.
+            for (size_t k = 0; k + 1 < w.size() && font.widths.size() < (1u << 20);)
             {
                 const uint32_t first = static_cast<uint32_t>(std::atol(w[k].c_str()));
                 if (w[k + 1][0] == '[')
@@ -2438,10 +2479,11 @@ PdfFont readFont(PdfFile& file, const std::string& dictionary)
                 }
                 else if (k + 2 < w.size())
                 {
-                    const uint32_t last = std::min(static_cast<uint32_t>(std::atol(w[k + 1].c_str())), first + 0xFFFF);
+                    const uint64_t last = std::min<uint64_t>(static_cast<uint32_t>(std::atol(w[k + 1].c_str())),
+                        static_cast<uint64_t>(first) + 0xFFFF);
                     const double width = std::atof(w[k + 2].c_str());
-                    for (uint32_t c = first; c <= last; ++c)
-                        font.widths[c] = width;
+                    for (uint64_t c = first; c <= last; ++c)
+                        font.widths[static_cast<uint32_t>(c)] = width;
                     k += 3;
                 }
                 else
@@ -2541,6 +2583,8 @@ struct PdfRun
     std::vector<std::vector<Subpath>> outerClips;
     /// Tiles drawn so far, to keep a pattern from growing past reason.
     size_t tiles = 0;
+    /// Forms drawn so far: a form can draw another many times over.
+    size_t forms = 0;
 
     void note(const std::string& text)
     {
@@ -3153,11 +3197,14 @@ void runContent(const std::string& content, PdfRun& run, const std::string& reso
             std::string dictionary;
             std::vector<uint8_t> data;
             bool isStream = false;
-            if (number >= 0 && run.file.object(number, dictionary, data, isStream) && isStream)
+            if (run.forms >= 20000)
+                run.note("Forms drawn past 20000 times were left out.");
+            else if (number >= 0 && run.file.object(number, dictionary, data, isStream) && isStream)
             {
                 const std::string subtype = valueOf(dictionary, "/Subtype");
                 if (subtype == "/Form" && depth < 12)
                 {
+                    ++run.forms;
                     // A group or placed art: its content, in its own space.
                     const std::vector<double> matrix = numbersOf(valueOf(dictionary, "/Matrix"));
                     Affine inside = state.ctm;
@@ -3300,6 +3347,8 @@ Artwork readSvg(const std::string& text)
     };
     gather(root);
     gDefs = &defs;
+    gSvgWalked = 0;
+    gSvgUsing.clear();
 
     SvgStyle style;
     for (const tinyxml2::XMLElement* child = root.FirstChildElement(); child; child = child->NextSiblingElement())

@@ -272,3 +272,108 @@ TEST(pdf_import_reads_text_through_its_fonts)
     CHECK(near(turned.placement.a, 0.0) && near(turned.placement.b, -1.0));
     CHECK(near(turned.placement.tx, 50.0) && near(turned.placement.ty, 70.0));
 }
+
+namespace {
+
+/// A one-page PDF: its content, the page's resources, then objects 5 on.
+std::vector<uint8_t> pagePdf(const std::string& content, const std::string& resources,
+    const std::vector<std::string>& objects)
+{
+    std::string pdf = "%PDF-1.4\n1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj\n"
+                      "2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj\n"
+                      "3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 100 100] /Contents 4 0 R /Resources << " +
+        resources + " >> >> endobj\n4 0 obj << /Length " + std::to_string(content.size()) + " >>\nstream\n" + content +
+        "\nendstream\nendobj\n";
+    for (size_t i = 0; i < objects.size(); ++i)
+        pdf += std::to_string(i + 5) + " 0 obj " + objects[i] + "\nendobj\n";
+    pdf += "%%EOF\n";
+    return std::vector<uint8_t>(pdf.begin(), pdf.end());
+}
+
+std::string streamObject(const std::string& dictionary, const std::string& data)
+{
+    return "<< " + dictionary + " /Length " + std::to_string(data.size()) + " >>\nstream\n" + data + "\nendstream";
+}
+
+} // namespace
+
+TEST(pdf_import_survives_damaged_functions_images_and_fonts)
+{
+    // A sampled function of no samples; an image far larger than its data
+    // in an ICC space of a thousand components; a palette claiming 100000
+    // colors; a font whose ToUnicode and widths run to the top of the codes.
+    const std::string content = "/CS0 cs 0.5 scn 0 0 10 10 re f /Im0 Do /Im1 Do BT /F2 20 Tf <0001> Tj ET";
+    const std::string resources = "/ColorSpace << /CS0 [/Separation /Spot /DeviceRGB 5 0 R] >> "
+                                  "/XObject << /Im0 6 0 R /Im1 7 0 R >> /Font << /F2 8 0 R >>";
+    const std::string cmap = "1 beginbfrange <FFFF0000> <FFFFFFFF> <0041> endbfrange";
+    const std::vector<uint8_t> pdf = pagePdf(content, resources,
+        {
+            streamObject("/FunctionType 0 /Domain [0 1] /Range [0 1 0 1 0 1] /Size [0] /BitsPerSample 8 /Decode [0]",
+                "abc"),
+            streamObject("/Subtype /Image /Width 2000000000 /Height 2000000000 /ColorSpace [/ICCBased 9 0 R] "
+                         "/BitsPerComponent 8",
+                "abcd"),
+            streamObject("/Subtype /Image /Width 1 /Height 1 /ColorSpace [/Indexed /DeviceRGB 100000 <FF0000>] "
+                         "/BitsPerComponent 8",
+                std::string(1, '\0')),
+            "<< /Type /Font /Subtype /Type0 /BaseFont /Arial /Encoding /Identity-H /DescendantFonts [10 0 R] "
+            "/ToUnicode 11 0 R >>",
+            streamObject("/N 1000", "x"),
+            "<< /Type /Font /Subtype /CIDFontType2 /W [4294967290 4294967295 500] >>",
+            streamObject("", cmap),
+        });
+    const fla::vectors::Artwork art = fla::vectors::readPdf(pdf);
+    CHECK(art.paths.size() == 1);
+    CHECK(art.images.size() == 1 && art.images[0].width == 1);
+}
+
+TEST(pdf_import_stops_programs_and_forms_that_grow_past_reason)
+{
+    // A calculator function nested a thousand deep and one that doubles its
+    // stack forty times; then forms each drawing the next ten times over,
+    // ten deep.
+    std::string doubling = "{ 1 1";
+    long long size = 2;
+    for (int i = 0; i < 40; ++i, size *= 2)
+        doubling += " " + std::to_string(size) + " copy";
+    doubling += " }";
+    const std::string content = "/CS0 cs 0.5 scn 0 0 10 10 re f /CS1 cs 0.5 scn 0 0 10 10 re f /Fm0 Do";
+    std::string resources = "/ColorSpace << /CS0 [/Separation /A /DeviceRGB 5 0 R] "
+                            "/CS1 [/Separation /B /DeviceRGB 6 0 R] >> /XObject << /Fm0 7 0 R >>";
+    std::vector<std::string> objects = {
+        streamObject("/FunctionType 4 /Domain [0 1] /Range [0 1 0 1 0 1]", std::string(1000, '{')),
+        streamObject("/FunctionType 4 /Domain [0 1] /Range [0 1 0 1 0 1]", doubling),
+    };
+    std::string tenTimes;
+    for (int i = 0; i < 10; ++i)
+        tenTimes += "/Fm0 Do ";
+    for (int level = 0; level < 10; ++level)
+    {
+        const int next = 7 + level + 1;
+        objects.push_back(streamObject("/Type /XObject /Subtype /Form /BBox [0 0 10 10] /Resources << /XObject << "
+                                       "/Fm0 " + std::to_string(next) + " 0 R >> >>",
+            level < 9 ? tenTimes : "q Q"));
+    }
+    objects.push_back("<< >>");
+    const fla::vectors::Artwork art = fla::vectors::readPdf(pagePdf(content, resources, objects));
+    CHECK(art.paths.size() == 2);
+}
+
+TEST(svg_uses_that_repeat_themselves_stop)
+{
+    // A group using itself, and groups each using the one before ten times,
+    // nine deep: a billion empty groups unless walking stops. The square
+    // after them comes past the budget, so it is not drawn either.
+    std::string svg = "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" "
+                      "width=\"10\" height=\"10\"><defs><g id=\"self\"><use xlink:href=\"#self\"/></g><g id=\"g0\"/>";
+    for (int level = 1; level < 10; ++level)
+    {
+        svg += "<g id=\"g" + std::to_string(level) + "\">";
+        for (int i = 0; i < 10; ++i)
+            svg += "<use xlink:href=\"#g" + std::to_string(level - 1) + "\"/>";
+        svg += "</g>";
+    }
+    svg += "</defs><use xlink:href=\"#self\"/><use xlink:href=\"#g9\"/><rect width=\"5\" height=\"5\"/></svg>";
+    const fla::vectors::Artwork art = fla::vectors::readSvg(svg);
+    CHECK(art.paths.empty());
+}
