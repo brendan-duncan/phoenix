@@ -98,6 +98,8 @@
 #include "swap_symbol_dialog.h"
 #include "../edit/layer_commands.h"
 #include "../edit/library_media.h"
+#include "../edit/node_graph.h"
+#include "../data/bitmap_decoder.h"
 #include "../edit/frame_commands.h"
 #include "../edit/frame_bake.h"
 #include "../edit/combine_objects.h"
@@ -5490,6 +5492,106 @@ int MainWindow::exportForOtherAppsFromCommandLine(const QString& source, const Q
     return 0;
 }
 
+void MainWindow::bakeNodeGraphs(fla::Document& copy, std::vector<std::string>& notes)
+{
+    fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
+    if (!document || !_phoenixView)
+        return;
+    // Each timeline of the document with a graph, and its twin in the copy:
+    // scenes by their place, symbols' by the symbol's name.
+    struct Pair
+    {
+        const fla::Timeline* source;
+        fla::Timeline* target;
+        const fla::Symbol* symbol;
+        std::string name;
+    };
+    std::vector<Pair> pairs;
+    for (size_t i = 0; i < document->timelines.size() && i < copy.timelines.size(); ++i)
+        if (document->timelines[i] && fla::nodegraph::active(*document->timelines[i]))
+            pairs.push_back({document->timelines[i], copy.timelines[i], nullptr, document->timelines[i]->name});
+    if (document->symbolList && copy.symbolList)
+        for (const fla::Symbol* symbol : document->symbolList->symbols)
+        {
+            if (!symbol || symbol->timelines.empty() || !fla::nodegraph::active(*symbol->timelines.front()))
+                continue;
+            for (fla::Symbol* twin : copy.symbolList->symbols)
+                if (twin && twin->name == symbol->name && !twin->timelines.empty())
+                    pairs.push_back({symbol->timelines.front(), twin->timelines.front(), symbol, symbol->name});
+        }
+
+    for (const Pair& pair : pairs)
+    {
+        int frames = 1;
+        for (const fla::Layer* layer : pair.source->layers)
+            if (layer)
+                for (const fla::Frame* frame : layer->frames)
+                    if (frame)
+                        frames = std::max(frames, frame->index + std::max(1, frame->duration));
+        // A scene's stage, or all a symbol shows, with room for what blurs
+        // and glows past its edge.
+        QRectF area(0, 0, document->width, document->height);
+        if (pair.symbol)
+        {
+            area = _phoenixView->symbolFramesBounds(pair.symbol, 0, frames - 1);
+            if (!area.isValid() || area.isEmpty())
+                continue;
+            const double margin = 24.0 + std::max(area.width(), area.height()) * 0.1;
+            area = area.adjusted(-margin, -margin, margin, margin).toAlignedRect();
+        }
+        // The pictures, one a frame, a frame like the one before held on.
+        fla::Layer* layer = fla::newLayerFor(*pair.target, false);
+        layer->name = "Node Graph";
+        layer->autoNamed = false;
+        QImage held;
+        fla::Frame* span = nullptr;
+        int made = 0;
+        for (int at = 0; at < frames; ++at)
+        {
+            const QImage image = _phoenixView->renderTimelineFrame(pair.source, at, area, 1.0);
+            if (image.isNull())
+                break;
+            if (span && image == held)
+            {
+                ++span->duration;
+                continue;
+            }
+            held = image;
+            std::vector<uint32_t> pixels(static_cast<size_t>(image.width()) * image.height());
+            for (int y = 0; y < image.height(); ++y)
+                std::memcpy(pixels.data() + static_cast<size_t>(y) * image.width(), image.constScanLine(y),
+                    static_cast<size_t>(image.width()) * 4);
+            const std::string name = fla::media::freeName(copy, pair.name + " graph " + std::to_string(at + 1) + ".png");
+            fla::Bitmap* bitmap = fla::media::newBitmap(copy, name, std::string(), image.width(), image.height(),
+                fla::encodeLosslessBitmap(image.width(), image.height(), pixels), false);
+            fla::AddBitmapCommand(&copy, bitmap, "Bake Node Graph").redo();
+            span = new fla::Frame(layer);
+            span->index = at;
+            span->duration = 1;
+            auto* picture = new fla::BitmapInstance(span);
+            picture->libraryItemName = name;
+            picture->transform = fla::Transform(1.0, 0.0, 0.0, 1.0, area.left(), area.top());
+            span->elements.push_back(picture);
+            layer->frames.push_back(span);
+            ++made;
+        }
+        // The layers it was made from are kept, as guides that do not show.
+        for (fla::Layer* each : pair.target->layers)
+        {
+            if (!each)
+                continue;
+            if (each->layerType != fla::Layer::Type::Folder)
+                each->layerType = fla::Layer::Type::Guide;
+            if (each->parentLayerIndex >= 0)
+                ++each->parentLayerIndex;
+        }
+        pair.target->layers.insert(pair.target->layers.begin(), layer);
+        pair.target->extraAttributes = fla::nodegraph::withGraph(*pair.target, nullptr);
+        notes.push_back("The node graph of " + pair.name + " is baked into a layer of " + std::to_string(made) +
+                        " pictures; the layers it composited are kept as guide layers.");
+    }
+}
+
 bool MainWindow::writeForOtherApps(const QString& path, QString& error, int* bakedLayers)
 {
     if (!_flaDocument || !_flaDocument->document)
@@ -5532,7 +5634,14 @@ bool MainWindow::writeForOtherApps(const QString& path, QString& error, int* bak
         *bakedLayers = static_cast<int>(layers.size());
     bool written = false;
     std::vector<std::string> notes;
-    if (fla::otherapps::needsBaking(*document))
+    // Node graphs are baked into pictures in the copy too.
+    bool graphs = false;
+    for (const fla::Timeline* timeline : document->timelines)
+        graphs = graphs || (timeline && fla::nodegraph::active(*timeline));
+    if (document->symbolList)
+        for (const fla::Symbol* symbol : document->symbolList->symbols)
+            graphs = graphs || (symbol && !symbol->timelines.empty() && fla::nodegraph::active(*symbol->timelines.front()));
+    if (fla::otherapps::needsBaking(*document) || graphs)
     {
         // Mattes, adjustment layers and template values are baked into a
         // copy read back from a temporary file, so the document stays as
@@ -5548,6 +5657,7 @@ bool MainWindow::writeForOtherApps(const QString& path, QString& error, int* bak
             if (copy && copy->document)
             {
                 fla::otherapps::bakeCompositing(*copy->document, notes);
+                bakeNodeGraphs(*copy->document, notes);
                 written = writeDocumentFile(*copy->document, path, error);
             }
             else

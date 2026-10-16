@@ -84,7 +84,9 @@
 
 <h2>Other apps</h2>
 
-<p>The graph is kept in the FLA file in a setting other apps ignore: they show the timeline's layers stacked as usual, without the graph's effects. Saving says so. Phoenix's own exports (video, image sequences, GIF, SWF) show the graph's Output.</p>
+<p>The graph is kept in the FLA file in a setting other apps ignore: they show the timeline's layers stacked as usual, without the graph's effects. Saving says so. Phoenix's own exports (video, image sequences, GIF, SWF, SVG) show the graph's Output; SVG exports it as a picture.</p>
+
+<p><strong>File &rsaquo; Export &rsaquo; Export FLA for Other Apps</strong> (and <code>--convert --for-other-apps</code>) bakes each graph into a layer named <i>Node Graph</i> holding the Output as a picture for each frame, a picture held over the frames where nothing changes. The layers the graph composited are kept as guide layers, which do not show, so the copy plays the same anywhere and can still be taken apart.</p>
 
 </article>
 </main>

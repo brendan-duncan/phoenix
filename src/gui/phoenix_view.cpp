@@ -718,7 +718,14 @@ QRectF PhoenixView::symbolFramesBounds(const fla::Symbol* symbol, int first, int
 
 QImage PhoenixView::renderSymbolFrame(const fla::Symbol* symbol, int frame, const QRectF& area, double scale)
 {
-    if (!symbol || symbol->timelines.empty() || !area.isValid() || area.isEmpty())
+    if (!symbol || symbol->timelines.empty())
+        return QImage();
+    return renderTimelineFrame(symbol->timelines.front(), frame, area, scale);
+}
+
+QImage PhoenixView::renderTimelineFrame(const fla::Timeline* timeline, int frame, const QRectF& area, double scale)
+{
+    if (!timeline || !area.isValid() || area.isEmpty())
         return QImage();
     const QSize size(std::max(1, static_cast<int>(std::ceil(area.width() * scale))),
         std::max(1, static_cast<int>(std::ceil(area.height() * scale))));
@@ -737,7 +744,7 @@ QImage PhoenixView::renderSymbolFrame(const fla::Symbol* symbol, int frame, cons
     _visibleRect = area;
     _exporting = true;
     _clipSequences.clear();
-    drawTimeline(painter, symbol->timelines.front(), fla::LoopType::SingleFrame, std::max(0, frame));
+    drawTimeline(painter, timeline, fla::LoopType::SingleFrame, std::max(0, frame));
     _exporting = wasExporting;
     viewTransform = savedView;
     _visibleRect = savedVisible;

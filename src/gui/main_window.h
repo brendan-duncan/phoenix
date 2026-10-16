@@ -493,6 +493,10 @@ private slots:
     /// The document written to \a path with behaviors, operators, mattes,
     /// adjustment layers and templates baked; the document itself is left
     /// as it was. \a bakedLayers says how many layers had behaviors.
+    /// The node graphs of the document drawn into \a copy (a copy of it
+    /// being written for other apps) as a layer of pictures each, the layers
+    /// they composited kept as guides.
+    void bakeNodeGraphs(fla::Document& copy, std::vector<std::string>& notes);
     bool writeForOtherApps(const QString& path, QString& error, int* bakedLayers);
     /// The shapes with operators on frames \a first to \a last of
     /// \a layer, baked: a keyframe a frame, each shape left as drawing

@@ -713,6 +713,9 @@ public:
     /// space at \a scale pixels per pixel on a clear image: what a sprite
     /// sheet of the symbol holds.
     QImage renderSymbolFrame(const fla::Symbol* symbol, int frame, const QRectF& area, double scale);
+    /// The same for any timeline, a scene's too: its frame \a frame on its
+    /// own, \a area of its space at \a scale, on a clear image.
+    QImage renderTimelineFrame(const fla::Timeline* timeline, int frame, const QRectF& area, double scale);
     /// What the symbol draws over frames \a first to \a last, in its space.
     QRectF symbolFramesBounds(const fla::Symbol* symbol, int first, int last);
 
