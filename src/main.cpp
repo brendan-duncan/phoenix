@@ -100,6 +100,24 @@ public:
 
 } // namespace
 
+#ifdef Q_OS_WIN
+#include <windows.h>
+
+/// Phoenix is a console program, so the commands that print (render,
+/// doctor, --export-movie) print where they were typed. Opened as the
+/// editor from Explorer or a shortcut, though, the console was made for it
+/// alone and is no use: it is let go. Typed in a terminal, the terminal's
+/// stays.
+void releaseOwnConsole()
+{
+    DWORD processes[2];
+    if (GetConsoleWindow() && GetConsoleProcessList(processes, 2) <= 1)
+        FreeConsole();
+}
+#else
+void releaseOwnConsole() {}
+#endif
+
 int main(int argc, char *argv[])
 {
     // A crash leaves a dump to find out from what (Windows).
@@ -226,6 +244,7 @@ int main(int argc, char *argv[])
     // quick viewer for documents, SWF movies, artwork and images.
     if (arguments.size() >= 3 && (arguments.at(1) == "--view" || arguments.at(1) == "-view"))
     {
+        releaseOwnConsole();
         MainWindow window(QString(), nullptr, false);
         return window.viewFromCommandLine(arguments.at(2));
     }
@@ -407,6 +426,7 @@ int main(int argc, char *argv[])
     // The theme last chosen, before any window is made.
     app_identity::apply();
     theme::applySaved();
+    releaseOwnConsole();
     MainWindow window(initialFile);
     window.show();
     if (!script.isEmpty())

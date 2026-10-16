@@ -297,7 +297,7 @@ ColorStyle colorStyleOf(const fla::ColorTransform& color)
 
 void clearLayout(QLayout* layout)
 {
-    while (QLayoutItem* item = layout->takeAt(0))
+    while (QLayoutItem* item = layout->count() > 0 ? layout->takeAt(0) : nullptr)
     {
         if (QWidget* widget = item->widget())
         {

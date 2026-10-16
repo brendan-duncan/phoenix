@@ -509,7 +509,7 @@ void BehaviorsPanel::refresh()
 
 void BehaviorsPanel::fillSettings()
 {
-    while (QLayoutItem* item = _form->takeAt(0))
+    while (QLayoutItem* item = _form->count() > 0 ? _form->takeAt(0) : nullptr)
     {
         // Quiet as it goes: a field losing focus on its way out must not
         // set anything.
