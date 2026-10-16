@@ -2055,6 +2055,33 @@ void PhoenixView::drawDocument(QPainter& painter, const fla::Document* document)
 
 void PhoenixView::drawTimeline(QPainter& painter, const fla::Timeline* timeline, fla::LoopType loopType, int firstFrame)
 {
+    // An export that writes vectors, of a timeline with a node graph: the
+    // graph works on pixels, so what it makes goes as one picture, at twice
+    // the export's size.
+    if (_vectorMasks && painter.device() && !_compositing.contains(timeline) && _visibleRect.isValid() &&
+        !_visibleRect.isEmpty() && fla::nodegraph::active(*timeline))
+    {
+        constexpr double kScale = 2.0;
+        const QRectF area = _visibleRect;
+        QImage canvas(std::max(1, qCeil(area.width() * kScale)), std::max(1, qCeil(area.height() * kScale)),
+            QImage::Format_ARGB32_Premultiplied);
+        canvas.fill(Qt::transparent);
+        {
+            QPainter canvasPainter(&canvas);
+            canvasPainter.setRenderHints(painter.renderHints());
+            canvasPainter.setTransform(painter.transform() * QTransform::fromTranslate(-area.left(), -area.top()) *
+                                       QTransform::fromScale(kScale, kScale));
+            _vectorMasks = false;
+            drawTimeline(canvasPainter, timeline, loopType, firstFrame);
+            _vectorMasks = true;
+        }
+        painter.save();
+        painter.resetTransform();
+        painter.drawImage(area, canvas);
+        painter.restore();
+        return;
+    }
+
     // An export that writes vectors: an adjustment layer works on pixels,
     // so it and every layer under it go as one picture, at twice the
     // export's size, and the layers above it as vectors over that.
