@@ -791,3 +791,40 @@ TEST(swf_import_brings_back_a_video_as_an_item_of_its_size)
     CHECK(layer->frames[0]->elements.size() == 1 &&
           layer->frames[0]->elements[0]->elementType() == fla::Element::Type::Raw);
 }
+
+TEST(swf_import_reads_the_movie_a_library_preloader_starts)
+{
+    // The movie itself: a stage of its own with a square on it.
+    swf::Writer inner(320, 240, 30.0, {255, 255, 255, 255});
+    swf::Fill green;
+    green.color = {0, 255, 0, 255};
+    inner.place(inner.defineShape(green, square(10)), 1);
+    inner.showFrame();
+    const std::vector<uint8_t> content = inner.finish(true);
+
+    // The preloader around it: two empty frames, and the movie as binary
+    // data whose class is the main timeline's __Content__.
+    swf::Writer outer(550, 400, 24.0, {255, 255, 255, 255});
+    outer.showFrame();
+    std::vector<uint8_t> data = {3, 0, 0, 0, 0, 0};
+    data.insert(data.end(), content.begin(), content.end());
+    outer.tag(87, data);
+    const std::string name = "movie_fla.MainTimeline__Content__";
+    std::vector<uint8_t> symbolClass = {1, 0, 3, 0};
+    symbolClass.insert(symbolClass.end(), name.begin(), name.end());
+    symbolClass.push_back(0);
+    outer.tag(76, symbolClass);
+    outer.showFrame();
+
+    std::map<std::string, std::vector<uint8_t>> files;
+    std::string error, report;
+    CHECK(SwfImport::convert(outer.finish(true), files, error, &report));
+    CHECK(report.find("runtime shared libraries") != std::string::npos);
+    Parsed parsed = parse(files);
+    CHECK(parsed.document != nullptr);
+    if (!parsed.document)
+        return;
+    CHECK(parsed.document->width == 320 && parsed.document->height == 240);
+    CHECK(std::fabs(parsed.document->frameRate - 30.0) < 1e-6);
+    CHECK(parsed.document->timelines.size() == 1 && parsed.document->timelines[0]->layers.size() == 1);
+}

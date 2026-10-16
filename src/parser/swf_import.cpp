@@ -877,6 +877,27 @@ public:
         _width = static_cast<int>(std::lround((stage.right - stage.left) / 20.0));
         _height = static_cast<int>(std::lround((stage.bottom - stage.top) / 20.0));
 
+        // A movie published with a preloader for its runtime shared
+        // libraries (TLF text needs one): its own frames only load them and
+        // show a loading animation, and the movie itself is embedded whole as
+        // binary data, which the preloader then starts. That movie is read
+        // instead.
+        if (_nesting < 4)
+        {
+            const std::vector<uint8_t> content = preloadedContent(in);
+            if (!content.empty())
+            {
+                Converter inner(_options);
+                inner._nesting = _nesting + 1;
+                if (inner.run(content, files, error))
+                {
+                    report = "This movie loads its runtime shared libraries before it starts; the movie it "
+                             "starts was read. " + inner.report;
+                    return true;
+                }
+            }
+        }
+
         _main = std::make_shared<TimelineData>();
         readTags(in, *_main, true);
         finish(files);
@@ -938,6 +959,8 @@ private:
     long _version_counter = 0;
     int _scripts = 0;
     int _abc = 0;
+    /// How many preloaders this movie was found inside.
+    int _nesting = 0;
     std::set<std::string> _names;
     std::set<std::string> _folders;
     int _dataCount = 0;
@@ -951,6 +974,51 @@ private:
     int _symbolDepth = 0;
 
     void leftOut(const std::string& what) { ++_unread[what]; }
+
+    /// The movie a runtime shared library preloader starts, when \a in (at
+    /// the first tag) is one: binary data whose class, named in a
+    /// SymbolClass tag, ends in "__Content__" and that holds an SWF. Empty
+    /// otherwise.
+    static std::vector<uint8_t> preloadedContent(Reader in)
+    {
+        std::map<int, std::pair<const uint8_t*, size_t>> data;
+        std::set<int> content;
+        while (!in.atEnd())
+        {
+            const uint16_t header = in.u16();
+            const int code = header >> 6;
+            size_t length = header & 0x3F;
+            if (length == 0x3F)
+                length = in.u32();
+            const size_t start = in.position();
+            length = std::min(length, in.left());
+            if (code == 0)
+                break;
+            Reader tag(in.data() + start, length);
+            if (code == 87 && length > 6) // DefineBinaryData: id, a reserved word, the bytes
+                data[tag.u16()] = {in.data() + start + 6, length - 6};
+            else if (code == 76) // SymbolClass
+            {
+                const int count = tag.u16();
+                const std::string suffix = "__Content__";
+                for (int i = 0; i < count && !tag.atEnd(); ++i)
+                {
+                    const int id = tag.u16();
+                    const std::string name = tag.string();
+                    if (name.size() > suffix.size() && name.compare(name.size() - suffix.size(), suffix.size(), suffix) == 0)
+                        content.insert(id);
+                }
+            }
+            in.seek(start + length);
+        }
+        for (const int id : content)
+        {
+            const auto found = data.find(id);
+            if (found != data.end() && isSwf(found->second.first, found->second.second) && found->second.second >= 8)
+                return std::vector<uint8_t>(found->second.first, found->second.first + found->second.second);
+        }
+        return {};
+    }
 
     // -- Tags ---------------------------------------------------------------
 
