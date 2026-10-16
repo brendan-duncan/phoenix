@@ -668,6 +668,15 @@ qt_generate_deploy_app_script(
     NO_UNSUPPORTED_PLATFORM_ERROR
     ${PHOENIX_DEPLOY_OPTIONS})
 install(SCRIPT ${PHOENIX_DEPLOY_SCRIPT} COMPONENT Phoenix)
+# The deploy script brings the platforms Phoenix shows windows with; the
+# offscreen one, for renders from the command line, goes beside them.
+if(TARGET Qt6::QOffscreenIntegrationPlugin AND NOT APPLE)
+    install(FILES $<TARGET_FILE:Qt6::QOffscreenIntegrationPlugin>
+        DESTINATION ${PHOENIX_INSTALL_BINDIR}/plugins/platforms COMPONENT Phoenix)
+elseif(TARGET Qt6::QOffscreenIntegrationPlugin)
+    install(FILES $<TARGET_FILE:Qt6::QOffscreenIntegrationPlugin>
+        DESTINATION Phoenix.app/Contents/PlugIns/platforms COMPONENT Phoenix)
+endif()
 
 # The phoenix Python module (python/phoenix), for driving Phoenix from your
 # own Python, ships beside it and finds the Phoenix it came with.
@@ -709,4 +718,19 @@ if(WIN32)
         COMMAND ${QT_WINDEPLOYQT_EXECUTABLE} ${PHOENIX_WINDEPLOYQT_ARGS} $<TARGET_FILE:Phoenix>
         COMMENT "Deploying Qt libraries"
     )
+    # windeployqt brings only the window platform; renders without a window
+    # (QT_QPA_PLATFORM=offscreen: the command line, tests, render farms)
+    # need the offscreen one too, or Qt stops with a "no platform plugin"
+    # box on the screen.
+    if(TARGET Qt6::QOffscreenIntegrationPlugin)
+        add_custom_command(TARGET Phoenix POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:Phoenix>/platforms"
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:Qt6::QOffscreenIntegrationPlugin>
+                "$<TARGET_FILE_DIR:Phoenix>/platforms/"
+            COMMENT "Deploying the offscreen platform plugin"
+        )
+    else()
+        message(WARNING "Qt's offscreen platform plugin was not found; Phoenix's command-line renders will need "
+            "QT_QPA_PLATFORM_PLUGIN_PATH pointed at Qt's plugins/platforms folder")
+    endif()
 endif()
