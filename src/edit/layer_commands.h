@@ -12,6 +12,9 @@
 
 namespace fla {
 
+class Element;
+class Selection;
+class SymbolList;
 class Timeline;
 
 /// A new, empty layer or folder for \a timeline, named "Layer N" (or
@@ -201,6 +204,14 @@ std::vector<int> withContents(const Timeline& timeline, std::vector<int> indices
 /// one copied alone still follows the original. The caller owns them; they
 /// belong to no timeline yet.
 std::vector<Layer*> cloneLayers(const std::vector<const Layer*>& layers, const Timeline& into);
+
+/// Distribute to Layers: each of \a elements lying on a frame of
+/// \a timeline moves to a layer of its own, the topmost to a new layer just
+/// under layer \a current, the next under that; a symbol's layer is named
+/// for it. The commands that do it, in order (a removal and a new layer
+/// for each); empty when none of them is on \a timeline.
+std::vector<CommandPtr> distributeToLayers(Timeline& timeline, int current, std::vector<Element*> elements,
+    const SymbolList* library, Selection* selection);
 
 } // namespace layers
 

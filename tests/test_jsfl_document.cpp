@@ -183,6 +183,105 @@ TEST(jsfl_library_videos_rename_delete)
     CHECK(raw->videoItem == "clip.flv" && data.videos.size() == 2 && data.extraFiles.size() == 2);
 }
 
+TEST(jsfl_document_arrange_selection)
+{
+    Fixture f;
+    // Three instances, 10 by 10 in this host, at x 0, 40 and 100.
+    CHECK(f.run("var d = fl.getDocumentDOM(), lib = d.library;\n"
+                "lib.addNewItem('graphic', 'Box');\n"
+                "lib.addItemToDocument({x: 5, y: 5}, 'Box'); var a = d.selection[0];\n"
+                "lib.addItemToDocument({x: 45, y: 5}, 'Box'); var b = d.selection[0];\n"
+                "lib.addItemToDocument({x: 105, y: 5}, 'Box'); var c = d.selection[0];\n"
+                "b.name = 'hero';\n"
+                "d.selectAll(); d.space('horizontal'); fl.trace(a.x + ' ' + b.x + ' ' + c.x);\n"
+                "d.selection = [b]; d.invertSelection(); fl.trace(d.selection.length + ' ' + (d.selection.indexOf(b) < 0));\n"
+                "fl.trace(d.getAlignToDocument()); d.setAlignToDocument(true); d.align('top'); d.setAlignToDocument(false);\n"
+                "fl.trace(a.y + ' ' + c.y + ' ' + b.y);\n"
+                "d.selection = [a]; d.match(true, false, true); fl.trace(a.matrix.a);\n"
+                "d.resetTransformation(); d.skewSelection(45, 0); fl.trace(Math.round(a.matrix.c * 100) / 100 + ' ' + a.matrix.a);\n"
+                "d.resetTransformation(); fl.trace(a.matrix.a + ' ' + a.matrix.c);\n"
+                "a.locked = true; d.unlockAllElements(); fl.trace(a.locked);\n"
+                "var found = fl.findObjectInDocByName('hero');\n"
+                "fl.trace(found.length + ' ' + found[0].obj.name + ' ' + found[0].layer.name + ' ' + found[0].keyframe.startFrame);\n"
+                "fl.trace(fl.findObjectInDocByType('instance', d).length + ' ' + fl.findObjectInDocByType('text').length);\n"
+                "d.selectNone(); fl.trace(fl.selectElement(found[0], false) + ' ' + d.selection.length + ' ' + d.selection[0].name);\n"
+                "d.selectAll(); d.distributeToLayers(); fl.trace(d.getTimeline().layerCount);\n"
+                "fl.objectDrawingMode = true; fl.trace(fl.objectDrawingMode);\n")
+              .ok);
+    expectOutput(f, "0 50 100\n"
+                    "2 true\n"
+                    "false\n"
+                    "0 0 0\n"
+                    "55\n"
+                    "1 1\n"
+                    "1 0\n"
+                    "false\n"
+                    "1 hero Layer_1 0\n"
+                    "3 0\n"
+                    "true 1 hero\n"
+                    "4\n"
+                    "true\n");
+    CHECK(f.host.style.objectDrawing);
+    // All of it one step.
+    f.host.history(f.document).undo();
+    CHECK(f.scene().layers.size() == 1 && f.scene().layers[0]->frames[0]->elements.empty());
+}
+
+TEST(jsfl_document_text_blend_and_filters)
+{
+    Fixture f;
+    CHECK(f.run("var d = fl.getDocumentDOM(), lib = d.library;\n"
+                "d.addNewText({left: 0, top: 0, right: 100, bottom: 20}, 'Hello');\n"
+                "d.setTextString('Bye'); d.setElementTextAttr('bold', true);\n"
+                "fl.trace(d.getTextString() + ' ' + d.selection[0].getTextAttr('bold'));\n"
+                "lib.addNewItem('movie clip', 'Clip'); lib.addItemToDocument({x: 0, y: 0}, 'Clip');\n"
+                "d.setBlendMode('multiply'); fl.trace(d.selection[0].blendMode);\n"
+                "d.setFilters([{name: 'blurFilter', blurX: 5, blurY: 5}]); d.addFilter('glowFilter');\n"
+                "function names() { var n = []; var list = d.getFilters(); for (var i = 0; i < list.length; i++) n.push(list[i].name + (list[i].enabled ? '' : '-off')); return n.join(','); }\n"
+                "fl.trace(names());\n"
+                "d.disableFilter(0); fl.trace(names()); d.enableAllFilters(); d.disableOtherFilters(1); fl.trace(names());\n"
+                "d.enableAllFilters(); d.changeFilterOrder(0, 1); fl.trace(names());\n"
+                "d.setFilterProperty('blurX', 1, 8); fl.trace(d.getFilters()[1].blurX);\n"
+                "d.removeFilter(0); fl.trace(names()); d.removeAllFilters(); fl.trace(d.getFilters().length);\n"
+                "try { d.removeFilter(3); } catch (e) { fl.trace('no filter'); }\n")
+              .ok);
+    expectOutput(f, "Bye true\n"
+                    "multiply\n"
+                    "blurFilter,glowFilter\n"
+                    "blurFilter-off,glowFilter\n"
+                    "blurFilter-off,glowFilter\n"
+                    "glowFilter,blurFilter\n"
+                    "8\n"
+                    "blurFilter\n"
+                    "0\n"
+                    "no filter\n");
+}
+
+TEST(jsfl_timeline_reverse_frames_and_guides)
+{
+    Fixture f;
+    CHECK(f.run("var d = fl.getDocumentDOM(), tl = d.getTimeline();\n"
+                "tl.insertFrames(3); tl.layers[0].frames[0].name = 'a';\n"
+                "tl.insertKeyframe(2); tl.layers[0].frames[2].name = 'b';\n"
+                "tl.reverseFrames(0, 4);\n"
+                "var n = []; for (var i = 0; i < 4; i++) n.push(tl.layers[0].frames[i].startFrame + tl.layers[0].frames[i].name);\n"
+                "fl.trace(n.join(',') + ' ' + tl.frameCount);\n"
+                "fl.trace(tl.getGuidelines());\n"
+                "fl.trace(tl.setGuidelines('<guidelines><guideline direction=\"v\">12.5</guideline><guideline direction=\"h\">40</guideline></guidelines>'));\n"
+                "fl.trace(tl.getGuidelines());\n"
+                "fl.trace(tl.setGuidelines('<guidelines><guideline direction=\"z\">1</guideline></guidelines>'));\n")
+              .ok);
+    // Frame by frame back to front, as Modify > Timeline > Reverse Frames does.
+    expectOutput(f, "0,1b,1b,3a 4\n"
+                    "<guidelines></guidelines>\n"
+                    "true\n"
+                    "<guidelines><guideline direction=\"v\">12.5</guideline><guideline direction=\"h\">40</guideline></guidelines>\n"
+                    "false\n");
+    CHECK(f.scene().guidesX.size() == 1 && f.scene().guidesY.size() == 1);
+    f.host.history(f.document).undo();
+    CHECK(f.scene().guidesX.empty() && f.scene().guidesY.empty());
+}
+
 TEST(jsfl_bitmap_export_lossless_as_png)
 {
     Fixture f;

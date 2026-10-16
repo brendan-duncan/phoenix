@@ -23,6 +23,7 @@
 #include "../edit/drawing_style.h"
 #include "../edit/element_clone.h"
 #include "../edit/element_commands.h"
+#include "../edit/layer_commands.h"
 #include "../edit/library_commands.h"
 #include "../edit/property_command.h"
 #include "../edit/scene_commands.h"
@@ -35,6 +36,7 @@
 #include <cmath>
 #include <cstdio>
 #include <filesystem>
+#include <functional>
 #include <memory>
 #include <system_error>
 #include <cstdint>
@@ -229,6 +231,83 @@ void setOnSelection(Document& doc, const std::string& name, const Value& value)
             }
         }
     }
+}
+
+/// Whether aligning, distributing, spacing and matching go by the stage
+/// rather than the selection when a script does not say: the Align
+/// panel's To Stage, kept between runs.
+bool& alignToStage()
+{
+    static bool toStage = false;
+    return toStage;
+}
+
+bool useStage(const Args& args, size_t at)
+{
+    return given(args, at) ? arg(args, at).toBool() : alignToStage();
+}
+
+const Property* findProperty(const Object& object, const std::string& name)
+{
+    for (const ClassInfo* info = &object.classInfo(); info; info = info->parent)
+        for (const Property& property : info->properties)
+            if (property.name == name)
+                return &property;
+    return nullptr;
+}
+
+const Method* findMethod(const Object& object, const std::string& name)
+{
+    for (const ClassInfo* info = &object.classInfo(); info; info = info->parent)
+        for (const Method& method : info->methods)
+            if (method.name == name)
+                return &method;
+    return nullptr;
+}
+
+/// Calls the element method \a name on each selected element that has it
+/// (text fields for the text methods); what the first one gave back, or
+/// undefined when none has it.
+Value callOnSelection(Document& doc, const std::string& name, const Args& args)
+{
+    Value first;
+    bool called = false;
+    for (fla::Element* element : needSelection(doc.session, doc.document))
+    {
+        auto wrapper = wrapElement(doc.session, doc.document, element);
+        if (const Method* method = findMethod(*wrapper, name))
+        {
+            Value result = method->call(*wrapper, args);
+            if (!called)
+                first = std::move(result);
+            called = true;
+        }
+    }
+    return first;
+}
+
+/// Changes the filters of each selected element that has them.
+void editFilters(Document& doc, const std::function<void(std::vector<Value>& filters)>& edit)
+{
+    for (fla::Element* element : needSelection(doc.session, doc.document))
+    {
+        auto wrapper = wrapElement(doc.session, doc.document, element);
+        const Property* property = findProperty(*wrapper, "filters");
+        if (!property || !property->set)
+            continue;
+        Value list = property->get(*wrapper);
+        edit(list.items);
+        property->set(*wrapper, list);
+    }
+}
+
+/// The filter at \a index of \a filters; an error when there is none.
+Value& filterAt(std::vector<Value>& filters, const Value& index)
+{
+    const int at = index.toInt();
+    if (at < 0 || at >= static_cast<int>(filters.size()))
+        throw Error("There is no filter " + index.toString() + ".");
+    return filters[static_cast<size_t>(at)];
 }
 
 bool sceneNamed(const fla::Document& data, const std::string& name)
@@ -771,7 +850,7 @@ const ClassInfo& Document::classInfo() const
         def.method("align", 2, [](Document& d, const Args& args) {
             const std::string mode = arg(args, 0).toString();
             const std::vector<fla::Element*> elements = needSelection(d.session, d.document);
-            const Rect area = arg(args, 1).toBool() ? Rect{0.0, 0.0, static_cast<double>(d.data().width), static_cast<double>(d.data().height)}
+            const Rect area = useStage(args, 1) ? Rect{0.0, 0.0, static_cast<double>(d.data().width), static_cast<double>(d.data().height)}
                                                     : selectionBounds(d.session, d.document, elements);
             for (fla::Element* element : elements)
             {
@@ -831,7 +910,7 @@ const ClassInfo& Document::classInfo() const
             std::sort(placed.begin(), placed.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
             double first = placed.front().first;
             double last = placed.back().first;
-            if (arg(args, 1).toBool())
+            if (useStage(args, 1))
             {
                 first = 0.0;
                 last = horizontal ? d.data().width : d.data().height;
@@ -905,6 +984,244 @@ const ClassInfo& Document::classInfo() const
             setOnSelection(d, "colorMode", Value("tint"));
             setOnSelection(d, "tintColor", arg(args, 0));
             setOnSelection(d, "tintPercent", arg(args, 1));
+            return Value();
+        });
+        def.method("getAlignToDocument", 0, [](Document& d, const Args&) {
+            d.data();
+            return Value(alignToStage());
+        });
+        def.method("setAlignToDocument", 1, [](Document& d, const Args& args) {
+            d.data();
+            alignToStage() = arg(args, 0).toBool();
+            return Value();
+        });
+        def.method("space", 2, [](Document& d, const Args& args) {
+            const std::string direction = arg(args, 0).toString();
+            if (direction != "horizontal" && direction != "vertical")
+                throw Error("space takes horizontal or vertical, not " + direction + ".");
+            const bool horizontal = direction == "horizontal";
+            std::vector<std::pair<Rect, fla::Element*>> placed;
+            for (fla::Element* element : needSelection(d.session, d.document))
+            {
+                const Rect box = d.session.host().bounds(d.document, element);
+                if (box.valid())
+                    placed.emplace_back(box, element);
+            }
+            if (placed.size() < 2)
+                return Value();
+            const auto start = [horizontal](const Rect& box) { return horizontal ? box.left : box.top; };
+            const auto size = [horizontal](const Rect& box) { return horizontal ? box.width() : box.height(); };
+            std::sort(placed.begin(), placed.end(), [&start](const auto& a, const auto& b) { return start(a.first) < start(b.first); });
+            // Equal gaps between them, across the stage or across the
+            // space they already take up.
+            double from = start(placed.front().first);
+            double to = horizontal ? placed.back().first.right : placed.back().first.bottom;
+            if (useStage(args, 1))
+            {
+                from = 0.0;
+                to = horizontal ? d.data().width : d.data().height;
+            }
+            double total = 0.0;
+            for (const auto& each : placed)
+                total += size(each.first);
+            const double gap = (to - from - total) / static_cast<double>(placed.size() - 1);
+            double at = from;
+            for (const auto& [box, element] : placed)
+            {
+                const double move = at - start(box);
+                at += size(box) + gap;
+                if (move != 0.0)
+                    setTransform(d.session, d.document, element,
+                        compose(fla::Transform::fromTranslate(horizontal ? move : 0.0, horizontal ? 0.0 : move), element->transform), "Space");
+            }
+            return Value();
+        });
+        def.method("match", 3, [](Document& d, const Args& args) {
+            const bool width = arg(args, 0).toBool();
+            const bool height = arg(args, 1).toBool();
+            std::vector<std::pair<Rect, fla::Element*>> placed;
+            double wantWidth = 0.0;
+            double wantHeight = 0.0;
+            for (fla::Element* element : needSelection(d.session, d.document))
+            {
+                const Rect box = d.session.host().bounds(d.document, element);
+                if (!box.valid())
+                    continue;
+                placed.emplace_back(box, element);
+                wantWidth = std::max(wantWidth, box.width());
+                wantHeight = std::max(wantHeight, box.height());
+            }
+            // The largest of them, or the stage.
+            if (useStage(args, 2))
+            {
+                wantWidth = d.data().width;
+                wantHeight = d.data().height;
+            }
+            for (const auto& [box, element] : placed)
+            {
+                const double sx = width && box.width() > 0.0 ? wantWidth / box.width() : 1.0;
+                const double sy = height && box.height() > 0.0 ? wantHeight / box.height() : 1.0;
+                if (sx != 1.0 || sy != 1.0)
+                    transformAll(d.session, d.document, {element}, fla::Transform::fromScale(sx, sy), box.left, box.top, "Match Size");
+            }
+            return Value();
+        });
+        def.method("invertSelection", 0, [](Document& d, const Args&) {
+            fla::Selection& selection = d.session.host().selection(d.document);
+            std::vector<fla::DOMElement*> chosen;
+            fla::Timeline* timeline = d.session.host().editedTimeline(d.document);
+            const int frame = d.session.host().currentFrame(d.document);
+            for (fla::Layer* layer : timeline ? timeline->layers : std::vector<fla::Layer*>())
+            {
+                if (!layer || layer->isLocked() || !layer->visible || layer->layerType == fla::Layer::Type::Folder)
+                    continue;
+                if (fla::Frame* key = fla::timeline::spanAt(*layer, frame))
+                    for (fla::Element* element : key->elements)
+                        if (element && !element->isLocked && !selection.contains(element))
+                            chosen.push_back(element);
+            }
+            selection.select(chosen);
+            return Value();
+        });
+        def.method("unlockAllElements", 0, [](Document& d, const Args&) {
+            fla::Timeline* timeline = d.session.host().editedTimeline(d.document);
+            const int frame = d.session.host().currentFrame(d.document);
+            for (fla::Layer* layer : timeline ? timeline->layers : std::vector<fla::Layer*>())
+            {
+                fla::Frame* key = layer ? fla::timeline::spanAt(*layer, frame) : nullptr;
+                for (fla::Element* element : key ? key->elements : std::vector<fla::Element*>())
+                    if (element && element->isLocked)
+                        d.push(fla::CommandPtr(new fla::SetPropertyCommand<bool>(element->isLocked, element->isLocked, false, "Unlock All")), false);
+            }
+            return Value();
+        });
+        def.method("skewSelection", 3, [](Document& d, const Args& args) {
+            const std::vector<fla::Element*> elements = needSelection(d.session, d.document);
+            const Rect box = selectionBounds(d.session, d.document, elements);
+            double x = (box.left + box.right) / 2;
+            double y = (box.top + box.bottom) / 2;
+            if (given(args, 2))
+                namedPoint(box, arg(args, 2).toString(), x, y);
+            // A skew along x shifts each point across by its height, one
+            // along y shifts it down by its distance across.
+            const double xSkew = std::tan(arg(args, 0).toNumber() * kPi / 180.0);
+            const double ySkew = std::tan(arg(args, 1).toNumber() * kPi / 180.0);
+            transformAll(d.session, d.document, elements, fla::Transform(1.0, ySkew, xSkew, 1.0, 0.0, 0.0), x, y, "Skew");
+            return Value();
+        });
+        def.method("resetTransformation", 0, [](Document& d, const Args&) {
+            // Scale, rotation and skew go; the registration point stays.
+            for (fla::Element* element : needSelection(d.session, d.document))
+                setTransform(d.session, d.document, element,
+                    fla::Transform(1.0, 0.0, 0.0, 1.0, element->transform.tx, element->transform.ty), "Remove Transform");
+            return Value();
+        });
+        def.method("distributeToLayers", 0, [](Document& d, const Args&) {
+            fla::Timeline* timeline = d.session.host().editedTimeline(d.document);
+            if (!timeline)
+                return Value();
+            fla::Selection& selection = d.session.host().selection(d.document);
+            std::vector<fla::CommandPtr> commands = fla::layers::distributeToLayers(*timeline, d.session.host().currentLayer(d.document),
+                needSelection(d.session, d.document), d.data().symbolList, &selection);
+            selection.clear();
+            for (fla::CommandPtr& command : commands)
+                d.push(std::move(command));
+            return Value();
+        });
+
+        // Text fields, through the selection.
+        def.method("getTextString", 2, [](Document& d, const Args& args) { return callOnSelection(d, "getTextString", args); });
+        def.method("setTextString", 3, [](Document& d, const Args& args) {
+            callOnSelection(d, "setTextString", args);
+            return Value(true);
+        });
+        def.method("setElementTextAttr", 4, [](Document& d, const Args& args) {
+            callOnSelection(d, "setTextAttr", args);
+            return Value(true);
+        });
+
+        // Blend modes and filters of the selected symbol instances.
+        def.method("setBlendMode", 1, [](Document& d, const Args& args) {
+            for (fla::Element* element : needSelection(d.session, d.document))
+            {
+                auto wrapper = wrapElement(d.session, d.document, element);
+                if (const Property* property = findProperty(*wrapper, "blendMode"))
+                    property->set(*wrapper, arg(args, 0));
+            }
+            return Value();
+        });
+        def.method("getFilters", 0, [](Document& d, const Args&) {
+            for (fla::Element* element : needSelection(d.session, d.document))
+            {
+                auto wrapper = wrapElement(d.session, d.document, element);
+                if (const Property* property = findProperty(*wrapper, "filters"))
+                    return property->get(*wrapper);
+            }
+            return Value::array();
+        });
+        def.method("setFilters", 1, [](Document& d, const Args& args) {
+            const Value filters = arg(args, 0);
+            editFilters(d, [&filters](std::vector<Value>& list) { list = filters.items; });
+            return Value();
+        });
+        def.method("addFilter", 1, [](Document& d, const Args& args) {
+            Value filter = Value::map();
+            filter.set("name", arg(args, 0).toString());
+            editFilters(d, [&filter](std::vector<Value>& list) { list.push_back(filter); });
+            return Value();
+        });
+        def.method("removeAllFilters", 0, [](Document& d, const Args&) {
+            editFilters(d, [](std::vector<Value>& list) { list.clear(); });
+            return Value();
+        });
+        def.method("removeFilter", 1, [](Document& d, const Args& args) {
+            editFilters(d, [&args](std::vector<Value>& list) {
+                filterAt(list, arg(args, 0));
+                list.erase(list.begin() + arg(args, 0).toInt());
+            });
+            return Value();
+        });
+        def.method("setFilterProperty", 3, [](Document& d, const Args& args) {
+            editFilters(d, [&args](std::vector<Value>& list) { filterAt(list, arg(args, 1)).set(arg(args, 0).toString(), arg(args, 2)); });
+            return Value();
+        });
+        def.method("enableFilter", 1, [](Document& d, const Args& args) {
+            editFilters(d, [&args](std::vector<Value>& list) { filterAt(list, arg(args, 0)).set("enabled", true); });
+            return Value();
+        });
+        def.method("disableFilter", 1, [](Document& d, const Args& args) {
+            editFilters(d, [&args](std::vector<Value>& list) { filterAt(list, arg(args, 0)).set("enabled", false); });
+            return Value();
+        });
+        def.method("enableAllFilters", 0, [](Document& d, const Args&) {
+            editFilters(d, [](std::vector<Value>& list) {
+                for (Value& filter : list)
+                    filter.set("enabled", true);
+            });
+            return Value();
+        });
+        def.method("disableAllFilters", 0, [](Document& d, const Args&) {
+            editFilters(d, [](std::vector<Value>& list) {
+                for (Value& filter : list)
+                    filter.set("enabled", false);
+            });
+            return Value();
+        });
+        def.method("disableOtherFilters", 1, [](Document& d, const Args& args) {
+            editFilters(d, [&args](std::vector<Value>& list) {
+                filterAt(list, arg(args, 0));
+                for (size_t i = 0; i < list.size(); ++i)
+                    list[i].set("enabled", static_cast<int>(i) == arg(args, 0).toInt());
+            });
+            return Value();
+        });
+        def.method("changeFilterOrder", 2, [](Document& d, const Args& args) {
+            editFilters(d, [&args](std::vector<Value>& list) {
+                const Value moving = filterAt(list, arg(args, 0));
+                filterAt(list, arg(args, 1));
+                list.erase(list.begin() + arg(args, 0).toInt());
+                list.insert(list.begin() + arg(args, 1).toInt(), moving);
+            });
             return Value();
         });
 

@@ -15248,62 +15248,16 @@ void MainWindow::distributeToLayers()
     int current = 0;
     if (!_timelineView->currentLayer(timeline, current) || !timeline)
         return;
-    std::vector<fla::Element*> elements = selectedElements();
-    // Only objects lying on a frame of the current timeline move.
-    elements.erase(std::remove_if(elements.begin(), elements.end(), [timeline](fla::Element* element) {
-        auto* frame = dynamic_cast<fla::Frame*>(element->parent);
-        auto* layer = frame ? dynamic_cast<fla::Layer*>(frame->parent) : nullptr;
-        return !layer || std::find(timeline->layers.begin(), timeline->layers.end(), layer) == timeline->layers.end();
-    }), elements.end());
-    if (elements.empty())
-        return;
-
-    _selection.clear();
     const fla::SymbolList* library = _flaDocument && _flaDocument->document ? _flaDocument->document->symbolList : nullptr;
+    std::vector<fla::CommandPtr> commands =
+        fla::layers::distributeToLayers(*timeline, current, selectedElements(), library, &_selection);
+    if (commands.empty())
+        return;
+    _selection.clear();
     fla::CommandStack& stack = _editContext.commandStack();
     stack.beginMacro("Distribute to Layers");
-    // The topmost object gets the layer just under the current one, the next
-    // the one under that.
-    int at = current + 1;
-    for (auto it = elements.rbegin(); it != elements.rend(); ++it)
-    {
-        fla::Element* element = *it;
-        auto* frame = static_cast<fla::Frame*>(element->parent);
-        fla::Layer* layer = fla::newLayerFor(*timeline, false);
-        for (fla::Frame* empty : layer->frames)
-            delete empty;
-        layer->frames.clear();
-        // Named for the symbol, else numbered.
-        if (element->elementType() == fla::Element::Type::SymbolInstance)
-        {
-            const auto* instance = static_cast<const fla::SymbolInstance*>(element);
-            const std::string& name = instance->name.empty() ? instance->libraryItemName : instance->name;
-            layer->name = name.substr(name.find_last_of('/') == std::string::npos ? 0 : name.find_last_of('/') + 1);
-            layer->autoNamed = false;
-        }
-        if (frame->index > 0)
-        {
-            fla::Frame* before = new fla::Frame(layer);
-            before->index = 0;
-            before->duration = frame->index;
-            before->keyMode = "9728";
-            layer->frames.push_back(before);
-        }
-        fla::Frame* holder = new fla::Frame(layer);
-        holder->index = frame->index;
-        holder->duration = frame->duration;
-        holder->keyMode = "9728";
-        if (fla::Element* copy = fla::cloneElement(*element, holder))
-        {
-            fla::relinkSymbols(*copy, library);
-            holder->elements.push_back(copy);
-        }
-        layer->frames.push_back(holder);
-        layer->firstFrame = 0;
-        layer->lastFrame = holder->index + holder->duration;
-        stack.push(fla::CommandPtr(new fla::RemoveElementCommand(frame, element, "Distribute to Layers", &_selection)));
-        stack.push(fla::CommandPtr(new fla::AddLayerCommand(timeline, at++, layer, "Distribute to Layers")));
-    }
+    for (fla::CommandPtr& command : commands)
+        stack.push(std::move(command));
     stack.endMacro();
     stack.breakMergeChain();
     _timelineView->refresh();

@@ -1,9 +1,12 @@
 #include "layer_commands.h"
 
 #include "../data/frame.h"
+#include "../data/symbol_instance.h"
 #include "../data/layer.h"
 #include "../data/timeline.h"
 #include "timeline_edit.h"
+#include "element_clone.h"
+#include "element_commands.h"
 
 #include <map>
 #include <set>
@@ -711,6 +714,61 @@ std::vector<Layer*> cloneLayers(const std::vector<const Layer*>& layers, const T
         made.push_back(copy);
     }
     return made;
+}
+
+std::vector<CommandPtr> distributeToLayers(Timeline& timeline, int current, std::vector<Element*> elements,
+    const SymbolList* library, Selection* selection)
+{
+    // Only objects lying on a frame of the timeline move.
+    elements.erase(std::remove_if(elements.begin(), elements.end(), [&timeline](Element* element) {
+        auto* frame = element ? dynamic_cast<Frame*>(element->parent) : nullptr;
+        auto* layer = frame ? dynamic_cast<Layer*>(frame->parent) : nullptr;
+        return !layer || std::find(timeline.layers.begin(), timeline.layers.end(), layer) == timeline.layers.end();
+    }), elements.end());
+    std::vector<CommandPtr> commands;
+    // The topmost object gets the layer just under the current one, the next
+    // the one under that.
+    int at = current + 1;
+    for (auto it = elements.rbegin(); it != elements.rend(); ++it)
+    {
+        Element* element = *it;
+        auto* frame = static_cast<Frame*>(element->parent);
+        Layer* layer = newLayerFor(timeline, false);
+        for (Frame* empty : layer->frames)
+            delete empty;
+        layer->frames.clear();
+        // Named for the symbol, else numbered.
+        if (element->elementType() == Element::Type::SymbolInstance)
+        {
+            const auto* instance = static_cast<const SymbolInstance*>(element);
+            const std::string& name = instance->name.empty() ? instance->libraryItemName : instance->name;
+            layer->name = name.substr(name.find_last_of('/') == std::string::npos ? 0 : name.find_last_of('/') + 1);
+            layer->autoNamed = false;
+        }
+        if (frame->index > 0)
+        {
+            Frame* before = new Frame(layer);
+            before->index = 0;
+            before->duration = frame->index;
+            before->keyMode = "9728";
+            layer->frames.push_back(before);
+        }
+        Frame* holder = new Frame(layer);
+        holder->index = frame->index;
+        holder->duration = frame->duration;
+        holder->keyMode = "9728";
+        if (Element* copy = cloneElement(*element, holder))
+        {
+            relinkSymbols(*copy, library);
+            holder->elements.push_back(copy);
+        }
+        layer->frames.push_back(holder);
+        layer->firstFrame = 0;
+        layer->lastFrame = holder->index + holder->duration;
+        commands.emplace_back(new RemoveElementCommand(frame, element, "Distribute to Layers", selection));
+        commands.emplace_back(new AddLayerCommand(&timeline, at++, layer, "Distribute to Layers"));
+    }
+    return commands;
 }
 
 } // namespace layers

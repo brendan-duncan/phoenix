@@ -5,13 +5,24 @@
 #include "model.h"
 #include "xul.h"
 
+#include "../data/document.h"
 #include "../data/fla_document.h"
+#include "../data/frame.h"
+#include "../data/group.h"
+#include "../data/layer.h"
+#include "../data/symbol.h"
+#include "../data/symbol_instance.h"
+#include "../data/symbol_list.h"
+#include "../data/timeline.h"
+#include "../edit/drawing_style.h"
+#include "../edit/selection.h"
 
 #include <algorithm>
 #include <cctype>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
+#include <functional>
 #include <cstdint>
 #include <memory>
 
@@ -111,6 +122,62 @@ Value saveAs(Flash& fl, fla::FLADocument* document, const std::string& path, boo
     if (!session.host().save(document, path, copy, error))
         throw Error(error.empty() ? "The document could not be saved." : error);
     return Value(true);
+}
+
+/// Every element on every keyframe of the document, in its scenes and its
+/// symbols, inside groups too, that \a wanted picks; as fl.findObjectInDoc*
+/// gives them: {obj, keyframe, layer, timeline, parent}.
+Value findInDocument(Flash& fl, fla::FLADocument* document, const std::function<bool(Element&)>& wanted)
+{
+    Session& session = fl.session;
+    fla::Document& data = session.data(document);
+    Value found = Value::array();
+    std::vector<fla::Timeline*> timelines = data.timelines;
+    if (data.symbolList)
+        for (fla::Symbol* symbol : data.symbolList->symbols)
+            if (symbol)
+                timelines.insert(timelines.end(), symbol->timelines.begin(), symbol->timelines.end());
+    for (fla::Timeline* timeline : timelines)
+    {
+        for (fla::Layer* layer : timeline ? timeline->layers : std::vector<fla::Layer*>())
+        {
+            for (fla::Frame* frame : layer ? layer->frames : std::vector<fla::Frame*>())
+            {
+                if (!frame)
+                    continue;
+                std::function<void(fla::Element*, const Value&)> visit = [&](fla::Element* element, const Value& parent) {
+                    if (!element)
+                        return;
+                    auto wrapper = wrapElement(session, document, element);
+                    if (wanted(*wrapper))
+                    {
+                        Value entry = Value::map();
+                        entry.set("obj", wrapper);
+                        entry.set("keyframe", std::make_shared<Frame>(session, document, layer, frame->index));
+                        entry.set("layer", wrapLayer(session, document, layer));
+                        entry.set("timeline", wrapTimeline(session, document, timeline));
+                        entry.set("parent", parent);
+                        found.items.push_back(std::move(entry));
+                    }
+                    if (auto* group = dynamic_cast<fla::Group*>(element))
+                        for (fla::Element* member : group->members)
+                            visit(member, Value(wrapper));
+                };
+                for (fla::Element* element : frame->elements)
+                    visit(element, Value::null());
+            }
+        }
+    }
+    return found;
+}
+
+std::string propertyText(Element& element, const char* name)
+{
+    for (const ClassInfo* info = &element.classInfo(); info; info = info->parent)
+        for (const Property& property : info->properties)
+            if (property.name == name)
+                return property.get(element).toString();
+    return {};
 }
 
 } // namespace
@@ -270,7 +337,65 @@ const ClassInfo& Flash::classInfo() const
             return path.empty() ? Value::null() : Value(uri::fromPath(path));
         });
         def.get("outputPanel", [](Flash& fl) { return Value(std::make_shared<OutputPanel>(fl.session)); });
-        def.method("showIdleMessage", 1, [](Flash&, const Args&) { return Value(); });
+        def.method("findObjectInDocByName", 2, [](Flash& fl, const Args& args) {
+            const std::string name = arg(args, 0).toString();
+            return findInDocument(fl, documentOf(fl, arg(args, 1)),
+                [&name](Element& element) { return !name.empty() && propertyText(element, "name") == name; });
+        });
+        def.method("findObjectInDocByType", 2, [](Flash& fl, const Args& args) {
+            const std::string type = arg(args, 0).toString();
+            return findInDocument(fl, documentOf(fl, arg(args, 1)), [&type](Element& element) {
+                const std::string kind = propertyText(element, "elementType");
+                // A drawing object is a "shapeObj" to search for.
+                if (type == "shapeObj")
+                    return kind == "shape" && propertyText(element, "isDrawingObject") == "true";
+                return kind == type;
+            });
+        });
+        def.method("selectElement", 2, [](Flash& fl, const Args& args) {
+            // An entry fl.findObjectInDoc* gave, or an element.
+            const Value& given = arg(args, 0);
+            const Value* object = given.type == Value::Type::Map ? given.field("obj") : &given;
+            const auto element = object ? object->as<Element>() : nullptr;
+            if (!element)
+                throw Error("selectElement takes an element, or what fl.findObjectInDocByName gives.");
+            fla::Element& target = element->get();
+            auto* frame = dynamic_cast<fla::Frame*>(target.parent);
+            // Inside a group: the group's frame.
+            for (fla::DOMElement* up = target.parent; !frame && up; up = up->parent)
+                frame = dynamic_cast<fla::Frame*>(up);
+            auto* layer = frame ? dynamic_cast<fla::Layer*>(frame->parent) : nullptr;
+            auto* timeline = layer ? dynamic_cast<fla::Timeline*>(layer->parent) : nullptr;
+            if (!timeline)
+                return Value(false);
+            Host& host = fl.session.host();
+            fla::FLADocument* document = element->document;
+            if (document != host.activeDocument())
+            {
+                fl.session.beforeSwitch();
+                host.activate(document);
+            }
+            host.editTimeline(document, timeline);
+            host.setCurrentFrame(document, frame->index);
+            const auto at = std::find(timeline->layers.begin(), timeline->layers.end(), layer);
+            host.setCurrentLayer(document, static_cast<int>(at - timeline->layers.begin()));
+            auto* instance = dynamic_cast<fla::SymbolInstance*>(&target);
+            if (arg(args, 1).toBool() && instance && instance->symbol && !instance->symbol->timelines.empty())
+                host.editTimeline(document, instance->symbol->timelines.front());
+            else
+                host.selection(document).select(&target);
+            return Value(true);
+        });
+        def.prop("objectDrawingMode",
+            [](Flash& fl) {
+                const fla::DrawingStyle* style = fl.session.host().drawingStyle();
+                return Value(style && style->objectDrawing);
+            },
+            [](Flash& fl, const Value& v) {
+                if (fla::DrawingStyle* style = fl.session.host().drawingStyle())
+                    style->objectDrawing = v.toBool();
+            });
+        def.method("showIdleMessage", 1,[](Flash&, const Args&) { return Value(); });
         def.method("clipCopyString", 1, [](Flash& fl, const Args& args) {
             fl.session.host().copyText(arg(args, 0).toString());
             return Value();

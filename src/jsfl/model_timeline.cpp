@@ -12,6 +12,7 @@
 #include "../data/symbol.h"
 #include "../data/timeline.h"
 #include "../edit/command_stack.h"
+#include "../edit/frame_bake.h"
 #include "../edit/layer_commands.h"
 #include "../edit/property_command.h"
 #include "../edit/selection.h"
@@ -19,11 +20,15 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <map>
 #include <memory>
 #include <cstdint>
 #include <functional>
+
+#include "../third_party/tinyxml2/tinyxml2.h"
 
 namespace jsfl {
 
@@ -661,6 +666,52 @@ const ClassInfo& Timeline::classInfo() const
                 }
             });
             return Value();
+        });
+        def.method("reverseFrames", 2, [](Timeline& t, const Args& args) {
+            editFrames(t, spansFor(t, args, 0), "Reverse Frames", [](const Span& span, std::vector<fla::Frame*>& removed) {
+                fla::frames::reverseFrames(*span.layer, span.first, span.last, removed);
+            });
+            return Value();
+        });
+        // Ruler guides, as the FLA keeps them: <guidelines><guideline
+        // direction="v">x</guideline>...</guidelines>, "h" for a horizontal
+        // one at its y.
+        def.method("getGuidelines", 0, [](Timeline& t, const Args&) {
+            const fla::Timeline& timeline = t.get();
+            std::string xml = "<guidelines>";
+            const auto add = [&xml](const char* direction, double position) {
+                char number[64];
+                std::snprintf(number, sizeof(number), "%g", position);
+                xml += std::string("<guideline direction=\"") + direction + "\">" + number + "</guideline>";
+            };
+            for (double x : timeline.guidesX)
+                add("v", x);
+            for (double y : timeline.guidesY)
+                add("h", y);
+            return Value(xml + "</guidelines>");
+        });
+        def.method("setGuidelines", 1, [](Timeline& t, const Args& args) {
+            fla::Timeline& timeline = t.get();
+            tinyxml2::XMLDocument xml;
+            const std::string text = arg(args, 0).toString();
+            if (xml.Parse(text.c_str(), text.size()) != tinyxml2::XML_SUCCESS || !xml.FirstChildElement("guidelines"))
+                return Value(false);
+            std::vector<double> xs;
+            std::vector<double> ys;
+            for (const tinyxml2::XMLElement* guide = xml.FirstChildElement("guidelines")->FirstChildElement("guideline"); guide;
+                 guide = guide->NextSiblingElement("guideline"))
+            {
+                const char* direction = guide->Attribute("direction");
+                const char* value = guide->GetText();
+                char* end = nullptr;
+                const double position = value ? std::strtod(value, &end) : 0.0;
+                if (!direction || !value || end == value || (std::strcmp(direction, "v") != 0 && std::strcmp(direction, "h") != 0))
+                    return Value(false);
+                (std::strcmp(direction, "v") == 0 ? xs : ys).push_back(position);
+            }
+            t.push(fla::CommandPtr(new fla::SetPropertyCommand<std::vector<double>>(timeline.guidesX, timeline.guidesX, xs, "Guides")), false);
+            t.push(fla::CommandPtr(new fla::SetPropertyCommand<std::vector<double>>(timeline.guidesY, timeline.guidesY, ys, "Guides")), false);
+            return Value(true);
         });
         def.method("clearFrames", 2, [](Timeline& t, const Args& args) {
             editFrames(t, spansFor(t, args, 0), "Clear Frames", [](const Span& span, std::vector<fla::Frame*>& removed) {
