@@ -218,7 +218,7 @@ bool HtmlView::event(QEvent* event)
 {
     if (event->type() == QEvent::WinIdChange && _impl->webview)
     {
-        NSView* parent = reinterpret_cast<NSView*>(winId());
+        NSView* parent = (__bridge NSView*)reinterpret_cast<void*>(winId());
         [_impl->webview removeFromSuperview];
         [parent addSubview:_impl->webview];
         _impl->webview.frame = parent.bounds;
@@ -259,7 +259,7 @@ void HtmlView::showEvent(QShowEvent* event)
         [configuration.userContentController addUserScript:start];
     }
     [configuration.preferences setValue:@YES forKey:@"developerExtrasEnabled"];
-    NSView* parent = reinterpret_cast<NSView*>(winId());
+    NSView* parent = (__bridge NSView*)reinterpret_cast<void*>(winId());
     d.webview = [[WKWebView alloc] initWithFrame:parent.bounds configuration:configuration];
     d.webview.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
     d.delegate = [[PhoenixWebDelegate alloc] init];
