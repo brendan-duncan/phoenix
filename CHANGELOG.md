@@ -2,10 +2,13 @@
 
 What changed in each release of Phoenix, newest first.
 
-## 0.13.1 (Unreleased)
+## 0.14.0 (Unreleased)
 
 - The Behaviors panel, Echo and Posterize Time, Mask Edge, bone springs, 3D Lights and Depth and template sliders use hot text numbers (drag to scrub, click to type) instead of arrow boxes
 - On Windows, a crash leaves a report in %LOCALAPPDATA%\Phoenix\Crashes to send with a bug report
+
+## 0.13.1
+
 - Objects with behaviors that make copies (particles, rings, rows) are selected by clicking any copy that shows, not only the first
 - Effects use every processor core: filters, adjustment-layer effects, mask edges and blurs draw 5 to 25 times faster, looking exactly as before
 - Motion blur draws about 15 times faster, and with echoes about 90 times: only the part of the picture the layer covers is blurred, and frames already blurred are reused
