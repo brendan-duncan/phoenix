@@ -1377,6 +1377,53 @@ TEST(mask_edges_and_layer_modes)
     CHECK(inside[0] == 255 && inside[10 * 21 + 10] == 0);
 }
 
+TEST(mask_variable_feather_and_several_masks)
+{
+    namespace comp = fla::compositing;
+    // An object's own feather, in place of the layer's; blended through a
+    // tween toward the next keyframe's.
+    fla::Shape soft(nullptr);
+    fla::Shape plain(nullptr);
+    CHECK(comp::elementFeatherOf(plain, 3.0) == 3.0);
+    soft.extraAttributes = comp::withElementFeather(soft, 20.0);
+    CHECK(comp::elementFeatherOf(soft, 3.0) == 20.0);
+    CHECK(near(comp::blendedFeather(soft, &plain, 0.25, 4.0), 16.0));
+    CHECK(comp::blendedFeather(soft, nullptr, 0.5, 4.0) == 20.0);
+    soft.extraAttributes = comp::withElementFeather(soft, -1.0);
+    CHECK(soft.extraAttributes.empty());
+
+    // Other masks by name, in any order; names with a semicolon or a
+    // percent sign come back whole.
+    fla::Layer layer(nullptr);
+    CHECK(comp::moreMasksOf(layer).empty());
+    std::vector<comp::MoreMask> masks(3);
+    masks[0].layer = "Spot; light";
+    masks[1].mode = comp::MaskCombine::Subtract;
+    masks[1].layer = "50% hole";
+    masks[2].mode = comp::MaskCombine::Intersect;
+    masks[2].layer = "Window";
+    layer.extraAttributes = comp::withMoreMasks(layer, masks);
+    CHECK(comp::moreMasksOf(layer) == masks);
+    layer.extraAttributes = comp::withMoreMasks(layer, {});
+    CHECK(layer.extraAttributes.empty());
+
+    // Four pixels: own mask on the first two, an Add mask on the third, a
+    // Subtract mask on the second, an Intersect mask on all but the third.
+    std::vector<uint8_t> own = {255, 255, 0, 0};
+    const std::vector<uint8_t> add = {0, 0, 255, 0};
+    const std::vector<uint8_t> cut = {0, 255, 0, 0};
+    const std::vector<uint8_t> overlap = {255, 255, 0, 255};
+    comp::combineMasks(own, {{comp::MaskCombine::Subtract, &cut}, {comp::MaskCombine::Intersect, &overlap},
+                                {comp::MaskCombine::Add, &add}});
+    // Added before it is overlapped: the third is lost to the Intersect mask.
+    CHECK(own == std::vector<uint8_t>({255, 0, 0, 0}));
+    // Soft masks by degrees: half cut out leaves half.
+    std::vector<uint8_t> half = {255};
+    const std::vector<uint8_t> halfCut = {128};
+    comp::combineMasks(half, {{comp::MaskCombine::Subtract, &halfCut}});
+    CHECK(half[0] == 127);
+}
+
 TEST(shape_operators_twist_and_merge)
 {
     using fla::shapeops::Line;

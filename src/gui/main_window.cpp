@@ -3362,6 +3362,9 @@ void MainWindow::setupUI()
         using Attributes = std::vector<std::pair<std::string, std::string>>;
         Attributes after;
         QString name;
+        // Objects whose attributes change with the layer's: a feather of
+        // their own on a mask.
+        std::vector<std::pair<fla::Element*, Attributes>> elementChanges;
         if (what.startsWith("matte:"))
         {
             const QString kind = what.mid(6);
@@ -3451,6 +3454,29 @@ void MainWindow::setupUI()
             form->addRow("Feather", feather);
             form->addRow("Expand", expand);
             form->addRow("Invert", invert);
+            // Variable feather: the selected objects on this mask layer
+            // can have a feather of their own.
+            std::vector<fla::Element*> onMask;
+            for (fla::Element* element : selectedElements())
+            {
+                const fla::Frame* frame = element ? frameOfElement(element) : nullptr;
+                if (frame && frame->parent == layer)
+                    onMask.push_back(element);
+            }
+            HotDoubleSpinBox* own = nullptr;
+            if (!onMask.empty())
+            {
+                const double first = fla::compositing::elementFeatherOf(*onMask.front(), -1.0);
+                own = new HotDoubleSpinBox(&dialog);
+                own->setRange(-1.0, 1000.0);
+                own->setDecimals(2);
+                own->setSuffix(" px");
+                own->setSpecialValueText("The layer's");
+                own->setValue(first);
+                own->setToolTip("A feather of their own for the selected objects on this mask, in place of the layer's; "
+                                "each keyframe keeps its own and a tween blends between them");
+                form->addRow(onMask.size() == 1 ? QString("Selected object") : QString("Selected objects"), own);
+            }
             QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
             connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
             connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
@@ -3463,6 +3489,40 @@ void MainWindow::setupUI()
             edge.invert = invert->isChecked();
             after = fla::compositing::withMaskEdge(*layer, edge);
             name = "Mask Edge";
+            if (own)
+                for (fla::Element* element : onMask)
+                {
+                    Attributes attributes = fla::compositing::withElementFeather(*element, own->value() < 0.0 ? -1.0 : own->value());
+                    if (attributes != element->extraAttributes)
+                        elementChanges.emplace_back(element, attributes);
+                }
+        }
+        else if (what.startsWith("maskwith:"))
+        {
+            // Another mask layer of the timeline added to the layer's own
+            // mask, cut out of it, overlapped with it, or taken off.
+            const QStringList parts = what.split(':');
+            const auto* timeline = dynamic_cast<const fla::Timeline*>(layer->parent);
+            const int index = parts.value(1).toInt();
+            if (!timeline || index < 0 || index >= static_cast<int>(timeline->layers.size()) || !timeline->layers[index])
+                return;
+            const std::string other = timeline->layers[index]->name;
+            const QString mode = parts.value(2);
+            std::vector<fla::compositing::MoreMask> list = fla::compositing::moreMasksOf(*layer);
+            list.erase(std::remove_if(list.begin(), list.end(),
+                           [&other](const fla::compositing::MoreMask& each) { return each.layer == other; }),
+                list.end());
+            if (mode != "none")
+            {
+                fla::compositing::MoreMask added;
+                added.layer = other;
+                added.mode = mode == "subtract" ? fla::compositing::MaskCombine::Subtract
+                    : mode == "intersect"       ? fla::compositing::MaskCombine::Intersect
+                                                : fla::compositing::MaskCombine::Add;
+                list.push_back(added);
+            }
+            after = fla::compositing::withMoreMasks(*layer, list);
+            name = "Also Masked By";
         }
         else if (what.startsWith("motionblur:"))
         {
@@ -3474,11 +3534,20 @@ void MainWindow::setupUI()
             after = fla::compositing::withAdjustment(*layer, what == "adjustment:on");
             name = "Adjustment Layer";
         }
-        if (after == layer->extraAttributes)
+        if (after == layer->extraAttributes && elementChanges.empty())
             return;
-        _editContext.commandStack().push(fla::CommandPtr(new fla::SetPropertyCommand<Attributes>(layer->extraAttributes,
-            layer->extraAttributes, after, name.toStdString())));
-        _editContext.commandStack().breakMergeChain();
+        fla::CommandStack& stack = _editContext.commandStack();
+        if (!elementChanges.empty())
+            stack.beginMacro(name.toStdString());
+        if (after != layer->extraAttributes)
+            stack.push(fla::CommandPtr(new fla::SetPropertyCommand<Attributes>(layer->extraAttributes,
+                layer->extraAttributes, after, name.toStdString())));
+        for (const auto& [element, attributes] : elementChanges)
+            stack.push(fla::CommandPtr(new fla::SetPropertyCommand<Attributes>(element->extraAttributes,
+                element->extraAttributes, attributes, name.toStdString())));
+        if (!elementChanges.empty())
+            stack.endMacro();
+        stack.breakMergeChain();
         if (_phoenixView)
         {
             _phoenixView->clearCaches();
@@ -6077,9 +6146,9 @@ void MainWindow::renameLayer(const fla::Timeline* timeline, int layerIndex, cons
     if (after == layer->name)
         return;
 
+    const std::string before = layer->name;
     // A typed name stops being automatic, so it is never renumbered.
     fla::CommandStack& stack = _editContext.commandStack();
-    const std::string before = layer->name;
     stack.beginMacro("Rename Layer");
     stack.push(fla::CommandPtr(new fla::SetPropertyCommand<std::string>(layer->name, layer->name, after, "Rename Layer")));
     stack.push(fla::CommandPtr(new fla::SetPropertyCommand<bool>(layer->autoNamed, layer->autoNamed, false, "Rename Layer")));
@@ -6089,6 +6158,27 @@ void MainWindow::renameLayer(const fla::Timeline* timeline, int layerIndex, cons
     if (graphAfter != owner->extraAttributes)
         stack.push(fla::CommandPtr(new fla::SetPropertyCommand<std::vector<std::pair<std::string, std::string>>>(
             owner->extraAttributes, owner->extraAttributes, graphAfter, "Rename Layer")));
+    // Layers also masked by a renamed mask layer follow it to its new name.
+    if (layer->layerType == fla::Layer::Type::Mask)
+        for (fla::Layer* other : timeline->layers)
+        {
+            if (!other)
+                continue;
+            std::vector<fla::compositing::MoreMask> more = fla::compositing::moreMasksOf(*other);
+            bool named = false;
+            for (fla::compositing::MoreMask& each : more)
+                if (each.layer == before)
+                {
+                    each.layer = after;
+                    named = true;
+                }
+            if (named)
+            {
+                using Attributes = std::vector<std::pair<std::string, std::string>>;
+                stack.push(fla::CommandPtr(new fla::SetPropertyCommand<Attributes>(other->extraAttributes, other->extraAttributes,
+                    fla::compositing::withMoreMasks(*other, more), "Rename Layer")));
+            }
+        }
     stack.endMacro();
     stack.breakMergeChain();
     _timelineView->refresh();

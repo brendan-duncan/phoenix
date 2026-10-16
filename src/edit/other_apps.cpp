@@ -3,6 +3,7 @@
 #include "adjustments.h"
 #include "behaviors.h"
 #include "frame_bake.h"
+#include "layer_commands.h"
 #include "library_commands.h"
 #include "library_media.h"
 #include "templates.h"
@@ -342,6 +343,177 @@ void bakeMattes(Document& document, Timeline& timeline, std::vector<std::string>
 // Effects ----------------------------------------------------------------------
 
 constexpr double kPi = 3.14159265358979323846;
+// Several masks ---------------------------------------------------------------
+
+/// A copy of \a source's frames at \a at in \a into, a layer of \a type of
+/// its own; the layers further down that count past it count one more.
+Layer* copiedLayer(const Layer& source, Timeline& into, size_t at, Layer::Type type)
+{
+    std::vector<Layer*> copies = layers::cloneLayers({&source}, into);
+    if (copies.empty())
+        return nullptr;
+    Layer* copy = copies.front();
+    for (size_t k = 1; k < copies.size(); ++k)
+        delete copies[k];
+    copy->parent = &into;
+    copy->layerType = type;
+    copy->parentLayer = nullptr;
+    copy->parentLayerIndex = -1;
+    // Its own edges and further masks are Phoenix's; the copy is plain.
+    for (const char* name : {"phoenixMaskFeather", "phoenixMaskExpand", "phoenixMaskInvert", compositing::kMoreMasks})
+        removeAttribute(*copy, name);
+    into.layers.insert(into.layers.begin() + static_cast<std::ptrdiff_t>(at), copy);
+    for (size_t k = at + 1; k < into.layers.size(); ++k)
+        if (into.layers[k] && into.layers[k]->parentLayerIndex >= static_cast<int>(at))
+            ++into.layers[k]->parentLayerIndex;
+    return copy;
+}
+
+/// Everything in \a inside put in a movie clip of its own (named after
+/// \a name), which becomes its one layer. Returns the instance showing it.
+SymbolInstance* wrapAll(Document& document, Timeline& inside, const std::string& name)
+{
+    return intoClip(document, inside, 0, inside.layers.size(), name);
+}
+
+/// \a inside cut where the art of \a cutters is: what it holds in a movie
+/// clip with Layer blending, copies of the cutters' art over it in a clip of
+/// their own that erases what it covers.
+void cutBy(Document& document, Timeline& inside, const std::vector<const Layer*>& cutters, const std::string& name)
+{
+    if (cutters.empty() || inside.layers.empty())
+        return;
+    SymbolInstance* both = wrapAll(document, inside, name + " cut");
+    both->blendMode = "layer";
+    Timeline* cut = both->symbol->timelines.front();
+    for (size_t k = 0; k < cutters.size(); ++k)
+        copiedLayer(*cutters[k], *cut, k, Layer::Type::Normal);
+    SymbolInstance* art = intoClip(document, *cut, 0, cutters.size(), name + " cutter");
+    art->blendMode = "erase";
+}
+
+void bakeMoreMasks(Document& document, Timeline& timeline, std::vector<std::string>& notes)
+{
+    for (size_t i = 0; i < timeline.layers.size(); ++i)
+    {
+        Layer* layer = timeline.layers[i];
+        if (!layer)
+            continue;
+        const std::vector<compositing::MoreMask> more = compositing::moreMasksOf(*layer);
+        if (more.empty())
+            continue;
+        removeAttribute(*layer, compositing::kMoreMasks);
+        const int ownIndex = layer->parentLayerIndex;
+        if (layer->layerType != Layer::Type::Masked || ownIndex < 0 || ownIndex >= static_cast<int>(timeline.layers.size()))
+            continue;
+        Layer* own = timeline.layers[static_cast<size_t>(ownIndex)];
+        // The masks it names, by name; one not found is left out.
+        std::vector<const Layer*> adds;
+        std::vector<const Layer*> subtracts;
+        std::vector<const Layer*> intersects;
+        for (const compositing::MoreMask& each : more)
+            for (const Layer* other : timeline.layers)
+                if (other && other != own && other->layerType == Layer::Type::Mask && other->name == each.layer)
+                {
+                    (each.mode == compositing::MaskCombine::Add ? adds
+                            : each.mode == compositing::MaskCombine::Subtract ? subtracts
+                                                                              : intersects)
+                        .push_back(other);
+                    break;
+                }
+        if (adds.empty() && subtracts.empty() && intersects.empty())
+            continue;
+        const std::string name = layer->name;
+
+        // The layer's art into a movie clip, its place taken by a layer
+        // showing it, still masked by its own mask.
+        SymbolInstance* shown = intoClip(document, timeline, i, 1, name + " masked");
+        Layer* holder = timeline.layers[i];
+        holder->name = name;
+        holder->layerType = Layer::Type::Masked;
+        holder->parentLayer = own;
+        holder->parentLayerIndex = ownIndex;
+        Symbol* clip = shown->symbol;
+        Timeline* inside = clip->timelines.front();
+        inside->layers.front()->layerType = Layer::Type::Normal;
+        // Inside it: each Intersect mask over what is there, one inside the
+        // other; then the Subtract masks cut it.
+        for (const Layer* mask : intersects)
+        {
+            if (inside->layers.size() > 1)
+                wrapAll(document, *inside, name + " overlapped");
+            copiedLayer(*mask, *inside, 0, Layer::Type::Mask);
+            inside->layers[1]->layerType = Layer::Type::Masked;
+            inside->layers[1]->parentLayer = inside->layers[0];
+            inside->layers[1]->parentLayerIndex = 0;
+        }
+        cutBy(document, *inside, subtracts, name);
+
+        // Each Add mask: another layer showing the clip, masked by it, less
+        // what its own mask and the Add masks before it show already, so
+        // nothing shows twice. It goes just under the own mask's layers.
+        size_t below = static_cast<size_t>(ownIndex) + 1;
+        while (below < timeline.layers.size() && timeline.layers[below] && timeline.layers[below]->parentLayerIndex == ownIndex &&
+            timeline.layers[below]->layerType == Layer::Type::Masked)
+            ++below;
+        std::vector<const Layer*> before = {own};
+        int length = 1;
+        for (const Frame* frame : holder->frames)
+            if (frame)
+                length = std::max(length, frame->index + std::max(1, frame->duration));
+        for (const Layer* mask : adds)
+        {
+            auto* added = new Symbol(nullptr);
+            added->name = uniqueName(document, name + " added by " + mask->name);
+            added->href = added->name + ".xml";
+            added->symbolType = SymbolType::MovieClip;
+            auto* addedInside = new Timeline(added);
+            addedInside->name = added->name;
+            added->timelines.push_back(addedInside);
+            auto* content = new Layer(addedInside);
+            content->name = name;
+            content->layerType = Layer::Type::Masked;
+            auto* frame = new Frame(content);
+            frame->index = 0;
+            frame->duration = length;
+            auto* instance = new SymbolInstance(frame);
+            instance->libraryItemName = clip->name;
+            instance->symbol = clip;
+            instance->symbolType = SymbolType::MovieClip;
+            frame->elements.push_back(instance);
+            content->frames.push_back(frame);
+            addedInside->layers.push_back(content);
+            copiedLayer(*mask, *addedInside, 0, Layer::Type::Mask);
+            content->parentLayer = addedInside->layers[0];
+            content->parentLayerIndex = 0;
+            cutBy(document, *addedInside, before, added->name);
+            addSymbol(document, added);
+            before.push_back(mask);
+
+            auto* place = new Layer(&timeline);
+            place->name = added->name;
+            auto* placeFrame = new Frame(place);
+            placeFrame->index = 0;
+            placeFrame->duration = length;
+            auto* placed = new SymbolInstance(placeFrame);
+            placed->libraryItemName = added->name;
+            placed->symbol = added;
+            placed->symbolType = SymbolType::MovieClip;
+            placeFrame->elements.push_back(placed);
+            place->frames.push_back(placeFrame);
+            timeline.layers.insert(timeline.layers.begin() + static_cast<std::ptrdiff_t>(below), place);
+            for (size_t k = below + 1; k < timeline.layers.size(); ++k)
+                if (timeline.layers[k] && timeline.layers[k]->parentLayerIndex >= static_cast<int>(below))
+                    ++timeline.layers[k]->parentLayerIndex;
+            ++below;
+        }
+        notes.push_back("Layer " + name + ": its other masks became the movie clip \"" + clip->name + "\"" +
+            (adds.empty() ? std::string() : std::string(" and a layer showing it for each Add mask, under its mask's layers")) +
+            ", which play on their own in other apps; the masks are hard-edged there.");
+    }
+}
+
+// Adjustment layers -------------------------------------------------------------
 
 double number(const behaviors::Applied& applied, const char* name, int frame, double fallback)
 {
@@ -1073,7 +1245,8 @@ bool needsBaking(const Document& document)
     for (Timeline* timeline : allTimelines(editable))
     {
         for (const Layer* layer : timeline->layers)
-            if (layer && (compositing::isAdjustment(*layer) || compositing::matteOf(*layer) != compositing::Matte::None))
+            if (layer && (compositing::isAdjustment(*layer) || compositing::matteOf(*layer) != compositing::Matte::None ||
+                             !compositing::moreMasksOf(*layer).empty()))
                 return true;
         bool found = false;
         eachElement(*timeline, [&](Element* element) {
@@ -1104,6 +1277,8 @@ void bakeCompositing(Document& document, std::vector<std::string>& notes, const 
         bakeInstanceEffects(document, *timeline, drawn, notes);
         bakeGroupedEffects(*timeline, notes);
     }
+    for (Timeline* timeline : allTimelines(document))
+        bakeMoreMasks(document, *timeline, notes);
     for (Timeline* timeline : allTimelines(document))
         bakeMattes(document, *timeline, notes);
     for (Timeline* timeline : allTimelines(document))

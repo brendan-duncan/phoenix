@@ -1228,6 +1228,36 @@ private:
     /// Masks clip what they mask to their area as a path, for exports that
     /// write vectors, rather than compositing pixels.
     bool _vectorMasks = false;
+    /// For an SVG export: a soft mask (feathered) is written as an SVG
+    /// mask with a blur rather than a hard clip. What it masks is drawn into
+    /// an SVG of its own, and a marker drawn in its place stands for it
+    /// until the file is finished: each marker's color, and what it is
+    /// replaced with.
+    bool _svgSoftMasks = false;
+    QRectF _svgArea;
+    QMap<QString, QString> _svgSoftMaskParts;
+    /// \a svg with every soft mask marker in it replaced.
+    QString resolveSoftMasks(const QString& svg) const;
+    /// A mask as an export that writes vectors has it: the areas it covers
+    /// on the device, a part for each feather its objects have (the
+    /// feather, like the expand, in device pixels), and whether it is
+    /// turned inside out.
+    struct VectorMask
+    {
+        std::vector<std::pair<QPainterPath, double>> parts;
+        double expand = 0.0;
+        bool invert = false;
+    };
+    /// \a layer masked softly by \a own and \a others, for an SVG export:
+    /// drawn into an SVG of its own, a marker left in its place.
+    void drawSoftMasked(QPainter& painter, const fla::Layer* layer, const VectorMask& own,
+        const std::vector<std::pair<fla::compositing::MaskCombine, const VectorMask*>>& others, fla::LoopType loopType,
+        int firstFrame);
+    /// A mask layer drawn one part at a time, for a feather that differs
+    /// from object to object: the frame whose objects are picked, and
+    /// which of them are drawn.
+    const fla::Frame* _maskPartFrame = nullptr;
+    std::vector<bool> _maskPartKeep;
     bool _gridOver = false;
     bool _clipOutsideStage = false;
     bool _showPasteboard = true;

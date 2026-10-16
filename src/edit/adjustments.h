@@ -68,6 +68,48 @@ struct MaskEdge
 MaskEdge maskEdgeOf(const Layer& layer);
 std::vector<std::pair<std::string, std::string>> withMaskEdge(const Layer& layer, const MaskEdge& edge);
 
+/// Variable feather: a shape, drawing object, symbol or text on a mask
+/// layer can have a feather of its own, kept in its phoenixMaskFeather
+/// attribute, in place of the layer's. One mask can then be soft round a
+/// spotlight and hard along a window frame. Each keyframe's objects keep
+/// their own, and a tween blends it from one keyframe's to the next's, so
+/// an edge can soften or sharpen over time.
+/// \a element's feather, or \a layerFeather when it has none.
+double elementFeatherOf(const DOMElement& element, double layerFeather);
+/// \a element's attributes with its feather set, or taken off (the layer's
+/// used) when \a feather is less than 0.
+std::vector<std::pair<std::string, std::string>> withElementFeather(const DOMElement& element, double feather);
+/// The feather a tween shows \a t of the way from \a from to \a to (null
+/// when the element does not tween), each falling back to \a layerFeather.
+double blendedFeather(const DOMElement& from, const DOMElement* to, double t, double layerFeather);
+
+/// Several masks: a masked layer is masked by its own mask layer (the one
+/// it sits under) and by others of its timeline, named in its phoenixMasks
+/// attribute. Add masks widen what shows, Intersect masks limit it to where
+/// they cover too, and Subtract masks cut out where they cover, whatever
+/// the order they are listed in: what shows is (own mask or any Add mask)
+/// and every Intersect mask, less any Subtract mask.
+enum class MaskCombine
+{
+    Add,
+    Subtract,
+    Intersect
+};
+struct MoreMask
+{
+    MaskCombine mode = MaskCombine::Add;
+    /// The mask layer's name.
+    std::string layer;
+    bool operator==(const MoreMask& other) const { return mode == other.mode && layer == other.layer; }
+};
+extern const char* const kMoreMasks;
+std::vector<MoreMask> moreMasksOf(const Layer& layer);
+std::vector<std::pair<std::string, std::string>> withMoreMasks(const Layer& layer, const std::vector<MoreMask>& masks);
+const char* maskCombineName(MaskCombine mode);
+/// \a own (one byte a pixel) with the coverage of each of \a others, all
+/// the same size, combined by their modes as moreMasksOf describes.
+void combineMasks(std::vector<uint8_t>& own, const std::vector<std::pair<MaskCombine, const std::vector<uint8_t>*>>& others);
+
 /// How a layer works with what is drawn under it: Stencil shows what is
 /// under only where the layer has art, Silhouette only where it has none,
 /// Preserve Transparency draws the layer only where there is something

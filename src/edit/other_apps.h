@@ -64,6 +64,12 @@ using Renderer = std::function<Picture(const Drawing&)>;
 /// - Track mattes: an alpha matte becomes a mask over the layer, its shape
 ///   hard-edged; a luma matte the same, by shape rather than light.
 ///   Inverted mattes cannot be carried and are left drawn plainly.
+/// - Several masks: the layer's art goes into a movie clip, shown in its
+///   place under its own mask. Inside it each Intersect mask's art masks it
+///   again, and the Subtract masks' art erases it (Layer and Erase
+///   blending). Each Add mask gets a layer of its own just under the own
+///   mask's layers, showing the clip masked by that mask, less what the
+///   masks before it show, so nothing is drawn twice. Masks are hard-edged.
 /// - Adjustment layers: the layers below go into a movie clip of their own,
 ///   placed on the adjustment layer with the effects as its filters and
 ///   color effect (see carryEffects), keyed a frame at a time where the

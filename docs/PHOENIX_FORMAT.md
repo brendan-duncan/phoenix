@@ -202,6 +202,7 @@ are kept, and an FLA export lists them as possibly lost.
 | `instance-effects` | Effects on instances | the instances without their blurs, glows, distortions and wipes |
 | `node-graph` | Node graphs | the layers stacked as usual, without the graph's effects, merges and mattes |
 | `mask-edges` | Mask edges and layer modes | masks hard-edged and not inverted, layers drawn normally |
+| `several-masks` | Several masks on a layer | each masked layer masked by its own mask layer only |
 | `motion-blur` | Motion blur, echo and posterize time | the layers drawn sharp, every frame, without echoes |
 | `templates` | Template fields | the symbols' text and colors as drawn, the same in every instance, nothing pinned to the text |
 | `master-controllers` | Master controllers | the properties as keyed, without the sliders |

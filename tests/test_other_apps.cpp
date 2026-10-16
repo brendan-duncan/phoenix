@@ -469,3 +469,85 @@ TEST(other_apps_draw_adjustment_layers_with_no_filter_into_bitmaps)
         told = told || note.find("Vignette has no filter") != std::string::npos;
     CHECK(told);
 }
+
+TEST(other_apps_bake_several_masks)
+{
+    const fs::path root = fs::temp_directory_path() / "phoenix_other_apps_tests";
+    const fs::path folder = root / "masks";
+    fs::remove_all(folder);
+    const std::string ns = kNs;
+    const auto square = [](int x) {
+        return "<DOMFrame index=\"0\" duration=\"4\"><elements><DOMShape><fills><FillStyle index=\"1\"><SolidColor color=\"#000000\"/>"
+               "</FillStyle></fills><edges><Edge fillStyle1=\"1\" edges=\"!" + std::to_string(x) + " 0|" + std::to_string(x + 400) +
+            " 0|" + std::to_string(x + 400) + " 400|" + std::to_string(x) + " 400|" + std::to_string(x) +
+            " 0\"/></edges></DOMShape></elements></DOMFrame>";
+    };
+    writeText(folder / "masks.xfl", "PROXY-CS5");
+    writeText(folder / "DOMDocument.xml",
+        "<DOMDocument " + ns + " width=\"300\" height=\"200\" frameRate=\"24\"><timelines><DOMTimeline name=\"Scene 1\"><layers>"
+        "<DOMLayer name=\"Own\" layerType=\"mask\"><frames>" + square(0) + "</frames></DOMLayer>"
+        "<DOMLayer name=\"Art\" layerType=\"masked\" parentLayerIndex=\"0\" phoenixMasks=\"add:Wide;subtract:Hole;intersect:Window\">"
+        "<frames>" + square(200) + "</frames></DOMLayer>"
+        "<DOMLayer name=\"Wide\" layerType=\"mask\"><frames>" + square(600) + "</frames></DOMLayer>"
+        "<DOMLayer name=\"Hole\" layerType=\"mask\"><frames>" + square(100) + "</frames></DOMLayer>"
+        "<DOMLayer name=\"Window\" layerType=\"mask\"><frames>" + square(50) + "</frames></DOMLayer>"
+        "<DOMLayer name=\"Under\" layerType=\"masked\" parentLayerIndex=\"4\"><frames>" + square(0) + "</frames></DOMLayer>"
+        "</layers></DOMTimeline></timelines></DOMDocument>");
+    FLAParser parser;
+    std::unique_ptr<fla::FLADocument> file(parser.parse(folder.string()));
+    CHECK(file && file->document);
+    if (!file || !file->document)
+        return;
+    fla::Document& document = *file->document;
+    CHECK(fla::otherapps::needsBaking(document));
+    std::vector<std::string> notes;
+    fla::otherapps::bakeCompositing(document, notes);
+    CHECK(!fla::otherapps::needsBaking(document) && notes.size() == 1);
+
+    // In the layer's place, still under its own mask, a layer showing a
+    // movie clip of its art; a layer for the Add mask under the own mask's
+    // layers; the layer masked further down still finds its mask.
+    fla::Timeline* scene = document.timelines.front();
+    CHECK(scene->layers.size() == 7);
+    if (scene->layers.size() != 7)
+        return;
+    fla::Layer* art = scene->layers[1];
+    CHECK(art->name == "Art" && art->layerType == fla::Layer::Type::Masked && art->parentLayerIndex == 0);
+    CHECK(scene->layers[2]->layerType == fla::Layer::Type::Normal && scene->layers[2]->name == "Art added by Wide");
+    CHECK(scene->layers[6]->parentLayerIndex == 5 && scene->layers[5]->name == "Window");
+    for (const fla::Layer* layer : scene->layers)
+        CHECK(fla::compositing::moreMasksOf(*layer).empty());
+
+    // Inside the clip: the art cut by the Subtract mask (an Erase clip over
+    // it, in a clip with Layer blending) and masked by the Intersect mask.
+    fla::Symbol* clip = symbolNamed(document, "Art masked");
+    CHECK(clip != nullptr);
+    if (!clip)
+        return;
+    fla::Timeline* inside = clip->timelines.front();
+    CHECK(inside->layers.size() == 1);
+    const auto* both = static_cast<const fla::SymbolInstance*>(inside->layers[0]->frames.front()->elements.front());
+    CHECK(both->blendMode == "layer");
+    fla::Timeline* cut = both->symbol->timelines.front();
+    CHECK(cut->layers.size() == 3);
+    if (cut->layers.size() != 3)
+        return;
+    const auto* cutter = static_cast<const fla::SymbolInstance*>(cut->layers[0]->frames.front()->elements.front());
+    CHECK(cutter->blendMode == "erase" && cutter->symbol->timelines.front()->layers.front()->name == "Hole");
+    CHECK(cut->layers[1]->layerType == fla::Layer::Type::Mask && cut->layers[1]->name == "Window" &&
+        cut->layers[2]->layerType == fla::Layer::Type::Masked && cut->layers[2]->parentLayerIndex == 1 &&
+        cut->layers[2]->name == "Art");
+
+    // The Add mask's layer: the clip masked by it, less the own mask.
+    fla::Symbol* added = symbolNamed(document, "Art added by Wide");
+    CHECK(added != nullptr);
+
+    // And it writes and reads back.
+    fs::remove_all(root / "masks_out");
+    fla::XFLFolderWriter writer;
+    CHECK(writer.write(document, (root / "masks_out").string()));
+    FLAParser again;
+    std::unique_ptr<fla::FLADocument> back(again.parse((root / "masks_out").string()));
+    CHECK(back && back->document && symbolNamed(*back->document, "Art masked") &&
+        symbolNamed(*back->document, "Art added by Wide"));
+}

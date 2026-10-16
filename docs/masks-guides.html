@@ -46,6 +46,20 @@
 
 <p>Right-click a mask layer and choose <strong>Mask Edge...</strong> to change how it masks: <strong>Feather</strong> fades its edge softly over that many pixels, <strong>Expand</strong> grows it (or shrinks it, below 0) by that many pixels, and <strong>Invert</strong> shows what is outside the mask instead of inside, for a hole cut in a picture or a vignette. The mask's art keeps its shape; the edge is worked out as it draws, on the stage and in every export. Other apps that open the FLA draw the mask hard-edged and not inverted.</p>
 
+<p>The feather can differ along a mask. Select objects on the mask layer (unlock it first) and open <strong>Mask Edge...</strong>: <strong>Selected objects</strong> gives them a feather of their own in place of the layer's, so one mask can be soft round a spotlight and hard along a window frame. Each keyframe keeps its objects' feathers, and a tween blends between them, so an edge can soften or sharpen as the mask moves. Set it back to <strong>The layer's</strong> to follow the layer again.</p>
+
+<h3 id="several-masks">Several masks on a layer</h3>
+
+<p>A masked layer can be masked by other mask layers of its timeline as well as its own. Right-click it and choose <strong>Also Masked By</strong>, then a mask layer and how it combines:</p>
+
+<ul>
+  <li><strong>Add</strong> shows the layer where either mask is.</li>
+  <li><strong>Subtract</strong> cuts the layer out where that mask is: a hole through a window.</li>
+  <li><strong>Intersect</strong> shows the layer only where both masks are.</li>
+</ul>
+
+<p>The order you add them in does not matter: Add masks widen what shows, then Intersect masks limit it, then Subtract masks cut it. Each mask keeps its own edge, feathered or inverted. A mask layer used only this way needs no layers of its own under it; renaming it keeps the layers that use it pointing at it. <span class="menu-path">File &rsaquo; Export &rsaquo; Export FLA for Other Apps</span> carries several masks over with movie clips: the layer's art in a clip under its own mask, masked again by each Intersect mask and erased by the Subtract masks inside it, and a layer for each Add mask; their edges are hard there.</p>
+
 <figure>
   <img src="assets/shots/mg-masks.webp" alt="Five stripes pictures: a soft-edged circle mask, a shrunk inverted mask making a hole, a stencil showing stripes only in a circle, a silhouette cutting a circle out, and a circle with the stripes kept inside it" width="1600" height="180">
   <figcaption>A feathered mask, a shrunk inverted one, then the layer modes Stencil, Silhouette and Preserve Transparency.</figcaption>

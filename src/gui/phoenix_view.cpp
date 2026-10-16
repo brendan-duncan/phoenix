@@ -100,6 +100,7 @@
 #include <QRegularExpression>
 #include <QCryptographicHash>
 #include <QBuffer>
+#include <QPainterPathStroker>
 #include <QtMath>
 #include <array>
 #include <cstdint>
@@ -460,19 +461,25 @@ bool PhoenixView::exportFrameSvg(const QString& filePath, int frame, bool transp
         _drawHidden = hidden;
         _exporting = true;
         _vectorMasks = true;
+        _svgSoftMasks = true;
+        _svgArea = area;
+        _svgSoftMaskParts.clear();
         if (!transparent)
             painter.fillRect(area, QColor(document->backgroundColor[0], document->backgroundColor[1],
                                        document->backgroundColor[2], document->backgroundColor[3]));
         drawDocument(painter, document);
         _exporting = false;
         _vectorMasks = false;
+        _svgSoftMasks = false;
         _drawHidden = false;
         _frameOverride = savedOverride;
         viewTransform = savedView;
         _visibleRect = savedVisible;
         painter.end();
     }
-    QString svg = QString::fromUtf8(buffer.data());
+    // Soft masks in place of their markers.
+    QString svg = resolveSoftMasks(QString::fromUtf8(buffer.data()));
+    _svgSoftMaskParts.clear();
     if (linked)
     {
         // Each embedded image as a file beside the SVG, named for what it
@@ -2109,6 +2116,226 @@ void PhoenixView::drawDocument(QPainter& painter, const fla::Document* document)
     painter.restore();
 }
 
+namespace {
+
+/// Coverage, one byte a pixel, as a white image (premultiplied) whose
+/// alpha it is.
+QImage coverageImage(const std::vector<uint8_t>& amount, const QSize& size)
+{
+    QImage image(size, QImage::Format_ARGB32_Premultiplied);
+    if (image.isNull() || amount.size() != static_cast<size_t>(size.width()) * static_cast<size_t>(size.height()))
+        return QImage();
+    for (int y = 0; y < size.height(); ++y)
+    {
+        QRgb* line = reinterpret_cast<QRgb*>(image.scanLine(y));
+        for (int x = 0; x < size.width(); ++x)
+        {
+            const int a = amount[static_cast<size_t>(y) * size.width() + x];
+            line[x] = qRgba(a, a, a, a);
+        }
+    }
+    return image;
+}
+
+/// \a area grown by \a by (shrunk when it is less than 0), its corners
+/// rounded as a mask's grow rounds them.
+QPainterPath grownArea(const QPainterPath& area, double by)
+{
+    if (std::fabs(by) < 0.01 || area.isEmpty())
+        return area;
+    QPainterPathStroker stroker;
+    stroker.setWidth(2.0 * std::fabs(by));
+    stroker.setJoinStyle(Qt::RoundJoin);
+    stroker.setCapStyle(Qt::RoundCap);
+    const QPainterPath edge = stroker.createStroke(area);
+    return by > 0.0 ? area.united(edge) : area.subtracted(edge);
+}
+
+/// \a path as an SVG path's data.
+QString svgPathData(const QPainterPath& path)
+{
+    const auto number = [](double value) { return QString::number(value, 'f', 2); };
+    QString data;
+    for (int i = 0; i < path.elementCount(); ++i)
+    {
+        const QPainterPath::Element element = path.elementAt(i);
+        if (element.isMoveTo())
+            data += "M" + number(element.x) + "," + number(element.y) + " ";
+        else if (element.isLineTo())
+            data += "L" + number(element.x) + "," + number(element.y) + " ";
+        else if (element.isCurveTo() && i + 2 < path.elementCount())
+        {
+            const QPainterPath::Element second = path.elementAt(i + 1);
+            const QPainterPath::Element end = path.elementAt(i + 2);
+            data += "C" + number(element.x) + "," + number(element.y) + " " + number(second.x) + "," + number(second.y) + " " +
+                number(end.x) + "," + number(end.y) + " ";
+            i += 2;
+        }
+    }
+    return data;
+}
+
+/// The marker drawn where a soft mask's SVG goes: a speck far off the page.
+const QRectF kSoftMaskMarker(-7777.0, -7777.0, 1.0, 1.0);
+
+} // namespace
+
+void PhoenixView::drawSoftMasked(QPainter& painter, const fla::Layer* layer, const VectorMask& own,
+    const std::vector<std::pair<fla::compositing::MaskCombine, const VectorMask*>>& others, fla::LoopType loopType,
+    int firstFrame)
+{
+    // What it masks, drawn into an SVG of its own as the export draws it.
+    QBuffer buffer;
+    buffer.open(QIODevice::WriteOnly);
+    {
+        QSvgGenerator generator(QSvgGenerator::SvgVersion::Svg11);
+        generator.setOutputDevice(&buffer);
+        generator.setSize(QSize(painter.device()->width(), painter.device()->height()));
+        generator.setResolution(96);
+        generator.setViewBox(_svgArea);
+        QPainter inner(&generator);
+        inner.setRenderHints(painter.renderHints());
+        inner.setOpacity(painter.opacity());
+        inner.setTransform(painter.transform());
+        drawLayer(inner, layer, loopType, firstFrame, nullptr);
+        inner.end();
+    }
+    // Soft masks inside it put in first; then its definitions and its
+    // drawing (the generator's outermost group, which sets the defaults),
+    // their names made its own.
+    const QString svg = resolveSoftMasks(QString::fromUtf8(buffer.data()));
+    const int number = static_cast<int>(_svgSoftMaskParts.size()) + 1;
+    const QString prefix = QString("phoenixSoft%1_").arg(number);
+    QString defs;
+    const int defsStart = svg.indexOf("<defs>");
+    const int defsEnd = svg.indexOf("</defs>");
+    if (defsStart >= 0 && defsEnd > defsStart)
+        defs = svg.mid(defsStart + 6, defsEnd - defsStart - 6);
+    const int bodyStart = svg.indexOf("<g ", std::max(0, defsEnd));
+    const int bodyEnd = svg.lastIndexOf("</g>");
+    QString body = bodyStart >= 0 && bodyEnd > bodyStart ? svg.mid(bodyStart, bodyEnd + 4 - bodyStart) : QString();
+    static const QRegularExpression names("(id=\"|url\\(#|xlink:href=\"#)");
+    defs.replace(names, "\\1" + prefix);
+    body.replace(names, "\\1" + prefix);
+
+    // Where the masks reach: the area exported, with room for the blurs.
+    double reach = 0.0;
+    const auto widest = [&reach](const VectorMask& mask) {
+        for (const auto& part : mask.parts)
+            reach = std::max(reach, part.second * 1.5 + std::fabs(mask.expand));
+    };
+    widest(own);
+    for (const auto& other : others)
+        widest(*other.second);
+    const QRectF region = _svgArea.adjusted(-reach - 2.0, -reach - 2.0, reach + 2.0, reach + 2.0);
+    const QString area = QString("x=\"%1\" y=\"%2\" width=\"%3\" height=\"%4\"")
+                             .arg(region.x(), 0, 'f', 2)
+                             .arg(region.y(), 0, 'f', 2)
+                             .arg(region.width(), 0, 'f', 2)
+                             .arg(region.height(), 0, 'f', 2);
+    // Each mask layer as a mask of its own: its areas in white (black on
+    // white when turned inside out), each blurred by its feather. A box
+    // blur of a width three times over is near a Gaussian of half of it.
+    QString masks;
+    QString blurs;
+    int filters = 0;
+    const auto maskOf = [&](const VectorMask& mask, const QString& id) {
+        masks += "<mask id=\"" + id + "\" maskUnits=\"userSpaceOnUse\" " + area + ">\n";
+        if (mask.invert)
+            masks += "<rect " + area + " fill=\"white\"/>\n";
+        // The hard parts first: a browser drawing one over a blurred part
+        // leaves a light seam along its edge.
+        std::vector<std::pair<QPainterPath, double>> parts = mask.parts;
+        std::stable_sort(parts.begin(), parts.end(), [](const auto& a, const auto& b) { return a.second < 0.5 && b.second >= 0.5; });
+        for (const auto& [shape, feather] : parts)
+        {
+            const QPainterPath grown = grownArea(shape, mask.expand);
+            if (grown.isEmpty())
+                continue;
+            // A hard edge is wholly in or out, as on the stage.
+            QString blur = " shape-rendering=\"crispEdges\"";
+            if (feather >= 0.5)
+            {
+                const QString filter = prefix + QString("blur%1").arg(++filters);
+                blurs += "<filter id=\"" + filter + "\" filterUnits=\"userSpaceOnUse\" " + area +
+                    "><feGaussianBlur stdDeviation=\"" + QString::number(feather / 2.0, 'f', 2) + "\"/></filter>\n";
+                blur = " filter=\"url(#" + filter + ")\"";
+            }
+            masks += QString("<path fill=\"%1\" fill-rule=\"%2\"%3 d=\"%4\"/>\n")
+                         .arg(mask.invert ? "black" : "white", grown.fillRule() == Qt::OddEvenFill ? "evenodd" : "nonzero", blur,
+                             svgPathData(grown));
+        }
+        masks += "</mask>\n";
+    };
+    const QString id = prefix + "mask";
+    maskOf(own, id + "0");
+    for (size_t k = 0; k < others.size(); ++k)
+        maskOf(*others[k].second, id + QString::number(k + 1));
+    // Together: its own and the Add masks widen it, Subtract masks cut it
+    // (black over white), each Intersect mask a mask of its own round it.
+    masks += "<mask id=\"" + id + "\" maskUnits=\"userSpaceOnUse\" " + area + ">\n";
+    masks += "<rect " + area + " fill=\"white\" mask=\"url(#" + id + "0)\"/>\n";
+    for (const fla::compositing::MaskCombine pass : {fla::compositing::MaskCombine::Add, fla::compositing::MaskCombine::Subtract})
+        for (size_t k = 0; k < others.size(); ++k)
+            if (others[k].first == pass)
+                masks += "<rect " + area + QString(" fill=\"%1\" mask=\"url(#%2%3)\"/>\n")
+                                            .arg(pass == fla::compositing::MaskCombine::Add ? "white" : "black", id)
+                                            .arg(k + 1);
+    masks += "</mask>\n";
+    QString opening = "<g mask=\"url(#" + id + ")\">\n";
+    QString closing = "</g>\n";
+    for (size_t k = 0; k < others.size(); ++k)
+        if (others[k].first == fla::compositing::MaskCombine::Intersect)
+        {
+            opening += "<g mask=\"url(#" + id + QString::number(k + 1) + ")\">\n";
+            closing += "</g>\n";
+        }
+    const QString replacement = "<defs>\n" + defs + blurs + masks + "</defs>\n" + opening + body + "\n" + closing;
+
+    // The marker, in a color of its own, stands for it until the file is
+    // finished.
+    const QColor marker = QColor::fromRgb(0x01, (number >> 8) & 0xFF, number & 0xFF);
+    _svgSoftMaskParts.insert(marker.name(), replacement);
+    painter.save();
+    painter.resetTransform();
+    painter.setOpacity(1.0);
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(marker);
+    painter.drawRect(kSoftMaskMarker);
+    painter.restore();
+}
+
+QString PhoenixView::resolveSoftMasks(const QString& svg) const
+{
+    // Each marker's group, found by its color and its place far off the
+    // page, gives way to what it stands for.
+    QString out = svg;
+    const QString place = QString("x=\"%1\"").arg(kSoftMaskMarker.x());
+    for (auto it = _svgSoftMaskParts.constBegin(); it != _svgSoftMaskParts.constEnd(); ++it)
+    {
+        const QString color = "fill=\"" + it.key() + "\"";
+        qsizetype from = 0;
+        for (;;)
+        {
+            const qsizetype at = out.indexOf(color, from);
+            if (at < 0)
+                break;
+            const qsizetype start = out.lastIndexOf("<g ", at);
+            const qsizetype end = out.indexOf("</g>", at);
+            if (start < 0 || end < 0)
+                break;
+            if (!out.mid(start, end + 4 - start).contains(place))
+            {
+                from = at + color.size();
+                continue;
+            }
+            out.replace(start, end + 4 - start, it.value());
+            from = start + it.value().size();
+        }
+    }
+    return out;
+}
+
 void PhoenixView::drawTimeline(QPainter& painter, const fla::Timeline* timeline, fla::LoopType loopType, int firstFrame)
 {
     // An export that writes vectors, of a timeline with a node graph: the
@@ -2247,17 +2474,19 @@ void PhoenixView::drawTimeline(QPainter& painter, const fla::Timeline* timeline,
 
     struct MaskData
     {
-        QPixmap maskPixmap;
+        /// The mask's coverage, white with alpha by degrees.
+        QImage maskImage;
         /// Where on the device the mask's pixels sit; empty when the mask
         /// covers nothing, in which case the masked layers show nothing.
         QRect crop;
     };
     QMap<int, MaskData> maskCache;
-    // For an export that writes vectors: each mask as the area it covers on
+    // For an export that writes vectors: each mask as the areas it covers on
     // the device, to clip what it masks to.
-    QMap<int, QPainterPath> vectorMasks;
+    QMap<int, VectorMask> vectorMasks;
     QTransform painterTransform = painter.transform();
     const QRect deviceRect(0, 0, painter.device()->width(), painter.device()->height());
+    const double deviceScale = std::sqrt(std::fabs(painterTransform.determinant()));
 
     // On the timeline being edited, guide layers show
     // and a mask masks only once it is locked; until then its own art shows
@@ -2285,20 +2514,83 @@ void PhoenixView::drawTimeline(QPainter& painter, const fla::Timeline* timeline,
             continue;
         }
 
-        if (_vectorMasks)
+        // Each object's feather: its own or the layer's, blended through a
+        // tween toward the next keyframe's. Objects with different
+        // feathers are drawn a part at a time, each part softened by its own.
+        const fla::compositing::MaskEdge edge = fla::compositing::maskEdgeOf(*layer);
+        const LayerFrame state = resolveLayerFrame(layer, loopType, firstFrame);
+        std::vector<double> feathers;
+        if (state.frame)
         {
-            // The mask's fills recorded as vectors rather than drawn.
-            PaintRecorder recorder(deviceRect.size());
-            QPainter recording(&recorder);
-            recording.setTransform(painterTransform);
+            const std::vector<fla::Element*>& elements = state.frame->elements;
+            const std::vector<int> pairs = state.tweenFrame && state.frame->tweenType == fla::TweenType::Motion
+                ? fla::pairTweenElements(elements, state.tweenFrame->elements) : std::vector<int>();
+            for (size_t k = 0; k < elements.size(); ++k)
+            {
+                const fla::Element* to = nullptr;
+                if (state.tweenFrame)
+                {
+                    const int paired = k < pairs.size() ? pairs[k] : state.frame->tweenType == fla::TweenType::Motion ? -1
+                                                                                                                    : static_cast<int>(k);
+                    if (paired >= 0 && static_cast<size_t>(paired) < state.tweenFrame->elements.size())
+                        to = state.tweenFrame->elements[static_cast<size_t>(paired)];
+                }
+                // Kept to an eighth of a pixel, so a tween does not make a
+                // part for every object.
+                const double feather = elements[k] ? fla::compositing::blendedFeather(*elements[k], to, state.tweenProgress, edge.feather)
+                                                   : edge.feather;
+                feathers.push_back(std::round(feather * 8.0) / 8.0);
+            }
+        }
+        std::vector<double> distinct;
+        for (const double feather : feathers)
+            if (std::find(distinct.begin(), distinct.end(), feather) == distinct.end())
+                distinct.push_back(feather);
+        if (distinct.empty())
+            distinct.push_back(edge.feather);
+        const bool parted = distinct.size() > 1;
+        const auto keepOf = [&feathers](double feather) {
+            std::vector<bool> keep(feathers.size());
+            for (size_t k = 0; k < feathers.size(); ++k)
+                keep[k] = feathers[k] == feather;
+            return keep;
+        };
+        // Draws the mask layer, or only the objects \a keep picks.
+        const auto drawMask = [&](QPainter& into, const std::vector<bool>* keep) {
             // Restored rather than cleared: a mask inside a symbol drawn by
             // an outer mask pass is still in that pass.
             const bool wasMaskPass = _maskPass;
+            const fla::Frame* wasPartFrame = _maskPartFrame;
+            const std::vector<bool> wasKeep = _maskPartKeep;
             _maskPass = true;
-            drawLayer(recording, layer, loopType, firstFrame, nullptr);
+            if (keep)
+            {
+                _maskPartFrame = state.frame;
+                _maskPartKeep = *keep;
+            }
+            drawLayer(into, layer, loopType, firstFrame, nullptr);
             _maskPass = wasMaskPass;
-            recording.end();
-            vectorMasks[i] = coveredArea(recorder.items);
+            _maskPartFrame = wasPartFrame;
+            _maskPartKeep = wasKeep;
+        };
+
+        if (_vectorMasks)
+        {
+            // The mask's fills recorded as vectors rather than drawn.
+            VectorMask vector;
+            vector.expand = edge.expand * deviceScale;
+            vector.invert = edge.invert;
+            for (const double feather : distinct)
+            {
+                PaintRecorder recorder(deviceRect.size());
+                QPainter recording(&recorder);
+                recording.setTransform(painterTransform);
+                const std::vector<bool> keep = keepOf(feather);
+                drawMask(recording, parted ? &keep : nullptr);
+                recording.end();
+                vector.parts.emplace_back(coveredArea(recorder.items), feather * deviceScale);
+            }
+            vectorMasks[i] = vector;
             continue;
         }
 
@@ -2308,13 +2600,12 @@ void PhoenixView::drawTimeline(QPainter& painter, const fla::Timeline* timeline,
         // and only over the part of the device the mask's art reaches, since
         // nothing outside it can show.
         QRectF reach;
-        const LayerFrame shown = resolveLayerFrame(layer, loopType, firstFrame);
-        if (shown.frame)
+        if (state.frame)
         {
-            ElapsedScope elapsed(_elapsed, shown.offset);
-            for (size_t index = 0; index < shown.frame->elements.size(); ++index)
+            ElapsedScope elapsed(_elapsed, state.offset);
+            for (size_t index = 0; index < state.frame->elements.size(); ++index)
             {
-                const fla::Element* element = shown.frame->elements[index];
+                const fla::Element* element = state.frame->elements[index];
                 if (!element || !element->visible)
                     continue;
                 // An instance by everything its symbol draws over all its
@@ -2326,7 +2617,7 @@ void PhoenixView::drawTimeline(QPainter& painter, const fla::Timeline* timeline,
                 if (element->elementType() != fla::Element::Type::Group)
                 {
                     const fla::Transform& kept = element->transform;
-                    const fla::Transform now = shownTransform(shown, index);
+                    const fla::Transform now = shownTransform(state, index);
                     const QTransform from(kept.m11, kept.m12, kept.m21, kept.m22, kept.tx, kept.ty);
                     const QTransform to(now.m11, now.m12, now.m21, now.m22, now.tx, now.ty);
                     bool invertible = false;
@@ -2339,18 +2630,17 @@ void PhoenixView::drawTimeline(QPainter& painter, const fla::Timeline* timeline,
             }
             // A shape tween morphs toward the next keyframe's shapes, so it
             // reaches anywhere between the two.
-            if (shown.frame->tweenType == fla::TweenType::Shape && shown.tweenFrame)
-                for (const fla::Element* element : shown.tweenFrame->elements)
+            if (state.frame->tweenType == fla::TweenType::Shape && state.tweenFrame)
+                for (const fla::Element* element : state.tweenFrame->elements)
                 {
                     const QRectF bounds = element ? getElementBounds(element) : QRectF();
                     if (bounds.isValid())
                         reach = reach.isNull() ? bounds : reach.united(bounds);
                 }
         }
-        const fla::compositing::MaskEdge edge = fla::compositing::maskEdgeOf(*layer);
         if (!reach.isNull())
         {
-            const double grow = edge.feather + std::max(0.0, edge.expand);
+            const double grow = *std::max_element(distinct.begin(), distinct.end()) + std::max(0.0, edge.expand);
             reach.adjust(-grow, -grow, grow, grow);
         }
         const QRect crop = edge.invert ? deviceRect
@@ -2358,66 +2648,128 @@ void PhoenixView::drawTimeline(QPainter& painter, const fla::Timeline* timeline,
             : painterTransform.mapRect(reach).adjusted(-2.0, -2.0, 2.0, 2.0).toAlignedRect().intersected(deviceRect);
         if (crop.isEmpty())
         {
-            maskCache[i] = { QPixmap(), QRect() };
+            maskCache[i] = { QImage(), QRect() };
             continue;
         }
-
-        QPixmap maskPixmap(crop.size());
-        if (maskPixmap.isNull())
-        {
-            maskCache[i] = { QPixmap(), QRect() };
-            continue;
-        }
-        maskPixmap.fill(Qt::transparent);
-
-        QPainter maskPainter(&maskPixmap);
-        maskPainter.setRenderHint(QPainter::Antialiasing, true);
-        maskPainter.setRenderHint(QPainter::TextAntialiasing, true);
-        maskPainter.setRenderHint(QPainter::SmoothPixmapTransform, true);
-        maskPainter.setTransform(painterTransform * QTransform::fromTranslate(-crop.x(), -crop.y()));
-
-        const bool wasMaskPass = _maskPass;
-        _maskPass = true;
-        drawLayer(maskPainter, layer, loopType, firstFrame, nullptr);
-        _maskPass = wasMaskPass;
-        maskPainter.end();
 
         // A mask is coverage, not alpha: a half-transparent mask fill shows
         // what is under it in full, and Flash's mask edges are not
         // anti-aliased, so every covered pixel is wholly in or out.
-        QImage coverage = maskPixmap.toImage().convertToFormat(QImage::Format_ARGB32);
-        for (int y = 0; y < coverage.height(); ++y)
-        {
-            QRgb* line = reinterpret_cast<QRgb*>(coverage.scanLine(y));
-            for (int x = 0; x < coverage.width(); ++x)
-                line[x] = qAlpha(line[x]) >= 128 ? qRgba(255, 255, 255, 255) : qRgba(0, 0, 0, 0);
-        }
-        // Feathered, grown or turned inside out: coverage by degrees.
-        if (!edge.plain())
-        {
-            std::vector<uint8_t> amount(static_cast<size_t>(coverage.width()) * coverage.height());
-            for (int y = 0; y < coverage.height(); ++y)
+        const size_t count = static_cast<size_t>(crop.width()) * static_cast<size_t>(crop.height());
+        const auto coverageOf = [&](const std::vector<bool>* keep) {
+            std::vector<uint8_t> amount;
+            QImage drawn(crop.size(), QImage::Format_ARGB32_Premultiplied);
+            if (drawn.isNull())
+                return amount;
+            drawn.fill(Qt::transparent);
+            QPainter maskPainter(&drawn);
+            maskPainter.setRenderHint(QPainter::Antialiasing, true);
+            maskPainter.setRenderHint(QPainter::TextAntialiasing, true);
+            maskPainter.setRenderHint(QPainter::SmoothPixmapTransform, true);
+            maskPainter.setTransform(painterTransform * QTransform::fromTranslate(-crop.x(), -crop.y()));
+            drawMask(maskPainter, keep);
+            maskPainter.end();
+            amount.resize(count);
+            for (int y = 0; y < drawn.height(); ++y)
             {
-                const QRgb* line = reinterpret_cast<const QRgb*>(coverage.constScanLine(y));
-                for (int x = 0; x < coverage.width(); ++x)
-                    amount[static_cast<size_t>(y) * coverage.width() + x] = static_cast<uint8_t>(qAlpha(line[x]));
+                const QRgb* line = reinterpret_cast<const QRgb*>(drawn.constScanLine(y));
+                for (int x = 0; x < drawn.width(); ++x)
+                    amount[static_cast<size_t>(y) * crop.width() + x] = qAlpha(line[x]) >= 128 ? 255 : 0;
             }
-            fla::compositing::shapeMask(amount, coverage.width(), coverage.height(), edge,
-                std::sqrt(std::fabs(painterTransform.determinant())));
-            for (int y = 0; y < coverage.height(); ++y)
-            {
-                QRgb* line = reinterpret_cast<QRgb*>(coverage.scanLine(y));
-                for (int x = 0; x < coverage.width(); ++x)
-                {
-                    const int a = amount[static_cast<size_t>(y) * coverage.width() + x];
-                    line[x] = qRgba(255, 255, 255, a);
-                }
-            }
+            return amount;
+        };
+        // Feathered, grown or turned inside out: coverage by degrees. With
+        // objects feathered differently, each part softened on its own and
+        // the parts laid together, then turned inside out.
+        std::vector<uint8_t> amount;
+        if (!parted)
+        {
+            amount = coverageOf(nullptr);
+            fla::compositing::MaskEdge whole = edge;
+            whole.feather = distinct.front();
+            if (!amount.empty() && !whole.plain())
+                fla::compositing::shapeMask(amount, crop.width(), crop.height(), whole, deviceScale);
         }
-        maskPixmap = QPixmap::fromImage(coverage.convertToFormat(QImage::Format_ARGB32_Premultiplied));
-
-        maskCache[i] = { maskPixmap, crop };
+        else
+        {
+            amount.assign(count, 0);
+            for (const double feather : distinct)
+            {
+                const std::vector<bool> keep = keepOf(feather);
+                std::vector<uint8_t> part = coverageOf(&keep);
+                if (part.size() != count)
+                    continue;
+                fla::compositing::MaskEdge partEdge;
+                partEdge.feather = feather;
+                partEdge.expand = edge.expand;
+                if (!partEdge.plain())
+                    fla::compositing::shapeMask(part, crop.width(), crop.height(), partEdge, deviceScale);
+                for (size_t k = 0; k < count; ++k)
+                    amount[k] = std::max(amount[k], part[k]);
+            }
+            if (edge.invert)
+                for (uint8_t& value : amount)
+                    value = static_cast<uint8_t>(255 - value);
+        }
+        if (amount.size() != count)
+        {
+            maskCache[i] = { QImage(), QRect() };
+            continue;
+        }
+        maskCache[i] = { coverageImage(amount, crop.size()), crop };
     }
+
+    // A masked layer's own mask with the others it names (Add, Subtract,
+    // Intersect), over a crop that holds all of what can show.
+    const auto maskIndexNamed = [timeline](const std::string& name) {
+        for (int j = 0; j < static_cast<int>(timeline->layers.size()); ++j)
+            if (timeline->layers[j] && timeline->layers[j]->layerType == fla::Layer::Type::Mask && timeline->layers[j]->name == name)
+                return j;
+        return -1;
+    };
+    const auto combinedMask = [&](const MaskData& own, const std::vector<fla::compositing::MoreMask>& more) {
+        std::vector<std::pair<fla::compositing::MaskCombine, const MaskData*>> others;
+        for (const fla::compositing::MoreMask& each : more)
+        {
+            const auto found = maskCache.constFind(maskIndexNamed(each.layer));
+            if (found != maskCache.constEnd())
+                others.emplace_back(each.mode, &found.value());
+        }
+        if (others.empty())
+            return own;
+        QRect crop = own.crop;
+        for (const auto& [mode, mask] : others)
+            if (mode == fla::compositing::MaskCombine::Add)
+                crop = crop.united(mask->crop);
+        for (const auto& [mode, mask] : others)
+            if (mode == fla::compositing::MaskCombine::Intersect)
+                crop = crop.intersected(mask->crop);
+        if (crop.isEmpty())
+            return MaskData{QImage(), QRect()};
+        // Each mask's coverage over the crop, nothing where it does not reach.
+        const auto amountOf = [&crop](const MaskData& mask) {
+            std::vector<uint8_t> amount(static_cast<size_t>(crop.width()) * static_cast<size_t>(crop.height()), 0);
+            const QRect overlap = mask.crop.intersected(crop);
+            for (int y = overlap.top(); y <= overlap.bottom(); ++y)
+            {
+                const QRgb* line = reinterpret_cast<const QRgb*>(mask.maskImage.constScanLine(y - mask.crop.y()));
+                for (int x = overlap.left(); x <= overlap.right(); ++x)
+                    amount[static_cast<size_t>(y - crop.y()) * crop.width() + (x - crop.x())] =
+                        static_cast<uint8_t>(qAlpha(line[x - mask.crop.x()]));
+            }
+            return amount;
+        };
+        std::vector<uint8_t> total = amountOf(own);
+        std::vector<std::vector<uint8_t>> amounts;
+        amounts.reserve(others.size());
+        for (const auto& other : others)
+            amounts.push_back(amountOf(*other.second));
+        std::vector<std::pair<fla::compositing::MaskCombine, const std::vector<uint8_t>*>> list;
+        for (size_t k = 0; k < others.size(); ++k)
+            list.emplace_back(others[k].first, &amounts[k]);
+        fla::compositing::combineMasks(total, list);
+        return MaskData{coverageImage(total, crop.size()), crop};
+    };
 
     // The light table fades every layer but the one drawn on.
     const bool lightTable = editing && _lightTable &&
@@ -2516,10 +2868,56 @@ void PhoenixView::drawTimeline(QPainter& painter, const fla::Timeline* timeline,
             const auto mask = vectorMasks.find(layer->parentLayerIndex);
             if (mask != vectorMasks.end())
             {
+                // The other masks it names, found by name.
+                std::vector<std::pair<fla::compositing::MaskCombine, const VectorMask*>> others;
+                for (const fla::compositing::MoreMask& each : fla::compositing::moreMasksOf(*layer))
+                {
+                    const auto found = vectorMasks.constFind(maskIndexNamed(each.layer));
+                    if (found != vectorMasks.constEnd())
+                        others.emplace_back(each.mode, &found.value());
+                }
+                bool soft = false;
+                for (const auto& part : mask.value().parts)
+                    soft = soft || part.second >= 0.5;
+                for (const auto& other : others)
+                    for (const auto& part : other.second->parts)
+                        soft = soft || part.second >= 0.5;
+                // Far past what the device shows, for a mask turned inside out.
+                const QRectF everywhere = QRectF(deviceRect).adjusted(-1.0e4, -1.0e4, 1.0e4, 1.0e4);
+                // A mask's area as a hard edge: its parts together, grown or
+                // shrunk, turned inside out.
+                const auto hardArea = [&everywhere](const VectorMask& vector) {
+                    QPainterPath area;
+                    area.setFillRule(Qt::WindingFill);
+                    for (const auto& part : vector.parts)
+                        area.addPath(part.first);
+                    area = grownArea(area.simplified(), vector.expand);
+                    if (vector.invert)
+                    {
+                        QPainterPath all;
+                        all.addRect(everywhere);
+                        area = all.subtracted(area);
+                    }
+                    return area;
+                };
+                if (soft && _svgSoftMasks)
+                {
+                    // An SVG mask, blurred where it is feathered.
+                    drawSoftMasked(painter, layer, mask.value(), others, loopType, firstFrame);
+                    continue;
+                }
                 // Clipped to the mask's area: a clip path in an SVG.
+                QPainterPath area = hardArea(mask.value());
+                for (const fla::compositing::MaskCombine pass :
+                    {fla::compositing::MaskCombine::Add, fla::compositing::MaskCombine::Intersect, fla::compositing::MaskCombine::Subtract})
+                    for (const auto& [mode, other] : others)
+                        if (mode == pass)
+                            area = mode == fla::compositing::MaskCombine::Add ? area.united(hardArea(*other))
+                                : mode == fla::compositing::MaskCombine::Intersect ? area.intersected(hardArea(*other))
+                                                                                   : area.subtracted(hardArea(*other));
                 painter.save();
                 painter.setTransform(QTransform());
-                painter.setClipPath(mask.value(), Qt::IntersectClip);
+                painter.setClipPath(area, Qt::IntersectClip);
                 painter.setTransform(painterTransform);
                 drawLayer(painter, layer, loopType, firstFrame, nullptr);
                 painter.restore();
@@ -2533,12 +2931,15 @@ void PhoenixView::drawTimeline(QPainter& painter, const fla::Timeline* timeline,
             auto maskIt = maskCache.find(layer->parentLayerIndex);
             if (maskIt != maskCache.end())
             {
-                const QPixmap& maskPixmap = maskIt.value().maskPixmap;
-                const QRect& crop = maskIt.value().crop;
-                if (crop.isEmpty())
+                // With any other masks it names combined in.
+                const std::vector<fla::compositing::MoreMask> more = fla::compositing::moreMasksOf(*layer);
+                const MaskData mask = more.empty() ? maskIt.value() : combinedMask(maskIt.value(), more);
+                const QImage& maskImage = mask.maskImage;
+                const QRect& crop = mask.crop;
+                if (crop.isEmpty() || maskImage.isNull())
                     continue;
 
-                QPixmap contentPixmap(maskPixmap.size());
+                QPixmap contentPixmap(maskImage.size());
                 if (contentPixmap.isNull())
                     continue;
                 contentPixmap.fill(Qt::transparent);
@@ -2554,7 +2955,7 @@ void PhoenixView::drawTimeline(QPainter& painter, const fla::Timeline* timeline,
                 // The content masked in place: no third image.
                 contentPainter.resetTransform();
                 contentPainter.setCompositionMode(QPainter::CompositionMode_DestinationIn);
-                contentPainter.drawPixmap(0, 0, maskPixmap);
+                contentPainter.drawImage(0, 0, maskImage);
                 contentPainter.end();
 
                 // Draw to main painter
@@ -4024,6 +4425,10 @@ void PhoenixView::drawFrame(QPainter& painter, const fla::Frame* frame, const fl
             // One element on its own, for a bitmap of it.
             if (!skip && _onlyElement && _onlyElement->parent == frame && element != _onlyElement)
                 skip = true;
+            // One part of a mask drawn by feather: only that part's objects.
+            if (!skip && frame == _maskPartFrame)
+                skip = static_cast<size_t>(nextElementIndex) >= _maskPartKeep.size() ||
+                    !_maskPartKeep[static_cast<size_t>(nextElementIndex)];
             if (!skip && culling)
             {
                 // An instance by everything its symbol draws over all its

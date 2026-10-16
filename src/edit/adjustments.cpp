@@ -4,6 +4,7 @@
 #include "pixel_math.h"
 #include "../util/parallel.h"
 
+#include "../data/dom_element.h"
 #include "../data/layer.h"
 
 #include <algorithm>
@@ -147,6 +148,140 @@ std::vector<std::pair<std::string, std::string>> withMaskEdge(const Layer& layer
     if (edge.invert)
         copy.extraAttributes.emplace_back("phoenixMaskInvert", "true");
     return copy.extraAttributes;
+}
+
+double elementFeatherOf(const DOMElement& element, double layerFeather)
+{
+    for (const auto& each : element.extraAttributes)
+        if (each.first == "phoenixMaskFeather")
+        {
+            char* end = nullptr;
+            const double value = std::strtod(each.second.c_str(), &end);
+            if (end != each.second.c_str() && std::isfinite(value))
+                return std::clamp(value, 0.0, 1.0e4);
+        }
+    return layerFeather;
+}
+
+std::vector<std::pair<std::string, std::string>> withElementFeather(const DOMElement& element, double feather)
+{
+    std::vector<std::pair<std::string, std::string>> out;
+    for (const auto& each : element.extraAttributes)
+        if (each.first != "phoenixMaskFeather")
+            out.push_back(each);
+    if (feather >= 0.0)
+    {
+        char text[32];
+        std::snprintf(text, sizeof(text), "%.10g", feather);
+        out.emplace_back("phoenixMaskFeather", text);
+    }
+    return out;
+}
+
+double blendedFeather(const DOMElement& from, const DOMElement* to, double t, double layerFeather)
+{
+    const double a = elementFeatherOf(from, layerFeather);
+    if (!to)
+        return a;
+    const double b = elementFeatherOf(*to, layerFeather);
+    return a + (b - a) * std::clamp(t, 0.0, 1.0);
+}
+
+const char* const kMoreMasks = "phoenixMasks";
+
+const char* maskCombineName(MaskCombine mode)
+{
+    switch (mode)
+    {
+    case MaskCombine::Subtract: return "subtract";
+    case MaskCombine::Intersect: return "intersect";
+    case MaskCombine::Add: break;
+    }
+    return "add";
+}
+
+std::vector<MoreMask> moreMasksOf(const Layer& layer)
+{
+    // "mode:name" entries separated by semicolons, a semicolon or percent
+    // sign in a name written as %3B or %25.
+    std::vector<MoreMask> masks;
+    const std::string text = attribute(layer, kMoreMasks);
+    size_t start = 0;
+    while (start < text.size())
+    {
+        size_t end = text.find(';', start);
+        if (end == std::string::npos)
+            end = text.size();
+        const std::string entry = text.substr(start, end - start);
+        start = end + 1;
+        const size_t colon = entry.find(':');
+        if (colon == std::string::npos)
+            continue;
+        const std::string mode = entry.substr(0, colon);
+        if (mode != "add" && mode != "subtract" && mode != "intersect")
+            continue;
+        MoreMask mask;
+        mask.mode = mode == "subtract" ? MaskCombine::Subtract : mode == "intersect" ? MaskCombine::Intersect : MaskCombine::Add;
+        const std::string coded = entry.substr(colon + 1);
+        for (size_t i = 0; i < coded.size(); ++i)
+        {
+            if (coded.compare(i, 3, "%3B") == 0)
+            {
+                mask.layer += ';';
+                i += 2;
+            }
+            else if (coded.compare(i, 3, "%25") == 0)
+            {
+                mask.layer += '%';
+                i += 2;
+            }
+            else
+                mask.layer += coded[i];
+        }
+        if (!mask.layer.empty())
+            masks.push_back(mask);
+    }
+    return masks;
+}
+
+std::vector<std::pair<std::string, std::string>> withMoreMasks(const Layer& layer, const std::vector<MoreMask>& masks)
+{
+    std::vector<std::pair<std::string, std::string>> out = without(layer, kMoreMasks);
+    std::string text;
+    for (const MoreMask& mask : masks)
+    {
+        if (mask.layer.empty())
+            continue;
+        if (!text.empty())
+            text += ';';
+        text += maskCombineName(mask.mode);
+        text += ':';
+        for (const char c : mask.layer)
+            text += c == ';' ? std::string("%3B") : c == '%' ? std::string("%25") : std::string(1, c);
+    }
+    if (!text.empty())
+        out.emplace_back(kMoreMasks, text);
+    return out;
+}
+
+void combineMasks(std::vector<uint8_t>& own, const std::vector<std::pair<MaskCombine, const std::vector<uint8_t>*>>& others)
+{
+    // Widened first, then limited and cut, so the order they are listed in
+    // does not matter.
+    for (const MaskCombine pass : {MaskCombine::Add, MaskCombine::Intersect, MaskCombine::Subtract})
+        for (const auto& [mode, coverage] : others)
+        {
+            if (mode != pass || !coverage || coverage->size() != own.size())
+                continue;
+            for (size_t i = 0; i < own.size(); ++i)
+            {
+                const int a = own[i];
+                const int b = (*coverage)[i];
+                own[i] = static_cast<uint8_t>(mode == MaskCombine::Add ? std::max(a, b)
+                        : mode == MaskCombine::Intersect                ? (a * b + 127) / 255
+                                                                         : (a * (255 - b) + 127) / 255);
+            }
+        }
 }
 
 LayerMode layerModeOf(const Layer& layer)

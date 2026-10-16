@@ -1690,7 +1690,38 @@ void LayersPanel::showLayerMenu(QTreeWidgetItem* item, const QPoint& globalPos)
         }
         if (layer->layerType == fla::Layer::Type::Mask)
             menu.addAction("Mask Edge...", this, [=]() { emit compositingRequested(layer, "maskedge"); })
-                ->setStatusTip("Feather, grow or shrink this mask's edge, or invert it");
+                ->setStatusTip("Feather, grow or shrink this mask's edge, or invert it; or feather the selected objects on it");
+        // Several masks: the other mask layers of the timeline, each added
+        // to the layer's own mask, cut out of it or overlapped with it.
+        if (layer->layerType == fla::Layer::Type::Masked)
+        {
+            QMenu* moreMenu = menu.addMenu("Also Masked By");
+            const std::vector<fla::compositing::MoreMask> more = fla::compositing::moreMasksOf(*layer);
+            const std::pair<const char*, const char*> modes[] = {{"none", "None"}, {"add", "Add (shows where either mask is)"},
+                {"subtract", "Subtract (cut out where it is)"}, {"intersect", "Intersect (only where both are)"}};
+            for (size_t i = 0; i < timeline->layers.size(); ++i)
+            {
+                const fla::Layer* other = timeline->layers[i];
+                if (!other || other->layerType != fla::Layer::Type::Mask || static_cast<int>(i) == layer->parentLayerIndex)
+                    continue;
+                QString current = "none";
+                for (const fla::compositing::MoreMask& each : more)
+                    if (each.layer == other->name)
+                        current = fla::compositing::maskCombineName(each.mode);
+                QMenu* otherMenu = moreMenu->addMenu(QString::fromStdString(other->name));
+                for (const auto& [mode, label] : modes)
+                {
+                    QAction* choice = otherMenu->addAction(label, this, [=]() {
+                        emit compositingRequested(layer, QString("maskwith:%1:%2").arg(i).arg(mode));
+                    });
+                    choice->setCheckable(true);
+                    choice->setChecked(current == mode);
+                }
+            }
+            if (moreMenu->isEmpty())
+                moreMenu->addAction("No other mask layers")->setEnabled(false);
+            moreMenu->setStatusTip("Mask this layer by other mask layers too, added, subtracted or intersected");
+        }
         menu.addAction("Echo and Posterize Time...", this, [=]() { emit compositingRequested(layer, "time"); })
             ->setStatusTip("A trail of earlier poses behind the layer, or each pose held for some frames");
         QAction* blur = menu.addAction("Motion Blur", this, [=]() {
