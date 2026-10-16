@@ -783,3 +783,28 @@ TEST(new_merge_artwork_goes_under_the_objects_on_its_frame)
     stack.redo();
     CHECK(frame.elements[1] == drawn);
 }
+
+TEST(moving_an_element_between_frames_keeps_one_owner)
+{
+    // Two frames, the element in the first; moved, it is only in the
+    // second, and undo and redo put it back and forth. The frames free it,
+    // never the history.
+    auto* from = new fla::Frame(nullptr);
+    auto* to = new fla::Frame(nullptr);
+    auto* first = new fla::SymbolInstance(from);
+    auto* moved = new fla::SymbolInstance(from);
+    from->elements = {first, moved};
+    {
+        fla::CommandStack stack;
+        stack.push(fla::CommandPtr(new fla::MoveElementCommand(from, to, moved, "Move")));
+        CHECK(from->elements.size() == 1 && to->elements.size() == 1 && to->elements[0] == moved && moved->parent == to);
+        stack.undo();
+        CHECK(from->elements.size() == 2 && from->elements[1] == moved && to->elements.empty() && moved->parent == from);
+        stack.redo();
+        CHECK(to->elements.size() == 1 && moved->parent == to);
+        stack.clear();
+    }
+    CHECK(to->elements.size() == 1);
+    delete from;
+    delete to;
+}

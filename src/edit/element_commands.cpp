@@ -981,6 +981,42 @@ void ConvertToSymbolCommand::undo()
     }
 }
 
+MoveElementCommand::MoveElementCommand(Frame* from, Frame* to, Element* element, const std::string& name)
+    : _from(from)
+    , _to(to)
+    , _element(element)
+    , _name(name)
+{}
+
+void MoveElementCommand::redo()
+{
+    if (!_from || !_to || !_element)
+        return;
+    std::vector<Element*>& source = _from->elements;
+    const auto it = std::find(source.begin(), source.end(), _element);
+    if (it == source.end())
+        return;
+    _index = static_cast<int>(it - source.begin());
+    source.erase(it);
+    _to->elements.push_back(_element);
+    _element->parent = _to;
+}
+
+void MoveElementCommand::undo()
+{
+    if (!_from || !_to || !_element)
+        return;
+    std::vector<Element*>& target = _to->elements;
+    const auto it = std::find(target.begin(), target.end(), _element);
+    if (it == target.end())
+        return;
+    target.erase(it);
+    std::vector<Element*>& source = _from->elements;
+    const int index = _index < 0 || _index > static_cast<int>(source.size()) ? static_cast<int>(source.size()) : _index;
+    source.insert(source.begin() + index, _element);
+    _element->parent = _from;
+}
+
 RemoveElementCommand::~RemoveElementCommand()
 {
     if (_owned)

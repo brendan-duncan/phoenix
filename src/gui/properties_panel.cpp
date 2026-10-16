@@ -301,6 +301,12 @@ void clearLayout(QLayout* layout)
     {
         if (QWidget* widget = item->widget())
         {
+            // Quiet first: until it is deleted it may still lose focus or
+            // finish an edit, and what it was showing may be gone (a closed
+            // document's settings, a deleted instance).
+            widget->blockSignals(true);
+            for (QObject* inside : widget->findChildren<QObject*>())
+                inside->blockSignals(true);
             widget->hide();
             widget->deleteLater();
         }

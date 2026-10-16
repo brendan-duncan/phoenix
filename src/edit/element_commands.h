@@ -563,6 +563,27 @@ private:
 
 /// Removes an element from a frame, and puts it back on undo. The mirror of
 /// AddElementCommand, with the same ownership rules.
+/// Moves an element from one frame to another (onto the end of its
+/// elements), and back on undo. The element is always in one frame or the
+/// other, which owns it: the command never does, so nothing frees it twice.
+class MoveElementCommand : public Command
+{
+public:
+    MoveElementCommand(Frame* from, Frame* to, Element* element, const std::string& name);
+
+    void redo() override;
+    void undo() override;
+    std::string name() const override { return _name; }
+
+private:
+    Frame* _from;
+    Frame* _to;
+    Element* _element;
+    std::string _name;
+    /// Where it sat in the frame it came from.
+    int _index = -1;
+};
+
 class RemoveElementCommand : public Command
 {
 public:

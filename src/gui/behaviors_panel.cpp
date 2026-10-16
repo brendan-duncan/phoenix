@@ -511,7 +511,15 @@ void BehaviorsPanel::fillSettings()
 {
     while (QLayoutItem* item = _form->takeAt(0))
     {
-        delete item->widget();
+        // Quiet as it goes: a field losing focus on its way out must not
+        // set anything.
+        if (QWidget* widget = item->widget())
+        {
+            widget->blockSignals(true);
+            for (QObject* inside : widget->findChildren<QObject*>())
+                inside->blockSignals(true);
+            delete widget;
+        }
         delete item;
     }
     const std::vector<fla::behaviors::Applied> list = shown();
