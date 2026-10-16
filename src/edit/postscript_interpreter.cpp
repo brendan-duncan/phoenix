@@ -1,9 +1,11 @@
 // A small PostScript interpreter for EPS artwork that is not Illustrator's:
 // FreeHand, Photoshop, CorelDRAW and the drawing programs that write plain
 // PostScript. It runs the program and keeps what it paints: paths filled
-// and stroked in gray, RGB, CMYK and separation colors (through their tint
-// transforms), text as text, and 8-bit images. Clipping, patterns and
-// shadings are left out and said so.
+// and stroked in gray, RGB, CMYK, separation and indexed colors (through
+// their tint transforms and tables), clipped; axial and radial shadings as
+// gradients; tiling patterns tile by tile; images of any depth, image masks
+// and images with masks of their own; and text as text, as wide as the
+// fonts the file carries (or the standard fonts) make it.
 //
 // Written from the PostScript Language Reference (third edition); the
 // shape of the operator set follows VectorCraft's clean-room EPS reader
@@ -2424,18 +2426,18 @@ void opSetcolor(Interp& I)
     {
         // A pattern; an uncolored one's color first, in the space under it.
         Obj pattern = I.pop();
-        if (I.gs.colorLocked)
-            return;
-        const Obj& space = I.gs.spaceObj;
+        const Obj space = I.gs.spaceObj;
         if (space.t == Obj::T::Array && space.arr && space.arr->size() >= 2)
         {
             std::vector<double> values;
             const int n = std::max(1, I.componentsOf((*space.arr)[1]));
             for (int i = 0; i < n && !I.ops.empty() && I.top().isNumber(); ++i)
                 values.insert(values.begin(), I.num());
-            I.gs.color = I.colorIn((*space.arr)[1], values);
+            if (!I.gs.colorLocked)
+                I.gs.color = I.colorIn((*space.arr)[1], values);
         }
-        I.gs.pattern = pattern;
+        if (!I.gs.colorLocked)
+            I.gs.pattern = pattern;
         return;
     }
     std::vector<double> values;

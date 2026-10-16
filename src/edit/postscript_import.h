@@ -25,9 +25,10 @@ bool looksLikePostScript(const std::vector<uint8_t>& bytes);
 
 /// An EPS or PostScript file's artwork, or an Illustrator file older than
 /// version 9: Illustrator's own format is read by its operators (paths,
-/// compound paths, colors, layers, hidden layers left out); any other
-/// PostScript runs in a small interpreter (paths, fills and strokes in
-/// gray, RGB and CMYK, transforms, procedures and the operators programs
+/// compound paths, colors, gradients, patterns, images, point, area and
+/// path text, layers, hidden layers left out); any other PostScript runs
+/// in a small interpreter (paths, fills and strokes, transforms, shadings,
+/// patterns, images and masks, text, procedures and the operators programs
 /// use to draw). The page is the file's bounding box.
 Artwork readPostScriptArt(const std::vector<uint8_t>& bytes);
 
@@ -35,11 +36,14 @@ Artwork readPostScriptArt(const std::vector<uint8_t>& bytes);
 /// (its AIPrivateData streams, in order); empty when it has none.
 std::vector<uint8_t> illustratorPrivateData(pdf::File& file, const pdf::Object& page);
 
-/// That data's artwork: uncompressed, or zlib-compressed after its
-/// "%AI12_CompressedData" mark.
+/// That data's artwork: uncompressed, zlib-compressed after its
+/// "%AI12_CompressedData" mark, or Zstandard-compressed after
+/// "%AI24_ZStandard_Data".
 Artwork readIllustratorPrivateData(const std::vector<uint8_t>& data);
 
-/// Illustrator's native format (as PostScript text): its paths and colors.
+/// Illustrator's native format (as PostScript text): its paths, colors,
+/// gradients, patterns, images and text (Illustrator 11's text through the
+/// text engine's own data).
 Artwork readIllustrator(const std::string& text);
 
 /// Any PostScript program's artwork, run in the interpreter, its page
