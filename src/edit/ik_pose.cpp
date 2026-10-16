@@ -849,8 +849,6 @@ void IKArmature::setSpring(int joint, const BoneSpring& spring)
 
 bool IKArmature::hasSprings() const
 {
-    if (_bendsShape)
-        return false;
     for (size_t i = 0; i < _nodes.size(); ++i)
         if (spring(static_cast<int>(i)).strength > 0.0)
             return true;
@@ -869,7 +867,7 @@ void IKArmature::setFrameRate(double fps)
 std::vector<IKJoint> IKArmature::sprungAt(int frame) const
 {
     if (!hasSprings())
-        return jointsAt(frame);
+        return shownAt(frame);
     const int count = std::max(1, frames());
     if (_sprung.empty())
     {
@@ -894,7 +892,8 @@ std::vector<IKJoint> IKArmature::sprungAt(int frame) const
         _sprung.assign(static_cast<size_t>(count), {});
         for (int f = 0; f < count; ++f)
         {
-            const std::vector<IKJoint> posed = jointsAt(f);
+            // From the joints the art shows: a shape's at its eased entry.
+            const std::vector<IKJoint> posed = shownAt(f);
             std::vector<IKJoint> joints = posed;
             // Parents come before their children, so each joint hangs off
             // its parent as the springs have already moved it.
@@ -1397,6 +1396,29 @@ void reskinShape(Shape& shape, const Transform& toArmature, const std::vector<IK
     warpShape(shape, [&](const Point& p) {
         return skinPoint(p.transformed(toArmature), before, after).transformed(toShape);
     });
+}
+
+bool springShape(Shape& shape, const Shape& first, const Transform& toArmature, const IKArmature& armature, int frame)
+{
+    if (!armature.bendsShape() || !armature.hasSprings())
+        return false;
+    const std::vector<IKJoint> sprung = armature.sprungAt(frame);
+    // Bound by the Bind tool: bent from the first frame's shape, as posing
+    // bends every frame, but to the sprung joints.
+    if (armature.bindsAnchors())
+    {
+        const ShapeBinding binding = armature.binding();
+        if (binding.size() == shapeAnchors(first).size())
+        {
+            std::unique_ptr<Shape> bent(cloneShape(first, nullptr));
+            bent->transform = shape.transform;
+            bindShape(*bent, toArmature, binding, armature.shownAt(0), sprung);
+            setShapeContents(shape, *bent);
+            return true;
+        }
+    }
+    reskinShape(shape, toArmature, armature.shownAt(frame), sprung);
+    return true;
 }
 
 std::vector<Point> shapeAnchors(const Shape& shape)

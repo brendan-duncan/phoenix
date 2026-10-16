@@ -2724,6 +2724,84 @@ bool PhoenixView::armatureTransform(const fla::Frame* frame, const fla::Element*
     return false;
 }
 
+const PhoenixView::ShapeSwap* PhoenixView::sprungShapes(const fla::Frame& pose, const fla::SymbolInstance& container,
+    int frameOffset)
+{
+    if (pose.otherTweenType != "IK pose" || pose.duration <= 1 || !container.symbol ||
+        container.symbol->timelines.empty() || !container.symbol->timelines.front())
+        return nullptr;
+    const std::string* xml = nullptr;
+    for (const std::string& child : pose.extraChildren)
+    {
+        const size_t at = child.find('<');
+        if (at != std::string::npos && child.compare(at, 7, "<IKTree") == 0)
+            xml = &child;
+    }
+    if (!xml)
+        return nullptr;
+    // Made again once anything in the document changes: the poses, the
+    // springs or the shapes themselves.
+    if (_sprungRevision != _revision)
+    {
+        for (const auto& [frame, entry] : _sprungShapes)
+            for (const auto& [into, swap] : entry.frames)
+                for (const auto& [shape, bent] : swap)
+                    _pathCache.remove(bent.get());
+        _sprungShapes.clear();
+        _sprungRevision = _revision;
+    }
+    SprungShapes& entry = _sprungShapes[&pose];
+    if (!entry.armature || entry.xml != *xml)
+    {
+        auto armature = std::make_shared<fla::IKArmature>();
+        entry.xml = *xml;
+        entry.frames.clear();
+        entry.armature = armature->parse(*xml) && armature->bendsShape() && armature->hasSprings() ? armature : nullptr;
+        // Springs swing at the document's own pace.
+        if (entry.armature && _flaDocument && _flaDocument->document)
+            armature->setFrameRate(_flaDocument->document->frameRate);
+    }
+    if (!entry.armature)
+        return nullptr;
+    const int into = frameOffset - container.firstFrame;
+    if (into < 0 || into >= entry.armature->frames())
+        return nullptr;
+    const auto done = entry.frames.find(into);
+    if (done != entry.frames.end())
+        return done->second.empty() ? nullptr : &done->second;
+    ShapeSwap& swap = entry.frames[into];
+    // Each layer's shapes on the frame shown, each bent from its own on the
+    // span's first frame.
+    const auto frameAt = [](const fla::Layer& layer, int index) -> const fla::Frame* {
+        for (const fla::Frame* frame : layer.frames)
+            if (frame && frame->index <= index && index < frame->index + std::max(1, frame->duration))
+                return frame;
+        return nullptr;
+    };
+    for (const fla::Layer* layer : container.symbol->timelines.front()->layers)
+    {
+        const fla::Frame* shown = layer ? frameAt(*layer, frameOffset) : nullptr;
+        const fla::Frame* first = layer ? frameAt(*layer, container.firstFrame) : nullptr;
+        for (size_t i = 0; shown && i < shown->elements.size(); ++i)
+        {
+            const fla::Element* element = shown->elements[i];
+            if (!element || element->elementType() != fla::Element::Type::Shape)
+                continue;
+            const auto* shape = static_cast<const fla::Shape*>(element);
+            const fla::Element* rest = first && i < first->elements.size() ? first->elements[i] : nullptr;
+            const auto* restShape = rest && rest->elementType() == fla::Element::Type::Shape
+                ? static_cast<const fla::Shape*>(rest) : shape;
+            std::unique_ptr<fla::Shape> bent(fla::cloneShape(*shape, shape->parent));
+            bent->transform = shape->transform;
+            fla::Transform toArmature = container.transform;
+            toArmature.concatenate(shape->transform);
+            if (fla::springShape(*bent, *restShape, toArmature, *entry.armature, into))
+                swap.emplace(shape, std::move(bent));
+        }
+    }
+    return swap.empty() ? nullptr : &swap;
+}
+
 fla::Transform PhoenixView::shownTransform(const LayerFrame& state, size_t elementIndex, bool behaviors)
 {
     if (!state.frame || elementIndex >= state.frame->elements.size() || !state.frame->elements[elementIndex])
@@ -4140,6 +4218,13 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
         const fla::Shape* shape = static_cast<const fla::Shape*>(element);
         const fla::Shape* tweenShape = (tweenElement && tweenElement->elementType() == fla::Element::Type::Shape) ?
             static_cast<const fla::Shape*>(tweenElement) : nullptr;
+        // In a boned shape on springs, the shape bent where they swing it.
+        if (_shapeSwap)
+        {
+            const auto swapped = _shapeSwap->find(shape);
+            if (swapped != _shapeSwap->end())
+                shape = swapped->second.get();
+        }
         drawShape(painter, shape, tweenShape, tweenProgress, qTransform);
     }
     else if (type == fla::Element::Type::SymbolInstance)
@@ -4332,6 +4417,17 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
                 frameOffset = std::min(behaviorDelta.hold, symbolLength(symbol) - 1);
                 loopType = fla::LoopType::SingleFrame;
             }
+            // A boned shape on springs: its container's shapes bent again
+            // where the springs swing its bones.
+            struct SwapScope
+            {
+                const ShapeSwap*& slot;
+                const ShapeSwap* was;
+                ~SwapScope() { slot = was; }
+            } swapScope{_shapeSwap, _shapeSwap};
+            if (symbol->otherSymbolType == "ik container")
+                if (const auto* pose = dynamic_cast<const fla::Frame*>(element->parent))
+                    _shapeSwap = sprungShapes(*pose, *instance, frameOffset);
             // A template's color field: the named clip tinted all one color.
             // A slider holds the clip on a frame; an image field draws a
             // file in place of its bitmap.

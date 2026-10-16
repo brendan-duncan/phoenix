@@ -1524,6 +1524,24 @@ private:
     bool armatureTransform(const fla::Frame* frame, const fla::Element* element, int offset, fla::Transform& shown);
     /// The same for \a element at the playhead, on the timeline shown.
     bool armatureHere(const fla::Element* element, fla::Transform& shown);
+    /// The shapes a boned shape on springs draws in place of its own, by
+    /// the shape each stands for: its container's shapes on one frame,
+    /// bent again where the springs swing the bones.
+    using ShapeSwap = std::map<const fla::Shape*, std::unique_ptr<fla::Shape>>;
+    /// Those for \a container (on the pose frame \a pose) showing frame
+    /// \a frameOffset of its symbol; null when no spring moves it. Kept
+    /// until the document changes.
+    const ShapeSwap* sprungShapes(const fla::Frame& pose, const fla::SymbolInstance& container, int frameOffset);
+    struct SprungShapes
+    {
+        std::string xml;
+        std::shared_ptr<fla::IKArmature> armature;
+        std::map<int, ShapeSwap> frames;
+    };
+    std::map<const fla::Frame*, SprungShapes> _sprungShapes;
+    unsigned _sprungRevision = 0;
+    /// While a boned shape's container draws, the shapes it draws instead.
+    const ShapeSwap* _shapeSwap = nullptr;
 
     /// The path of the motion guide a frame's layer is guided by, from the
     /// guide layer's strokes as shown now; null when it has none.

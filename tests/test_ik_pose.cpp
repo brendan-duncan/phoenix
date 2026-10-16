@@ -512,6 +512,57 @@ TEST(sprung_bones_trail_overshoot_and_settle)
     CHECK(!armature.hasSprings());
 }
 
+TEST(sprung_bones_swing_the_shape_they_bend)
+{
+    // A 200 by 40 rectangle boned along its middle, its second bone turning
+    // a quarter turn down over ten frames and holding, on a spring.
+    std::vector<fla::ArmatureJoint> joints(3);
+    for (int i = 0; i < 3; ++i)
+    {
+        joints[i].position = fla::Point(100.0 * i, 20.0);
+        joints[i].registration = joints[i].position;
+        joints[i].parent = i - 1;
+        joints[i].node = "ikNode_" + std::to_string(i + 1);
+    }
+    fla::IKArmature armature;
+    CHECK(armature.parse(fla::armatureXml("Armature_1", "ikTreeName1", joints, 60, true)));
+    std::unique_ptr<fla::Shape> rest = rectangle();
+    const std::vector<fla::Point> anchors = fla::shapeAnchors(*rest);
+    armature.setBinding(fla::bindToNearestBones(anchors, armature.jointsAt(0)), anchors, fla::Transform());
+    CHECK(armature.parse(armature.xml()) && armature.bendsShape() && armature.bindsAnchors());
+    const std::vector<fla::IKJoint> start = armature.shownAt(0);
+    CHECK(armature.setPose(10, {start[0].angle, start[1].angle + kPi / 2.0, start[2].angle + kPi / 2.0}));
+
+    // No spring: nothing to bend again.
+    std::unique_ptr<fla::Shape> shown(fla::cloneShape(*rest, nullptr));
+    CHECK(!armature.hasSprings());
+    CHECK(!fla::springShape(*shown, *rest, fla::Transform(), armature, 10));
+
+    fla::BoneSpring spring;
+    spring.present = true;
+    spring.strength = 20.0;
+    spring.damping = 20.0;
+    // On the joint the far bone turns about, as the joint dialog sets it.
+    armature.setSpring(1, spring);
+    CHECK(armature.hasSprings());
+    CHECK(armature.sprungAt(10)[1].angle < armature.shownAt(10)[1].angle - 0.05);
+    // The bone trails its swing: on the pose frame the far corner has not
+    // come all the way round, where the pose alone takes it.
+    std::unique_ptr<fla::Shape> posed(fla::cloneShape(*rest, nullptr));
+    fla::bindShape(*posed, fla::Transform(), armature.binding(), start, armature.shownAt(10));
+    CHECK(near(fla::shapeAnchors(*posed)[1], 120.0, 120.0, 0.01));
+    std::unique_ptr<fla::Shape> sprung(fla::cloneShape(*rest, nullptr));
+    CHECK(fla::springShape(*sprung, *rest, fla::Transform(), armature, 10));
+    const fla::Point lagging = fla::shapeAnchors(*sprung)[1];
+    CHECK(lagging.x > 121.0 && lagging.y < 119.0);
+    // The near corners keep to the bone that has no spring.
+    CHECK(near(fla::shapeAnchors(*sprung)[0], 0.0, 0.0, 0.01));
+    // Long after, it has settled where posed.
+    std::unique_ptr<fla::Shape> settled(fla::cloneShape(*rest, nullptr));
+    CHECK(fla::springShape(*settled, *rest, fla::Transform(), armature, 59));
+    CHECK(near(fla::shapeAnchors(*settled)[1], 120.0, 120.0, 3.0));
+}
+
 TEST(rebuilt_armatures_keep_springs_and_other_attributes)
 {
     const std::string xml = "<IKTree name=\"Armature_1\" treeName=\"ikTreeName2\" physicsEnabled=\"true\" custom=\"1\">"

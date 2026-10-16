@@ -78,7 +78,9 @@ using ShapeBinding = std::vector<std::vector<BoneWeight>>;
 /// A bone's spring, as a node may carry one (0 to 100 each): how stiffly it
 /// pulls back to its pose, 0 for no spring at all, and how quickly its
 /// swinging dies away. With a spring, the bone lags behind the motion of the
-/// bones above it and of its own poses, overshoots and settles (see sprungAt).
+/// bones above it and of its own poses, overshoots and settles (see sprungAt),
+/// carrying its instance in an armature of symbols or its part of a boned
+/// shape (see springShape).
 struct BoneSpring
 {
     bool present = false;
@@ -145,9 +147,9 @@ public:
     /// from the root down, each joint with a spring turns toward the angle
     /// its pose gives it from its parent as the parent now is, on a damped
     /// spring, so it trails, overshoots and settles; a joint without one
-    /// keeps its pose from its parent. The stored joints (jointsAt) when no
-    /// joint has a spring or the armature bends a shape. Worked out for the
-    /// whole span at once and kept until the armature changes.
+    /// keeps its pose from its parent. Worked from the joints the art shows
+    /// (shownAt), and those themselves when no joint has a spring. Worked
+    /// out for the whole span at once and kept until the armature changes.
     std::vector<IKJoint> sprungAt(int frame) const;
 
     /// Whether any joint has a spring that moves it.
@@ -329,6 +331,16 @@ Point skinPoint(const Point& point, const std::vector<IKJoint>& before, const st
 /// the shape's own space to the armature's.
 void reskinShape(Shape& shape, const Transform& toArmature, const std::vector<IKJoint>& before,
     const std::vector<IKJoint>& after);
+
+/// Bends \a shape, a copy of what a boned shape's container shows \a frame
+/// frames into the span, for the armature's springs: from the joints its
+/// poses give that frame to where the springs swing them. A shape bound by
+/// the Bind tool is bent afresh from \a first, the span's first frame's
+/// shape, by its binding; one bound otherwise is carried from where it is
+/// by the bones nearest each point. \a toArmature takes the shape's own
+/// space to the armature's. False, and the shape left as it is, when the
+/// armature has no spring.
+bool springShape(Shape& shape, const Shape& first, const Transform& toArmature, const IKArmature& armature, int frame);
 
 /// A new armature layer for \a timeline, to go above \a below: empty up to
 /// \a start, then one pose frame \a length frames long, which \a pose is set
