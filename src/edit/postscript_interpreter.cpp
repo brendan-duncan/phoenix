@@ -44,6 +44,15 @@ struct Source
     std::vector<uint8_t> bytes;
     size_t at = 0;
     bool program = false;
+    /// The JPEG a DCTDecode filter leaves for the importer to decode.
+    bool dct = false;
+    /// A filter not yet read: what it reads from, its name, its end string
+    /// (SubFileDecode's), and how many filters lie under it.
+    std::shared_ptr<Source> upstream;
+    std::string filter;
+    std::string end;
+    bool pending = false;
+    int chain = 0;
 };
 
 struct Obj
@@ -197,6 +206,12 @@ struct GState
     int spaceComponents = 1;
     Obj tintTransform;
     std::string alternate;
+    /// The space as setcolorspace was given it (a name or an array).
+    Obj spaceObj = Obj::name("DeviceGray", false);
+    /// A pattern fills (a dictionary makepattern made), else null.
+    Obj pattern;
+    /// Inside an uncolored pattern's tile: the color is the pattern's.
+    bool colorLocked = false;
     double lineWidth = 1.0;
     std::vector<Subpath> path;
     Subpath current;
@@ -205,6 +220,28 @@ struct GState
     Font font;
     /// The clipping paths in force (stage coordinates).
     std::vector<std::vector<Subpath>> clips;
+};
+
+/// An image as image, colorimage and imagemask give it.
+struct ImageSpec
+{
+    int width = 0, height = 0, bits = 8;
+    Matrix matrix;
+    std::vector<Obj> sources;
+    /// Samples a pixel, in  space (null: the device space of as many).
+    int components = 1;
+    bool multiple = false;
+    Obj space;
+    std::vector<double> decode;
+    /// A stencil painted in the current color (imagemask).
+    bool mask = false;
+    /// The samples already read, for a source shared with a mask.
+    std::optional<std::vector<uint8_t>> data;
+    /// An alpha a pixel from a mask (ImageType 3), its own size.
+    std::vector<uint8_t> alpha;
+    int alphaWidth = 0, alphaHeight = 0;
+    /// The sample ranges left out (ImageType 4's MaskColor).
+    std::vector<double> maskColor;
 };
 
 // ---------------------------------------------------------------- scanner
@@ -353,7 +390,10 @@ struct Interp
     long long steps = 0;
     int depth = 0;
     std::chrono::steady_clock::time_point started = std::chrono::steady_clock::now();
-    bool sawClip = false, sawPattern = false, sawShading = false, sawMask = false;
+    bool sawShading = false;
+    /// Pattern tiles drawn so far, and how deep patterns paint patterns.
+    size_t tiles = 0;
+    int patternDepth = 0;
     unsigned seed = 1;
 
     explicit Interp(Artwork& a)
@@ -632,6 +672,11 @@ struct Interp
         gs.hasPoint = false;
         if (paths.empty())
             return;
+        if (fill && gs.pattern.t == Obj::T::Dict)
+        {
+            fillWithPattern(std::move(paths), stroke);
+            return;
+        }
         Painted painted;
         if (fill)
             for (Subpath& s : paths)
@@ -677,33 +722,25 @@ struct Interp
 
     /// setcolor in the current space: device spaces directly, a separation
     /// through its tint transform into its alternate space.
-    void setColor(std::vector<double> values)
+    void setColor(const std::vector<double>& values)
     {
-        if (gs.space == "Separation" || gs.space == "DeviceN")
-        {
-            if (gs.tintTransform.isProc())
-            {
-                const size_t before = ops.size();
-                for (double v : values)
-                    push(Obj::real(v));
-                run(gs.tintTransform);
-                std::vector<double> out;
-                while (ops.size() > before && top().isNumber())
-                    out.insert(out.begin(), pop().num);
-                ops.resize(std::min(ops.size(), before));
-                setDeviceColor(out, gs.alternate);
-                return;
-            }
-            // No transform: the tint as a shade of gray.
-            gs.color = grayColor(1.0 - (values.empty() ? 1.0 : values[0]));
+        if (gs.colorLocked)
             return;
-        }
-        if (gs.space == "Pattern")
-        {
-            sawPattern = true;
+        gs.pattern = Obj();
+        gs.color = colorIn(gs.spaceObj, values);
+    }
+
+    /// A device space's color set by setgray and the like: the space too,
+    /// unless an uncolored pattern's tile holds the color.
+    void setDevice(const char* space, int components, const Color& color)
+    {
+        if (gs.colorLocked)
             return;
-        }
-        setDeviceColor(values, gs.space);
+        gs.space = space;
+        gs.spaceObj = Obj::name(space, false);
+        gs.spaceComponents = components;
+        gs.pattern = Obj();
+        gs.color = color;
     }
 
     // -- text
@@ -828,8 +865,25 @@ struct Interp
     }
 
     void setup();
-    void image(int width, int height, int bits, const Matrix& matrix, std::vector<Obj> sources, int components,
-        bool multiple);
+    void image(ImageSpec spec);
+    void placeImage(Image image, const Matrix& matrix);
+    /// What  proc leaves of numbers, run on  in; empty when it fails.
+    std::vector<double> runProcedure(const Obj& proc, const std::vector<double>& in);
+    /// How many numbers a color in  space takes.
+    int componentsOf(const Obj& space, int depth = 0) const;
+    /// The color  v names in  space, through tint transforms and
+    /// lookup tables to a device's.
+    Color colorIn(const Obj& space, const std::vector<double>& v, int depth = 0);
+    /// A function (types 0, 2 and 3, an array of them, or a procedure) at
+    ///  t.
+    std::vector<double> evaluate(const Obj& function, double t, int depth = 0);
+    /// An axial or radial shading as a gradient, its space onto the device
+    /// by  toDevice; none for other kinds.
+    std::optional<Gradient> shadingGradient(const Obj& shading, const Matrix& toDevice);
+    /// Fills  area (stage coordinates) with the pattern in force.
+    void fillWithPattern(std::vector<Subpath> area, bool stroke);
+    /// A plain color standing for a tiling pattern.
+    Color tileColor(const Obj& pattern);
 };
 
 bool Scanner::next(Obj& out, Interp& interp)
@@ -1019,6 +1073,25 @@ Obj matrixObj(const Matrix& m)
     return Obj::array({Obj::real(m.a), Obj::real(m.b), Obj::real(m.c), Obj::real(m.d), Obj::real(m.e), Obj::real(m.f)});
 }
 
+/// The value of entry \a key of dictionary \a d; null when it has none.
+const Obj* entry(const Obj& d, const char* key)
+{
+    if (d.t != Obj::T::Dict || !d.dict)
+        return nullptr;
+    const auto found = d.dict->find(key);
+    return found == d.dict->end() ? nullptr : &found->second;
+}
+
+/// The numbers of an array entry; empty when it is not one.
+std::vector<double> numbersIn(const Obj* o)
+{
+    std::vector<double> out;
+    if (o && o->t == Obj::T::Array && o->arr)
+        for (const Obj& item : *o->arr)
+            out.push_back(item.isNumber() ? item.num : 0.0);
+    return out;
+}
+
 /// The matrix operand an operator may take last: true when there was one.
 bool popMatrix(Interp& I, Matrix& m)
 {
@@ -1069,14 +1142,18 @@ bool equal(const Obj& a, const Obj& b)
     }
 }
 
-std::vector<uint8_t> inflateBytes(const std::vector<uint8_t>& data)
+/// zlib data from \a data on, inflated; \a used gets how many bytes the
+/// stream took, so what follows it can be read.
+std::vector<uint8_t> inflateBytes(const uint8_t* data, size_t size, size_t* used = nullptr)
 {
     std::vector<uint8_t> out;
     z_stream stream{};
+    if (used)
+        *used = size;
     if (inflateInit(&stream) != Z_OK)
         return out;
-    stream.next_in = const_cast<Bytef*>(data.data());
-    stream.avail_in = static_cast<uInt>(data.size());
+    stream.next_in = const_cast<Bytef*>(data);
+    stream.avail_in = static_cast<uInt>(std::min<size_t>(size, 0xFFFFFFFFu));
     uint8_t buffer[65536];
     for (;;)
     {
@@ -1088,8 +1165,50 @@ std::vector<uint8_t> inflateBytes(const std::vector<uint8_t>& data)
         if (status != Z_OK || (stream.avail_in == 0 && stream.avail_out != 0) || out.size() > (size_t(1) << 28))
             break;
     }
+    if (used)
+        *used = static_cast<size_t>(stream.total_in);
     inflateEnd(&stream);
     return out;
+}
+
+/// Where the JPEG starting at \a at in \a bytes ends: past its end of
+/// image mark, else the end of the bytes.
+size_t jpegEnd(const std::vector<uint8_t>& bytes, size_t at)
+{
+    size_t i = at;
+    if (i + 1 >= bytes.size() || bytes[i] != 0xFF || bytes[i + 1] != 0xD8)
+        return bytes.size();
+    i += 2;
+    // Marker segments up to the scan, then the scan's data up to a marker
+    // that is not a restart.
+    while (i + 3 < bytes.size())
+    {
+        if (bytes[i] != 0xFF)
+        {
+            ++i;
+            continue;
+        }
+        const uint8_t marker = bytes[i + 1];
+        if (marker == 0xD9)
+            return i + 2;
+        if (marker == 0xFF || marker == 0x00 || (marker >= 0xD0 && marker <= 0xD7) || marker == 0x01)
+        {
+            ++i;
+            continue;
+        }
+        const size_t length = static_cast<size_t>(bytes[i + 2]) << 8 | bytes[i + 3];
+        i += 2 + length;
+        if (marker == 0xDA)
+        {
+            while (i + 1 < bytes.size())
+            {
+                if (bytes[i] == 0xFF && bytes[i + 1] != 0x00 && !(bytes[i + 1] >= 0xD0 && bytes[i + 1] <= 0xD7))
+                    break;
+                ++i;
+            }
+        }
+    }
+    return bytes.size();
 }
 
 /// What a filter reads from \a source, decoded. Text filters stop at their
@@ -1195,8 +1314,10 @@ std::shared_ptr<Source> makeFilter(Interp& I, const std::shared_ptr<Source>& sou
     }
     else if (name == "RunLengthDecode")
     {
-        const std::vector<uint8_t> data = rest();
-        for (size_t i = 0; i < data.size();)
+        // Up to its end mark, so the program reads on past it.
+        const std::vector<uint8_t>& data = in.bytes;
+        size_t i = std::min(in.at, data.size());
+        while (i < data.size())
         {
             const int length = data[i++];
             if (length == 128)
@@ -1210,16 +1331,58 @@ std::shared_ptr<Source> makeFilter(Interp& I, const std::shared_ptr<Source>& sou
             }
             else if (i < data.size())
                 out->bytes.insert(out->bytes.end(), static_cast<size_t>(257 - length), data[i++]);
+            if (out->bytes.size() > (size_t(1) << 28))
+                break;
         }
+        in.at = i;
     }
     else if (name == "FlateDecode")
-        out->bytes = inflateBytes(rest());
+    {
+        const size_t start = std::min(in.at, in.bytes.size());
+        size_t used = 0;
+        out->bytes = inflateBytes(in.bytes.data() + start, in.bytes.size() - start, &used);
+        in.at = start + used;
+    }
+    else if (name == "DCTDecode")
+    {
+        // The JPEG as it is, for the importer to decode; the program reads
+        // on past its end.
+        const size_t start = std::min(in.at, in.bytes.size());
+        const size_t end = jpegEnd(in.bytes, start);
+        out->bytes.assign(in.bytes.begin() + static_cast<std::ptrdiff_t>(start),
+            in.bytes.begin() + static_cast<std::ptrdiff_t>(end));
+        in.at = end;
+        out->dct = true;
+    }
     else
     {
-        // DCT and the rest: the bytes as they are, for whoever reads them.
+        // The rest: the bytes as they are, for whoever reads them.
         out->bytes = rest();
     }
     return out;
+}
+
+/// A filter's data, read the first time anything asks for it: from where
+/// its source stands then, so it sees what follows the operator reading it
+/// (the image operator, for one, its data after it in the program).
+void ready(Interp& I, Source& s)
+{
+    if (!s.pending || !s.upstream)
+        return;
+    s.pending = false;
+    Source& in = *s.upstream;
+    ready(I, in);
+    // The program's data starts past the white space after the operator.
+    if (in.program && in.at < in.bytes.size() && Scanner::white(in.bytes[in.at]))
+    {
+        const bool crlf = in.bytes[in.at] == '\r' && in.at + 1 < in.bytes.size() && in.bytes[in.at + 1] == '\n';
+        in.at += crlf ? 2 : 1;
+    }
+    const Obj end = Obj::string(s.end);
+    const std::shared_ptr<Source> decoded = makeFilter(I, s.upstream, s.filter, s.end.empty() ? nullptr : &end);
+    s.bytes = std::move(decoded->bytes);
+    s.dct = decoded->dct;
+    s.at = 0;
 }
 
 // ---------------------------------------------------------------- operators
@@ -2059,25 +2222,16 @@ void opSetdash(Interp& I)
     I.pop();
     I.pop();
 }
-void opSetgray(Interp& I)
-{
-    I.gs.space = "DeviceGray";
-    I.gs.spaceComponents = 1;
-    I.gs.color = Interp::grayColor(I.num());
-}
+void opSetgray(Interp& I) { I.setDevice("DeviceGray", 1, Interp::grayColor(I.num())); }
 void opSetrgbcolor(Interp& I)
 {
     const double b = I.num(), g = I.num(), r = I.num();
-    I.gs.space = "DeviceRGB";
-    I.gs.spaceComponents = 3;
-    I.gs.color = Interp::rgbColor(r, g, b);
+    I.setDevice("DeviceRGB", 3, Interp::rgbColor(r, g, b));
 }
 void opSetcmykcolor(Interp& I)
 {
     const double k = I.num(), y = I.num(), m = I.num(), c = I.num();
-    I.gs.space = "DeviceCMYK";
-    I.gs.spaceComponents = 4;
-    I.gs.color = Interp::cmykColor(c, m, y, k);
+    I.setDevice("DeviceCMYK", 4, Interp::cmykColor(c, m, y, k));
 }
 void opSethsbcolor(Interp& I)
 {
@@ -2094,8 +2248,7 @@ void opSethsbcolor(Interp& I)
     case 5: r = v; g = p; b = q; break;
     default: break;
     }
-    I.gs.space = "DeviceRGB";
-    I.gs.color = Interp::rgbColor(r, g, b);
+    I.setDevice("DeviceRGB", 3, Interp::rgbColor(r, g, b));
 }
 void opCurrentgray(Interp& I)
 {
@@ -2122,49 +2275,46 @@ void opCurrentcmykcolor(Interp& I)
 void opSetcolorspace(Interp& I)
 {
     Obj space = I.pop();
-    std::string name;
     GState& gs = I.gs;
-    gs.tintTransform = Obj();
-    if (space.t == Obj::T::Name)
+    if (gs.colorLocked)
+        return;
+    std::string name;
+    if ((space.t == Obj::T::Name || space.t == Obj::T::String) && space.str)
         name = *space.str;
-    else if (space.t == Obj::T::Array && !space.arr->empty())
-    {
-        const Array& a = *space.arr;
-        name = a[0].str ? *a[0].str : std::string();
-        if ((name == "Separation" || name == "DeviceN") && a.size() >= 4)
-        {
-            gs.alternate = a[2].t == Obj::T::Name ? *a[2].str
-                : a[2].t == Obj::T::Array && !a[2].arr->empty() && (*a[2].arr)[0].str ? *(*a[2].arr)[0].str
-                                                                                       : "DeviceGray";
-            gs.tintTransform = a[3];
-            gs.spaceComponents = name == "DeviceN" && a[1].t == Obj::T::Array ? static_cast<int>(a[1].arr->size()) : 1;
-        }
-        else if (name == "ICCBased" || name == "CIEBasedABC" || name == "CalRGB")
-            name = "DeviceRGB";
-        else if (name == "CalGray" || name == "CIEBasedA")
-            name = "DeviceGray";
-        else if (name == "Indexed")
-            name = "DeviceRGB";
-    }
+    else if (space.t == Obj::T::Array && space.arr && !space.arr->empty() && (*space.arr)[0].str)
+        name = *(*space.arr)[0].str;
+    else
+        throw PsError{"typecheck"};
     gs.space = name;
-    if (name == "DeviceRGB")
-        gs.spaceComponents = 3;
+    gs.spaceObj = space;
+    gs.spaceComponents = I.componentsOf(space);
+    gs.pattern = Obj();
+    // The space's initial color: black, a full tint, the first index.
+    if (name == "Separation" || name == "DeviceN")
+        gs.color = I.colorIn(space, std::vector<double>(static_cast<size_t>(std::max(1, gs.spaceComponents)), 1.0));
     else if (name == "DeviceCMYK")
-        gs.spaceComponents = 4;
-    else if (name == "DeviceGray")
-        gs.spaceComponents = 1;
-    // The initial color of the space.
-    if (name == "DeviceCMYK" || name == "DeviceRGB" || name == "DeviceGray")
         gs.color = Color{0, 0, 0, 255};
-    else if (name == "Separation" || name == "DeviceN")
-        I.setColor(std::vector<double>(static_cast<size_t>(std::max(1, gs.spaceComponents)), 1.0));
+    else if (name != "Pattern")
+        gs.color = I.colorIn(space, std::vector<double>(static_cast<size_t>(std::max(1, gs.spaceComponents)), 0.0));
 }
 void opSetcolor(Interp& I)
 {
     if (!I.ops.empty() && I.top().t == Obj::T::Dict)
     {
-        I.pop();
-        I.sawPattern = true;
+        // A pattern; an uncolored one's color first, in the space under it.
+        Obj pattern = I.pop();
+        if (I.gs.colorLocked)
+            return;
+        const Obj& space = I.gs.spaceObj;
+        if (space.t == Obj::T::Array && space.arr && space.arr->size() >= 2)
+        {
+            std::vector<double> values;
+            const int n = std::max(1, I.componentsOf((*space.arr)[1]));
+            for (int i = 0; i < n && !I.ops.empty() && I.top().isNumber(); ++i)
+                values.insert(values.begin(), I.num());
+            I.gs.color = I.colorIn((*space.arr)[1], values);
+        }
+        I.gs.pattern = pattern;
         return;
     }
     std::vector<double> values;
@@ -2173,11 +2323,27 @@ void opSetcolor(Interp& I)
         values.insert(values.begin(), I.num());
     I.setColor(values);
 }
-void opCurrentcolorspace(Interp& I) { I.push(Obj::array({Obj::name(I.gs.space, false)})); }
+void opCurrentcolorspace(Interp& I)
+{
+    const Obj& space = I.gs.spaceObj;
+    I.push(space.t == Obj::T::Array ? space : Obj::array({Obj::name(I.gs.space, false)}));
+}
 void opSetpattern(Interp& I)
 {
-    I.pop();
-    I.sawPattern = true;
+    Obj pattern = I.pop();
+    if (pattern.t != Obj::T::Dict)
+        throw PsError{"typecheck"};
+    if (I.gs.colorLocked)
+        return;
+    // An uncolored pattern paints in the color already set.
+    const Obj* paintType = entry(pattern, "PaintType");
+    if (!(paintType && Interp::toInt(paintType->num) == 2))
+    {
+        I.gs.space = "Pattern";
+        I.gs.spaceObj = Obj::name("Pattern", false);
+        I.gs.spaceComponents = 0;
+    }
+    I.gs.pattern = pattern;
 }
 
 // -- matrices
@@ -2494,10 +2660,605 @@ void opRectclip(Interp& I)
     (void)keep;
     (void)current;
 }
+// -- color spaces, functions, shadings and patterns
+
+std::vector<double> Interp::runProcedure(const Obj& proc, const std::vector<double>& in)
+{
+    const size_t before = ops.size();
+    for (double v : in)
+        push(Obj::real(v));
+    std::vector<double> out;
+    try
+    {
+        run(proc);
+    }
+    catch (const PsError&)
+    {
+        ops.resize(std::min(ops.size(), before));
+        return out;
+    }
+    while (ops.size() > before && top().isNumber())
+        out.insert(out.begin(), pop().num);
+    ops.resize(std::min(ops.size(), before));
+    return out;
+}
+
+int Interp::componentsOf(const Obj& space, int depth) const
+{
+    std::string name;
+    const Array* a = nullptr;
+    if ((space.t == Obj::T::Name || space.t == Obj::T::String) && space.str)
+        name = *space.str;
+    else if (space.t == Obj::T::Array && space.arr && !space.arr->empty() && (*space.arr)[0].str)
+    {
+        name = *(*space.arr)[0].str;
+        a = space.arr.get();
+    }
+    if (name == "DeviceRGB" || name == "CalRGB" || name == "CIEBasedABC" || name == "Lab")
+        return 3;
+    if (name == "DeviceCMYK")
+        return 4;
+    if (name == "DeviceN" && a && a->size() >= 2 && (*a)[1].t == Obj::T::Array)
+        return static_cast<int>(std::clamp<size_t>((*a)[1].arr->size(), 1, 32));
+    if (name == "ICCBased" && a && a->size() >= 2)
+    {
+        if (const Obj* n = entry((*a)[1], "N"))
+            return std::clamp(toInt(n->num), 1, 4);
+        return 3;
+    }
+    if (name == "Pattern" && a && a->size() >= 2 && depth < 8)
+        return componentsOf((*a)[1], depth + 1);
+    if (name == "Pattern")
+        return 0;
+    return 1;
+}
+
+Color Interp::colorIn(const Obj& space, const std::vector<double>& v, int depth)
+{
+    const auto at = [&v](size_t i) { return i < v.size() ? v[i] : 0.0; };
+    std::string name;
+    const Array* a = nullptr;
+    if ((space.t == Obj::T::Name || space.t == Obj::T::String) && space.str)
+        name = *space.str;
+    else if (space.t == Obj::T::Array && space.arr && !space.arr->empty() && (*space.arr)[0].str)
+    {
+        name = *(*space.arr)[0].str;
+        a = space.arr.get();
+    }
+    if (depth > 8)
+        name.clear();
+    if (name == "DeviceRGB" || name == "CalRGB" || name == "CIEBasedABC")
+        return rgbColor(at(0), at(1), at(2));
+    if (name == "DeviceCMYK")
+        return cmykColor(at(0), at(1), at(2), at(3));
+    if (name == "DeviceGray" || name == "CalGray" || name == "CIEBasedA")
+        return grayColor(at(0));
+    if (name == "Lab")
+        return grayColor(at(0) / 100.0);
+    if (name == "ICCBased")
+    {
+        const int n = componentsOf(space);
+        return n == 4 ? cmykColor(at(0), at(1), at(2), at(3)) : n == 3 ? rgbColor(at(0), at(1), at(2)) : grayColor(at(0));
+    }
+    if ((name == "Separation" || name == "DeviceN") && a && a->size() >= 4)
+    {
+        // Through the tint transform into the alternate space; with none,
+        // the tint as a shade of gray.
+        if ((*a)[3].isProc())
+        {
+            const std::vector<double> out = runProcedure((*a)[3], v);
+            if (!out.empty())
+                return colorIn((*a)[2], out, depth + 1);
+        }
+        return grayColor(1.0 - at(0));
+    }
+    if (name == "Indexed" && a && a->size() >= 4)
+    {
+        const Obj& base = (*a)[1];
+        const int hival = std::max(0, toInt((*a)[2].num));
+        const int index = std::clamp(toInt(std::floor(at(0) + 0.5)), 0, hival);
+        const int n = std::max(1, componentsOf(base, depth + 1));
+        std::vector<double> values;
+        const Obj& lookup = (*a)[3];
+        if (lookup.t == Obj::T::String && lookup.str)
+        {
+            for (int c = 0; c < n; ++c)
+            {
+                const size_t k = static_cast<size_t>(index) * static_cast<size_t>(n) + static_cast<size_t>(c);
+                values.push_back(k < lookup.str->size() ? static_cast<unsigned char>((*lookup.str)[k]) / 255.0 : 0.0);
+            }
+        }
+        else if (lookup.isProc())
+            values = runProcedure(lookup, {static_cast<double>(index)});
+        return colorIn(base, values, depth + 1);
+    }
+    return v.size() >= 4 ? cmykColor(at(0), at(1), at(2), at(3))
+        : v.size() == 3  ? rgbColor(at(0), at(1), at(2))
+                         : grayColor(at(0));
+}
+
+std::vector<double> Interp::evaluate(const Obj& function, double t, int depth)
+{
+    std::vector<double> out;
+    if (depth > 8)
+        return out;
+    if (function.t == Obj::T::Array && !function.exec && function.arr)
+    {
+        // One function a component.
+        for (const Obj& part : *function.arr)
+        {
+            const std::vector<double> one = evaluate(part, t, depth + 1);
+            out.push_back(one.empty() ? 0.0 : one[0]);
+        }
+        return out;
+    }
+    if (function.isProc())
+        return runProcedure(function, {t});
+    const Obj* typeEntry = entry(function, "FunctionType");
+    if (!typeEntry)
+        return out;
+    const int type = toInt(typeEntry->num);
+    std::vector<double> domain = numbersIn(entry(function, "Domain"));
+    if (domain.size() < 2)
+        domain = {0.0, 1.0};
+    t = std::clamp(t, std::min(domain[0], domain[1]), std::max(domain[0], domain[1]));
+    const std::vector<double> range = numbersIn(entry(function, "Range"));
+    const auto clipped = [&range](std::vector<double> values) {
+        for (size_t i = 0; i < values.size() && 2 * i + 1 < range.size(); ++i)
+            values[i] = std::clamp(values[i], range[2 * i], range[2 * i + 1]);
+        return values;
+    };
+    if (type == 2)
+    {
+        std::vector<double> c0 = numbersIn(entry(function, "C0"));
+        std::vector<double> c1 = numbersIn(entry(function, "C1"));
+        if (c0.empty())
+            c0 = {0.0};
+        if (c1.empty())
+            c1 = {1.0};
+        const Obj* nEntry = entry(function, "N");
+        const double n = nEntry ? nEntry->num : 1.0;
+        const double x = std::pow(std::max(0.0, t), n);
+        for (size_t i = 0; i < std::min(c0.size(), c1.size()); ++i)
+            out.push_back(c0[i] + x * (c1[i] - c0[i]));
+        return clipped(out);
+    }
+    if (type == 3)
+    {
+        const Obj* functions = entry(function, "Functions");
+        if (!functions || functions->t != Obj::T::Array || functions->arr->empty())
+            return out;
+        const std::vector<double> bounds = numbersIn(entry(function, "Bounds"));
+        const std::vector<double> encode = numbersIn(entry(function, "Encode"));
+        const size_t k = functions->arr->size();
+        size_t i = 0;
+        while (i < bounds.size() && i + 1 < k && t >= bounds[i])
+            ++i;
+        const double low = i == 0 ? domain[0] : bounds[i - 1];
+        const double high = i < bounds.size() ? bounds[i] : domain[1];
+        const double e0 = 2 * i < encode.size() ? encode[2 * i] : 0.0;
+        const double e1 = 2 * i + 1 < encode.size() ? encode[2 * i + 1] : 1.0;
+        const double u = high != low ? e0 + (t - low) * (e1 - e0) / (high - low) : e0;
+        return clipped(evaluate((*functions->arr)[i], u, depth + 1));
+    }
+    if (type == 0)
+    {
+        // Sampled, one input: interpolated between the two nearest samples.
+        const std::vector<double> size = numbersIn(entry(function, "Size"));
+        const Obj* bitsEntry = entry(function, "BitsPerSample");
+        const Obj* source = entry(function, "DataSource");
+        if (size.empty() || !bitsEntry || !source || range.size() < 2)
+            return out;
+        const int bits = toInt(bitsEntry->num);
+        const int count = std::clamp(toInt(size[0]), 1, 65536);
+        if (bits != 1 && bits != 2 && bits != 4 && bits != 8 && bits != 12 && bits != 16 && bits != 24 && bits != 32)
+            return out;
+        const size_t outputs = range.size() / 2;
+        std::vector<uint8_t> data;
+        if (source->t == Obj::T::String && source->str)
+            data.assign(source->str->begin(), source->str->end());
+        else if (source->t == Obj::T::File && source->file)
+        {
+            ready(*this, *source->file);
+            data = source->file->bytes;
+        }
+        std::vector<double> encode = numbersIn(entry(function, "Encode"));
+        if (encode.size() < 2)
+            encode = {0.0, static_cast<double>(count - 1)};
+        std::vector<double> decode = numbersIn(entry(function, "Decode"));
+        if (decode.size() < 2 * outputs)
+            decode = range;
+        const double e = encode[0] + (t - domain[0]) * (encode[1] - encode[0]) / (domain[1] != domain[0] ? domain[1] - domain[0] : 1.0);
+        const double position = std::clamp(e, 0.0, static_cast<double>(count - 1));
+        const int i0 = static_cast<int>(std::floor(position));
+        const int i1 = std::min(count - 1, i0 + 1);
+        const double f = position - i0;
+        const double top = bits >= 32 ? 4294967295.0 : static_cast<double>((uint64_t(1) << bits) - 1);
+        const auto sample = [&](int index, size_t c) {
+            const size_t bit = (static_cast<size_t>(index) * outputs + c) * static_cast<size_t>(bits);
+            uint64_t value = 0;
+            for (int b = 0; b < bits; ++b)
+            {
+                const size_t at = bit + static_cast<size_t>(b);
+                const int on = at / 8 < data.size() ? (data[at / 8] >> (7 - static_cast<int>(at % 8))) & 1 : 0;
+                value = (value << 1) | static_cast<uint64_t>(on);
+            }
+            return static_cast<double>(value) / top;
+        };
+        for (size_t c = 0; c < outputs; ++c)
+        {
+            const double s = sample(i0, c) * (1 - f) + sample(i1, c) * f;
+            out.push_back(decode[2 * c] + s * (decode[2 * c + 1] - decode[2 * c]));
+        }
+        return clipped(out);
+    }
+    return out;
+}
+
+/// \a stops brought to at most fifteen (what an FLA gradient holds),
+/// dropping first those its neighbors draw anyway.
+std::vector<Gradient::Stop> fewerStops(std::vector<Gradient::Stop> stops)
+{
+    const auto apart = [](const Gradient::Stop& a, const Gradient::Stop& b, const Gradient::Stop& c) {
+        // How far b's color is from the line between a's and c's.
+        const double f = c.offset > a.offset ? (b.offset - a.offset) / (c.offset - a.offset) : 0.0;
+        double worst = 0.0;
+        for (size_t k = 0; k < 4; ++k)
+            worst = std::max(worst, std::fabs(a.color[k] + f * (c.color[k] - a.color[k]) - b.color[k]));
+        return worst;
+    };
+    for (double tolerance = 1.5;; tolerance *= 2.0)
+    {
+        bool removed = true;
+        while (removed && stops.size() > 2)
+        {
+            removed = false;
+            size_t best = 0;
+            double least = 1e300;
+            for (size_t i = 1; i + 1 < stops.size(); ++i)
+            {
+                const double d = apart(stops[i - 1], stops[i], stops[i + 1]);
+                if (d < least)
+                {
+                    least = d;
+                    best = i;
+                }
+            }
+            if (best > 0 && (least <= tolerance || stops.size() > 15))
+            {
+                stops.erase(stops.begin() + static_cast<std::ptrdiff_t>(best));
+                removed = true;
+            }
+        }
+        if (stops.size() <= 15 || tolerance > 1000.0)
+            return stops;
+    }
+}
+
+std::optional<Gradient> Interp::shadingGradient(const Obj& shading, const Matrix& toDevice)
+{
+    const Obj* typeEntry = entry(shading, "ShadingType");
+    const Obj* function = entry(shading, "Function");
+    if (!typeEntry || !function)
+        return std::nullopt;
+    const int type = toInt(typeEntry->num);
+    const std::vector<double> coords = numbersIn(entry(shading, "Coords"));
+    if ((type != 2 || coords.size() < 4) && (type != 3 || coords.size() < 6))
+        return std::nullopt;
+    Obj space = Obj::name("DeviceGray", false);
+    if (const Obj* s = entry(shading, "ColorSpace"))
+        space = *s;
+    std::vector<double> domain = numbersIn(entry(shading, "Domain"));
+    if (domain.size() < 2)
+        domain = {0.0, 1.0};
+    // The function sampled along the ramp, at its stitches too, then thinned.
+    std::vector<double> at;
+    for (int i = 0; i <= 32; ++i)
+        at.push_back(i / 32.0);
+    if (const Obj* bounds = entry(*function, "Bounds"))
+        for (double b : numbersIn(bounds))
+            if (domain[1] != domain[0])
+                for (double e : {-1e-6, 1e-6})
+                    at.push_back(std::clamp((b - domain[0]) / (domain[1] - domain[0]) + e, 0.0, 1.0));
+    std::sort(at.begin(), at.end());
+    Gradient gradient;
+    for (double u : at)
+    {
+        const std::vector<double> values = evaluate(*function, domain[0] + u * (domain[1] - domain[0]));
+        if (values.empty())
+            return std::nullopt;
+        gradient.stops.push_back(Gradient::Stop{u, colorIn(space, values)});
+    }
+    gradient.stops = fewerStops(std::move(gradient.stops));
+    const Matrix toStage = Matrix{1, 0, 0, -1, -pageLeft, pageTop}.after(toDevice);
+    const double square = 1638.4;
+    Matrix local;
+    if (type == 2)
+    {
+        // The square's x along the axis, its y across it.
+        const double x0 = coords[0], y0 = coords[1], dx = coords[2] - x0, dy = coords[3] - y0;
+        local = Matrix{dx / square, dy / square, -dy / square, dx / square, x0 + dx / 2, y0 + dy / 2};
+    }
+    else
+    {
+        // On the outer circle, turned toward the inner one's center, the
+        // colors starting out at the inner circle.
+        const double radius = coords[5];
+        if (!(radius > 0.0))
+            return std::nullopt;
+        const double ix = coords[0], iy = coords[1], ox = coords[3], oy = coords[4];
+        const double toward = std::hypot(ix - ox, iy - oy);
+        const double angle = toward > 1e-9 ? std::atan2(iy - oy, ix - ox) : 0.0;
+        const double k = radius / (square / 2.0);
+        local = Matrix{std::cos(angle) * k, std::sin(angle) * k, -std::sin(angle) * k, std::cos(angle) * k, ox, oy};
+        gradient.radial = true;
+        gradient.focal = std::clamp(toward / radius, 0.0, 0.99);
+        const double start = std::clamp(coords[2] / radius, 0.0, 0.99);
+        for (Gradient::Stop& stop : gradient.stops)
+            stop.offset = start + stop.offset * (1.0 - start);
+    }
+    const Matrix placed = toStage.after(local);
+    gradient.placement = Placement{placed.a, placed.b, placed.c, placed.d, placed.e, placed.f};
+    return gradient;
+}
+
+/// A pattern's space onto the device: what makepattern kept with it.
+Matrix patternMatrix(const Obj& pattern)
+{
+    if (const Obj* m = entry(pattern, "#PatternMatrix"); m && m->t == Obj::T::Array && m->arr->size() >= 6)
+        return matrixOf(*m);
+    return Matrix();
+}
+
+void Interp::fillWithPattern(std::vector<Subpath> area, bool stroke)
+{
+    const Obj pattern = gs.pattern;
+    const Obj* typeEntry = entry(pattern, "PatternType");
+    const int type = typeEntry ? toInt(typeEntry->num) : 1;
+    for (Subpath& s : area)
+        s.closed = true;
+    const auto plain = [&](std::optional<Gradient> gradient, Color color) {
+        Painted painted;
+        painted.subpaths = area;
+        painted.fill = gradient && !gradient->stops.empty() ? gradient->stops.front().color : color;
+        painted.gradient = std::move(gradient);
+        if (stroke)
+        {
+            painted.stroke = gs.color;
+            painted.strokeWidth = std::max(0.1, gs.lineWidth * gs.ctm.scale());
+        }
+        painted.clips = gs.clips;
+        art.order.emplace_back(Artwork::Kind::Path, art.paths.size());
+        art.paths.push_back(std::move(painted));
+    };
+    if (type == 2)
+    {
+        const Obj* shading = entry(pattern, "Shading");
+        std::optional<Gradient> gradient = shading ? shadingGradient(*shading, patternMatrix(pattern)) : std::nullopt;
+        if (!gradient)
+            note(art, "Some shadings are of kinds Phoenix does not read and came in as plain color.");
+        plain(gradient, gs.color);
+        return;
+    }
+    // A tiling pattern: its cell painted wherever the area reaches, each
+    // tile cut to the area.
+    const std::vector<double> box = numbersIn(entry(pattern, "BBox"));
+    const Obj* xEntry = entry(pattern, "XStep");
+    const Obj* yEntry = entry(pattern, "YStep");
+    const Obj* proc = entry(pattern, "PaintProc");
+    const double xs = xEntry ? std::fabs(xEntry->num) : 0.0, ys = yEntry ? std::fabs(yEntry->num) : 0.0;
+    const Matrix toDevice = patternMatrix(pattern);
+    const Matrix toStage = Matrix{1, 0, 0, -1, -pageLeft, pageTop}.after(toDevice);
+    Matrix inverse;
+    long i0 = 0, i1 = -1, j0 = 0, j1 = -1;
+    if (box.size() >= 4 && proc && proc->isProc() && xs > 1e-9 && ys > 1e-9 && toStage.invert(inverse))
+    {
+        double left = 1e300, top = 1e300, right = -1e300, bottom = -1e300;
+        for (const Subpath& s : area)
+            for (const Segment& seg : s.segments)
+                for (const Point& pt : seg.points)
+                {
+                    left = std::min(left, pt.x);
+                    right = std::max(right, pt.x);
+                    top = std::min(top, pt.y);
+                    bottom = std::max(bottom, pt.y);
+                }
+        double px0 = 1e300, py0 = 1e300, px1 = -1e300, py1 = -1e300;
+        for (const Point& corner : {Point(left, top), Point(right, top), Point(left, bottom), Point(right, bottom)})
+        {
+            double qx, qy;
+            inverse.apply(corner.x, corner.y, qx, qy);
+            px0 = std::min(px0, qx);
+            px1 = std::max(px1, qx);
+            py0 = std::min(py0, qy);
+            py1 = std::max(py1, qy);
+        }
+        const double limit = 1e6;
+        if (std::fabs(px0) < limit * xs && std::fabs(px1) < limit * xs && std::fabs(py0) < limit * ys &&
+            std::fabs(py1) < limit * ys)
+        {
+            i0 = static_cast<long>(std::floor((px0 - std::max(box[0], box[2])) / xs));
+            i1 = static_cast<long>(std::ceil((px1 - std::min(box[0], box[2])) / xs));
+            j0 = static_cast<long>(std::floor((py0 - std::max(box[1], box[3])) / ys));
+            j1 = static_cast<long>(std::ceil((py1 - std::min(box[1], box[3])) / ys));
+        }
+    }
+    const long count = (i1 - i0 + 1) * (j1 - j0 + 1);
+    if (i1 < i0 || j1 < j0 || count > 2500 || tiles + static_cast<size_t>(count) > 20000 || patternDepth >= 4)
+    {
+        if (i1 >= i0 && j1 >= j0)
+            note(art, "Pattern fills too fine to draw tile by tile came in as plain colors.");
+        plain(std::nullopt, tileColor(pattern));
+        return;
+    }
+    tiles += static_cast<size_t>(count);
+    const Obj* paintType = entry(pattern, "PaintType");
+    const bool uncolored = paintType && toInt(paintType->num) == 2;
+    const GState outer = gs;
+    const size_t stackDepth = ops.size();
+    ++patternDepth;
+    try
+    {
+        for (long i = i0; i <= i1; ++i)
+            for (long j = j0; j <= j1; ++j)
+            {
+                gs = outer;
+                gs.ctm = toDevice.after(Matrix{1, 0, 0, 1, i * xs, j * ys});
+                gs.clips.push_back(area);
+                gs.path.clear();
+                gs.current = Subpath();
+                gs.hasPoint = false;
+                gs.pattern = Obj();
+                if (!uncolored)
+                {
+                    gs.color = Color{0, 0, 0, 255};
+                    gs.space = "DeviceGray";
+                    gs.spaceObj = Obj::name("DeviceGray", false);
+                    gs.spaceComponents = 1;
+                }
+                gs.colorLocked = uncolored;
+                push(pattern);
+                run(*proc);
+                ops.resize(std::min(ops.size(), stackDepth));
+            }
+    }
+    catch (...)
+    {
+        --patternDepth;
+        gs = outer;
+        ops.resize(std::min(ops.size(), stackDepth));
+        throw;
+    }
+    --patternDepth;
+    gs = outer;
+    if (stroke)
+    {
+        Painted outline;
+        outline.subpaths = area;
+        outline.stroke = gs.color;
+        outline.strokeWidth = std::max(0.1, gs.lineWidth * gs.ctm.scale());
+        outline.clips = gs.clips;
+        art.order.emplace_back(Artwork::Kind::Path, art.paths.size());
+        art.paths.push_back(std::move(outline));
+    }
+}
+
+Color Interp::tileColor(const Obj& pattern)
+{
+    // One tile painted aside: the color of the first thing it fills.
+    const Obj* paintType = entry(pattern, "PaintType");
+    if (paintType && toInt(paintType->num) == 2)
+        return gs.color;
+    const Obj* proc = entry(pattern, "PaintProc");
+    if (!proc || !proc->isProc() || patternDepth >= 4)
+        return gs.color;
+    const size_t paths = art.paths.size(), images = art.images.size(), texts = art.texts.size(),
+                 order = art.order.size(), notes = art.notes.size();
+    const GState outer = gs;
+    const size_t stackDepth = ops.size();
+    Color found = gs.color;
+    ++patternDepth;
+    try
+    {
+        gs.pattern = Obj();
+        gs.ctm = patternMatrix(pattern);
+        gs.path.clear();
+        gs.current = Subpath();
+        gs.hasPoint = false;
+        push(pattern);
+        run(*proc);
+    }
+    catch (const PsError&)
+    {
+    }
+    --patternDepth;
+    for (size_t k = paths; k < art.paths.size(); ++k)
+        if (art.paths[k].fill || art.paths[k].stroke)
+        {
+            found = art.paths[k].fill ? *art.paths[k].fill : *art.paths[k].stroke;
+            break;
+        }
+    art.paths.resize(paths);
+    art.images.resize(images);
+    art.texts.resize(texts);
+    art.order.resize(order);
+    art.notes.resize(notes);
+    gs = outer;
+    ops.resize(std::min(ops.size(), stackDepth));
+    return found;
+}
+
 void opShfill(Interp& I)
 {
-    I.pop();
-    I.sawShading = true;
+    Obj shading = I.pop();
+    if (shading.t != Obj::T::Dict)
+        throw PsError{"typecheck"};
+    // The area: what clips it, else the shading's box, else the page.
+    std::vector<Subpath> area;
+    std::vector<std::vector<Subpath>> clips = I.gs.clips;
+    if (!clips.empty())
+    {
+        area = clips.back();
+        clips.pop_back();
+    }
+    else
+    {
+        std::vector<double> box = numbersIn(entry(shading, "BBox"));
+        Subpath rect;
+        const auto corner = [&](double x, double y, bool user) {
+            double dx = x, dy = y;
+            if (user)
+                I.gs.ctm.apply(x, y, dx, dy);
+            return I.stage(dx, dy);
+        };
+        const bool user = box.size() >= 4;
+        if (!user)
+            box = {I.pageLeft, I.pageTop - I.art.height, I.pageLeft + I.art.width, I.pageTop};
+        rect.segments.push_back(Segment{Segment::Kind::Move, {corner(box[0], box[1], user)}});
+        rect.segments.push_back(Segment{Segment::Kind::Line, {corner(box[2], box[1], user)}});
+        rect.segments.push_back(Segment{Segment::Kind::Line, {corner(box[2], box[3], user)}});
+        rect.segments.push_back(Segment{Segment::Kind::Line, {corner(box[0], box[3], user)}});
+        rect.closed = true;
+        area.push_back(rect);
+    }
+    std::optional<Gradient> gradient = I.shadingGradient(shading, I.gs.ctm);
+    Painted painted;
+    painted.subpaths = std::move(area);
+    painted.clips = std::move(clips);
+    if (gradient)
+    {
+        painted.fill = gradient->stops.front().color;
+        painted.gradient = std::move(gradient);
+    }
+    else
+    {
+        // Meshes and function shadings: their background, else left out.
+        const std::vector<double> background = numbersIn(entry(shading, "Background"));
+        Obj space = Obj::name("DeviceGray", false);
+        if (const Obj* s = entry(shading, "ColorSpace"))
+            space = *s;
+        if (background.empty())
+        {
+            I.sawShading = true;
+            return;
+        }
+        painted.fill = I.colorIn(space, background);
+        I.sawShading = true;
+    }
+    I.art.order.emplace_back(Artwork::Kind::Path, I.art.paths.size());
+    I.art.paths.push_back(std::move(painted));
+}
+
+void opMakepattern(Interp& I)
+{
+    const Matrix m = matrixOf(I.pop());
+    Obj pattern = I.pop();
+    if (pattern.t != Obj::T::Dict)
+        throw PsError{"typecheck"};
+    Obj copy = Obj::dictionary();
+    *copy.dict = *pattern.dict;
+    (*copy.dict)["#PatternMatrix"] = matrixObj(I.gs.ctm.after(m));
+    I.push(copy);
 }
 
 // -- fonts and text
@@ -2720,7 +3481,15 @@ void opFilter(Interp& I)
     Obj source = I.pop();
     Obj f;
     f.t = Obj::T::File;
-    f.file = makeFilter(I, sourceOf(I, source), filter, end.t == Obj::T::String ? &end : nullptr);
+    f.file = std::make_shared<Source>();
+    f.file->upstream = sourceOf(I, source);
+    f.file->filter = filter;
+    f.file->end = end.t == Obj::T::String && end.str ? *end.str : std::string();
+    f.file->pending = true;
+    f.file->chain = f.file->upstream->chain + 1;
+    // Filters on filters past reason.
+    if (f.file->chain > 64)
+        throw PsError{"limitcheck"};
     I.push(f);
 }
 void opReadhexstring(Interp& I)
@@ -2728,6 +3497,7 @@ void opReadhexstring(Interp& I)
     Obj buffer = textOperand(I.pop());
     Obj file = I.pop();
     Source& src = fileOperand(file);
+    ready(I, src);
     std::string& out = *buffer.str;
     size_t filled = 0;
     int high = -1;
@@ -2755,6 +3525,7 @@ void opReadstring(Interp& I)
     Obj buffer = textOperand(I.pop());
     Obj file = I.pop();
     Source& src = fileOperand(file);
+    ready(I, src);
     // After the operator's own white space, the data.
     if (src.program && src.at < src.bytes.size() && Scanner::white(src.bytes[src.at]))
         ++src.at;
@@ -2771,6 +3542,7 @@ void opReadline(Interp& I)
     Obj buffer = textOperand(I.pop());
     Obj file = I.pop();
     Source& src = fileOperand(file);
+    ready(I, src);
     std::string out;
     bool found = false;
     while (src.at < src.bytes.size())
@@ -2792,6 +3564,7 @@ void opRead(Interp& I)
 {
     Obj file = I.pop();
     Source& src = fileOperand(file);
+    ready(I, src);
     if (src.at < src.bytes.size())
     {
         I.push(Obj::integer(src.bytes[src.at++]));
@@ -2804,12 +3577,17 @@ void opFlushfile(Interp& I)
 {
     Obj file = I.pop();
     if (file.t == Obj::T::File && file.file && !file.file->program)
+    {
+        ready(I, *file.file);
         file.file->at = file.file->bytes.size();
+    }
 }
 void opClosefile(Interp& I) { I.pop(); }
 void opBytesavailable(Interp& I)
 {
     Obj file = I.pop();
+    if (file.t == Obj::T::File && file.file)
+        ready(I, *file.file);
     I.push(Obj::integer(file.file ? static_cast<double>(file.file->bytes.size() - std::min(file.file->at, file.file->bytes.size())) : 0));
 }
 
@@ -2827,9 +3605,10 @@ std::vector<uint8_t> imageData(Interp& I, const Obj& source, size_t wanted)
         while (out.size() < wanted)
             out.insert(out.end(), source.str->begin(), source.str->end());
     }
-    else if (source.t == Obj::T::File)
+    else if (source.t == Obj::T::File && source.file)
     {
         Source& src = *source.file;
+        ready(I, src);
         const size_t n = std::min(wanted, src.bytes.size() - std::min(src.at, src.bytes.size()));
         out.assign(src.bytes.begin() + static_cast<std::ptrdiff_t>(src.at),
             src.bytes.begin() + static_cast<std::ptrdiff_t>(src.at + n));
@@ -2858,49 +3637,167 @@ std::vector<uint8_t> imageData(Interp& I, const Obj& source, size_t wanted)
     return out;
 }
 
-void Interp::image(int width, int height, int bits, const Matrix& matrix, std::vector<Obj> sources, int components,
-    bool multiple)
+/// Samples of \a bits each from \a data, \a count of them from the bit
+/// \a at on, as values from 0 to 2^bits - 1.
+uint32_t sampleAt(const std::vector<uint8_t>& data, size_t bit, int bits)
 {
+    if (bits == 8)
+        return bit / 8 < data.size() ? data[bit / 8] : 0;
+    if (bits == 16)
+        return bit / 8 + 1 < data.size() ? (static_cast<uint32_t>(data[bit / 8]) << 8 | data[bit / 8 + 1]) : 0;
+    uint32_t v = 0;
+    for (int k = 0; k < bits; ++k, ++bit)
+    {
+        const size_t byte = bit / 8;
+        const int on = byte < data.size() ? (data[byte] >> (7 - static_cast<int>(bit % 8))) & 1 : 0;
+        v = (v << 1) | static_cast<uint32_t>(on);
+    }
+    return v;
+}
+
+void Interp::image(ImageSpec spec)
+{
+    const int width = spec.width, height = spec.height, bits = spec.bits;
     if (width <= 0 || height <= 0 || width > 20000 || height > 20000 ||
         static_cast<size_t>(width) * static_cast<size_t>(height) > kMaxImagePixels)
         throw PsError{"rangecheck"};
     if (bits != 1 && bits != 2 && bits != 4 && bits != 8 && bits != 12 && bits != 16)
         throw PsError{"rangecheck"};
-    // Gray, RGB or CMYK; with a source for each when there are several.
-    if (components < 1 || components > 4 || (multiple && sources.size() < static_cast<size_t>(components)) ||
-        sources.empty())
+    // Gray, RGB or CMYK (or a space of as many); with a source for each when
+    // there are several.
+    const int components = spec.mask ? 1 : spec.components;
+    if (components < 1 || components > 4 || (spec.multiple && spec.sources.size() < static_cast<size_t>(components)) ||
+        spec.sources.empty())
         throw PsError{"rangecheck"};
-    const size_t row = (static_cast<size_t>(width) * static_cast<size_t>(bits) *
-                           static_cast<size_t>(multiple ? 1 : components) + 7) / 8;
+    const size_t pixels = static_cast<size_t>(width) * static_cast<size_t>(height);
+    for (const Obj& source : spec.sources)
+        if (source.t == Obj::T::File && source.file)
+            ready(*this, *source.file);
+    // A JPEG (a DCTDecode filter): the file as it is, for the importer.
+    if (!spec.multiple && !spec.mask && spec.sources[0].t == Obj::T::File && spec.sources[0].file &&
+        spec.sources[0].file->dct)
+    {
+        Source& src = *spec.sources[0].file;
+        Image image;
+        image.encoded.assign(src.bytes.begin() + static_cast<std::ptrdiff_t>(std::min(src.at, src.bytes.size())),
+            src.bytes.end());
+        src.at = src.bytes.size();
+        image.width = width;
+        image.height = height;
+        placeImage(std::move(image), spec.matrix);
+        return;
+    }
+    const size_t samplesPerRow = static_cast<size_t>(width) * static_cast<size_t>(spec.multiple ? 1 : components);
+    const size_t row = (samplesPerRow * static_cast<size_t>(bits) + 7) / 8;
     const size_t total = row * static_cast<size_t>(height);
     if (total > (size_t(1) << 29))
         throw PsError{"limitcheck"};
     std::vector<std::vector<uint8_t>> planes;
-    for (const Obj& source : sources)
-        planes.push_back(imageData(*this, source, total));
-    if (bits != 8)
+    if (spec.data)
+        planes.push_back(std::move(*spec.data));
+    else
+        for (const Obj& source : spec.sources)
+            planes.push_back(imageData(*this, source, total));
+    // Each sample to its value: by the Decode array, else 0 to 1 (an index
+    // keeps its number).
+    const double top = static_cast<double>((uint64_t(1) << bits) - 1);
+    std::vector<double> decode = spec.decode;
+    const bool indexed = spec.space.t == Obj::T::Array && spec.space.arr && !spec.space.arr->empty() &&
+        (*spec.space.arr)[0].str && *(*spec.space.arr)[0].str == "Indexed";
+    for (int c = static_cast<int>(decode.size()) / 2; c < components; ++c)
     {
-        note(art, "Images of other than 8 bits a sample were left out.");
-        return;
+        decode.push_back(0.0);
+        decode.push_back(indexed ? top : 1.0);
+    }
+    // Colors through a table when there are few samples and the space is
+    // not a device's (a separation's tint transform, an index).
+    const bool device = spec.space.t == Obj::T::Null ||
+        (spec.space.t == Obj::T::Name && spec.space.str &&
+            (*spec.space.str == "DeviceGray" || *spec.space.str == "DeviceRGB" || *spec.space.str == "DeviceCMYK"));
+    std::vector<Color> table;
+    if (!spec.mask && !device && components == 1 && bits <= 8)
+        for (uint32_t s = 0; s <= static_cast<uint32_t>(top); ++s)
+            table.push_back(colorIn(spec.space, {decode[0] + s * (decode[1] - decode[0]) / top}));
+    else if (!spec.mask && !device && pixels > (size_t(1) << 20))
+    {
+        note(art, "An image in a color space too slow to convert came in gray.");
+        spec.space = Obj();
     }
     Image image;
     image.width = width;
     image.height = height;
-    image.rgba.assign(static_cast<size_t>(width) * static_cast<size_t>(height) * 4, 255);
-    for (size_t p = 0; p < static_cast<size_t>(width) * static_cast<size_t>(height); ++p)
+    image.rgba.assign(pixels * 4, 255);
+    std::vector<double> v(static_cast<size_t>(components));
+    for (size_t p = 0; p < pixels; ++p)
     {
-        double v[4] = {0, 0, 0, 0};
+        const size_t y = p / static_cast<size_t>(width);
+        const size_t x = p % static_cast<size_t>(width);
+        uint32_t first = 0;
         for (int c = 0; c < components; ++c)
         {
-            const std::vector<uint8_t>& plane = planes[multiple ? static_cast<size_t>(c) : 0];
-            const size_t at = multiple ? p : p * static_cast<size_t>(components) + static_cast<size_t>(c);
-            v[c] = at < plane.size() ? plane[at] / 255.0 : 0.0;
+            const std::vector<uint8_t>& plane = planes[spec.multiple ? static_cast<size_t>(c) : 0];
+            const size_t index = spec.multiple ? x : x * static_cast<size_t>(components) + static_cast<size_t>(c);
+            const uint32_t s = sampleAt(plane, y * row * 8 + index * static_cast<size_t>(bits), bits);
+            if (c == 0)
+                first = s;
+            v[static_cast<size_t>(c)] = decode[2 * static_cast<size_t>(c)] +
+                s * (decode[2 * static_cast<size_t>(c) + 1] - decode[2 * static_cast<size_t>(c)]) / top;
         }
-        const Color color = components == 4 ? cmykColor(v[0], v[1], v[2], v[3])
-            : components == 3              ? rgbColor(v[0], v[1], v[2])
-                                           : grayColor(v[0]);
-        std::copy(color.begin(), color.begin() + 3, image.rgba.begin() + static_cast<std::ptrdiff_t>(p * 4));
+        uint8_t* out = image.rgba.data() + p * 4;
+        if (spec.mask)
+        {
+            // A stencil: the current color where the sample paints.
+            const bool paints = v[0] < 0.5;
+            std::copy(gs.color.begin(), gs.color.begin() + 3, out);
+            out[3] = paints ? 255 : 0;
+            continue;
+        }
+        Color color;
+        if (!table.empty())
+            color = table[std::min<size_t>(first, table.size() - 1)];
+        else if (device)
+            color = components == 4 ? cmykColor(v[0], v[1], v[2], v[3])
+                : components == 3   ? rgbColor(v[0], v[1], v[2])
+                                    : grayColor(v[0]);
+        else
+            color = colorIn(spec.space, v);
+        std::copy(color.begin(), color.begin() + 3, out);
+        // Colors the mask color range leaves out (ImageType 4).
+        if (!spec.maskColor.empty())
+        {
+            bool inside = true;
+            for (int c = 0; c < components && inside; ++c)
+            {
+                const std::vector<uint8_t>& plane = planes[spec.multiple ? static_cast<size_t>(c) : 0];
+                const size_t index = spec.multiple ? x : x * static_cast<size_t>(components) + static_cast<size_t>(c);
+                const double s = sampleAt(plane, y * row * 8 + index * static_cast<size_t>(bits), bits);
+                const size_t k = static_cast<size_t>(c);
+                if (spec.maskColor.size() >= 2 * static_cast<size_t>(components))
+                    inside = s >= spec.maskColor[2 * k] && s <= spec.maskColor[2 * k + 1];
+                else
+                    inside = k < spec.maskColor.size() && s == spec.maskColor[k];
+            }
+            if (inside)
+                out[3] = 0;
+        }
     }
+    // An alpha from a mask of its own size (ImageType 3), stretched over
+    // the image.
+    if (!spec.alpha.empty() && spec.alphaWidth > 0 && spec.alphaHeight > 0)
+        for (size_t p = 0; p < pixels; ++p)
+        {
+            const size_t y = p / static_cast<size_t>(width) * static_cast<size_t>(spec.alphaHeight) /
+                static_cast<size_t>(height);
+            const size_t x = p % static_cast<size_t>(width) * static_cast<size_t>(spec.alphaWidth) /
+                static_cast<size_t>(width);
+            const size_t at = y * static_cast<size_t>(spec.alphaWidth) + x;
+            image.rgba[p * 4 + 3] = at < spec.alpha.size() ? std::min(image.rgba[p * 4 + 3], spec.alpha[at]) : 0;
+        }
+    placeImage(std::move(image), spec.matrix);
+}
+
+void Interp::placeImage(Image image, const Matrix& matrix)
+{
     // Image space to user space is the inverse of the image's matrix; on
     // to the device, then to the stage.
     Matrix inverse;
@@ -2911,10 +3808,69 @@ void Interp::image(int width, int height, int bits, const Matrix& matrix, std::v
     const Matrix placed = toStage.after(device);
     // The importer places the unit square (its rows top down): pixel space
     // scaled by the image's size.
-    image.placement = Placement{placed.a * width, placed.b * width, placed.c * height, placed.d * height, placed.e,
-        placed.f};
+    const double w = image.width, h = image.height;
+    image.placement = Placement{placed.a * w, placed.b * w, placed.c * h, placed.d * h, placed.e, placed.f};
     art.order.emplace_back(Artwork::Kind::Image, art.images.size());
     art.images.push_back(std::move(image));
+}
+
+/// A mask's alpha, a byte a sample (255 where it paints), read from its
+/// dictionary's own source or from \a data.
+std::vector<uint8_t> maskAlpha(Interp& I, const Obj& mask, int width, int height, const std::vector<uint8_t>* data)
+{
+    std::vector<uint8_t> alpha;
+    const Obj* bitsEntry = entry(mask, "BitsPerComponent");
+    const int bits = bitsEntry ? Interp::toInt(bitsEntry->num) : 1;
+    if (width <= 0 || height <= 0 || static_cast<size_t>(width) * static_cast<size_t>(height) > Interp::kMaxImagePixels ||
+        (bits != 1 && bits != 2 && bits != 4 && bits != 8 && bits != 16))
+        return alpha;
+    const size_t row = (static_cast<size_t>(width) * static_cast<size_t>(bits) + 7) / 8;
+    std::vector<uint8_t> bytes;
+    if (data)
+        bytes = *data;
+    else if (const Obj* source = entry(mask, "DataSource"))
+        bytes = imageData(I, *source, row * static_cast<size_t>(height));
+    // Decode [0 1] (the default) paints where samples are 0.
+    const std::vector<double> decode = numbersIn(entry(mask, "Decode"));
+    const bool inverted = decode.size() >= 2 && decode[0] > decode[1];
+    const double top = static_cast<double>((uint64_t(1) << bits) - 1);
+    alpha.resize(static_cast<size_t>(width) * static_cast<size_t>(height));
+    for (size_t y = 0; y < static_cast<size_t>(height); ++y)
+        for (size_t x = 0; x < static_cast<size_t>(width); ++x)
+        {
+            const double s = sampleAt(bytes, y * row * 8 + x * static_cast<size_t>(bits), bits) / top;
+            alpha[y * static_cast<size_t>(width) + x] = (inverted ? s >= 0.5 : s < 0.5) ? 255 : 0;
+        }
+    return alpha;
+}
+
+/// An image dictionary's own spec: its size, samples and matrix, in the
+/// current color space.
+ImageSpec imageSpec(Interp& I, const Obj& d)
+{
+    const Obj* w = entry(d, "Width");
+    const Obj* h = entry(d, "Height");
+    const Obj* b = entry(d, "BitsPerComponent");
+    const Obj* m = entry(d, "ImageMatrix");
+    const Obj* source = entry(d, "DataSource");
+    if (!w || !h || !b || !m || !source)
+        throw PsError{"typecheck"};
+    ImageSpec spec;
+    spec.width = Interp::toInt(w->num);
+    spec.height = Interp::toInt(h->num);
+    spec.bits = Interp::toInt(b->num);
+    spec.matrix = matrixOf(*m);
+    spec.components = std::max(1, I.gs.spaceComponents);
+    spec.space = I.gs.spaceObj;
+    spec.decode = numbersIn(entry(d, "Decode"));
+    if (const Obj* many = entry(d, "MultipleDataSources"); many && many->num != 0 && source->t == Obj::T::Array)
+    {
+        spec.multiple = true;
+        spec.sources = *source->arr;
+    }
+    else
+        spec.sources = {*source};
+    return spec;
 }
 
 void opImage(Interp& I)
@@ -2922,36 +3878,77 @@ void opImage(Interp& I)
     if (I.top().t == Obj::T::Dict)
     {
         Obj d = I.pop();
-        const auto get = [&d](const char* k) -> const Obj* {
-            const auto f = d.dict->find(k);
-            return f == d.dict->end() ? nullptr : &f->second;
-        };
-        const Obj* w = get("Width");
-        const Obj* h = get("Height");
-        const Obj* b = get("BitsPerComponent");
-        const Obj* m = get("ImageMatrix");
-        const Obj* source = get("DataSource");
-        if (!w || !h || !b || !m || !source)
-            throw PsError{"typecheck"};
-        std::vector<Obj> sources;
-        bool multiple = false;
-        if (const Obj* many = get("MultipleDataSources"); many && many->num != 0 && source->t == Obj::T::Array)
+        const Obj* type = entry(d, "ImageType");
+        const int imageType = type ? Interp::toInt(type->num) : 1;
+        if (imageType == 3)
         {
-            multiple = true;
-            sources = *source->arr;
+            // An image with a mask: interleaved sample by sample, row by
+            // row, or from sources of their own.
+            const Obj* dataDict = entry(d, "DataDict");
+            const Obj* maskDict = entry(d, "MaskDict");
+            if (!dataDict || !maskDict)
+                throw PsError{"typecheck"};
+            const Obj* interleave = entry(d, "InterleaveType");
+            const int kind = interleave ? Interp::toInt(interleave->num) : 3;
+            const Obj* mw = entry(*maskDict, "Width");
+            const Obj* mh = entry(*maskDict, "Height");
+            ImageSpec spec = imageSpec(I, *dataDict);
+            const int maskWidth = mw ? Interp::toInt(mw->num) : spec.width;
+            const int maskHeight = mh ? Interp::toInt(mh->num) : spec.height;
+            if (kind == 1 && !spec.multiple && spec.bits == 8 && spec.width > 0 && spec.height > 0 &&
+                static_cast<size_t>(spec.width) * static_cast<size_t>(spec.height) <= Interp::kMaxImagePixels)
+            {
+                // Each pixel's mask sample first, then its color.
+                const size_t pixels = static_cast<size_t>(spec.width) * static_cast<size_t>(spec.height);
+                const size_t per = static_cast<size_t>(spec.components) + 1;
+                const std::vector<uint8_t> all = imageData(I, spec.sources[0], pixels * per);
+                std::vector<uint8_t> color(pixels * (per - 1));
+                spec.alpha.resize(pixels);
+                for (size_t p = 0; p < pixels; ++p)
+                {
+                    const size_t at = p * per;
+                    spec.alpha[p] = at < all.size() ? all[at] : 0;
+                    for (size_t c = 1; c < per; ++c)
+                        color[p * (per - 1) + c - 1] = at + c < all.size() ? all[at + c] : 0;
+                }
+                // A sample of the mask paints where it is not 0, as an alpha.
+                const std::vector<double> decode = numbersIn(entry(*maskDict, "Decode"));
+                if (!(decode.size() >= 2 && decode[0] > decode[1]))
+                    for (uint8_t& a : spec.alpha)
+                        a = static_cast<uint8_t>(255 - a);
+                spec.alphaWidth = spec.width;
+                spec.alphaHeight = spec.height;
+                spec.data = std::move(color);
+                I.image(std::move(spec));
+                return;
+            }
+            if (kind == 3)
+            {
+                spec.alpha = maskAlpha(I, *maskDict, maskWidth, maskHeight, nullptr);
+                spec.alphaWidth = maskWidth;
+                spec.alphaHeight = maskHeight;
+                I.image(std::move(spec));
+                return;
+            }
+            note(I.art, "Images with masks interleaved row by row came in without their masks.");
+            I.image(std::move(spec));
+            return;
         }
-        else
-            sources = {*source};
-        I.image(Interp::toInt(w->num), Interp::toInt(h->num), Interp::toInt(b->num), matrixOf(*m), sources,
-            std::max(1, I.gs.spaceComponents), multiple);
+        ImageSpec spec = imageSpec(I, d);
+        if (imageType == 4)
+            spec.maskColor = numbersIn(entry(d, "MaskColor"));
+        I.image(std::move(spec));
         return;
     }
     Obj source = I.pop();
-    const Matrix m = matrixOf(I.pop());
-    const int bits = I.integer();
-    const int height = I.integer();
-    const int width = I.integer();
-    I.image(width, height, bits, m, {source}, 1, false);
+    ImageSpec spec;
+    spec.matrix = matrixOf(I.pop());
+    spec.bits = I.integer();
+    spec.height = I.integer();
+    spec.width = I.integer();
+    spec.sources = {source};
+    spec.components = 1;
+    I.image(std::move(spec));
 }
 void opColorimage(Interp& I)
 {
@@ -2959,45 +3956,50 @@ void opColorimage(Interp& I)
     if (components < 1 || components > 4)
         throw PsError{"rangecheck"};
     const bool multiple = I.boolean();
-    std::vector<Obj> sources;
+    ImageSpec spec;
     for (int i = 0; i < (multiple ? components : 1); ++i)
-        sources.insert(sources.begin(), I.pop());
-    const Matrix m = matrixOf(I.pop());
-    const int bits = I.integer();
-    const int height = I.integer();
-    const int width = I.integer();
-    I.image(width, height, bits, m, sources, components, multiple);
-}
-/// The bytes of a mask \a width by \a height, which is read past and left
-/// out; refused when no image could be that large.
-size_t maskBytes(int width, int height)
-{
-    if (width <= 0 || height <= 0)
-        return 0;
-    if (width > 20000 || height > 20000 ||
-        static_cast<size_t>(width) * static_cast<size_t>(height) > Interp::kMaxImagePixels)
-        throw PsError{"rangecheck"};
-    return (static_cast<size_t>(width) + 7) / 8 * static_cast<size_t>(height);
+        spec.sources.insert(spec.sources.begin(), I.pop());
+    spec.matrix = matrixOf(I.pop());
+    spec.bits = I.integer();
+    spec.height = I.integer();
+    spec.width = I.integer();
+    spec.components = components;
+    spec.multiple = multiple;
+    I.image(std::move(spec));
 }
 void opImagemask(Interp& I)
 {
-    I.sawMask = true;
+    ImageSpec spec;
+    spec.mask = true;
+    spec.bits = 1;
     if (I.top().t == Obj::T::Dict)
     {
         Obj d = I.pop();
-        const auto f = d.dict->find("DataSource");
-        const auto w = d.dict->find("Width");
-        const auto h = d.dict->find("Height");
-        if (f != d.dict->end() && w != d.dict->end() && h != d.dict->end())
-            imageData(I, f->second, maskBytes(Interp::toInt(w->second.num), Interp::toInt(h->second.num)));
+        const Obj* w = entry(d, "Width");
+        const Obj* h = entry(d, "Height");
+        const Obj* m = entry(d, "ImageMatrix");
+        const Obj* source = entry(d, "DataSource");
+        if (!w || !h || !m || !source)
+            throw PsError{"typecheck"};
+        spec.width = Interp::toInt(w->num);
+        spec.height = Interp::toInt(h->num);
+        spec.matrix = matrixOf(*m);
+        spec.sources = {*source};
+        // Decode [1 0] paints the samples that are 1.
+        spec.decode = numbersIn(entry(d, "Decode"));
+        I.image(std::move(spec));
         return;
     }
     Obj source = I.pop();
-    I.pop();
-    I.pop();
-    const int height = I.integer();
-    const int width = I.integer();
-    imageData(I, source, maskBytes(width, height));
+    spec.matrix = matrixOf(I.pop());
+    const bool polarity = I.boolean();
+    spec.height = I.integer();
+    spec.width = I.integer();
+    spec.sources = {source};
+    // With polarity true the samples that are 1 paint.
+    if (polarity)
+        spec.decode = {1.0, 0.0};
+    I.image(std::move(spec));
 }
 
 void Interp::setup()
@@ -3057,7 +4059,7 @@ void Interp::setup()
         {"flattenpath", opNoop}, {"reversepath", opNoop}, {"strokepath", opNoop}, {"fill", opFill},
         {"eofill", opFill}, {"stroke", opStroke}, {"clip", opClip}, {"eoclip", opClip}, {"initclip", opInitclip},
         {"clippath", opClippath}, {"rectfill", opRectfill}, {"rectstroke", opRectstroke},
-        {"rectclip", opRectclip}, {"shfill", opShfill}, {"findfont", opFindfont}, {"definefont", opDefinefont},
+        {"rectclip", opRectclip}, {"shfill", opShfill}, {"makepattern", opMakepattern}, {"findfont", opFindfont}, {"definefont", opDefinefont},
         {"scalefont", opScalefont}, {"makefont", opMakefont}, {"setfont", opSetfont},
         {"currentfont", opCurrentfont}, {"selectfont", opSelectfont}, {"show", opShow}, {"ashow", opAshow},
         {"widthshow", opWidthshow}, {"awidthshow", opAwidthshow}, {"xshow", opXshow}, {"yshow", opYshow},
@@ -3158,12 +4160,9 @@ Artwork readPostScript(const std::string& text, const double box[4])
         art.notes.push_back(art.paths.empty() && art.images.empty()
                 ? "The PostScript could not be run (" + stoppedAt + ")."
                 : "The PostScript stopped part way (" + stoppedAt + "): what it drew until then came in.");
-    if (interp.sawPattern)
-        art.notes.push_back("Pattern fills came in as plain color.");
     if (interp.sawShading)
-        art.notes.push_back("Smooth shadings were left out.");
-    if (interp.sawMask)
-        art.notes.push_back("Image masks were left out.");
+        art.notes.push_back("Smooth shadings other than axial and radial ones (meshes) came in as plain color or were "
+                            "left out.");
     return art;
 }
 

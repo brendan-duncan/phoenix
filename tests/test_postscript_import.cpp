@@ -420,3 +420,137 @@ TEST(illustrator_eps_reads_its_private_data_behind_a_binary_header)
     if (!art.paths.empty())
         CHECK(art.paths[0].fill && (*art.paths[0].fill)[1] == 0 && (*art.paths[0].fill)[0] == 255);
 }
+
+TEST(postscript_shadings_come_in_as_gradients)
+{
+    // An axial shading filling a clip, and a radial one through a shading
+    // pattern whose function is stitched from two.
+    const std::string program =
+        "%!PS-Adobe-3.0 EPSF-3.0\n%%BoundingBox: 0 0 200 100\n"
+        "gsave 0 0 100 100 rectclip\n"
+        "<< /ShadingType 2 /ColorSpace /DeviceRGB /Coords [0 0 100 0] /Extend [true true]\n"
+        "   /Function << /FunctionType 2 /Domain [0 1] /C0 [1 0 0] /C1 [0 0 1] /N 1 >> >> shfill grestore\n"
+        "<< /PatternType 2 /Shading << /ShadingType 3 /ColorSpace /DeviceGray /Coords [150 50 0 150 50 40]\n"
+        "   /Function << /FunctionType 3 /Domain [0 1] /Bounds [0.5] /Encode [0 1 0 1] /Functions [\n"
+        "     << /FunctionType 2 /Domain [0 1] /C0 [0] /C1 [1] /N 1 >>\n"
+        "     << /FunctionType 2 /Domain [0 1] /C0 [1] /C1 [0] /N 1 >> ] >> >> >>\n"
+        "matrix makepattern setpattern 110 10 80 80 rectfill\n";
+    const double box[4] = {0, 0, 200, 100};
+    const fla::vectors::Artwork art = fla::vectors::readPostScript(program, box);
+    CHECK(art.notes.empty());
+    CHECK(art.paths.size() == 2);
+    if (art.paths.size() != 2)
+        return;
+    // The clip's square, red to blue along x.
+    const fla::vectors::Painted& axial = art.paths[0];
+    CHECK(axial.gradient && !axial.gradient->radial && axial.clips.empty());
+    if (axial.gradient)
+    {
+        CHECK(axial.gradient->stops.size() == 2);
+        CHECK(axial.gradient->stops.front().color[0] == 255 && axial.gradient->stops.back().color[2] == 255);
+        CHECK_NEAR(axial.gradient->placement.a, 100 / 1638.4);
+        CHECK_NEAR(axial.gradient->placement.tx, 50);
+    }
+    // Black, white at the middle, black: on a circle of 40 at (150, 50).
+    const fla::vectors::Painted& radial = art.paths[1];
+    CHECK(radial.gradient && radial.gradient->radial);
+    if (radial.gradient)
+    {
+        CHECK(radial.gradient->stops.size() >= 3 && radial.gradient->stops.front().color[0] == 0);
+        bool white = false;
+        for (const auto& stop : radial.gradient->stops)
+            white = white || (std::fabs(stop.offset - 0.5) < 0.01 && stop.color[0] > 250);
+        CHECK(white);
+        CHECK_NEAR(radial.gradient->placement.a, 40 / 819.2);
+        CHECK_NEAR(radial.gradient->placement.tx, 150);
+        CHECK_NEAR(radial.gradient->placement.ty, 50);
+    }
+}
+
+TEST(postscript_tiling_patterns_paint_their_tiles)
+{
+    // A colored tile (a red square in each 10-point cell), an uncolored one
+    // painted green whatever its procedure sets, and one too fine to tile.
+    const std::string program =
+        "%!PS-Adobe-3.0 EPSF-3.0\n%%BoundingBox: 0 0 200 100\n"
+        "/cell { << /PatternType 1 /PaintType 1 /TilingType 1 /BBox [0 0 10 10] /XStep 10 /YStep 10\n"
+        "   /PaintProc { pop 1 0 0 setrgbcolor 0 0 5 5 rectfill } >> } def\n"
+        "cell matrix makepattern setpattern 0 0 30 20 rectfill\n"
+        "[/Pattern /DeviceRGB] setcolorspace\n"
+        "<< /PatternType 1 /PaintType 2 /TilingType 1 /BBox [0 0 10 10] /XStep 10 /YStep 10\n"
+        "   /PaintProc { pop 1 0 0 setrgbcolor 0 0 5 5 rectfill } >> matrix makepattern\n"
+        "0 1 0 4 -1 roll setcolor 100 0 20 20 rectfill\n"
+        "<< /PatternType 1 /PaintType 1 /TilingType 1 /BBox [0 0 0.1 0.1] /XStep 0.1 /YStep 0.1\n"
+        "   /PaintProc { pop 0 0 1 setrgbcolor 0 0 0.1 0.1 rectfill } >> matrix makepattern setpattern\n"
+        "150 0 50 50 rectfill\n";
+    const double box[4] = {0, 0, 200, 100};
+    const fla::vectors::Artwork art = fla::vectors::readPostScript(program, box);
+    size_t red = 0, green = 0, blue = 0, clipped = 0;
+    for (const fla::vectors::Painted& p : art.paths)
+    {
+        if (!p.fill)
+            continue;
+        const auto& c = *p.fill;
+        red += c[0] == 255 && c[1] == 0 && c[2] == 0;
+        green += c[0] == 0 && c[1] == 255 && c[2] == 0;
+        blue += c[0] == 0 && c[1] == 0 && c[2] == 255;
+        clipped += p.clips.size() == 1;
+    }
+    // Cells from one before the area to one past it, each cut to it.
+    CHECK(red == 20);
+    CHECK(green == 16);
+    CHECK(blue == 1);
+    CHECK(clipped == 36);
+    CHECK(art.notes.size() == 1 && art.notes[0].find("too fine") != std::string::npos);
+}
+
+TEST(postscript_image_masks_and_masked_images_come_in)
+{
+    const std::string program =
+        "%!PS-Adobe-3.0 EPSF-3.0\n%%BoundingBox: 0 0 100 100\n"
+        // A stencil in red: with polarity true its 1 bits paint.
+        "1 0 0 setrgbcolor 8 2 true [8 0 0 -2 0 2] <F00F> imagemask\n"
+        // A dictionary's, Decode [1 0]: the 1 bits paint.
+        "<< /ImageType 1 /Width 8 /Height 1 /ImageMatrix [8 0 0 -1 0 1] /DataSource <0F> /Decode [1 0] >> imagemask\n"
+        // An RGB image with a mask of its own: the second pixel masked out.
+        "/DeviceRGB setcolorspace << /ImageType 3 /InterleaveType 3\n"
+        "  /DataDict << /ImageType 1 /Width 2 /Height 1 /BitsPerComponent 8 /ImageMatrix [2 0 0 -1 0 1]\n"
+        "     /DataSource <FF000000FF00> /Decode [0 1 0 1 0 1] >>\n"
+        "  /MaskDict << /ImageType 1 /Width 2 /Height 1 /BitsPerComponent 1 /ImageMatrix [2 0 0 -1 0 1]\n"
+        "     /DataSource <40> >> >> image\n"
+        // One bit gray, and an indexed image.
+        "2 1 1 [2 0 0 -1 0 1] <80> image\n"
+        "[/Indexed /DeviceRGB 1 <FF000000FF00>] setcolorspace\n"
+        "<< /ImageType 1 /Width 2 /Height 1 /BitsPerComponent 8 /ImageMatrix [2 0 0 -1 0 1] /DataSource <0001> >> image\n"
+        // A JPEG behind its filter, the program reading on past it.
+        "/DeviceRGB setcolorspace\n"
+        "<< /ImageType 1 /Width 1 /Height 1 /BitsPerComponent 8 /ImageMatrix [1 0 0 -1 0 1] /Decode [0 1 0 1 0 1]\n"
+        "   /DataSource currentfile /DCTDecode filter >> image\n";
+    std::string jpeg = "\xFF\xD8\xFF\xDB";
+    jpeg += std::string("\x00\x04\x00\x00", 4);
+    jpeg += "\xFF\xDA";
+    jpeg += std::string("\x00\x02", 2);
+    jpeg += "\x12\x34\xFF\xD9";
+    const std::string all = program + jpeg + "\n0 0 10 10 rectfill\n";
+    const double box[4] = {0, 0, 100, 100};
+    const fla::vectors::Artwork art = fla::vectors::readPostScript(all, box);
+    CHECK(art.notes.empty());
+    CHECK(art.images.size() == 6);
+    if (art.images.size() == 6)
+    {
+        const auto& stencil = art.images[0];
+        CHECK(stencil.width == 8 && stencil.height == 2 && stencil.rgba[0] == 255 && stencil.rgba[1] == 0);
+        CHECK(stencil.rgba[3] == 255 && stencil.rgba[4 * 4 + 3] == 0 && stencil.rgba[(8 + 4) * 4 + 3] == 255);
+        const auto& decoded = art.images[1];
+        CHECK(decoded.rgba[3] == 0 && decoded.rgba[4 * 4 + 3] == 255);
+        const auto& masked = art.images[2];
+        CHECK(masked.rgba[0] == 255 && masked.rgba[3] == 255 && masked.rgba[4 + 1] == 255 && masked.rgba[4 + 3] == 0);
+        const auto& bit = art.images[3];
+        CHECK(bit.rgba[0] == 255 && bit.rgba[4] == 0);
+        const auto& indexed = art.images[4];
+        CHECK(indexed.rgba[0] == 255 && indexed.rgba[1] == 0 && indexed.rgba[4] == 0 && indexed.rgba[5] == 255);
+        CHECK(art.images[5].encoded.size() == jpeg.size() && art.images[5].encoded[0] == 0xFF);
+    }
+    // The square after the JPEG's data.
+    CHECK(art.paths.size() == 1);
+}
