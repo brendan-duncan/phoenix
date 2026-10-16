@@ -174,6 +174,7 @@ McpServer::McpServer(MainWindow* window)
     , _window(window)
     , _api(std::make_unique<ScriptApi>(*window))
 {
+    _api->fromOutside = true;
     // Writing anywhere outside the document is asked about, a folder at a time.
     _api->approveWrite = [this](const QString& path) {
         const QString folder = QFileInfo(path).absolutePath();

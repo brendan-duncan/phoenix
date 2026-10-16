@@ -521,6 +521,22 @@ ScriptApi::Result ScriptApi::call(const QString& name, const QJsonObject& argume
         if (_window.isReadOnlyDocument())
             fail("This document is read-only: it came from a newer Phoenix. Save a copy to change it.");
         fla::CommandStack& stack = context.stack();
+        if (grouped)
+        {
+            // The group went from under it: its changes would land elsewhere.
+            const QString trouble = groupTrouble();
+            if (!trouble.isEmpty())
+            {
+                _group.clear();
+                fail(QString("The edit begin_edit opened has ended: %1. Begin another.").arg(trouble));
+            }
+        }
+        else if (fromOutside && stack.isInMacro())
+        {
+            // A change of the person's own (a drag, a script) is under way:
+            // this one would fold into it.
+            fail("Phoenix is in the middle of another change; try again in a moment.");
+        }
         // Each change is one undo step named for what asked it, unless a
         // group gathers several.
         if (!grouped)
@@ -553,6 +569,17 @@ ScriptApi::Result ScriptApi::call(const QString& name, const QJsonObject& argume
     {
         return {QJsonValue(), QImage(), QString("That failed: %1").arg(error.what())};
     }
+}
+
+QString ScriptApi::groupTrouble() const
+{
+    if (_group.isEmpty())
+        return QString();
+    if (_window._flaDocument != _groupDocument)
+        return "the document it was on is no longer the one in front";
+    if (!_window._editContext.commandStack().isInMacro())
+        return "its undo step was closed by something else";
+    return QString();
 }
 
 void ScriptApi::addReadOperations()
@@ -739,11 +766,21 @@ void ScriptApi::addWriteOperations()
         {{"label", prop("string", "What the changes do, for the Edit menu: \"Add walk cycle\"")}}, {"label"}, false,
         [this](const QJsonObject& args) {
             ScriptContext context{_window};
+            context.document();
+            // One whose document or undo step went is let go.
+            if (!_group.isEmpty() && !groupTrouble().isEmpty())
+                _group.clear();
             if (!_group.isEmpty())
                 fail("An edit is already open; end it first.");
+            fla::CommandStack& stack = context.stack();
+            if (fromOutside && stack.isInMacro())
+                fail("Phoenix is in the middle of another change; try again in a moment.");
             const QString label = args.value("label").toString().trimmed();
             _group = label.isEmpty() ? "Edit" : label;
-            context.stack().beginMacro(("AI: " + _group).toStdString());
+            stack.beginMacro(("AI: " + _group).toStdString());
+            _groupDocument = _window._flaDocument;
+            _groupIndex = stack.index();
+            _groupCount = stack.count();
             return Result{QJsonObject{{"open", _group}}};
         });
 
@@ -754,10 +791,19 @@ void ScriptApi::addWriteOperations()
                 fail("No edit is open.");
             const QString closed = _group;
             _group.clear();
-            context.stack().endMacro();
-            context.stack().breakMergeChain();
+            const QString trouble = groupTrouble();
+            if (!trouble.isEmpty())
+                fail(QString("The edit had already ended: %1.").arg(trouble));
+            fla::CommandStack& stack = context.stack();
+            const bool moved = stack.index() != _groupIndex || stack.count() != _groupCount;
+            stack.endMacro();
+            stack.breakMergeChain();
             context.refresh();
-            return Result{QJsonObject{{"closed", closed}}};
+            QJsonObject result{{"closed", closed}};
+            if (moved)
+                result["note"] = "The undo history changed while the edit was open (something was undone or redone), "
+                                 "so the document may not be as the edit left it. Look before going on.";
+            return Result{result};
         });
 
     add("add_layer", "Add layer",

@@ -61,6 +61,11 @@ public:
     /// the answer for the folder until Phoenix closes.
     std::function<bool(const QString& path)> approveWrite;
 
+    /// Calls come from outside Phoenix (an AI assistant), not from a script
+    /// it runs: one arriving while a change of its own is under way (a
+    /// drag, a script) is turned away rather than folded into it.
+    bool fromOutside = false;
+
 private:
     void add(const QString& name, const QString& title, const QString& description, const QJsonObject& properties,
         const QStringList& required, bool writes, std::function<Result(const QJsonObject&)> run);
@@ -71,6 +76,17 @@ private:
 
     MainWindow& _window;
     std::vector<Operation> _operations;
+    /// What is wrong with the group begin_edit opened (its document is no
+    /// longer the one in front, or something else closed its undo step);
+    /// empty while it is sound, or when none is open.
+    QString groupTrouble() const;
+
     /// The label of the group begin_edit opened, while it is open.
     QString _group;
+    /// The document it was opened on, and where the history stood then:
+    /// inside the group nothing reaches the history, so a change there means
+    /// something was undone or redone meanwhile.
+    const void* _groupDocument = nullptr;
+    size_t _groupIndex = 0;
+    size_t _groupCount = 0;
 };
