@@ -1,5 +1,6 @@
 #include "command_line.h"
 #include "display_check.h"
+#include "display_painter.h"
 
 #include "main_window.h"
 #include "script_runner.h"
@@ -788,6 +789,19 @@ int play(const QStringList& args)
     const auto classes = fla::play::classFiles(*document->document,
         QFileInfo(args.at(0)).absolutePath().toStdString(), documentClass);
     movie.setClasses(classes, documentClass);
+    // What scripts draw into bitmaps (BitmapData.draw) is drawn by the
+    // display painter, with no window as with one.
+    DisplayPainter painter;
+    fla::display::setBackend(&painter);
+    struct Unset
+    {
+        DisplayPainter& painter;
+        ~Unset()
+        {
+            if (fla::display::backend() == &painter)
+                fla::display::setBackend(nullptr);
+        }
+    } unset{painter};
     movie.start();
     for (int i = 0; i < frames; ++i)
         movie.step();

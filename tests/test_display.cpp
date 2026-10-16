@@ -571,3 +571,115 @@ TEST(display_text_fields_take_text_and_typing)
     sized->setText("wide wide wide wide wide wide");
     CHECK(sized->fieldWidth() > 100.0);
 }
+
+TEST(display_bitmap_data_channels_merges_and_compares)
+{
+    BitmapData a(4, 4, true, 0xff102030);
+    BitmapData b(4, 4, true, 0xff405060);
+    // Green into red.
+    a.copyChannel(b, b.rect(), Point(), 2, 1);
+    CHECK(a.getPixel32(0, 0) == 0xff502030u);
+    // Half of each channel toward the other.
+    BitmapData c(1, 1, true, 0xff000000);
+    BitmapData white(1, 1, true, 0xffffffff);
+    c.merge(white, white.rect(), Point(), 128, 128, 128, 128);
+    CHECK(c.getPixel(0, 0) == 0x7f7f7fu);
+    // A palette that inverts red.
+    std::vector<uint32_t> red(256);
+    for (uint32_t i = 0; i < 256; ++i)
+        red[i] = (255 - i) << 16;
+    BitmapData d(1, 1, false, 0x00102030);
+    d.paletteMap(d, d.rect(), Point(), &red, nullptr, nullptr, nullptr);
+    CHECK(d.getPixel(0, 0) == 0xef2030u);
+    // compare: the same, a different size, or the differences.
+    std::shared_ptr<BitmapData> differences;
+    BitmapData e(4, 4, true, 0xff102030);
+    BitmapData f(4, 4, true, 0xff102030);
+    CHECK(e.compare(f, differences) == 0 && !differences);
+    BitmapData g(3, 4, true, 0);
+    CHECK(e.compare(g, differences) == -3);
+    f.setPixel32(1, 1, 0xff102031);
+    CHECK(e.compare(f, differences) == 1 && differences && differences->getPixel32(1, 1) == 0xff0000ffu);
+    // Where a color is.
+    BitmapData h(10, 10, true, 0);
+    h.fillRect(Rect(2, 3, 4, 2), 0xffff0000);
+    const Rect found = h.getColorBoundsRect(0xffffffff, 0xffff0000);
+    CHECK(found.x == 2 && found.y == 3 && found.width == 4 && found.height == 2);
+    // Noise is the same from the same seed.
+    BitmapData n1(8, 8, false, 0), n2(8, 8, false, 0);
+    n1.noise(42);
+    n2.noise(42);
+    std::shared_ptr<BitmapData> none;
+    CHECK(n1.compare(n2, none) == 0);
+    // Locked, changes wait to be shown.
+    BitmapData locked(2, 2, true, 0);
+    const uint64_t before = locked.revision();
+    locked.lock();
+    locked.setPixel32(0, 0, 0xffffffff);
+    CHECK(locked.revision() == before);
+    locked.unlock();
+    CHECK(locked.revision() != before);
+}
+
+TEST(display_hit_areas_masks_and_button_hit_states)
+{
+    auto stage = std::make_shared<Stage>(400, 300);
+    // A sprite found by its hit area, not its art.
+    auto art = box(0, 0, 50, 50, 0xff0000);
+    auto area = box(200, 0, 50, 50, 0x00ff00);
+    stage->addChild(art);
+    stage->addChild(area);
+    art->setHitArea(area);
+    area->mouseEnabled = false;
+    CHECK(stage->hitTarget(10, 10) == nullptr);
+    CHECK(stage->hitTarget(210, 10) == art.get());
+    // A masked sprite is found only where its mask lets it show.
+    auto masked = box(0, 100, 100, 100, 0x0000ff);
+    auto mask = box(0, 100, 30, 100, 0);
+    stage->addChild(masked);
+    stage->addChild(mask);
+    masked->setMask(mask);
+    CHECK(stage->hitTarget(10, 150) == masked.get());
+    CHECK(stage->hitTarget(60, 150) == nullptr);
+    // A button found by its hit test state, wherever its up state is.
+    auto button = std::make_shared<SimpleButton>();
+    button->upState = box(0, 0, 20, 20, 0);
+    button->hitTestState = box(100, 0, 20, 20, 0);
+    button->setY(250);
+    stage->addChild(button);
+    CHECK(stage->hitTarget(10, 260) == nullptr);
+    CHECK(stage->hitTarget(110, 260) == button.get());
+    // An invisible object is not found; scrollRect cuts what is.
+    button->setVisible(false);
+    CHECK(stage->hitTarget(110, 260) == nullptr);
+    auto scrolled = box(300, 0, 100, 100, 0);
+    scrolled->setScrollRect(Rect(50, 0, 50, 50));
+    stage->addChild(scrolled);
+    CHECK(stage->hitTarget(310, 10) == scrolled.get());
+    CHECK(stage->hitTarget(360, 10) == nullptr);
+    // Focus moves with focusIn and focusOut.
+    auto first = std::make_shared<TextField>();
+    auto second = std::make_shared<TextField>();
+    stage->addChild(first);
+    stage->addChild(second);
+    std::vector<std::string> heard;
+    first->addEventListener(events::kFocusOut, [&](Event&) { heard.push_back("first out"); });
+    second->addEventListener(events::kFocusIn, [&](Event& e) {
+        heard.push_back("second in");
+        CHECK(static_cast<FocusEvent&>(e).relatedObject == first.get());
+    });
+    stage->setFocus(first.get());
+    stage->setFocus(second.get());
+    CHECK(heard.size() == 2u && heard[0] == "first out" && heard[1] == "second in");
+    // Keys go to the focus and bubble to the stage.
+    int keys = 0;
+    stage->addEventListener(events::kKeyDown, [&](Event& e) {
+        if (e.eventPhase == Event::Phase::Bubbling && e.target == second.get())
+            ++keys;
+    });
+    stage->keyDown(65, 'a');
+    CHECK(keys == 1);
+    // Taken off the stage, it loses the focus.
+    stage->removeChild(second.get());
+    CHECK(stage->focus() == nullptr);
+}
