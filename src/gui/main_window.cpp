@@ -5746,6 +5746,21 @@ bool MainWindow::writeForOtherApps(const QString& path, QString& error, int* bak
             std::unique_ptr<fla::FLADocument> copy(parser.parse(temporary.toStdString()));
             if (copy && copy->document)
             {
+                // Pinned parts are placed by how big the words and the art
+                // are drawn.
+                fla::otherapps::Measure measure;
+                measure.textReach = [](const fla::StaticText& text, fla::Rect& reach) {
+                    const QRectF box = PhoenixView::textReach(text);
+                    reach = fla::Rect(fla::Point(box.left(), box.top()), fla::Point(box.right(), box.bottom()));
+                    return true;
+                };
+                measure.symbolBounds = [this](const fla::Symbol& symbol, int frame, fla::Rect& bounds) {
+                    const QRectF box = _phoenixView ? _phoenixView->symbolFramesBounds(&symbol, frame, frame) : QRectF();
+                    if (!box.isValid())
+                        return false;
+                    bounds = fla::Rect(fla::Point(box.left(), box.top()), fla::Point(box.right(), box.bottom()));
+                    return true;
+                };
                 // Effects with no filter in other apps are drawn into
                 // bitmaps, by a view of the copy of its own, as an exported
                 // movie draws them (no camera: other apps have none).
@@ -5799,7 +5814,7 @@ bool MainWindow::writeForOtherApps(const QString& path, QString& error, int* bak
                     }
                     return picture;
                 };
-                fla::otherapps::bakeCompositing(*copy->document, notes, render);
+                fla::otherapps::bakeCompositing(*copy->document, notes, render, &measure);
                 view.setDocument(nullptr);
                 bakeNodeGraphs(*copy->document, notes);
                 written = writeDocumentFile(*copy->document, path, error);

@@ -336,6 +336,9 @@ public:
     /// \a transform with the instance moved or stretched as its pin to a
     /// text field says, by how that field shows now against as drawn.
     fla::Transform pinnedTransform(const fla::SymbolInstance& instance, const fla::Transform& transform);
+    /// Where a text field's letters reach, in the space it is placed in:
+    /// what a part pinned to it keeps beside.
+    static QRectF textReach(const fla::StaticText& text);
 
     /// Onion skinning: \a before and \a after frames either side of the
     /// playhead drawn faded under it, those before tinted blue and those

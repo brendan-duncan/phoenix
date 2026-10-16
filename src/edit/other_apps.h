@@ -1,6 +1,8 @@
 #pragma once
 
 #include <cstdint>
+#include "../data/rect.h"
+
 #include <functional>
 #include <string>
 #include <vector>
@@ -10,6 +12,8 @@ namespace fla {
 class ColorTransform;
 class Document;
 class Element;
+class StaticText;
+class Symbol;
 class Timeline;
 struct Filter;
 
@@ -58,9 +62,25 @@ struct Picture
 /// code has no hold of: the caller hands it in.
 using Renderer = std::function<Picture(const Drawing&)>;
 
+/// How big things are drawn, which only the app that draws them knows: for
+/// moving pinned parts where they show.
+struct Measure
+{
+    /// Where a text field's letters reach, in the space it is placed in.
+    std::function<bool(const StaticText& text, Rect& reach)> textReach;
+    /// What \a frame (from 0) of \a symbol covers, in its own space.
+    std::function<bool(const Symbol& symbol, int frame, Rect& bounds)> symbolBounds;
+};
+
 /// - Template values: each instance shows a copy of its symbol with its
 ///   words and colors written in (one copy for each different set of
 ///   values, nested symbols too).
+/// - Pinned parts: moved or stretched to where they show beside the words
+///   given, a keyframe more where that changes along the span (needs
+///   \a measure; without it they stay as drawn).
+/// - Responsive time: a graphic with stretch and outro labels shows a copy
+///   for the span it is on, a keyframe of the original held on each frame
+///   it shows, so its start and ending keep their speed.
 /// - Track mattes: an alpha matte becomes a mask over the layer, its shape
 ///   hard-edged; a luma matte the same, by shape rather than light.
 ///   Inverted mattes cannot be carried and are left drawn plainly.
@@ -86,7 +106,8 @@ using Renderer = std::function<Picture(const Drawing&)>;
 /// effects are left out.
 ///
 /// \a notes says what could only be carried in part.
-void bakeCompositing(Document& document, std::vector<std::string>& notes, const Renderer& render = Renderer());
+void bakeCompositing(Document& document, std::vector<std::string>& notes, const Renderer& render = Renderer(),
+    const Measure* measure = nullptr);
 
 /// The filters and color effect \a effects make on \a frame, added to
 /// \a filters and \a color: Blur, Directional Blur along an axis and Lens

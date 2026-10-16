@@ -6656,23 +6656,8 @@ fla::Transform PhoenixView::pinnedTransform(const fla::SymbolInstance& instance,
     if (!templatedText(*text, shown))
         return transform;
     // Where the letters reach, as drawn and as shown, on the timeline.
-    const auto inked = [text](const fla::StaticText& words) {
-        const TextLayout::Layout layout = TextLayout::layout(words);
-        QRectF reach;
-        bool first = true;
-        for (const TextLayout::Line& line : layout.lines)
-        {
-            const QRectF band(line.x, line.top, line.width, line.height);
-            reach = first ? band : reach.united(band);
-            first = false;
-        }
-        if (first)
-            reach = QRectF(layout.bounds.left(), layout.bounds.top(), 0.0, layout.bounds.height());
-        const fla::Transform& m = text->transform;
-        return QTransform(m.m11, m.m12, m.m21, m.m22, m.tx, m.ty).mapRect(reach);
-    };
-    const QRectF drawn = inked(*text);
-    const QRectF now = inked(shown);
+    const QRectF drawn = textReach(*text);
+    const QRectF now = textReach(shown);
     const QRectF box = QTransform(transform.m11, transform.m12, transform.m21, transform.m22, transform.tx, transform.ty)
                            .mapRect(symbolFramesBounds(instance.symbol, symbolFrame(instance), symbolFrame(instance)));
     // Moved with an edge, or stretched to keep its room around the words.
@@ -6698,6 +6683,23 @@ fla::Transform PhoenixView::pinnedTransform(const fla::SymbolInstance& instance,
     fla::Transform pinned(sx, 0.0, 0.0, sy, dx, dy);
     pinned.concatenate(transform);
     return pinned;
+}
+
+QRectF PhoenixView::textReach(const fla::StaticText& text)
+{
+    const TextLayout::Layout layout = TextLayout::layout(text);
+    QRectF reach;
+    bool first = true;
+    for (const TextLayout::Line& line : layout.lines)
+    {
+        const QRectF band(line.x, line.top, line.width, line.height);
+        reach = first ? band : reach.united(band);
+        first = false;
+    }
+    if (first)
+        reach = QRectF(layout.bounds.left(), layout.bounds.top(), 0.0, layout.bounds.height());
+    const fla::Transform& m = text.transform;
+    return QTransform(m.m11, m.m12, m.m21, m.m22, m.tx, m.ty).mapRect(reach);
 }
 
 void PhoenixView::setTemplateValues(const fla::templates::Values& values)

@@ -189,6 +189,105 @@ TEST(other_apps_cut_by_inverted_mattes_and_keep_adjustment_art)
     CHECK(eraser->blendMode == "erase" && eraser->symbol->timelines.front()->layers.front()->name == "Spot");
 }
 
+TEST(other_apps_bake_pins_and_responsive_time)
+{
+    // A card of 6 frames whose middle stretches, its plate pinned to the
+    // width of its name: drawn "Name", then "Longer Name" from frame 4. It
+    // is placed for 10 frames with a longer name.
+    const fs::path root = fs::temp_directory_path() / "phoenix_other_apps_tests";
+    const fs::path folder = root / "pins";
+    fs::remove_all(folder);
+    const std::string ns = kNs;
+    writeText(folder / "pins.xfl", "PROXY-CS5");
+    writeText(folder / "LIBRARY" / "Plate.xml",
+        "<DOMSymbolItem " + ns + " name=\"Plate\" symbolType=\"graphic\"><timeline><DOMTimeline name=\"Plate\"><layers>"
+        "<DOMLayer name=\"L\"><frames><DOMFrame index=\"0\"><elements><DOMShape><fills><FillStyle index=\"1\"><SolidColor color=\"#FF0000\"/>"
+        "</FillStyle></fills><edges><Edge fillStyle1=\"1\" edges=\"!0 0|2000 0!2000 0|2000 400!2000 400|0 400!0 400|0 0\"/></edges></DOMShape>"
+        "</elements></DOMFrame></frames></DOMLayer></layers></DOMTimeline></timeline></DOMSymbolItem>");
+    const auto field = [](const std::string& words) {
+        return "<DOMDynamicText instanceName=\"name\" width=\"300\" height=\"30\"><matrix><Matrix tx=\"10\"/></matrix><textRuns><DOMTextRun>"
+               "<characters>" + words + "</characters><textAttrs><DOMTextAttrs face=\"ArialMT\" size=\"20\"/></textAttrs></DOMTextRun>"
+               "</textRuns></DOMDynamicText>";
+    };
+    writeText(folder / "LIBRARY" / "Card.xml",
+        "<DOMSymbolItem " + ns + " name=\"Card\" symbolType=\"graphic\"><timeline><DOMTimeline name=\"Card\"><layers>"
+        "<DOMLayer name=\"Labels\"><frames><DOMFrame index=\"0\" duration=\"2\"><elements/></DOMFrame>"
+        "<DOMFrame index=\"2\" duration=\"2\" name=\"stretch\"><elements/></DOMFrame><DOMFrame index=\"4\" duration=\"2\" name=\"outro\">"
+        "<elements/></DOMFrame></frames></DOMLayer>"
+        "<DOMLayer name=\"Name\"><frames><DOMFrame index=\"0\" duration=\"3\"><elements>" + field("Name") + "</elements></DOMFrame>"
+        "<DOMFrame index=\"3\" duration=\"3\"><elements>" + field("Longer Name") + "</elements></DOMFrame></frames></DOMLayer>"
+        "<DOMLayer name=\"Plate\"><frames><DOMFrame index=\"0\" duration=\"6\"><elements>"
+        "<DOMSymbolInstance libraryItemName=\"Plate\" symbolType=\"graphic\" loop=\"loop\" phoenixPin=\"text=name&amp;mode=width\"/>"
+        "</elements></DOMFrame></frames></DOMLayer></layers></DOMTimeline></timeline></DOMSymbolItem>");
+    writeText(folder / "DOMDocument.xml",
+        "<DOMDocument " + ns + " width=\"300\" height=\"200\" frameRate=\"24\">"
+        "<symbols><Include href=\"Plate.xml\"/><Include href=\"Card.xml\"/></symbols>"
+        "<timelines><DOMTimeline name=\"Scene 1\"><layers><DOMLayer name=\"Card\"><frames><DOMFrame index=\"0\" duration=\"10\"><elements>"
+        "<DOMSymbolInstance libraryItemName=\"Card\" symbolType=\"graphic\" loop=\"play once\" phoenixTemplate=\"name=Ada%20Lovelace\"/>"
+        "</elements></DOMFrame></frames></DOMLayer></layers></DOMTimeline></timelines></DOMDocument>");
+    FLAParser parser;
+    std::unique_ptr<fla::FLADocument> file(parser.parse(folder.string()));
+    CHECK(file && file->document);
+    if (!file || !file->document)
+        return;
+    fla::Document& document = *file->document;
+    CHECK(fla::otherapps::needsBaking(document));
+    // Letters 10 pixels wide; the plate 100 by 20.
+    fla::otherapps::Measure measure;
+    measure.textReach = [](const fla::StaticText& text, fla::Rect& reach) {
+        size_t letters = 0;
+        for (const fla::TextRun& run : text.runs)
+            letters += run.text.size();
+        reach = fla::Rect(fla::Point(text.transform.tx, 0.0), fla::Point(text.transform.tx + 10.0 * letters, 20.0));
+        return true;
+    };
+    measure.symbolBounds = [](const fla::Symbol& symbol, int, fla::Rect& bounds) {
+        bounds = fla::Rect(fla::Point(0.0, 0.0), fla::Point(100.0, 20.0));
+        return symbol.name == "Plate";
+    };
+    std::vector<std::string> notes;
+    fla::otherapps::bakeCompositing(document, notes, fla::otherapps::Renderer(), &measure);
+    CHECK(!fla::otherapps::needsBaking(document));
+
+    // The card plays a copy for its 10 frames: the start and the ending at
+    // their own speed, the middle frames held longer.
+    auto* card = static_cast<fla::SymbolInstance*>(document.timelines.front()->layers.front()->frames.front()->elements.front());
+    CHECK(card->symbol && card->symbol->name == "Card (Ada Lovelace) (10 frames)" && card->loopType == fla::LoopType::PlayOnce &&
+        card->firstFrame == 0);
+    if (!card->symbol)
+        return;
+    const std::vector<fla::Frame*>& held = card->symbol->timelines.front()->layers.front()->frames;
+    const int shown[][3] = {{0, 1, 0}, {1, 1, 1}, {2, 3, 2}, {5, 3, 3}, {8, 1, 4}, {9, 1, 5}};
+    CHECK(held.size() == 6);
+    for (size_t i = 0; i < held.size() && i < 6; ++i)
+    {
+        const auto* inner = static_cast<const fla::SymbolInstance*>(held[i]->elements.front());
+        CHECK(held[i]->index == shown[i][0] && held[i]->duration == shown[i][1] && inner->firstFrame == shown[i][2] &&
+            inner->loopType == fla::LoopType::SingleFrame && inner->symbol->name == "Card (Ada Lovelace)");
+    }
+
+    // Inside the filled-in copy, the plate stretched to the longer name:
+    // 120 pixels of words against 40 drawn, then against 110.
+    fla::Symbol* copy = symbolNamed(document, "Card (Ada Lovelace)");
+    CHECK(copy != nullptr);
+    if (!copy)
+        return;
+    const std::vector<fla::Frame*>& plate = copy->timelines.front()->layers[2]->frames;
+    CHECK(plate.size() == 2);
+    if (plate.size() != 2)
+        return;
+    const auto* first = static_cast<const fla::SymbolInstance*>(plate[0]->elements.front());
+    const auto* second = static_cast<const fla::SymbolInstance*>(plate[1]->elements.front());
+    CHECK(plate[0]->index == 0 && plate[0]->duration == 3 && plate[1]->index == 3 && plate[1]->duration == 3);
+    CHECK(near(first->transform.m11, 1.8) && near(second->transform.m11, 1.1) && near(first->transform.tx, 0.0));
+    CHECK(!fla::templates::pinOf(*first).any() && !fla::templates::pinOf(*second).any());
+    // The second piece carries the looping plate on from where it had got.
+    CHECK(second->firstFrame == 3 && second->loopType == fla::LoopType::Loop);
+    // The original symbol's plate is as drawn.
+    const std::vector<fla::Frame*>& drawn = symbolNamed(document, "Card")->timelines.front()->layers[2]->frames;
+    CHECK(drawn.size() == 1 && near(drawn.front()->elements.front()->transform.m11, 1.0));
+}
+
 TEST(edited_cubics_save_as_quadratics_and_a_cubics_edge)
 {
     // A straight edge of a symbol's shape bent into a cubic, as the pen or

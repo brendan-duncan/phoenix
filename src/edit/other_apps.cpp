@@ -4,6 +4,8 @@
 #include "behaviors.h"
 #include "frame_bake.h"
 #include "layer_commands.h"
+#include "element_clone.h"
+#include "graphic_loop.h"
 #include "library_commands.h"
 #include "library_media.h"
 #include "templates.h"
@@ -92,6 +94,10 @@ struct TemplateBaker
 {
     Document& document;
     std::map<std::string, Symbol*> made;
+    const Measure* measure = nullptr;
+    /// Where the copies' text fields reached as drawn, before the words
+    /// given were written in: what their pinned parts were placed beside.
+    std::map<const StaticText*, Rect> drawn;
 
     /// \a symbol with \a values written in: a copy when any of its fields
     /// (or those of the symbols inside it) has a value, else itself.
@@ -124,6 +130,9 @@ struct TemplateBaker
                 if (element->elementType() == Element::Type::StaticText)
                 {
                     auto* text = static_cast<StaticText*>(element);
+                    Rect reach;
+                    if (measure && measure->textReach && !text->instanceName.empty() && measure->textReach(*text, reach))
+                        drawn[text] = reach;
                     const auto value = values.find(text->instanceName);
                     if (text->textType != StaticText::TextType::Static && !text->instanceName.empty() && value != values.end())
                     {
@@ -177,9 +186,9 @@ struct TemplateBaker
     }
 };
 
-int bakeTemplates(Document& document)
+int bakeTemplates(TemplateBaker& baker)
 {
-    TemplateBaker baker{document, {}};
+    Document& document = baker.document;
     int count = 0;
     for (Timeline* timeline : allTimelines(document))
         eachElement(*timeline, [&](Element* element) {
@@ -198,6 +207,274 @@ int bakeTemplates(Document& document)
                 ++count;
             }
         });
+    return count;
+}
+
+// Responsive time ---------------------------------------------------------------
+
+/// The frames \a symbol runs to.
+int symbolLength(const Symbol& symbol)
+{
+    int length = 1;
+    for (const Timeline* timeline : symbol.timelines)
+        for (const Layer* layer : timeline ? timeline->layers : std::vector<Layer*>())
+            for (const Frame* frame : layer ? layer->frames : std::vector<Frame*>())
+                if (frame)
+                    length = std::max(length, frame->index + std::max(1, frame->duration));
+    return length;
+}
+
+/// Whether \a instance plays its symbol's middle stretched to its span.
+bool responsive(const SymbolInstance& instance)
+{
+    return instance.symbol && instance.symbolType == SymbolType::Graphic && instance.loopType != LoopType::SingleFrame &&
+        templates::responsiveOf(*instance.symbol).any();
+}
+
+/// Each instance of a graphic with responsive time shows instead a copy as
+/// long as its span, holding an instance of the graphic on each frame it
+/// shows there, so it plays the same where the labels mean nothing.
+int bakeResponsive(Document& document)
+{
+    std::map<std::string, Symbol*> made;
+    int count = 0;
+    for (Timeline* timeline : allTimelines(document))
+        for (Layer* layer : timeline->layers)
+            for (Frame* frame : layer ? layer->frames : std::vector<Frame*>())
+                for (Element* top : frame ? frame->elements : std::vector<Element*>())
+                    eachElement(top, [&](Element* element) {
+                        if (element->elementType() != Element::Type::SymbolInstance)
+                            return;
+                        auto* instance = static_cast<SymbolInstance*>(element);
+                        if (!responsive(*instance))
+                            return;
+                        Symbol* symbol = instance->symbol;
+                        const int span = std::max(1, frame->duration);
+                        const int length = symbolLength(*symbol);
+                        const templates::Responsive timing = templates::responsiveOf(*symbol);
+                        // The frame of the symbol shown on each of the span's.
+                        std::vector<int> shown;
+                        for (int e = 0; e < span; ++e)
+                            shown.push_back(graphicFrame(instance->loopType, instance->firstFrame, instance->lastFrame, length,
+                                templates::responsiveElapsed(timing, length, span, e)));
+                        const std::string key = symbol->name + '\x1f' + std::to_string(span) + '\x1f' +
+                            std::to_string(static_cast<int>(instance->loopType)) + '\x1f' +
+                            std::to_string(instance->firstFrame) + '\x1f' + std::to_string(instance->lastFrame);
+                        Symbol*& copy = made[key];
+                        if (!copy)
+                        {
+                            copy = new Symbol(nullptr);
+                            copy->name = uniqueName(document, symbol->name + " (" + std::to_string(span) + " frames)");
+                            copy->href = copy->name + ".xml";
+                            copy->symbolType = SymbolType::Graphic;
+                            auto* inside = new Timeline(copy);
+                            inside->name = copy->name;
+                            copy->timelines.push_back(inside);
+                            auto* held = new Layer(inside);
+                            held->name = symbol->name;
+                            inside->layers.push_back(held);
+                            for (int e = 0; e < span;)
+                            {
+                                int end = e + 1;
+                                while (end < span && shown[static_cast<size_t>(end)] == shown[static_cast<size_t>(e)])
+                                    ++end;
+                                auto* hold = new Frame(held);
+                                hold->index = e;
+                                hold->duration = end - e;
+                                hold->keyMode = "9728";
+                                auto* original = new SymbolInstance(hold);
+                                original->libraryItemName = symbol->name;
+                                original->symbol = symbol;
+                                original->symbolType = SymbolType::Graphic;
+                                original->loopType = LoopType::SingleFrame;
+                                original->firstFrame = shown[static_cast<size_t>(e)];
+                                hold->elements.push_back(original);
+                                held->frames.push_back(hold);
+                                e = end;
+                            }
+                            addSymbol(document, copy);
+                        }
+                        instance->symbol = copy;
+                        instance->libraryItemName = copy->name;
+                        instance->loopType = LoopType::PlayOnce;
+                        instance->firstFrame = 0;
+                        instance->lastFrame = -1;
+                        ++count;
+                    });
+    return count;
+}
+
+// Pinning -------------------------------------------------------------------------
+
+bool sameTransform(const Transform& a, const Transform& b)
+{
+    const auto near = [](double x, double y) { return std::fabs(x - y) < 1e-9; };
+    return near(a.m11, b.m11) && near(a.m12, b.m12) && near(a.m21, b.m21) && near(a.m22, b.m22) && near(a.tx, b.tx) &&
+        near(a.ty, b.ty);
+}
+
+/// The change pinning makes to \a instance, placed by \a transform on its
+/// keyframe \a frame, \a offset frames into it: moved with an edge of the
+/// text it is pinned to, or stretched to keep its room round the words, as
+/// the words given reach further or less far than those drawn.
+Transform pinAt(const TemplateBaker& baker, const SymbolInstance& instance, const Transform& transform, const Frame& frame,
+    int offset)
+{
+    const templates::Pin pin = templates::pinOf(instance);
+    const Layer* layer = dynamic_cast<const Layer*>(frame.parent);
+    const Timeline* timeline = layer ? dynamic_cast<const Timeline*>(layer->parent) : nullptr;
+    const Measure* measure = baker.measure;
+    if (!pin.any() || !timeline || !instance.symbol || !measure || !measure->textReach || !measure->symbolBounds)
+        return Transform();
+    // The field it is pinned to, on that frame: the first on the layers
+    // from the top.
+    const int at = frame.index + offset;
+    const StaticText* text = nullptr;
+    for (const Layer* each : timeline->layers)
+        for (const Frame* other : each ? each->frames : std::vector<Frame*>())
+            if (!text && other && other->index <= at && at < other->index + std::max(1, other->duration))
+                for (const Element* element : other->elements)
+                    if (element && element->elementType() == Element::Type::StaticText &&
+                        static_cast<const StaticText*>(element)->instanceName == pin.text)
+                    {
+                        text = static_cast<const StaticText*>(element);
+                        break;
+                    }
+    const auto was = text ? baker.drawn.find(text) : baker.drawn.end();
+    Rect now;
+    if (was == baker.drawn.end() || !measure->textReach(*text, now))
+        return Transform();
+    const Rect& drawn = was->second;
+    // What the part covers on that frame, where it is placed.
+    const int shown = instance.symbolType == SymbolType::Graphic
+        ? graphicFrame(instance.loopType, instance.firstFrame, instance.lastFrame, symbolLength(*instance.symbol), offset)
+        : 0;
+    Rect box;
+    if (!measure->symbolBounds(*instance.symbol, shown, box))
+        return Transform();
+    box.transform(transform);
+    double sx = 1.0, sy = 1.0, dx = 0.0, dy = 0.0;
+    const auto stretch = [](double start, double length, double from, double to, double& scale, double& shift) {
+        if (length <= 0.0)
+            return;
+        scale = std::max(0.0, length + to - from) / length;
+        shift = start + from - start * scale;
+    };
+    if (pin.mode == "left")
+        dx = now.topLeft.x - drawn.topLeft.x;
+    else if (pin.mode == "right")
+        dx = now.bottomRight.x - drawn.bottomRight.x;
+    else if (pin.mode == "top")
+        dy = now.topLeft.y - drawn.topLeft.y;
+    else if (pin.mode == "bottom")
+        dy = now.bottomRight.y - drawn.bottomRight.y;
+    if (pin.mode == "width" || pin.mode == "both")
+        stretch(box.topLeft.x, box.width(), now.topLeft.x - drawn.topLeft.x, now.bottomRight.x - drawn.bottomRight.x, sx, dx);
+    if (pin.mode == "height" || pin.mode == "both")
+        stretch(box.topLeft.y, box.height(), now.topLeft.y - drawn.topLeft.y, now.bottomRight.y - drawn.bottomRight.y, sy, dy);
+    return Transform(sx, 0.0, 0.0, sy, dx, dy);
+}
+
+/// \a instance as a keyframe \a offset frames into its span would start
+/// it: a graphic on the frame it had reached.
+void startLater(SymbolInstance& instance, int offset)
+{
+    if (instance.symbolType != SymbolType::Graphic || instance.loopType == LoopType::SingleFrame || !instance.symbol)
+        return;
+    if ((instance.loopType == LoopType::Loop && instance.lastFrame < 0) || instance.loopType == LoopType::PingPong)
+        instance.firstFrame += offset;
+    else
+        instance.firstFrame = graphicFrame(instance.loopType, instance.firstFrame, instance.lastFrame,
+            symbolLength(*instance.symbol), offset);
+}
+
+/// Every pinned part moved where it shows: its keyframe cut where that
+/// changes along the span (unless it tweens, when the start holds).
+int bakePins(TemplateBaker& baker)
+{
+    int count = 0;
+    for (Timeline* timeline : allTimelines(baker.document))
+        for (Layer* layer : timeline->layers)
+        {
+            if (!layer)
+                continue;
+            std::vector<Frame*> added;
+            for (Frame* frame : layer->frames)
+            {
+                if (!frame)
+                    continue;
+                const int span = std::max(1, frame->duration);
+                // The change to each pinned part on each frame of the span.
+                std::map<size_t, std::vector<Transform>> changes;
+                for (size_t i = 0; i < frame->elements.size(); ++i)
+                {
+                    auto* instance = dynamic_cast<SymbolInstance*>(frame->elements[i]);
+                    if (!instance || !templates::pinOf(*instance).any())
+                        continue;
+                    std::vector<Transform>& each = changes[i];
+                    for (int offset = 0; offset < span; ++offset)
+                        each.push_back(pinAt(baker, *instance, instance->transform, *frame, offset));
+                }
+                if (changes.empty())
+                    continue;
+                const bool tweens = frame->tweenType != TweenType::None || !frame->otherTweenType.empty();
+                std::vector<int> cuts = {0};
+                for (int offset = 1; offset < span && !tweens; ++offset)
+                {
+                    bool differs = false;
+                    for (const auto& [i, each] : changes)
+                        differs = differs || !sameTransform(each[static_cast<size_t>(offset)], each[static_cast<size_t>(offset) - 1]);
+                    if (differs)
+                        cuts.push_back(offset);
+                }
+                // The pieces after the first: the keyframe's contents again,
+                // each graphic carried on to where it had got to.
+                for (size_t c = 1; c < cuts.size(); ++c)
+                {
+                    const int offset = cuts[c];
+                    auto* piece = new Frame(layer);
+                    piece->index = frame->index + offset;
+                    piece->duration = (c + 1 < cuts.size() ? cuts[c + 1] : span) - offset;
+                    piece->keyMode = frame->keyMode;
+                    for (size_t i = 0; i < frame->elements.size(); ++i)
+                    {
+                        Element* element = frame->elements[i] ? cloneElement(*frame->elements[i], piece) : nullptr;
+                        if (!element)
+                            continue;
+                        eachElement(element, [offset](Element* each) {
+                            if (each->elementType() == Element::Type::SymbolInstance)
+                                startLater(*static_cast<SymbolInstance*>(each), offset);
+                        });
+                        const auto change = changes.find(i);
+                        if (change != changes.end())
+                        {
+                            Transform placed = change->second[static_cast<size_t>(offset)];
+                            placed.concatenate(element->transform);
+                            element->transform = placed;
+                            static_cast<SymbolInstance*>(element)->extraAttributes =
+                                templates::withPin(*static_cast<SymbolInstance*>(element), templates::Pin());
+                        }
+                        piece->elements.push_back(element);
+                    }
+                    added.push_back(piece);
+                }
+                frame->duration = cuts.size() > 1 ? cuts[1] : frame->duration;
+                for (const auto& [i, each] : changes)
+                {
+                    auto* instance = static_cast<SymbolInstance*>(frame->elements[i]);
+                    Transform placed = each.front();
+                    placed.concatenate(instance->transform);
+                    instance->transform = placed;
+                    instance->extraAttributes = templates::withPin(*instance, templates::Pin());
+                    ++count;
+                }
+            }
+            if (added.empty())
+                continue;
+            layer->frames.insert(layer->frames.end(), added.begin(), added.end());
+            std::stable_sort(layer->frames.begin(), layer->frames.end(),
+                [](const Frame* a, const Frame* b) { return (a ? a->index : 0) < (b ? b->index : 0); });
+        }
     return count;
 }
 
@@ -1252,7 +1529,8 @@ bool needsBaking(const Document& document)
         eachElement(*timeline, [&](Element* element) {
             found = found || (element->elementType() == Element::Type::SymbolInstance &&
                                  (templates::any(*static_cast<SymbolInstance*>(element)) ||
-                                     !compositing::instanceEffectsOf(*element).empty()));
+                                     !compositing::instanceEffectsOf(*element).empty() ||
+                                     responsive(*static_cast<SymbolInstance*>(element))));
         });
         if (found)
             return true;
@@ -1260,7 +1538,8 @@ bool needsBaking(const Document& document)
     return false;
 }
 
-void bakeCompositing(Document& document, std::vector<std::string>& notes, const Renderer& render)
+void bakeCompositing(Document& document, std::vector<std::string>& notes, const Renderer& render,
+    const Measure* measure)
 {
     // What effects with no filter make is drawn first, while the document
     // is still as Phoenix shows it.
@@ -1268,10 +1547,19 @@ void bakeCompositing(Document& document, std::vector<std::string>& notes, const 
     Drawn drawn;
     if (render)
         drawForBitmaps(document, render, bitmaps, drawn);
-    const int templated = bakeTemplates(document);
+    TemplateBaker baker{document, {}, measure, {}};
+    const int templated = bakeTemplates(baker);
     if (templated > 0)
         notes.push_back(std::to_string(templated) + " template instance" + (templated == 1 ? "" : "s") +
             " now show symbols with their words and colors written in.");
+    const int stretched = bakeResponsive(document);
+    if (stretched > 0)
+        notes.push_back(std::to_string(stretched) + " instance" + (stretched == 1 ? "" : "s") +
+            " of graphics with responsive time now show copies with their frames laid out for the span they are on.");
+    // Pinned parts are placed beside the words now written in; without a
+    // way to measure them they stay as drawn.
+    if (measure)
+        bakePins(baker);
     for (Timeline* timeline : allTimelines(document))
     {
         bakeInstanceEffects(document, *timeline, drawn, notes);
