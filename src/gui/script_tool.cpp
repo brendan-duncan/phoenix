@@ -1,5 +1,7 @@
 #include "script_tool.h"
 
+#include "hot_text.h"
+
 #include "phoenix_view.h"
 #include "tool_icons.h"
 
@@ -10,7 +12,6 @@
 #include <QComboBox>
 #include <QDialog>
 #include <QDialogButtonBox>
-#include <QDoubleSpinBox>
 #include <QFileInfo>
 #include <QFormLayout>
 #include <QKeyEvent>
@@ -216,14 +217,18 @@ void ScriptTool::showOptions(QWidget* parent)
         }
         else if (option.type == "Number")
         {
-            auto* box = new QDoubleSpinBox(&dialog);
+            auto* box = new HotDoubleSpinBox(&dialog);
             // Whole numbers stay whole (a count of sides); a fraction gets
             // two places.
             const bool whole = option.value.find('.') == std::string::npos;
             box->setDecimals(whole ? 0 : 2);
             box->setSingleStep(whole ? 1.0 : 0.05);
+            box->setStep(whole ? 1.0 : 0.05);
             box->setRange(option.min, option.max);
-            box->setValue(std::atof(option.value.c_str()));
+            {
+                const QSignalBlocker quiet(box);
+                box->setValue(std::atof(option.value.c_str()));
+            }
             form->addRow(label, box);
             readers.push_back([box, variable]() { return std::make_pair(variable, QString::number(box->value()).toStdString()); });
         }
