@@ -15,6 +15,7 @@
 #include "../data/static_text.h"
 #include "../data/shape.h"
 
+#include <QCache>
 #include <QCheckBox>
 #include <QDialog>
 #include <QDialogButtonBox>
@@ -32,6 +33,7 @@
 #include <QDoubleSpinBox>
 #include <QFormLayout>
 #include <QHBoxLayout>
+#include <QIcon>
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
@@ -106,14 +108,240 @@ std::vector<BrowsedPreset> behaviorPresets()
     return list;
 }
 
+/// What a preview shows its preset on.
+enum class Sample
+{
+    /// A star, moved by behaviors.
+    Star,
+    /// A word, its letters animated.
+    Word,
+    /// Shapes, their lines and fills changed by shape operators.
+    Shapes,
+    /// A picture, changed by adjustment effects.
+    Picture
+};
+
+constexpr int kPreviewFrames = 72;
+
+/// \a list as a preview plays it: a transition keyed from start to end and
+/// Trim Paths drawing on over the loop, so they show moving; the rest as
+/// set.
+std::vector<fla::behaviors::Applied> demonstrated(std::vector<fla::behaviors::Applied> list)
+{
+    for (fla::behaviors::Applied& applied : list)
+    {
+        const char* keyed = applied.params.count("completion") ? "completion" : applied.type == "trim" ? "end" : nullptr;
+        if (!keyed || applied.keyed(keyed))
+            continue;
+        applied.params.erase(keyed);
+        applied.setKey(keyed, 6, "0");
+        applied.setKey(keyed, kPreviewFrames - 12, "100");
+    }
+    return list;
+}
+
+/// A line of the sample as shape operators take it.
+fla::shapeops::Line lineOf(const QPolygonF& polygon, bool closed)
+{
+    fla::shapeops::Line line;
+    for (const QPointF& point : polygon)
+        line.points.push_back(fla::Point(point.x(), point.y()));
+    if (closed && line.points.size() > 2)
+        line.points.pop_back();
+    line.closed = closed;
+    return line;
+}
+
+QPainterPath pathOf(const std::vector<fla::shapeops::Line>& lines)
+{
+    QPainterPath path;
+    for (const fla::shapeops::Line& line : lines)
+    {
+        if (line.points.empty())
+            continue;
+        path.moveTo(line.points.front().x, line.points.front().y);
+        for (size_t i = 1; i < line.points.size(); ++i)
+            path.lineTo(line.points[i].x, line.points[i].y);
+        if (line.closed)
+            path.closeSubpath();
+    }
+    return path;
+}
+
+/// The sample shapes on \a frame of \a list, on a picture of \a size: a
+/// circle and a square overlapping, filled (so Merge Paths shows),
+/// and a wavy line under them, stroked (so Trim Paths and Taper show).
+QImage operatedSample(const std::vector<fla::behaviors::Applied>& list, int frame, const QSize& size)
+{
+    QImage picture(size, QImage::Format_ARGB32_Premultiplied);
+    picture.fill(QColor(0x20, 0x26, 0x30));
+    QPainter painter(&picture);
+    painter.setRenderHint(QPainter::Antialiasing);
+    painter.translate(size.width() / 2.0, size.height() / 2.0);
+    const double fit = std::min(size.width() / 330.0, size.height() / 210.0);
+    painter.scale(fit, fit);
+
+    QPainterPath circle;
+    circle.addEllipse(QPointF(-35.0, -15.0), 50.0, 50.0);
+    QPainterPath square;
+    square.addRect(QRectF(-5.0, -55.0, 95.0, 85.0));
+    std::vector<fla::shapeops::Line> outlines;
+    for (const QPainterPath& each : {circle, square})
+        for (const QPolygonF& polygon : each.toSubpathPolygons())
+            outlines.push_back(lineOf(polygon, true));
+    QPolygonF wave;
+    for (double x = -120.0; x <= 120.0; x += 3.0)
+        wave << QPointF(x, 68.0 + 10.0 * std::sin(x / 20.0));
+    const std::vector<fla::shapeops::Line> strokes = {lineOf(wave, false)};
+
+    const std::vector<fla::shapeops::Line> filled = fla::shapeops::apply(outlines, false, list, frame, 24.0);
+    QPainterPath fills = pathOf(filled);
+    fills.setFillRule(Qt::WindingFill);
+    // Merge Paths: the first outline combined with each after it.
+    const std::string merge = fla::shapeops::mergeOf(list, frame);
+    if (!merge.empty() && filled.size() > 1)
+    {
+        QPainterPath combined;
+        bool first = true;
+        for (const fla::shapeops::Line& line : filled)
+        {
+            if (line.points.size() < 3)
+                continue;
+            QPainterPath piece = pathOf({line});
+            piece.closeSubpath();
+            if (first)
+                combined = piece;
+            else if (merge == "Subtract")
+                combined = combined.subtracted(piece);
+            else if (merge == "Intersect")
+                combined = combined.intersected(piece);
+            else if (merge == "Exclude")
+                combined = combined.united(piece).subtracted(combined.intersected(piece));
+            else
+                combined = combined.united(piece);
+            first = false;
+        }
+        fills = combined;
+    }
+    const QColor accent = theme::color("accent");
+    painter.setPen(QPen(accent.darker(170), 2.0));
+    painter.setBrush(accent);
+    painter.drawPath(fills);
+
+    const std::vector<fla::shapeops::Line> stroked = fla::shapeops::apply(strokes, true, list, frame, 24.0);
+    const QColor ink(0xF0, 0xC0, 0x40);
+    const fla::shapeops::Taper taper = fla::shapeops::taperOf(list, frame);
+    if (taper.on)
+    {
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(ink);
+        for (const fla::shapeops::Line& line : stroked)
+        {
+            QPolygonF outline;
+            for (const fla::Point& point : fla::shapeops::taperedOutline(line, 8.0, taper, frame / 24.0))
+                outline << QPointF(point.x, point.y);
+            painter.drawPolygon(outline, Qt::WindingFill);
+        }
+    }
+    else
+    {
+        painter.setPen(QPen(ink, 6.0, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+        painter.setBrush(Qt::NoBrush);
+        painter.drawPath(pathOf(stroked));
+    }
+    return picture;
+}
+
+/// The picture adjustment effects are seen on: a sky, a sun, hills, a star
+/// and a word, \a size big.
+const QImage& effectPicture(const QSize& size)
+{
+    static QImage picture;
+    if (picture.size() == size)
+        return picture;
+    picture = QImage(size, QImage::Format_ARGB32_Premultiplied);
+    QPainter painter(&picture);
+    painter.setRenderHint(QPainter::Antialiasing);
+    const double w = size.width(), h = size.height();
+    QLinearGradient sky(0.0, 0.0, 0.0, h);
+    sky.setColorAt(0.0, QColor(0x2E, 0x6F, 0xC8));
+    sky.setColorAt(1.0, QColor(0xF2, 0xB8, 0x7A));
+    painter.fillRect(QRectF(0.0, 0.0, w, h), sky);
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(QColor(0xFF, 0xE0, 0x60));
+    painter.drawEllipse(QPointF(w * 0.72, h * 0.32), h * 0.16, h * 0.16);
+    QPainterPath hills;
+    hills.moveTo(0.0, h);
+    hills.lineTo(0.0, h * 0.7);
+    hills.cubicTo(w * 0.25, h * 0.5, w * 0.45, h * 0.85, w * 0.7, h * 0.65);
+    hills.cubicTo(w * 0.85, h * 0.55, w * 0.95, h * 0.62, w, h * 0.6);
+    hills.lineTo(w, h);
+    hills.closeSubpath();
+    painter.setBrush(QColor(0x2F, 0x7A, 0x3A));
+    painter.drawPath(hills);
+    QPainterPath star;
+    for (int i = 0; i < 10; ++i)
+    {
+        const double angle = -1.5707963267948966 + i * 0.6283185307179586;
+        const double r = (i % 2 == 0 ? 0.2 : 0.085) * h;
+        const QPointF point(w * 0.25 + std::cos(angle) * r, h * 0.36 + std::sin(angle) * r);
+        if (i == 0)
+            star.moveTo(point);
+        else
+            star.lineTo(point);
+    }
+    star.closeSubpath();
+    painter.setBrush(QColor(0xE0, 0x40, 0x50));
+    painter.setPen(QPen(Qt::white, std::max(1.0, h / 80.0)));
+    painter.drawPath(star);
+    QFont font = painter.font();
+    font.setBold(true);
+    font.setPixelSize(std::max(6, static_cast<int>(h * 0.14)));
+    painter.setFont(font);
+    painter.setPen(Qt::white);
+    painter.drawText(QRectF(0.0, h * 0.72, w, h * 0.26), Qt::AlignCenter, "Phoenix");
+    return picture;
+}
+
+/// The picture with \a list on it, on \a frame.
+QImage adjustedSample(const std::vector<fla::behaviors::Applied>& list, int frame, const QSize& size)
+{
+    QImage picture = effectPicture(size).copy();
+    // Displacement Map pushes it by itself.
+    const QImage& source = effectPicture(size);
+    const std::vector<uint32_t> map(reinterpret_cast<const uint32_t*>(source.constBits()),
+        reinterpret_cast<const uint32_t*>(source.constBits()) + static_cast<size_t>(size.width()) * size.height());
+    const fla::compositing::effects::LayerPictures layers = [&map](const std::string&) { return &map; };
+    // The picture stands for a stage 560 pixels across.
+    fla::compositing::apply(reinterpret_cast<uint32_t*>(picture.bits()), size.width(), size.height(), list, frame,
+        size.width() / 560.0, nullptr, 24.0, &layers);
+    return picture;
+}
+
+/// \a list on its sample on \a frame, \a size big: shapes or a picture.
+QImage sampleFrame(Sample sample, const std::vector<fla::behaviors::Applied>& list, int frame, const QSize& size)
+{
+    return sample == Sample::Picture ? adjustedSample(list, frame, size) : operatedSample(list, frame, size);
+}
+
+/// A still of \a list on its sample, for the list of presets.
+QIcon sampleIcon(Sample sample, const std::vector<fla::behaviors::Applied>& list)
+{
+    const QSize size(66, 44);
+    return QIcon(QPixmap::fromImage(sampleFrame(sample, demonstrated(list), kPreviewFrames / 2, size)));
+}
+
 /// A sample drawn moving as a preset makes it move, round and round: a
-/// shape for behaviors, a word for letter animators.
+/// shape for behaviors, a word for letter animators, shapes for shape
+/// operators and a picture for adjustment effects. The frames of the last
+/// two are kept once drawn, as they take longer.
 class PresetPreview : public QWidget
 {
 public:
-    PresetPreview(bool letters, QWidget* parent)
+    PresetPreview(Sample sample, QWidget* parent)
         : QWidget(parent)
-        , _letters(letters)
+        , _letters(sample == Sample::Word)
+        , _sample(sample)
         , _word(nullptr)
     {
         setMinimumSize(320, 220);
@@ -135,6 +363,8 @@ public:
     void show(const std::vector<fla::behaviors::Applied>& list)
     {
         _list = list;
+        _shown = demonstrated(list);
+        _key = QString::fromStdString(fla::behaviors::encode(list));
         _frame = 0;
         update();
     }
@@ -145,9 +375,28 @@ protected:
         QPainter painter(this);
         painter.setRenderHint(QPainter::Antialiasing);
         painter.fillRect(rect(), QColor(0x20, 0x26, 0x30));
+        // Shapes and the picture: each frame drawn once, small, and kept
+        // for the next time round.
+        if (_sample == Sample::Shapes || _sample == Sample::Picture)
+        {
+            const QSize size(280, 186);
+            const QString key = _key + '#' + QString::number(_frame);
+            QImage* picture = _frames.object(key);
+            if (!picture)
+            {
+                picture = new QImage(sampleFrame(_sample, _shown, _frame, size));
+                _frames.insert(key, picture, static_cast<int>(picture->sizeInBytes() / 1024));
+            }
+            const double fit = std::min(width() / static_cast<double>(size.width()), height() / static_cast<double>(size.height()));
+            const QSizeF drawn(size.width() * fit, size.height() * fit);
+            painter.setRenderHint(QPainter::SmoothPixmapTransform);
+            painter.drawImage(QRectF(QPointF((width() - drawn.width()) / 2.0, (height() - drawn.height()) / 2.0), drawn), *picture);
+        }
         painter.setPen(palette().color(QPalette::PlaceholderText));
         painter.drawText(rect().adjusted(6, 4, -6, -4), Qt::AlignRight | Qt::AlignBottom,
             QString("%1 / %2").arg(_frame + 1).arg(kFrames));
+        if (_sample == Sample::Shapes || _sample == Sample::Picture)
+            return;
         if (_letters)
         {
             const std::vector<fla::textanim::Letter> letters = TextLayout::letters(_word);
@@ -202,10 +451,15 @@ protected:
     }
 
 private:
-    static constexpr int kFrames = 72;
+    static constexpr int kFrames = kPreviewFrames;
     bool _letters;
+    Sample _sample;
     fla::StaticText _word;
     std::vector<fla::behaviors::Applied> _list;
+    /// The list as played, and as a key to its frames kept (in KB).
+    std::vector<fla::behaviors::Applied> _shown;
+    QString _key;
+    QCache<QString, QImage> _frames{48 * 1024};
     int _frame = 0;
     QTimer _timer;
 };
@@ -293,11 +547,12 @@ BehaviorsPanel::BehaviorsPanel(BehaviorsLinks links, QWidget* parent)
             }
         }
         // Every one of them and some made together, each seen moving.
-        if (mode() == Mode::Behaviors || mode() == Mode::Texts)
         {
             menu->addSeparator();
             QAction* browse = menu->addAction("Browse Presets...");
-            browse->setStatusTip("See each behavior and ready-made animation moving before you add it");
+            browse->setStatusTip(mode() == Mode::Shapes ? "See each shape operator on sample shapes before you add it"
+                    : mode() == Mode::Adjustments      ? "See each effect on a sample picture before you add it"
+                                                       : "See each behavior and ready-made animation moving before you add it");
             connect(browse, &QAction::triggered, this, &BehaviorsPanel::browsePresets);
         }
         // Behaviors of one's own: a new one to write, and where they are.
@@ -797,12 +1052,16 @@ void BehaviorsPanel::add(const std::string& id)
 
 void BehaviorsPanel::browsePresets()
 {
-    const bool letters = mode() == Mode::Texts;
+    const Mode now = mode();
+    const bool letters = now == Mode::Texts;
+    const Sample sample = letters ? Sample::Word : now == Mode::Shapes ? Sample::Shapes
+        : now == Mode::Adjustments                                     ? Sample::Picture
+                                                                       : Sample::Star;
     std::vector<BrowsedPreset> presets;
     if (letters)
         for (const fla::textanim::Preset& preset : fla::textanim::presets())
             presets.push_back({QString::fromStdString(preset.name), QString::fromStdString(preset.description), preset.animators});
-    else
+    else if (now == Mode::Behaviors)
         presets = behaviorPresets();
     const size_t made = presets.size();
     // Then every one on its own, as it comes, but those that need another
@@ -813,11 +1072,15 @@ void BehaviorsPanel::browsePresets()
     for (const fla::behaviors::Definition& definition : available())
         if (!needMore.count(definition.id))
             presets.push_back({QString::fromStdString(definition.name), QString::fromStdString(definition.description),
-                {letters ? fla::textanim::defaults(definition.id, 1)
-                         : BehaviorLibrary::instance().engine().defaults(definition.id, 1)}});
+                {letters                      ? fla::textanim::defaults(definition.id, 1)
+                        : now == Mode::Shapes      ? fla::shapeops::defaults(definition.id, 1)
+                        : now == Mode::Adjustments ? fla::compositing::defaults(definition.id, 1)
+                                                   : BehaviorLibrary::instance().engine().defaults(definition.id, 1)}});
 
     QDialog dialog(this);
-    dialog.setWindowTitle(letters ? "Letter Animation Presets" : "Behavior Presets");
+    dialog.setWindowTitle(letters ? "Letter Animation Presets" : now == Mode::Shapes ? "Shape Operator Presets"
+            : now == Mode::Adjustments                                             ? "Effect Presets"
+                                                                                   : "Behavior Presets");
     auto* layout = new QHBoxLayout(&dialog);
     auto* list = new QListWidget(&dialog);
     list->setMinimumWidth(200);
@@ -828,18 +1091,27 @@ void BehaviorsPanel::browsePresets()
         font.setBold(true);
         item->setFont(font);
     };
-    heading("Ready made");
+    if (made > 0)
+        heading("Ready made");
+    // Shape operators and effects show a still of each beside its name.
+    const bool stills = sample == Sample::Shapes || sample == Sample::Picture;
+    if (stills)
+        list->setIconSize(QSize(66, 44));
     for (size_t i = 0; i < presets.size(); ++i)
     {
         if (i == made)
-            heading(letters ? "Letter animators" : "Behaviors");
+            heading(letters ? "Letter animators" : now == Mode::Shapes ? "Shape operators"
+                    : now == Mode::Adjustments                         ? "Effects"
+                                                                       : "Behaviors");
         auto* item = new QListWidgetItem(presets[i].name, list);
         item->setData(Qt::UserRole, static_cast<int>(i));
         item->setToolTip(presets[i].description);
+        if (stills)
+            item->setIcon(sampleIcon(sample, presets[i].list));
     }
     layout->addWidget(list);
     auto* side = new QVBoxLayout();
-    auto* preview = new PresetPreview(letters, &dialog);
+    auto* preview = new PresetPreview(sample, &dialog);
     side->addWidget(preview, 1);
     auto* about = new QLabel(&dialog);
     about->setWordWrap(true);
@@ -847,7 +1119,8 @@ void BehaviorsPanel::browsePresets()
     about->setAlignment(Qt::AlignTop | Qt::AlignLeft);
     side->addWidget(about);
     auto* buttons = new QDialogButtonBox(&dialog);
-    QPushButton* apply = buttons->addButton(letters ? "Add to Text" : "Add to Selection", QDialogButtonBox::AcceptRole);
+    QPushButton* apply = buttons->addButton(letters ? "Add to Text" : now == Mode::Adjustments ? "Add to Layer" : "Add to Selection",
+        QDialogButtonBox::AcceptRole);
     buttons->addButton(QDialogButtonBox::Close);
     side->addWidget(buttons);
     layout->addLayout(side, 1);
@@ -862,7 +1135,10 @@ void BehaviorsPanel::browsePresets()
         about->setText(preset.description);
     });
     // Added as a step of its own, and the dialog stays for another.
-    const auto addChosen = [this, &presets, list, letters]() {
+    const char* stepName = letters ? "Add Letter Animation" : now == Mode::Shapes ? "Add Operator"
+        : now == Mode::Adjustments                                               ? "Add Effect"
+                                                                                 : "Add Behavior";
+    const auto addChosen = [this, &presets, list, stepName]() {
         const QVariant index = list->currentItem() ? list->currentItem()->data(Qt::UserRole) : QVariant();
         if (!index.isValid() || targets().empty())
             return;
@@ -870,7 +1146,7 @@ void BehaviorsPanel::browsePresets()
         for (fla::behaviors::Applied& applied : chosen)
             if (applied.params.count("seed"))
                 applied.params["seed"] = std::to_string(newSeed());
-        edit(letters ? "Add Letter Animation" : "Add Behavior", [&chosen](std::vector<fla::behaviors::Applied>& each) {
+        edit(stepName, [&chosen](std::vector<fla::behaviors::Applied>& each) {
             each.insert(each.end(), chosen.begin(), chosen.end());
         });
         refresh();
@@ -878,7 +1154,7 @@ void BehaviorsPanel::browsePresets()
     };
     connect(apply, &QPushButton::clicked, &dialog, addChosen);
     connect(list, &QListWidget::itemDoubleClicked, &dialog, addChosen);
-    list->setCurrentRow(1);
+    list->setCurrentRow(made > 0 ? 1 : 0);
     dialog.resize(640, 360);
     dialog.exec();
 }
@@ -1026,3 +1302,4 @@ void BehaviorsPanel::newBehavior()
     else
         QDesktopServices::openUrl(QUrl::fromLocalFile(path));
 }
+
