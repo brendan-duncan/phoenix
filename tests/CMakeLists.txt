@@ -134,7 +134,7 @@ if(PHOENIX_TESTS_HAVE_PARSER)
 endif()
 
 if(PHOENIX_TESTS_HAVE_JSFL)
-    list(APPEND TEST_SOURCES test_jsfl.cpp test_jsfl_e4x.cpp test_jsfl_xul.cpp test_jsfl_extensions.cpp)
+    list(APPEND TEST_SOURCES test_jsfl.cpp test_jsfl_e4x.cpp test_jsfl_xul.cpp test_jsfl_extensions.cpp test_jsfl_document.cpp)
 endif()
 
 # Playing movies with their scripts, with libas3 in the build.

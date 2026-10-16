@@ -123,4 +123,37 @@ private:
     std::vector<uint8_t> _data;
 };
 
+/// Takes a sound or a video out of the library: its item, what was read of
+/// it and its data under bin. Only for one nothing uses: the caller checks.
+class RemoveMediaCommand : public Command
+{
+public:
+    RemoveMediaCommand(Document* document, const std::string& itemName, const std::string& name);
+    void redo() override;
+    void undo() override;
+    std::string name() const override { return _name; }
+
+private:
+    Document* _document;
+    std::string _itemName;
+    std::string _name;
+    // What was taken out and where it was, to put back in place.
+    struct Taken
+    {
+        bool xmlTaken = false;
+        size_t xmlIndex = 0;
+        std::string xml;
+        bool soundTaken = false;
+        size_t soundIndex = 0;
+        Document::SoundInfo sound;
+        bool videoTaken = false;
+        size_t videoIndex = 0;
+        Document::VideoInfo video;
+        bool fileTaken = false;
+        size_t fileIndex = 0;
+        std::pair<std::string, LazyBytes> file;
+    };
+    Taken _taken;
+};
+
 } // namespace fla

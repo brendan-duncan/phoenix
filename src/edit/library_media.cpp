@@ -260,4 +260,109 @@ void SetBitmapPixelsCommand::undo()
     apply(_before);
 }
 
+RemoveMediaCommand::RemoveMediaCommand(Document* document, const std::string& itemName, const std::string& name)
+    : _document(document)
+    , _itemName(itemName)
+    , _name(name)
+{
+}
+
+namespace {
+
+/// The value of \a key on the opening tag of \a xml, as written (escaped).
+std::string tagAttribute(const std::string& xml, const std::string& key)
+{
+    const size_t tagEnd = xml.find('>');
+    const size_t at = xml.find(" " + key + "=\"");
+    if (at == std::string::npos || at > tagEnd)
+        return {};
+    const size_t start = at + key.size() + 3;
+    const size_t end = xml.find('"', start);
+    return end == std::string::npos ? std::string() : xml.substr(start, end - start);
+}
+
+} // namespace
+
+void RemoveMediaCommand::redo()
+{
+    if (!_document)
+        return;
+    _taken = Taken();
+    // Its item, a DOMSoundItem or DOMVideoItem kept as text.
+    auto& media = _document->extraMedia;
+    std::string dataPath;
+    for (size_t i = 0; i < media.size(); ++i)
+    {
+        const std::string& xml = media[i];
+        if ((xml.rfind("<DOMSoundItem", 0) != 0 && xml.rfind("<DOMVideoItem", 0) != 0) ||
+            tagAttribute(xml, "name") != media::escaped(_itemName))
+            continue;
+        const std::string video = tagAttribute(xml, "videoDataHRef");
+        if (!video.empty())
+            dataPath = "bin/" + video;
+        _taken.xmlTaken = true;
+        _taken.xmlIndex = i;
+        _taken.xml = xml;
+        media.erase(media.begin() + static_cast<std::ptrdiff_t>(i));
+        break;
+    }
+    auto& sounds = _document->sounds;
+    for (size_t i = 0; i < sounds.size(); ++i)
+    {
+        if (sounds[i].name != _itemName)
+            continue;
+        dataPath = sounds[i].dataPath;
+        _taken.soundTaken = true;
+        _taken.soundIndex = i;
+        _taken.sound = sounds[i];
+        sounds.erase(sounds.begin() + static_cast<std::ptrdiff_t>(i));
+        break;
+    }
+    auto& videos = _document->videos;
+    for (size_t i = 0; i < videos.size(); ++i)
+    {
+        if (videos[i].name != _itemName)
+            continue;
+        _taken.videoTaken = true;
+        _taken.videoIndex = i;
+        _taken.video = videos[i];
+        videos.erase(videos.begin() + static_cast<std::ptrdiff_t>(i));
+        break;
+    }
+    // Its data, unless another item shares it.
+    auto& files = _document->extraFiles;
+    const bool shared = std::any_of(media.begin(), media.end(), [&dataPath](const std::string& xml) {
+        const size_t slash = dataPath.find('/');
+        return slash != std::string::npos && xml.find("\"" + media::escaped(dataPath.substr(slash + 1)) + "\"") != std::string::npos;
+    });
+    for (size_t i = 0; !dataPath.empty() && !shared && i < files.size(); ++i)
+    {
+        if (files[i].first != dataPath)
+            continue;
+        _taken.fileTaken = true;
+        _taken.fileIndex = i;
+        _taken.file = files[i];
+        files.erase(files.begin() + static_cast<std::ptrdiff_t>(i));
+        break;
+    }
+}
+
+void RemoveMediaCommand::undo()
+{
+    if (!_document)
+        return;
+    const auto putBack = [](auto& list, size_t index, const auto& value) {
+        list.insert(list.begin() + static_cast<std::ptrdiff_t>(std::min(index, list.size())), value);
+    };
+    if (_taken.fileTaken)
+        putBack(_document->extraFiles, _taken.fileIndex, _taken.file);
+    if (_taken.videoTaken)
+        putBack(_document->videos, _taken.videoIndex, _taken.video);
+    if (_taken.soundTaken)
+        putBack(_document->sounds, _taken.soundIndex, _taken.sound);
+    if (_taken.xmlTaken)
+        putBack(_document->extraMedia, _taken.xmlIndex, _taken.xml);
+    _taken = Taken();
+}
+
 } // namespace fla

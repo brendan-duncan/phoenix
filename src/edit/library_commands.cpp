@@ -12,6 +12,7 @@
 #include "../data/frame.h"
 #include "../data/group.h"
 #include "../data/layer.h"
+#include "../data/raw_element.h"
 #include "../data/symbol.h"
 #include "../data/symbol_instance.h"
 #include "../data/symbol_list.h"
@@ -235,6 +236,9 @@ void usesOf(Element* element, const std::function<void(const std::string&)>& use
         for (Element* member : static_cast<Group*>(element)->members)
             usesOf(member, use);
         break;
+    case Element::Type::Raw:
+        use(static_cast<RawElement*>(element)->videoItem);
+        break;
     default:
         break;
     }
@@ -258,6 +262,9 @@ bool nameIsFree(const Document& document, const std::string& name)
     for (const Document::SoundInfo& sound : document.sounds)
         if (sound.name == name)
             return false;
+    for (const Document::VideoInfo& video : document.videos)
+        if (video.name == name)
+            return false;
     return true;
 }
 
@@ -271,7 +278,8 @@ bool isFolder(const Document& document, const std::string& name)
 
 namespace {
 
-/// Every name in the library: folders, symbols, bitmaps and sounds.
+/// Every name in the library: folders, symbols, bitmaps, sounds and
+/// videos.
 std::vector<std::string> libraryNames(const Document& document)
 {
     std::vector<std::string> names;
@@ -287,6 +295,8 @@ std::vector<std::string> libraryNames(const Document& document)
             names.push_back(static_cast<const Bitmap*>(resource)->name);
     for (const Document::SoundInfo& sound : document.sounds)
         names.push_back(sound.name);
+    for (const Document::VideoInfo& video : document.videos)
+        names.push_back(video.name);
     return names;
 }
 
@@ -468,8 +478,10 @@ void applyRenames(Document& document, const Renames& renames)
 
     for (Document::SoundInfo& sound : document.sounds)
         renamed(sound.name);
+    for (Document::VideoInfo& video : document.videos)
+        renamed(video.name);
 
-    // A sound's library item is kept as XML text; its name is the first
+    // A sound's or video's library item is kept as XML text; its name is the first
     // name attribute of the element.
     for (std::string& xml : document.extraMedia)
     {
@@ -495,6 +507,18 @@ void applyRenames(Document& document, const Renames& renames)
             else if (element->elementType() == Element::Type::BitmapInstance)
             {
                 renamed(static_cast<BitmapInstance*>(element)->libraryItemName);
+            }
+            else if (element->elementType() == Element::Type::Raw)
+            {
+                // A video on the stage, kept as the XML it is written back as.
+                RawElement* raw = static_cast<RawElement*>(element);
+                if (raw->videoItem.empty() || !renamed(raw->videoItem))
+                    return;
+                const std::string key = "libraryItemName=\"";
+                const size_t at = raw->xml.find(key);
+                const size_t end = at == std::string::npos ? at : raw->xml.find('"', at + key.size());
+                if (end != std::string::npos)
+                    raw->xml.replace(at + key.size(), end - at - key.size(), xmlEscaped(raw->videoItem));
             }
             else if (element->elementType() == Element::Type::Shape)
             {

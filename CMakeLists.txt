@@ -383,6 +383,7 @@ set(HEADERS
     src/util/exr_writer.h
     src/util/zip_writer.h
     src/util/gif_writer.h
+    src/util/png_writer.h
     src/util/sprite_sheet.h
     src/util/swf_writer.h
     src/util/lzma.h

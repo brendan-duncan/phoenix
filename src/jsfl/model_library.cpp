@@ -20,10 +20,14 @@
 #include "../edit/element_commands.h"
 #include "../edit/layer_commands.h"
 #include "../edit/library_commands.h"
+#include "../edit/library_media.h"
 #include "../edit/property_command.h"
 #include "../edit/selection.h"
+#include "../util/png_writer.h"
 
 #include <algorithm>
+#include <cctype>
+#include <cstdio>
 #include <filesystem>
 #include <fstream>
 #include <map>
@@ -236,8 +240,19 @@ void deleteItem(Library& library, Item& item)
         library.push(fla::CommandPtr(new RemoveFolderCommand(&data, item.folder())));
         break;
     }
-    default:
-        throw Error("Phoenix cannot delete sounds and videos from scripts yet.");
+    case Item::Kind::Sound:
+    case Item::Kind::Video:
+    {
+        const std::string name = item.name();
+        const std::map<std::string, int> uses = fla::library::useCounts(data);
+        const auto found = uses.find(name);
+        if (found != uses.end() && found->second > 0)
+            throw Error("The " + std::string(item.kind == Item::Kind::Sound ? "sound " : "video ") + name +
+                " is still used; delete what uses it first.");
+        library.push(fla::CommandPtr(new fla::RemoveMediaCommand(&data, name,
+            item.kind == Item::Kind::Sound ? "Delete Sound" : "Delete Video")));
+        break;
+    }
     }
 }
 
@@ -446,10 +461,14 @@ const ClassInfo& Library::classInfo() const
             if (items.empty())
                 return Value();
             Item& item = *items.front();
-            for (const Property& property : item.classInfo().properties)
+            // itemType is Item's, which each kind of item inherits.
+            for (const ClassInfo* info = &item.classInfo(); info; info = info->parent)
             {
-                if (property.name == "itemType")
-                    return property.get(item);
+                for (const Property& property : info->properties)
+                {
+                    if (property.name == "itemType")
+                        return property.get(item);
+                }
             }
             return Value();
         });
@@ -646,8 +665,6 @@ void describeItem(ClassDef<Item>& def)
             // A bare name renames it where it is.
             if (to.find('/') == std::string::npos && !folderOf(from).empty())
                 to = folderOf(from) + "/" + to;
-            if (i.kind == Item::Kind::Sound || i.kind == Item::Kind::Video)
-                throw Error("Phoenix cannot rename sounds and videos from scripts yet.");
             rename(i, from, to);
             i.itemName = to;
         });
@@ -727,10 +744,99 @@ void describeBitmap(ClassDef<Item>& def)
             bytes = &bitmap->imageData.get();
         else if (!bitmap->datData.empty() && fla::isJpegData(bitmap->datData.get()))
             bytes = &bitmap->datData.get();
+        const std::string path = uri::toPath(arg(args, 0).toString());
+        std::vector<uint8_t> png;
+        if (!bytes && fla::isLosslessBitmapData(bitmap->datData.get()))
+        {
+            // The FLA's own lossless encoding, written out as a PNG.
+            std::string extension = std::filesystem::u8path(path).extension().u8string();
+            std::transform(extension.begin(), extension.end(), extension.begin(),
+                [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+            if (extension == ".jpg" || extension == ".jpeg")
+                throw Error("Phoenix exports this bitmap as a PNG, not a JPEG.");
+            fla::DecodedBitmap decoded;
+            if (!fla::decodeLosslessBitmap(bitmap->datData.get(), decoded))
+                throw Error("The bitmap " + bitmap->name + " could not be read.");
+            std::vector<uint8_t> rgba(decoded.pixels.size() * 4);
+            for (size_t p = 0; p < decoded.pixels.size(); ++p)
+            {
+                // Premultiplied ARGB to straight RGBA.
+                const uint32_t pixel = decoded.pixels[p];
+                const uint32_t alpha = pixel >> 24;
+                for (int channel = 0; channel < 3; ++channel)
+                {
+                    const uint32_t value = (pixel >> (16 - channel * 8)) & 0xFF;
+                    rgba[p * 4 + channel] = static_cast<uint8_t>(alpha ? std::min<uint32_t>(255, (value * 255 + alpha / 2) / alpha) : 0);
+                }
+                rgba[p * 4 + 3] = static_cast<uint8_t>(alpha);
+            }
+            png = png::encodeRgba(decoded.width, decoded.height, rgba);
+            if (png.empty())
+                throw Error("The bitmap " + bitmap->name + " could not be encoded.");
+            bytes = &png;
+        }
         if (!bytes)
             throw Error("Phoenix cannot export this bitmap's pixels from a script yet.");
-        std::ofstream out(std::filesystem::u8path(uri::toPath(arg(args, 0).toString())), std::ios::binary);
+        std::ofstream out(std::filesystem::u8path(path), std::ios::binary);
         out.write(reinterpret_cast<const char*>(bytes->data()), static_cast<std::streamsize>(bytes->size()));
+        return Value(static_cast<bool>(out));
+    });
+}
+
+void putLittle(std::vector<uint8_t>& out, uint32_t value, int bytes)
+{
+    for (int i = 0; i < bytes; ++i)
+        out.push_back(static_cast<uint8_t>(value >> (8 * i)));
+}
+
+void describeSound(ClassDef<Item>& def)
+{
+    def.method("exportToFile", 1, [](Item& i, const Args& args) {
+        // The sound as the library keeps it: an MP3 as it is, samples as a
+        // WAV file.
+        const std::string name = i.name();
+        const fla::Document& data = i.data();
+        const auto info = std::find_if(data.sounds.begin(), data.sounds.end(),
+            [&name](const fla::Document::SoundInfo& sound) { return sound.name == name; });
+        const auto file = info == data.sounds.end() ? data.extraFiles.end()
+            : std::find_if(data.extraFiles.begin(), data.extraFiles.end(),
+                  [&info](const auto& entry) { return entry.first == info->dataPath; });
+        if (file == data.extraFiles.end())
+            throw Error("The sound " + name + " has no data in the document.");
+        const std::vector<uint8_t>& samples = file->second.get();
+        const bool mp3 = (samples.size() >= 3 && samples[0] == 'I' && samples[1] == 'D' && samples[2] == '3') ||
+            (samples.size() >= 2 && samples[0] == 0xFF && (samples[1] & 0xE0) == 0xE0 && info->format.find("bit") == std::string::npos);
+        const std::string path = uri::toPath(arg(args, 0).toString());
+        std::vector<uint8_t> bytes;
+        if (mp3)
+            bytes = samples;
+        else
+        {
+            // "44kHz 16bit Stereo": 5.5, 11, 22 or 44.1 kHz.
+            int khz = 0;
+            int bits = 0;
+            if (std::sscanf(info->format.c_str(), "%dkHz %dbit", &khz, &bits) != 2 || (bits != 8 && bits != 16))
+                throw Error("Phoenix cannot export the sound " + name + " (" + info->format + ") yet.");
+            const uint32_t rate = khz == 5 ? 5512 : khz == 11 ? 11025 : khz == 22 ? 22050 : khz == 44 ? 44100 : khz * 1000;
+            const uint32_t channels = info->format.find("Stereo") != std::string::npos ? 2 : 1;
+            const uint32_t align = channels * static_cast<uint32_t>(bits / 8);
+            const uint32_t size = static_cast<uint32_t>(samples.size());
+            bytes.insert(bytes.end(), {'R', 'I', 'F', 'F'});
+            putLittle(bytes, 36 + size, 4);
+            bytes.insert(bytes.end(), {'W', 'A', 'V', 'E', 'f', 'm', 't', ' '});
+            putLittle(bytes, 16, 4);
+            putLittle(bytes, 1, 2);
+            putLittle(bytes, channels, 2);
+            putLittle(bytes, rate, 4);
+            putLittle(bytes, rate * align, 4);
+            putLittle(bytes, align, 2);
+            putLittle(bytes, static_cast<uint32_t>(bits), 2);
+            bytes.insert(bytes.end(), {'d', 'a', 't', 'a'});
+            putLittle(bytes, size, 4);
+            bytes.insert(bytes.end(), samples.begin(), samples.end());
+        }
+        std::ofstream out(std::filesystem::u8path(path), std::ios::binary);
+        out.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
         return Value(static_cast<bool>(out));
     });
 }
@@ -747,6 +853,7 @@ const ItemClasses& itemClasses()
         ClassDef<Item> bitmap(c.bitmap, "BitmapItem", &c.item);
         describeBitmap(bitmap);
         ClassDef<Item> sound(c.sound, "SoundItem", &c.item);
+        describeSound(sound);
         ClassDef<Item> video(c.video, "VideoItem", &c.item);
         ClassDef<Item> folder(c.folder, "FolderItem", &c.item);
         return true;
