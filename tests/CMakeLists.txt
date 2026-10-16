@@ -142,7 +142,7 @@ endif()
 
 # Playing movies with their scripts, with libas3 in the build.
 if(TARGET phoenix_core AND TARGET as3_parser)
-    list(APPEND TEST_SOURCES test_movie_runtime.cpp)
+    list(APPEND TEST_SOURCES test_movie_runtime.cpp test_display.cpp)
 endif()
 
 # Python scripts over the same object model; the tests skip themselves where

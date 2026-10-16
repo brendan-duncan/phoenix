@@ -208,6 +208,15 @@ set(PHOENIX_CORE_PYTHON_SOURCES
 # Playing movies with their ActionScript (Control > Test Movie): libas3.
 set(PHOENIX_CORE_PLAY_SOURCES
     play/movie_runtime.cpp
+    play/display/bitmap_data.cpp
+    play/display/bitmap_filter.cpp
+    play/display/blend.cpp
+    play/display/display_object.cpp
+    play/display/events.cpp
+    play/display/geom.cpp
+    play/display/graphics.cpp
+    play/display/stage.cpp
+    play/display/text_field.cpp
 )
 
 # phoenix_add_core(<target> <src dir> [FILES] [JSFL] [PYTHON] [PLAY]): the core
