@@ -44,9 +44,32 @@
     <tr><td>Particle systems</td><td>The Particles behavior, Window &gt; Behaviors</td></tr>
     <tr><td>Expressions and expression columns</td><td>Behaviors, built in or written as short JavaScript files; Link to Controller ties a property to a master controller</td></tr>
     <tr><td>Scripting (QtScript, Python)</td><td>Commands &gt; Script Editor: JSFL and Python</td></tr>
+    <tr><td>Node view (Composite, Cutter, Peg, effect and Display nodes)</td><td><a href="node-graph.html">Window &gt; Node Graph</a>: Composite and Merge nodes, Matte for cutters, Transform for a peg's move, every effect as a node, and the Output as the display</td></tr>
+    <tr><td>Drawing substitution</td><td><a href="symbols.html">Window &gt; Frame Picker</a>, or the drawings in a column of the <a href="rigging.html#x-sheet">X-Sheet</a></td></tr>
+    <tr><td>Onion skin</td><td><a href="frames.html">View &gt; Onion Skin</a>, and Edit &gt; Timeline &gt; Edit Multiple Frames to work on several drawings at once</td></tr>
+    <tr><td>Pencil line thickness, stroke sculpting</td><td>The <a href="drawing-tools.html">Width tool</a> (U)</td></tr>
+    <tr><td>Free-form deformation over a drawing</td><td>The <a href="bones.html">Asset Warp tool</a> (Shift+W): pins on the art, turned, dragged and keyed</td></tr>
+    <tr><td>Morphing with hints</td><td><a href="tweens.html">Shape tweens</a>, steered by Modify &gt; Shape &gt; Add Shape Hint</td></tr>
+    <tr><td>Paint with gap closing</td><td>The Paint Bucket's gap size on the Tool tab: Close Small, Medium or Large Gaps</td></tr>
+    <tr><td>Time remapping in the Xsheet</td><td>The <a href="behaviors.html">Time Remap</a> behavior, its Frame shown keyed or drawn as a curve in the Motion Editor</td></tr>
+    <tr><td>Motion Blur module</td><td><a href="behaviors.html">Motion Blur</a>: right-click a layer &gt; Motion Blur, the shutter on the Doc tab</td></tr>
+    <tr><td>3D rotation, lights and depth of field</td><td>The 3D section of the Properties panel, and its <a href="selecting.html">Lights and Depth</a> dialog: several lights, shadows and extrusion</td></tr>
+    <tr><td>Safe area and field guide</td><td><a href="stage.html">View &gt; Safe Zones</a></td></tr>
+    <tr><td>Keyboard shortcut sets</td><td><a href="shortcuts.html">Edit &gt; Keyboard Shortcuts</a></td></tr>
     <tr><td>Batch rendering</td><td><a href="export.html#render-queue">Window &gt; Render Queue</a>, or <a href="command-line.html">Phoenix render</a></td></tr>
   </tbody>
 </table>
+
+<h2 id="node-graph">The node graph</h2>
+
+<p>Phoenix's <a href="node-graph.html">Node Graph</a> composites a timeline's layers much as Harmony's node view composites a scene, with a few differences:</p>
+
+<ul>
+  <li><strong>Layers come first.</strong> A timeline stacks its layers as usual until you create a graph for it, and the graph can be turned off again. In a graph, a <strong>Layer</strong> node takes one layer (or a folder) out of the stack, and <strong>Other Layers</strong> brings in all the rest, so a layer added later still shows.</li>
+  <li><strong>Each timeline has its own.</strong> A symbol's graph goes wherever the symbol does, in every instance of it.</li>
+  <li><strong>Rigging stays on the timeline.</strong> Pegs, parenting and bones are set on layers and in the X-Sheet, not as nodes; the graph is for compositing.</li>
+  <li><strong>What you see.</strong> Each node shows a picture of its result, and its eye shows that node on the stage, as a Display node would.</li>
+</ul>
 
 <p>Phoenix saves Phoenix documents (<code>.phx</code>), FLA files and XFL folders rather than Harmony scenes. What only Phoenix draws (deformers, effect layers, palettes) is kept in the file for Phoenix, and the rest opens anywhere FLA files do.</p>
 
