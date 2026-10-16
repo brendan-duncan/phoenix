@@ -207,7 +207,7 @@ TEST(compound_file_survives_a_difat_that_points_at_itself)
 
 namespace {
 
-/// A Contents stream with nothing in it, of the oldest version read.
+/// A Contents stream with nothing in it, of MX 2004 unless given.
 std::vector<uint8_t> emptyContents(uint16_t version = 0x129)
 {
     std::vector<uint8_t> contents(400, 0);
@@ -516,4 +516,129 @@ TEST(binary_fla_reads_flash_8_contents_and_32_bit_tags)
     std::string warning;
     // Both layers read (a misread tag would stop the page with a warning).
     CHECK(BinaryFla::convert(streams, files, error, &warning) && warning.empty() && files.count("DOMDocument.xml"));
+}
+
+TEST(binary_fla_reads_every_contents_version)
+{
+    // Flash 5 to CS4, with the high byte of the version 0 or 1.
+    for (const uint16_t version : {0x1B, 0x11B, 0x20, 0x120, 0x29, 0x129, 0x38, 0x138, 0x3F, 0x13F, 0x43, 0x143, 0x147})
+    {
+        std::map<std::string, std::vector<uint8_t>> streams;
+        streams["Contents"] = emptyContents(version);
+        std::map<std::string, std::vector<uint8_t>> files;
+        std::string error;
+        std::string warning;
+        CHECK(BinaryFla::convert(streams, files, error, &warning) && warning.empty());
+    }
+}
+
+TEST(binary_fla_reads_flash_5_layers_frames_and_actions)
+{
+    // Contents 0x1B naming a scene, and its page: a layer linked to the
+    // layer above it, which is serialized inline in the link and named again
+    // in the page's list by reference; a frame holding an action record.
+    std::vector<uint8_t> c = {0x1B, 0, 0, 0, 0, 0, 0};
+    std::vector<uint8_t> body;
+    const auto u32 = [](std::vector<uint8_t>& b, uint32_t v) {
+        for (int i = 0; i < 4; ++i)
+            b.push_back(static_cast<uint8_t>(v >> (8 * i)));
+    };
+    const auto text = [](std::vector<uint8_t>& b, const std::string& s) {
+        b.push_back(static_cast<uint8_t>(s.size()));
+        b.insert(b.end(), s.begin(), s.end());
+    };
+    const auto declare = [&text](std::vector<uint8_t>& b, const std::string& cls) {
+        b.insert(b.end(), {0xFF, 0xFF, 1, 0, static_cast<uint8_t>(cls.size()), 0});
+        b.insert(b.end(), cls.begin(), cls.end());
+    };
+    declare(c, "CDocumentPage");
+    c.push_back(8); // schema
+    text(c, "Page 1");
+    text(c, "Scene 1");
+    u32(c, 0);
+    c.push_back(0);
+    text(c, "");
+    u32(c, 1);
+    u32(c, 4); // item header
+    u32(c, 1);
+    c.insert(c.end(), 8, 0);
+    u32(c, 1);
+    c.insert(c.end(), 8, 0);
+    u32(c, 0);
+    u32(c, 0); // last modified
+    c.resize(c.size() + 400, 0);
+
+    const auto frame = [&](bool first, uint32_t actions) {
+        if (first)
+            declare(body, "CPicFrame");
+        else
+            body.insert(body.end(), {0x05, 0x80});
+        body.insert(body.end(), {1, 0, 0, 0}); // CPicObj: schema 1, flags, no children
+        body.insert(body.end(), 8, 0);
+        body.push_back(2);              // shape schema
+        body.insert(body.end(), 24, 0); // matrix
+        body.push_back(4);              // shape data schema: no cubics
+        u32(body, 0);
+        body.insert(body.end(), {0, 0, 0, 0, 0});
+        body.push_back(18); // frame schema
+        body.insert(body.end(), {1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0});
+        u32(body, 0);
+        u32(body, 0);
+        body.insert(body.end(), {0, 0});
+        text(body, first ? "go" : "");
+        u32(body, actions);
+        for (uint32_t i = 0; i < actions; ++i)
+        {
+            body.push_back(9);
+            u32(body, 0x10); // fscommand
+            body.insert(body.end(), {1, 0, 0x80, 0xC1, 0});
+            text(body, "allowscale");
+            text(body, "false");
+            text(body, "");
+            body.insert(body.end(), 32, 0);
+            u32(body, 0xFFFFFFFF);
+            body.insert(body.end(), {0, 0});
+            text(body, "");
+            text(body, "MouseDown");
+            body.insert(body.end(), 67, 0);
+        }
+        body.insert(body.end(), 12, 0);
+        body.insert(body.end(), {0, 0, 0, 0, 0, 0, 0, 0, 0}); // no morph, u32, no hints, CString
+    };
+    const auto layer = [&](const std::string& name) {
+        body.insert(body.end(), {0, 0}); // no more frames
+        body.insert(body.end(), 8, 0);
+        body.push_back(8); // layer schema
+        text(body, name);
+        body.insert(body.end(), 3 + 4 + 4 + 4 + 4, 0);
+        body.push_back(0); // type
+        body.insert(body.end(), {0, 0});
+    };
+    body.insert(body.end(), {1, 0}); // the page's CPicObj
+    declare(body, "CPicLayer");
+    body.insert(body.end(), {1, 0});
+    frame(true, 1);
+    layer("Lower");
+    body.insert(body.end(), {0x03, 0x80, 1, 0}); // linked: the upper layer, inline
+    frame(false, 0);
+    layer("Upper");
+    body.insert(body.end(), {0, 0, 0}); // no link, a byte
+    body.push_back(0);                  // the lower layer's last byte
+    body.insert(body.end(), {7, 0});    // the upper layer again, by reference
+    body.insert(body.end(), {0, 0});    // no more layers
+    body.insert(body.end(), 8, 0);
+    body.insert(body.end(), {2, 0, 0}); // page schema 2: no guide list
+    std::map<std::string, std::vector<uint8_t>> streams;
+    streams["Contents"] = c;
+    streams["Page 1"] = pageStream(body);
+    std::map<std::string, std::vector<uint8_t>> files;
+    std::string error;
+    std::string warning;
+    CHECK(BinaryFla::convert(streams, files, error, &warning));
+    CHECK(warning.empty());
+    const auto xml = files["DOMDocument.xml"];
+    const std::string document(xml.begin(), xml.end());
+    CHECK(document.find("name=\"Lower\"") != std::string::npos);
+    CHECK(document.find("name=\"Upper\"") != std::string::npos);
+    CHECK(document.find("name=\"go\"") != std::string::npos);
 }

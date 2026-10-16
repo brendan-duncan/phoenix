@@ -11,6 +11,7 @@ What changed in each release of Phoenix, newest first.
 - Python as a module: `import phoenix` from your own Python opens, changes, renders and saves documents in a windowless Phoenix
 - Python scripts: keyword arguments (`timeline.insert_frames(5, all_layers=True)`), and `fl.runScript` runs JSFL scripts too; `Phoenix batch --python` runs scripts inside Phoenix, like `--jsfl`
 - SWF export: sounds inside movie clips play, sounds keep their envelopes, in and out points and loops, and each library sound keeps its own compression; Animate's stream and event sound settings are read from the file
+- Old binary FLA files open from Flash 5, MX, MX 2004, Flash 8, CS3 and CS4, including the versions Phoenix refused before; more of each reads too: rectangle primitives, videos on the stage, CS4 text, exported symbols, and scripts in MX files
 
 ## 0.13.3
 

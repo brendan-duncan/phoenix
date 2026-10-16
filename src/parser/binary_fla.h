@@ -17,10 +17,12 @@
 /// script, sound); shapes and groups (solid, gradient and bitmap fills,
 /// strokes, edges to the 1/256 twip); symbol instances (matrix,
 /// transformation point, loop and first frame, color effect, name); bitmaps
-/// placed on the stage; shape tweens (as the tween type: Phoenix tweens from
-/// the keyframes); static text; bitmaps (JPEG and lossless), sounds, and
-/// embedded videos (as where they came from). MX 2004, Flash 8 and CS3
-/// documents are read in full; CS4 drawing objects are not yet.
+/// and videos placed on the stage; rectangle primitives (as the drawing
+/// objects they draw as); shape tweens (as the tween type: Phoenix tweens
+/// from the keyframes); static text; bitmaps (JPEG and lossless), sounds,
+/// and embedded videos (as where they came from). Documents from Flash 5 to
+/// CS4 are read; Flash 5 scripts, kept as action records rather than text,
+/// are left out, and CS4 drawing objects are not yet read.
 ///
 /// The format is undocumented. The layouts here follow the independent
 /// reverse engineering in fla-decoder (MIT, Ed Moore) and were checked

@@ -84,6 +84,14 @@ std::string fromUtf16(const uint8_t* bytes, size_t units)
     return out;
 }
 
+/// Some MX 2004 documents end their strings (stream and font names) with a
+/// NUL.
+void trimNul(std::string& name)
+{
+    while (!name.empty() && name.back() == '\0')
+        name.pop_back();
+}
+
 // ---------------------------------------------------------------------------
 // The model read from the streams
 
@@ -509,7 +517,7 @@ void readPicObj(Reader& r, Object& o)
     o.pointX = r.s32();
     o.pointY = r.s32();
     o.hasPoint = !(o.pointX == kIntMin && o.pointY == kIntMin);
-    if (schema >= 5)
+    if (schema >= 4)
         r.skip(2);
 }
 
@@ -620,7 +628,7 @@ void readShapeData(Reader& r, ShapeData& shape, int shapeSchema)
         e.tx = e.fx + d[2][0];
         e.ty = e.fy + d[2][1];
         e.straight = (f & 0x0C) == 0;
-        if (e.straight && shapeSchema >= 3)
+        if (e.straight && shapeSchema >= 6)
             r.u8();
         e.move = d[0][0] != 0 || d[0][1] != 0 || shape.edges.empty();
         e.line = styles[0];
@@ -643,7 +651,7 @@ void readShapeData(Reader& r, ShapeData& shape, int shapeSchema)
         for (int32_t i = 0; i < cubics; ++i)
         {
             r.skip(32);
-            if (shapeSchema < 3)
+            if (shapeSchema < 6)
                 continue;
             const uint8_t points = r.u8();
             r.skip(static_cast<size_t>(points) * 10);
@@ -664,19 +672,76 @@ void readShapeBody(Reader& r, Object& o)
 std::string readActions(Reader& r)
 {
     const uint32_t version = r.u32();
-    r.skip(12);
+    const uint32_t kind = r.u32();
+    // Version 0 (MX) is the two u32s alone, kind 0 adding two more as in
+    // version 1. [S]
+    if (version == 0)
+    {
+        if (kind == 0)
+            r.skip(8);
+        return kind == 1 ? r.cstring() : std::string();
+    }
+    r.u32();
+    const uint32_t extra = r.u32();
     if (version >= 5)
+    {
+        // The fourth u32 is 0 but once (a CS4 button), where it is 1 and one
+        // more u32 follows: taken as a count. [G]
+        if (extra > 1000)
+            r.fail("a bad action block");
+        r.skip(4 * static_cast<size_t>(extra));
         r.u32();
-    // Version 4 (Flash 8) has the script without the u32 before it.
-    if (version >= 4)
+    }
+    // Version 4 (Flash 8) has the script without the u32 before it; in
+    // version 1 (MX 2004) the second u32 says whether there is one (1) or
+    // not (2), and 0 adds two u32s (0). [S]
+    if (version >= 4 || kind == 1)
         return r.cstring();
+    if (kind == 0)
+        r.skip(8);
     return std::string();
+}
+
+/// Flash 5 kept a frame's or button's actions as records of its own rather
+/// than script text: a count, then each action. Phoenix reads past them. [S]
+void readFlash5Actions(Reader& r)
+{
+    const uint32_t count = r.u32();
+    if (count > 100000)
+        r.fail("a bad action count");
+    for (uint32_t i = 0; i < count; ++i)
+    {
+        r.u8();
+        r.u32(); // the action
+        r.skip(5);
+        // Its parameters: three CStrings, 32 bytes, a u32 (-1), a u16, two
+        // CStrings and 67 bytes.
+        r.cstring();
+        r.cstring();
+        r.cstring();
+        r.skip(32 + 4 + 2);
+        r.cstring();
+        r.cstring();
+        r.skip(67);
+    }
 }
 
 void readShape(Reader& r, Object& o)
 {
     readPicObj(r, o);
     readShapeBody(r, o);
+}
+
+/// A rectangle primitive (CS3 and later): a shape holding the rectangle as
+/// drawn, then a schema byte (3), a byte (1: the corners locked together?)
+/// and the four corner radii (s32 twips). Written as the drawing object it
+/// draws as. [S]
+void readRectangle(Reader& r, Object& o)
+{
+    readShape(r, o);
+    r.u8();
+    r.u8();
+    r.skip(16);
 }
 
 void readFrame(Reader& r, Object& o)
@@ -696,13 +761,20 @@ void readFrame(Reader& r, Object& o)
     o.soundOut = r.s32();
     r.u16(); // sound zoom
     o.label = r.cstring();
-    o.script = readActions(r);
+    if (schema >= 21)
+        o.script = readActions(r);
+    else
+        readFlash5Actions(r);
     r.skip(12);
     o.morph = r.readObject(kTimeline) != nullptr;
     r.u32();
     r.readObject(kTimeline);
     r.cstring();
-    r.skip(12);
+    // Schema 21 (MX) has two u32s here, 18 (Flash 5) none. [S]
+    if (schema >= 22)
+        r.skip(12);
+    else if (schema >= 21)
+        r.skip(8);
     if (schema >= 24)
     {
         r.u32();
@@ -732,7 +804,7 @@ void readFrame(Reader& r, Object& o)
 void readLayer(Reader& r, Object& o)
 {
     readPicObj(r, o);
-    r.u8(); // layer schema
+    const uint8_t schema = r.u8();
     o.name = r.cstring();
     o.current = r.u8() != 0;
     o.hidden = r.u8() != 0;
@@ -742,9 +814,21 @@ void readLayer(Reader& r, Object& o)
     r.u32(); // outline mode
     r.u32(); // height
     o.layerType = r.u8();
+    if (schema < 10)
+    {
+        // Flash 5: two bytes, then the layer it is linked to (serialized
+        // inline when it comes later in the list, as a folder is), and a
+        // byte. [S]
+        r.skip(2);
+        o.parent = r.readObject(kTimeline);
+        r.u8();
+        return;
+    }
     o.parent = r.readObject(kTimeline);
     r.u8();
     o.autoNamed = r.u8() != 0;
+    if (schema >= 13)
+        r.u8(); // CS4 [S]
 }
 
 void readPage(Reader& r, Object& o)
@@ -756,8 +840,12 @@ void readPage(Reader& r, Object& o)
         r.u16();
     if (schema >= 7)
         r.u32();
-    const uint32_t guides = r.u32();
-    r.skip(static_cast<size_t>(guides) * 8);
+    // Schema 2 (Flash 5) has no guide list. [S]
+    if (schema >= 3)
+    {
+        const uint32_t guides = r.u32();
+        r.skip(static_cast<size_t>(guides) * 8);
+    }
 }
 
 void readInstance(Reader& r, Object& o)
@@ -778,22 +866,58 @@ void readInstance(Reader& r, Object& o)
     o.tint = r.color();
     o.instanceName = r.cstring();
     o.symbol = r.u32();
-    if (schema >= 19)
+    if (schema >= 22)
+    {
+        // CS4: the 3D transform, a 4 x 4 matrix of floats, then 24 bytes,
+        // an unset point (INT_MIN, INT_MIN) and 6 bytes. [S]
+        r.skip(7 + 64 + 24 + 8 + 6);
+    }
+    else if (schema >= 19)
         r.skip(7);
     else if (schema >= 14)
         r.skip(3); // Flash 8
+    else if (schema == 8)
+        r.skip(11); // MX [S]
 }
 
-/// A bitmap on the stage: the CPicObj base, a schema byte (2), its matrix
-/// (bitmap pixels to the parent, translation in twips), the number N of its
-/// "Media N" and a byte (0).
+/// A bitmap on the stage: the CPicObj base, a schema byte (1 or 2), its
+/// matrix (bitmap pixels to the parent, translation in twips), the number N
+/// of its "Media N" and, from schema 2, a byte (0).
 void readBitmapInstance(Reader& r, Object& o)
+{
+    readPicObj(r, o);
+    const uint8_t schema = r.u8();
+    o.matrix = r.matrix();
+    o.number = r.u16();
+    if (schema >= 2)
+        r.u8();
+}
+
+/// A video on the stage: the CPicObj base, a schema byte, its matrix, its
+/// frame (4 x s32 twips: xmin, xmax, ymin, ymax), a byte, two CStrings, a
+/// u32 (1) and the number N of its "Media N". [S]
+void readVideoInstance(Reader& r, Object& o)
+{
+    readPicObj(r, o);
+    r.u8();
+    o.matrix = r.matrix();
+    for (int32_t& bound : o.bounds)
+        bound = r.s32();
+    r.u8();
+    r.cstring();
+    r.cstring();
+    r.u32();
+    o.number = r.u16();
+}
+
+/// An MX video on the stage: the CPicObj base, a schema byte (0), its
+/// matrix and the number N of its "Media N". [S]
+void readVideoInstanceMx(Reader& r, Object& o)
 {
     readPicObj(r, o);
     r.u8();
     o.matrix = r.matrix();
     o.number = r.u16();
-    r.u8();
 }
 
 /// An MFC CObList: a count, then that many objects.
@@ -861,12 +985,18 @@ void readSprite(Reader& r, Object& o)
 {
     readInstance(r, o);
     const uint8_t schema = r.u8();
-    o.script = readActions(r);
+    // Schema 1 (Flash 5) is the instance name alone. [S]
+    if (schema >= 2)
+        o.script = readActions(r);
     const std::string name = r.cstring();
     if (!name.empty())
         o.instanceName = name;
+    if (schema < 2)
+        return;
     r.u32();
     r.u8();
+    if (schema < 4)
+        return; // MX [S]
     r.skip(12);
     if (schema >= 8)
     {
@@ -879,7 +1009,14 @@ void readSprite(Reader& r, Object& o)
 void readButton(Reader& r, Object& o)
 {
     readInstance(r, o);
-    r.u8();
+    const uint8_t schema = r.u8();
+    if (schema < 5)
+    {
+        // Flash 5: the actions and a byte. [S]
+        readFlash5Actions(r);
+        r.u8();
+        return;
+    }
     o.script = readActions(r);
     r.u8();
     const std::string name = r.cstring();
@@ -897,9 +1034,16 @@ void readText(Reader& r, Object& o)
         bound = r.s32();
     r.u8();
     r.u8();
-    r.u32();
-    r.u16();
-    r.cstring();
+    const uint32_t flags = r.u32();
+    if (schema >= 5)
+        r.u16(); // not in Flash 5's schema 4 [S]
+    r.cstring(); // instance name
+    // Another CString when 0x2000 is set in either half of the flags (seen
+    // twice, a CS3 and a CS4 text; never otherwise). [S]
+    if (schema >= 5 && ((flags | flags >> 16) & 0x2000))
+        r.cstring();
+    if (schema >= 14)
+        r.u8(); // CS4 [S]
     for (;;)
     {
         const uint16_t count = r.u16();
@@ -909,14 +1053,48 @@ void readText(Reader& r, Object& o)
         const uint8_t runSchema = r.u8();
         run.size = r.u16();
         const bool wide = runSchema >= 10;
-        run.font = wide ? r.wide8() : r.ansi8();
-        run.color = r.color();
-        const size_t attrs = runSchema == 7 ? 23 : runSchema == 10 ? 24 : runSchema == 12 ? 35 : 0;
-        if (attrs == 0)
-            r.fail("a text run of a schema Phoenix does not know");
-        std::vector<uint8_t> a(attrs);
-        for (uint8_t& byte : a)
-            byte = r.u8();
+        std::vector<uint8_t> a;
+        if (runSchema == 15)
+        {
+            // CS4: the family and PostScript names, a u32 and the color,
+            // then the attributes of schema 12 with its URL, target and
+            // last field as CStrings rather than bytes. [S]
+            run.font = r.cstring();
+            const std::string face = r.cstring();
+            if (!face.empty())
+                run.font = face;
+            r.u32();
+            run.color = r.color();
+            a.resize(18);
+            for (uint8_t& byte : a)
+                byte = r.u8();
+            r.cstring();
+            r.u32();
+            r.cstring();
+            r.skip(10);
+            r.cstring();
+        }
+        else
+        {
+            run.font = wide ? r.wide8() : r.ansi8();
+            trimNul(run.font);
+            run.color = r.color();
+            // Schema 7 holds the link's URL and target as strings: 23 bytes
+            // with both empty, more where they end in a NUL. [S]
+            const size_t attrs = runSchema == 4 || runSchema == 7 ? 18
+                : runSchema == 5 ? 19 : runSchema == 10 ? 24 : runSchema == 12 ? 35 : 0;
+            if (attrs == 0)
+                r.fail("a text run of a schema Phoenix does not know");
+            a.resize(attrs);
+            for (uint8_t& byte : a)
+                byte = r.u8();
+            if (runSchema == 7)
+            {
+                r.ansi8();
+                r.skip(3);
+                r.ansi8();
+            }
+        }
         run.bold = a[2] != 0;
         run.italic = a[3] != 0;
         run.alignment = a[7];
@@ -938,6 +1116,9 @@ void readText(Reader& r, Object& o)
         }
         o.runs.push_back(run);
     }
+    // Flash 5's schemas 4 and 5 end with the runs. [S]
+    if (schema < 6)
+        return;
     r.cstring();
     r.u32();
     r.u32();
@@ -957,6 +1138,8 @@ const std::map<std::string, Reader::Serializer> kTimeline = {
     {"CObList", readObList},
     {"CMorphHintItem", readMorphHint},
     {"CPicBitmap", readBitmapInstance},
+    {"CPicVideoStream", readVideoInstance},
+    {"CPicVideo", readVideoInstanceMx},
     {"CPicMorphShape", readMorphShape},
     {"CMorphSegment", readMorphSegment},
     {"CMorphCurve", readMorphCurve},
@@ -964,6 +1147,7 @@ const std::map<std::string, Reader::Serializer> kTimeline = {
     {"CPicLayer", readLayer},
     {"CPicFrame", readFrame},
     {"CPicShape", readShape},
+    {"CPicRect", readRectangle},
     {"CPicSymbol", readInstance},
     {"CPicSprite", readSprite},
     {"CPicButton", readButton},
@@ -975,13 +1159,15 @@ const std::map<std::string, Reader::Serializer> kTimeline = {
 
 void readLinkage(Reader& r)
 {
-    const uint32_t version = r.u32();
+    // The low byte is the version; 0x100 is set on an exported symbol. [S]
+    const uint32_t version = r.u32() & 0xFF;
     r.u8();
     r.cstring();
     r.cstring();
-    r.cstring();
+    // Version 3 (MX 2004) has two CStrings and the byte. [S]
     if (version >= 5)
-        r.u8();
+        r.cstring();
+    r.u8();
     r.u32();
 }
 
@@ -1002,13 +1188,26 @@ ItemHeader readItem(Reader& r)
     r.u32();
     item.itemId = r.itemId();
     r.u32();
+    // Version 4 (Flash 5) ends here. [S]
+    if (version < 5)
+        return item;
+    if (r.version < 0x129)
+    {
+        // MX and Flash 5: a u32, a byte and two CStrings (all empty in the
+        // documents seen) in place of the linkage and source. [S]
+        r.u32();
+        r.u8();
+        r.cstring();
+        r.cstring();
+        return item;
+    }
     readLinkage(r);
     readSource(r);
     if (version >= 6)
     {
-        // Flash 8 (Contents 0x138) has the byte alone; CS3 adds the rest.
+        // Flash 8 (Contents 0x138) has the byte alone; 0x13f adds the rest.
         r.u8();
-        if (r.version >= 0x143)
+        if (r.version >= 0x13f)
         {
             r.cstring();
             r.u8();
@@ -1021,6 +1220,7 @@ void readDocumentPage(Reader& r, Object& o)
 {
     const uint8_t schema = r.u8();
     o.stream = schema >= 22 ? r.wide8() : r.ansi8();
+    trimNul(o.stream);
     o.name = r.cstring();
     o.number = static_cast<int>(r.u32());
     o.symbolType = r.u8();
@@ -1028,18 +1228,26 @@ void readDocumentPage(Reader& r, Object& o)
     r.u32();
     o.item = readItem(r);
     o.lastModified = r.u32();
+    if (schema < 12)
+        return; // Flash 5 [S]
     r.cstring();
     r.cstring();
     r.u32();
     r.u8();
     r.u32();
     r.u32();
+    if (schema < 17)
+    {
+        r.skip(3); // MX [S]
+        return;
+    }
     readLinkage(r);
     readSource(r);
     if (schema >= 22)
     {
-        // Schema 22 (Flash 8) is schema 24 (CS3) without a few fields.
-        if (schema >= 24)
+        // Schema 22 (Flash 8) is schema 24 (CS3) without a few fields, and
+        // 23 (Contents 0x13f) is between them. [S]
+        if (schema >= 23)
         {
             r.u8();
             r.cstring();
@@ -1065,16 +1273,17 @@ void readDocumentPage(Reader& r, Object& o)
             r.skip(16);
             r.cstring();
         }
-        r.skip(8);
+        r.skip(schema == 23 ? 12 : 8);
         r.cstring();
         r.cstring();
         r.u32();
         r.cstring();
-        if (schema >= 24)
+        if (schema >= 23)
         {
             r.u32();
             r.skip(16); // scale-9 rectangle
-            r.skip(9);
+            if (schema >= 24)
+                r.skip(schema >= 25 ? 11 : 9); // CS4 writes 25 [S]
         }
     }
     else
@@ -1088,6 +1297,7 @@ uint8_t readMediaCommon(Reader& r, Object& o)
 {
     const uint8_t schema = r.u8();
     o.stream = schema >= 6 ? r.wide8() : r.ansi8();
+    trimNul(o.stream);
     o.name = r.cstring();
     o.number = r.u16();
     o.importPath = r.cstring();
@@ -1098,25 +1308,34 @@ uint8_t readMediaCommon(Reader& r, Object& o)
 
 void readMediaBits(Reader& r, Object& o)
 {
-    readMediaCommon(r, o);
-    r.u32();
+    const uint8_t schema = readMediaCommon(r, o);
+    if (schema >= 5)
+        r.u32(); // not in Flash 5 [S]
     r.u16();
     o.quality = r.u8();
     o.allowSmoothing = r.u8() != 0;
     r.u32();
+    if (schema >= 7)
+        r.u8(); // CS4 [S]
 }
 
 void readMediaSound(Reader& r, Object& o)
 {
     const uint8_t schema = readMediaCommon(r, o);
-    r.u32();
+    if (schema >= 5)
+        r.u32(); // not in Flash 5, which ends after the u32 below [S]
     r.u8();
     o.format = r.u16();
     o.sampleCount = r.u32();
     r.u32();
+    if (schema < 5)
+        return;
     r.skip(11);
     if (schema >= 6)
         r.cstring();
+    // Contents 0x13f and later add a u32, whatever the record's schema. [S]
+    if (r.version >= 0x13f)
+        r.u32();
 }
 
 void readColorDef(Reader& r, Object& o)
@@ -1148,11 +1367,19 @@ void readMediaVideo(Reader& r, Object& o)
     r.u32();
 }
 
+/// An MX video (a QuickTime or embedded one): the same, and a byte. [S]
+void readMediaVideoMx(Reader& r, Object& o)
+{
+    readMediaVideo(r, o);
+    r.u8();
+}
+
 const std::map<std::string, Reader::Serializer> kContents = {
     {"CDocumentPage", readDocumentPage},
     {"CMediaBits", readMediaBits},
     {"CMediaSound", readMediaSound},
     {"CMediaVideoStream", readMediaVideo},
+    {"CMediaVideo", readMediaVideoMx},
     {"CColorDef", readColorDef},
     {"CQTAudioSettings", readQtAudio},
 };
@@ -1186,14 +1413,19 @@ std::vector<Object*> readList(Reader& r)
 /// Reads into \a c as it goes, so that what came before a failure is kept.
 void readContents(Reader& r, Contents& c)
 {
-    // CS4 writes 0x43, with CS3's layout.
+    // The low byte is the version; documents are found with the high byte
+    // 0 or 1 and otherwise alike.
     uint16_t version = r.u16();
-    if (version == 0x43)
-        version = 0x143;
-    if (version != 0x129 && version != 0x138 && version != 0x143)
+    if (version < 0x100)
+        version |= 0x100;
+    // Each version adds to the header before the scenes.
+    static const std::map<uint16_t, size_t> header = {{0x11b, 5}, {0x120, 9}, {0x129, 13}, {0x138, 17},
+        {0x13f, 21}, {0x143, 25}, {0x147, 29}};
+    const auto known = header.find(version);
+    if (known == header.end())
         r.fail("a Contents version Phoenix does not know");
     r.version = version;
-    r.skip(version >= 0x143 ? 25 : version >= 0x138 ? 17 : 13);
+    r.skip(known->second);
     c.scenes = readList(r);
     r.skip(6);
     c.symbols = readList(r);
@@ -1241,7 +1473,8 @@ void readContents(Reader& r, Contents& c)
         const uint16_t swatches = r.u16();
         for (uint16_t i = 0; i < swatches; ++i)
             r.readObject(kContents);
-        r.u8();
+        // CS4 ends each list with two bytes. [S]
+        r.skip(version >= 0x147 ? 2 : 1);
     }
     r.skip(8 + 16 + 24);
     const uint32_t folders = r.u32();
@@ -1399,7 +1632,7 @@ private:
         const std::string path = _mediaPaths[m.number];
         const std::string dat = m.stream + ".dat";
         const auto data = _streams.find(m.stream);
-        if (m.cls == "CMediaVideoStream")
+        if (m.cls == "CMediaVideoStream" || m.cls == "CMediaVideo")
         {
             // An embedded video: its stream is in a layout Phoenix does not
             // know, so the item keeps only where the video came from.
@@ -1645,6 +1878,12 @@ private:
             parent->InsertEndChild(group);
             --_nesting;
         }
+        else if (element->cls == "CPicRect")
+        {
+            tinyxml2::XMLElement* shape = writeShape(doc, element->matrix, element->shape);
+            shape->SetAttribute("isDrawingObject", "true");
+            parent->InsertEndChild(shape);
+        }
         else if (element->cls == "CPicSymbol" || element->cls == "CPicSprite" || element->cls == "CPicButton")
         {
             parent->InsertEndChild(writeInstance(doc, *element));
@@ -1652,6 +1891,17 @@ private:
         else if (element->cls == "CPicText")
         {
             parent->InsertEndChild(writeText(doc, *element));
+        }
+        else if (element->cls == "CPicVideoStream" || element->cls == "CPicVideo")
+        {
+            tinyxml2::XMLElement* node = doc.NewElement("DOMVideoInstance");
+            const auto media = _mediaPaths.find(element->number);
+            if (media != _mediaPaths.end())
+                node->SetAttribute("libraryItemName", media->second.c_str());
+            node->SetAttribute("frameRight", element->bounds[1] - element->bounds[0]);
+            node->SetAttribute("frameBottom", element->bounds[3] - element->bounds[2]);
+            writeMatrix(doc, node, element->matrix);
+            parent->InsertEndChild(node);
         }
         else if (element->cls == "CPicBitmap")
         {
