@@ -2,10 +2,6 @@
 
 What changed in each release of Phoenix, newest first.
 
-## 0.14.0 (Unreleased)
-
-- Tutorials: each lesson has a picture of how it turns out, which plays when you pick it, and tags (Animation, Motion Graphics, Rigging and more) to show only the lessons about one thing
-
 ## 0.13.2
 
 - Many crashes fixed: closing a document tab, adding bones then closing, undoing while an AI assistant edits, objects kept by scripts after they are gone, Test Movie clips made and removed by frame scripts, very large blurs, and high-density screens running out of memory
@@ -13,6 +9,7 @@ What changed in each release of Phoenix, newest first.
 - Damaged or hostile SWF, FLA, PSD, EPS, PDF, SVG, extension and lip sync files are refused or read in part, rather than hanging Phoenix, closing it, or writing outside their folder
 - The Behaviors panel, Echo and Posterize Time, Mask Edge, bone springs, 3D Lights and Depth and template sliders use hot text numbers (drag to scrub, click to type) instead of arrow boxes
 - On Windows, a crash leaves a report in %LOCALAPPDATA%\Phoenix\Crashes to send with a bug report
+- Tutorials: each lesson has a picture of how it turns out, which plays when you pick it, and tags (Animation, Motion Graphics, Rigging and more) to show only the lessons about one thing
 
 ## 0.13.1
 
