@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How to run an episode · Phoenix User Guide</title>
+<meta name="description" content="Step by step: set up a show folder, import the animatic, split the episode into shots, link rigs from master files, push a rig change to every shot, take review notes, and render.">
+<meta name="keywords" content="how to howto walkthrough step by step production pipeline studio episode show folder animatic edl shots linked assets master rig update review notes git lfs render batch">
+<link rel="icon" href="assets/img/logo.png">
+<link rel="stylesheet" href="assets/site.css">
+<script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<main>
+<article class="content">
+
+<p class="eyebrow">Studio pipeline</p>
+<h1>How to run an episode</h1>
+<p class="lead">One episode from the cut to the final render: set up the show folder, import the animatic, link the rigs, split it into shots, push a rig change to every shot, review, and render.</p>
+
+<p>This page walks one episode, <code>ep101</code>, through each step in order. For what each feature does in full, see <a href="pipeline.html">Shots, assets and review</a>, <a href="version-control.html">Version control</a> and <a href="command-line.html">Command line</a>.</p>
+
+<h2>1. Lay out the show folder</h2>
+
+<p>Make one folder for the show, with the master files for the rigs and props at the top and a folder for each episode:</p>
+
+<pre><code>myshow/
+  .gitattributes
+  rigs/
+    kid.fla            one master file per character or prop set
+    dog.fla
+    props.fla
+  ep101/
+    edit/              the cut from the editor, its board images and audio
+    animatic/
+      ep101.fla        the whole episode, before it is split
+    shots/
+      sh010.fla ...    one file per shot, made in step 6
+    renders/</code></pre>
+
+<div class="callout">
+  <span class="label">Keep the animatic and the shots at the same depth</span>
+  <p>A link to a master file is stored relative to the file that holds it, and Export Shots copies links into the shots as they are. A link made in <code>ep101/animatic/ep101.fla</code> reads <code>../../rigs/kid.fla</code>, which is just as right from <code>ep101/shots/sh010.fla</code>. If the shots went into a folder one level deeper or shallower, such as the <code>ep101_shots</code> folder Export Shots suggests inside <code>animatic/</code>, their links would point to the wrong place.</p>
+</div>
+
+<h2>2. Put the show in version control</h2>
+
+<p>In the show folder, start a Git repository with Git LFS for the documents and media:</p>
+
+<pre><code>cd myshow
+git init
+git lfs install</code></pre>
+
+<p>Create <code>.gitattributes</code> from <a href="version-control.html#git-lfs-for-the-media">Git LFS for the media</a> before you add any documents, then commit it. Everyone on the show runs <code>git lfs install</code> once on their own machine.</p>
+
+<p>This walkthrough keeps the shots as <code>.fla</code> files: <code>Phoenix batch</code> in step 8 works on <code>.fla</code> and <code>.phx</code> files, not on XFL folders. The rigs can be XFL folders if you want their history symbol by symbol; link to the <code>.xfl</code> file inside the folder.</p>
+
+<h2>3. Build the master files</h2>
+
+<p>Each file in <code>rigs/</code> holds finished rigs as symbols in its library, named the way the shots will use them, for example <i>Kid</i>, <i>Kid Head</i>, <i>Dog</i>. The symbols a rig uses inside it (heads, hands, mouth sets) and its bitmaps live in the same file; they travel with the rig when it is linked.</p>
+
+<p>Commit the rigs. From here on, change a rig only in its master file.</p>
+
+<h2>4. Import the animatic</h2>
+
+<ol class="steps">
+  <li>Export the cut from your storyboard or editing software as a CMX 3600 EDL or a Final Cut Pro 7 XML file, and put it in <code>ep101/edit/</code> with its board images and audio. Name the clips the way you want the shots named (<code>sh010</code>, <code>sh020</code>…): each clip's name becomes its shot's label and file name.</li>
+  <li>In Phoenix, make a new document at the show's stage size and frame rate, and save it as <code>ep101/animatic/ep101.fla</code>.</li>
+  <li>Choose <span class="menu-path">File &rsaquo; Import &rsaquo; Import Animatic...</span> and pick the EDL or XML file.</li>
+</ol>
+
+<p>Phoenix adds a <em>Shots</em> layer with a frame label where each shot starts, a <em>Board</em> layer with each shot's board image fitted to the stage, and an <em>Audio</em> layer for each audio track. A message then lists what was imported and anything it could not find, such as a board image that was neither at the path the cut gives nor beside the cut file. Fix what is missing and import again, or add it by hand.</p>
+
+<p>Play the episode through and check that each label starts where the shot should. A label you move or rename here moves or renames the shot in step 6.</p>
+
+<h2>5. Lay out the episode and link the rigs</h2>
+
+<p>Place the characters and props on new layers above <em>Board</em>, as you would in any document. To bring a rig in, open its master file and drag the symbol from that file's Library onto the episode's stage, or use <span class="menu-path">File &rsaquo; Import &rsaquo; Open External Library...</span>.</p>
+
+<p>Then link each rig to its master, once, in the episode:</p>
+
+<ol class="steps">
+  <li>In the Library, right-click the symbol and choose <b>Link to Master File...</b>.</li>
+  <li>Pick the master file in <code>rigs/</code>, then the symbol in it. The one with the same name is picked for you.</li>
+  <li>Click <b>Yes</b> when Phoenix asks whether to update it from the master now.</li>
+</ol>
+
+<p>The Library's Type column now shows <em>(linked)</em> for the symbol. Save the episode. Because the links are made before the split, every shot gets them in the next step.</p>
+
+<h2>6. Split the episode into shots</h2>
+
+<ol class="steps">
+  <li>Save the episode. The shots are cut from the saved file.</li>
+  <li>Choose <span class="menu-path">File &rsaquo; Export &rsaquo; Export Shots...</span>.</li>
+  <li>Set <b>Cut at</b> to <b>Frame labels</b> and <b>Save as</b> to <b>FLA files</b>.</li>
+  <li>Set <b>Folder</b> to <code>ep101/shots</code>, not the folder Phoenix suggests (see step 1), and click <b>OK</b>.</li>
+</ol>
+
+<p>Phoenix lists each shot with its frames and the file it wrote. Each shot starts at frame 1, plays exactly as it did in the episode, and keeps only the library items it uses. From the command line, the same split is:</p>
+
+<pre><code>Phoenix shots ep101/animatic/ep101.fla --by label --out ep101/shots</code></pre>
+
+<p>Check one shot's links, then commit the shots:</p>
+
+<pre><code>Phoenix links ep101/shots/sh010.fla
+git add ep101
+git commit -m "ep101: animatic and shots"</code></pre>
+
+<p>Each line of the <code>links</code> output names a linked symbol, the master path it resolves to, and the symbol it is linked to there. If the path is wrong, the shots are at a different depth from the animatic: fix it with <b>Change Master File...</b> in the Library, or export the shots again to the right folder.</p>
+
+<h2>7. Hand out shots and animate</h2>
+
+<p>Each animator takes a shot with a lock, so two people never edit the same file:</p>
+
+<pre><code>git pull
+git lfs lock ep101/shots/sh030.fla
+<em>animate, save</em>
+git commit -am "sh030: blocking"
+git push
+git lfs unlock ep101/shots/sh030.fla</code></pre>
+
+<p>Animate in the shot file as in any document. Leave the linked rigs as they are: an update from the master replaces the symbol's contents, so any change made to it in a shot is lost at the next update. Instances of it on the stage, and the animation you key on them, are kept.</p>
+
+<h2>8. Push a rig change to every shot</h2>
+
+<p>When a rig changes, edit and save its master file in <code>rigs/</code>, then update the shots from a terminal at the show folder:</p>
+
+<pre><code>Phoenix batch ep101/shots --update-links --save
+git commit -am "ep101: kid rig v2 in every shot"</code></pre>
+
+<p>Each shot's linked symbols are replaced by their masters' versions, with the symbols and bitmaps they use, and the shot is saved. At the end, Phoenix says how many shots had problems; a link that could not be updated (a missing master, a symbol renamed in it) is listed, and the exit code is 2. Add <code>--recursive</code> to update several episodes at once from <code>myshow</code>.</p>
+
+<p>Shots locked by someone else are written too, so update them when no one is working, or ask whoever holds a shot to update it themselves: open it, right-click an empty part of the Library and choose <b>Update All Linked Items</b>, then save. An update cannot be undone; close the shot without saving to back out.</p>
+
+<h2>9. Review</h2>
+
+<p>The reviewer opens a shot and chooses <span class="menu-path">Window &rsaquo; Review Notes</span>, then for each note:</p>
+
+<ol class="steps">
+  <li>Go to the frame the note is about and click <b>Add Note...</b>. Type the note and click <b>OK</b>. It is signed with the reviewer's user name and shows in the corner of the stage until the next note.</li>
+  <li>To mark the art, click <b>Draw</b> and circle or sketch over it with any drawing tool. The marks go on the notes layer.</li>
+</ol>
+
+<p>The reviewer saves and commits the shot. The notes live on a guide layer called <em>Review Notes</em>, so they never show in a render or an export.</p>
+
+<p>The animator opens Review Notes, clicks a note to go to its frame, fixes it, and clicks <b>Done</b> to strike it through. To see what changed between two versions of a shot, frame by frame, use <b>File &gt; Compare With...</b>, or from Git:</p>
+
+<pre><code>git difftool --tool=phoenix HEAD~1 -- ep101/shots/sh030.fla</code></pre>
+
+<p>(<a href="version-control.html#phoenix-as-the-diff-tool">Phoenix as the diff tool</a> shows the one-time setup.) When the shot is approved, delete the <em>Review Notes</em> layer.</p>
+
+<h2>10. Render</h2>
+
+<p>Before the final render, delete the <em>Board</em> layer in each shot, or right-click it and choose <b>Guide</b> so it stays for reference but never renders. Check the shots for damage, then render them all:</p>
+
+<pre><code>Phoenix batch ep101/shots --doctor
+Phoenix batch ep101/shots --render --out ep101/renders</code></pre>
+
+<p>Each shot renders to a PNG sequence in a folder named after it. To render one shot as a video instead, or at another size:</p>
+
+<pre><code>Phoenix render ep101/shots/sh030.fla --out ep101/renders/sh030.mp4 --size 1920x1080</code></pre>
+
+<p>These run without a window, so they can run on a render machine. See <a href="command-line.html#render-frames">Render frames</a> for every option.</p>
+
+</article>
+</main>
+</body>
+</html>

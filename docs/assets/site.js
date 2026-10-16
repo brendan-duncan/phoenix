@@ -74,6 +74,7 @@ const NAV = [
     { href: "command-line.html", title: "Command line" },
   ] },
   { group: "Studio pipeline", pages: [
+    { href: "howto-production.html", title: "How to run an episode" },
     { href: "pipeline.html", title: "Shots, assets and review" },
     { href: "version-control.html", title: "Version control" },
     { href: "scripting.html", title: "Scripting with JSFL and Python" },
