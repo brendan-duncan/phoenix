@@ -1,8 +1,13 @@
 #include "test_util.h"
 
 #include "../src/data/shape.h"
+#include "../src/data/bitmap.h"
+#include "../src/data/bitmap_decoder.h"
+#include "../src/data/bitmap_instance.h"
 #include "../src/data/edge.h"
 #include "../src/data/document.h"
+#include "../src/data/filter.h"
+#include "../src/data/folder.h"
 #include "../src/data/fla_document.h"
 #include "../src/data/frame.h"
 #include "../src/data/layer.h"
@@ -20,6 +25,7 @@
 #include <cmath>
 #include <filesystem>
 #include <fstream>
+#include <map>
 #include <memory>
 #include <string>
 
@@ -220,4 +226,246 @@ TEST(edited_cubics_save_as_quadratics_and_a_cubics_edge)
     FLAParser again;
     std::unique_ptr<fla::FLADocument> back(again.parse((root / "cubics_out").string()));
     CHECK(back && back->document && symbolNamed(*back->document, "Bar"));
+}
+
+namespace {
+
+/// A movie clip "Bar" placed on a layer of 3 frames with \a effects on it,
+/// under an adjustment layer with \a adjustments (none when empty).
+std::unique_ptr<fla::FLADocument> effectsSample(const fs::path& folder, const std::string& effects, const std::string& adjustments)
+{
+    writeSample(folder);
+    const std::string ns = kNs;
+    std::string layers;
+    if (!adjustments.empty())
+        layers += "<DOMLayer name=\"Grade\" phoenixAdjustmentLayer=\"true\" phoenixAdjustments=\"" + adjustments +
+            "\"><frames><DOMFrame index=\"0\"><elements/></DOMFrame></frames></DOMLayer>";
+    layers += "<DOMLayer name=\"Bars\"><frames><DOMFrame index=\"0\" duration=\"3\"><elements>"
+              "<DOMSymbolInstance libraryItemName=\"Bar\" name=\"bar\" symbolType=\"movie clip\" phoenixEffects=\"" + effects +
+        "\"><filters><DropShadowFilter/></filters></DOMSymbolInstance></elements></DOMFrame></frames></DOMLayer>";
+    writeText(folder / "DOMDocument.xml",
+        "<DOMDocument " + ns + " width=\"300\" height=\"200\" frameRate=\"24\">"
+        "<symbols><Include href=\"Bar.xml\"/><Include href=\"Lower.xml\"/></symbols>"
+        "<timelines><DOMTimeline name=\"Scene 1\"><layers>" + layers + "</layers></DOMTimeline></timelines></DOMDocument>");
+    FLAParser parser;
+    return std::unique_ptr<fla::FLADocument>(parser.parse(folder.string()));
+}
+
+fla::behaviors::Applied effect(const std::string& type, std::map<std::string, std::string> settings)
+{
+    fla::behaviors::Applied applied = fla::compositing::defaults(type, 1);
+    for (const auto& [name, value] : settings)
+        applied.params[name] = value;
+    return applied;
+}
+
+/// A picture of \a width by \a height the renderer hands back, its pixels
+/// all \a color.
+fla::otherapps::Picture solid(int width, int height, uint32_t color, double x, double y)
+{
+    fla::otherapps::Picture picture;
+    picture.width = width;
+    picture.height = height;
+    picture.x = x;
+    picture.y = y;
+    picture.pixels.assign(static_cast<size_t>(width) * height, color);
+    return picture;
+}
+
+} // namespace
+
+TEST(other_apps_carry_effects_as_filters)
+{
+    using fla::otherapps::carryEffects;
+    std::vector<fla::Filter> filters;
+    fla::ColorTransform color;
+    std::vector<std::string> left;
+
+    // Glow and Outline as Glow filters, the outline solid near the edge.
+    CHECK(carryEffects({effect("glow", {{"radius", "10"}, {"intensity", "150"}, {"color", "#FFE060"}}),
+                           effect("outline", {{"width", "4"}, {"color", "#000000"}, {"amount", "50"}})},
+        0, filters, color));
+    CHECK(filters.size() == 2 && filters[0].type == fla::Filter::Type::Glow && near(filters[0].blurX, 20.0) &&
+        near(filters[0].strength, 1.5) && filters[0].color[0] == 0xFF && filters[0].color[1] == 0xE0);
+    CHECK(near(filters[1].blurX, 8.0) && near(filters[1].strength, 3.0) && filters[1].color[3] == 128);
+
+    // A smear across is a Blur on that axis alone; a slanted one is not.
+    filters.clear();
+    CHECK(carryEffects({effect("dirblur", {{"angle", "180"}, {"length", "30"}})}, 0, filters, color));
+    CHECK(filters.size() == 1 && near(filters[0].blurX, 30.0) && near(filters[0].blurY, 0.0) && filters[0].quality == 1);
+    filters.clear();
+    CHECK(!carryEffects({effect("dirblur", {{"angle", "45"}})}, 0, filters, color, &left));
+    CHECK(filters.empty() && left.size() == 1 && left[0] == "Directional Blur");
+
+    // Hue/Saturation as Adjust Color, unless it colorizes.
+    filters.clear();
+    CHECK(carryEffects({effect("huesat", {{"hue", "40"}, {"saturation", "-50"}, {"lightness", "10"}})}, 0, filters, color));
+    CHECK(filters.size() == 1 && filters[0].type == fla::Filter::Type::AdjustColor && near(filters[0].hue, 40.0) &&
+        near(filters[0].saturation, -50.0) && near(filters[0].brightness, 10.0));
+    CHECK(!carryEffects({effect("huesat", {{"colorize", "true"}})}, 0, filters, color));
+
+    // Fill is a full tint; a second color effect has no room.
+    filters.clear();
+    CHECK(carryEffects({effect("fill", {{"color", "#00FF00"}})}, 0, filters, color));
+    CHECK(near(color.tintMultiplier, 1.0) && color.tintColor[1] == 0xFF && filters.empty());
+    CHECK(!carryEffects({effect("tint", {})}, 0, filters, color));
+
+    // Levels squeezed into a narrower range is a multiplier and an offset;
+    // stretched, or with a gamma, it is not.
+    fla::ColorTransform levels;
+    CHECK(carryEffects({effect("levels", {{"outBlack", "20"}, {"outWhite", "220"}})}, 0, filters, levels));
+    CHECK(near(levels.redMultiplier, 200.0 / 255.0) && levels.redOffset == 20 && levels.blueOffset == 20);
+    fla::ColorTransform stretched;
+    CHECK(!carryEffects({effect("levels", {{"inWhite", "200"}})}, 0, filters, stretched));
+    CHECK(!carryEffects({effect("levels", {{"gamma", "1.5"}})}, 0, filters, stretched));
+
+    // A wipe not started is nothing, finished is nothing to see, part way
+    // cannot be carried; and Ripple never can.
+    fla::ColorTransform wiped;
+    CHECK(carryEffects({effect("linearwipe", {{"completion", "0"}})}, 0, filters, wiped) && wiped.isIdentity());
+    CHECK(carryEffects({effect("linearwipe", {{"completion", "@0=0;10=100"}})}, 10, filters, wiped) &&
+        near(wiped.alphaMultiplier, 0.0));
+    left.clear();
+    CHECK(!carryEffects({effect("linearwipe", {{"completion", "50"}}), effect("ripple", {})}, 0, filters, wiped, &left));
+    CHECK(left.size() == 2 && left[1] == "Ripple");
+    // Off, or at an amount of 0, changes nothing.
+    fla::behaviors::Applied off = effect("ripple", {});
+    off.enabled = false;
+    CHECK(carryEffects({off, effect("ripple", {{"amount", "0"}})}, 0, filters, wiped));
+}
+
+TEST(other_apps_carry_instance_effects)
+{
+    const fs::path root = fs::temp_directory_path() / "phoenix_other_apps_tests";
+    std::unique_ptr<fla::FLADocument> file = effectsSample(root / "instance_effects",
+        "blur?radius=@0=2;2=6&amp;amount=100|fill?color=%2300FF00&amp;amount=100", "");
+    CHECK(file && file->document);
+    if (!file || !file->document)
+        return;
+    fla::Document& document = *file->document;
+    CHECK(fla::otherapps::needsBaking(document));
+    std::vector<std::string> notes;
+    fla::otherapps::bakeCompositing(document, notes);
+    CHECK(!fla::otherapps::needsBaking(document));
+    CHECK(notes.empty());
+
+    // The keyed blur: a keyframe a frame, each with its blur before the
+    // drop shadow the instance had, and the fill as a tint.
+    fla::Layer* bars = document.timelines.front()->layers.front();
+    CHECK(bars->frames.size() == 3);
+    if (bars->frames.size() != 3)
+        return;
+    for (int f = 0; f < 3; ++f)
+    {
+        auto* bar = static_cast<fla::SymbolInstance*>(bars->frames[static_cast<size_t>(f)]->elements.front());
+        CHECK(bar->filters.size() == 2 && bar->filters[0].type == fla::Filter::Type::Blur &&
+            bar->filters[1].type == fla::Filter::Type::DropShadow);
+        CHECK(near(bar->filters[0].blurX, (2.0 + 2.0 * f) * 2.0));
+        CHECK(near(bar->colorTransform.tintMultiplier, 1.0) && bar->colorTransform.tintColor[1] == 0xFF);
+        CHECK(fla::compositing::instanceEffectsOf(*bar).empty());
+    }
+}
+
+TEST(other_apps_draw_effects_with_no_filter_into_bitmaps)
+{
+    const fs::path root = fs::temp_directory_path() / "phoenix_other_apps_tests";
+    std::unique_ptr<fla::FLADocument> file = effectsSample(root / "bitmap_effects", "ripple?height=6|glow", "");
+    CHECK(file && file->document);
+    if (!file || !file->document)
+        return;
+    fla::Document& document = *file->document;
+    fla::Layer* bars = document.timelines.front()->layers.front();
+    const fla::Element* original = bars->frames.front()->elements.front();
+
+    // The renderer draws the instance on its own: the same picture on the
+    // first two frames, another on the third.
+    std::vector<fla::otherapps::Drawing> asked;
+    const fla::otherapps::Renderer render = [&](const fla::otherapps::Drawing& drawing) {
+        asked.push_back(drawing);
+        fla::otherapps::Picture picture = solid(6, 4, drawing.frame < 2 ? 0xFFFF0000u : 0xFF0000FFu, 10.0, 20.0);
+        picture.scale = 2.0;
+        // Clear round the edge, which the bitmap leaves out.
+        for (int x = 0; x < 6; ++x)
+            picture.pixels[static_cast<size_t>(x)] = 0;
+        return picture;
+    };
+    std::vector<std::string> notes;
+    fla::otherapps::bakeCompositing(document, notes, render);
+    CHECK(asked.size() == 3);
+    for (size_t i = 0; i < asked.size(); ++i)
+        CHECK(asked[i].element == original && asked[i].frame == static_cast<int>(i) && asked[i].from == 0 &&
+            asked[i].to == 1 && asked[i].margin > 6.0);
+    CHECK(notes.size() == 1 && notes[0].find("Ripple has no filter") != std::string::npos);
+
+    // Two keyframes of bitmaps, the first held for two frames.
+    CHECK(bars->frames.size() == 2);
+    if (bars->frames.size() != 2)
+        return;
+    CHECK(bars->frames[0]->duration == 2 && bars->frames[1]->index == 2);
+    auto* first = dynamic_cast<fla::BitmapInstance*>(bars->frames[0]->elements.front());
+    auto* last = dynamic_cast<fla::BitmapInstance*>(bars->frames[1]->elements.front());
+    CHECK(first && last && first->libraryItemName != last->libraryItemName);
+    if (!first || !last)
+        return;
+    CHECK(first->libraryItemName.rfind("Baked effects/", 0) == 0);
+    // Placed where the picture was, its top row trimmed, at half size.
+    CHECK(near(first->transform.m11, 0.5) && near(first->transform.tx, 10.0) && near(first->transform.ty, 20.5));
+    bool folder = false;
+    for (const fla::Folder* each : document.folders)
+        folder = folder || each->name == "Baked effects";
+    int bitmaps = 0;
+    for (const fla::Resource* resource : document.resources)
+        if (resource->resourceType() == fla::Resource::Type::Bitmap)
+        {
+            const auto* bitmap = static_cast<const fla::Bitmap*>(resource);
+            fla::DecodedBitmap pixels;
+            CHECK(fla::decodeLosslessBitmap(bitmap->datData.get(), pixels) && pixels.width == 6 && pixels.height == 3);
+            ++bitmaps;
+        }
+    CHECK(folder && bitmaps == 2);
+
+    // Without a renderer the effects that cannot be carried are left out.
+    std::unique_ptr<fla::FLADocument> plain = effectsSample(root / "bitmap_effects_plain", "ripple?height=6|glow", "");
+    notes.clear();
+    fla::otherapps::bakeCompositing(*plain->document, notes);
+    CHECK(notes.size() == 1 && notes[0].find("left out") != std::string::npos);
+    auto* kept = dynamic_cast<fla::SymbolInstance*>(plain->document->timelines.front()->layers.front()->frames.front()->elements.front());
+    CHECK(kept && kept->filters.size() == 2 && kept->filters[0].type == fla::Filter::Type::Glow);
+}
+
+TEST(other_apps_draw_adjustment_layers_with_no_filter_into_bitmaps)
+{
+    const fs::path root = fs::temp_directory_path() / "phoenix_other_apps_tests";
+    std::unique_ptr<fla::FLADocument> file = effectsSample(root / "bitmap_adjustments", "blur", "vignette|blur");
+    CHECK(file && file->document);
+    if (!file || !file->document)
+        return;
+    fla::Document& document = *file->document;
+    fla::Timeline* scene = document.timelines.front();
+    const fla::Layer* grade = scene->layers.front();
+    std::vector<fla::otherapps::Drawing> asked;
+    const fla::otherapps::Renderer render = [&](const fla::otherapps::Drawing& drawing) {
+        asked.push_back(drawing);
+        return solid(30, 20, 0xFF808080u, 0.0, 0.0);
+    };
+    std::vector<std::string> notes;
+    fla::otherapps::bakeCompositing(document, notes, render);
+
+    // It and all below, drawn a frame at a time; the instance below, being
+    // in those pictures, is not drawn on its own.
+    CHECK(asked.size() == 3);
+    for (const fla::otherapps::Drawing& drawing : asked)
+        CHECK(drawing.timeline == scene && drawing.from == 0 && drawing.to == 2 && !drawing.element);
+    // One keyframe of the bitmap held over the three frames; the layers
+    // below kept in the movie clip in the library.
+    CHECK(scene->layers.size() == 1 && scene->layers.front() == grade);
+    CHECK(grade->frames.size() == 1 && grade->frames.front()->duration == 3);
+    CHECK(dynamic_cast<fla::BitmapInstance*>(grade->frames.front()->elements.front()) != nullptr);
+    fla::Symbol* clip = symbolNamed(document, "Adjusted by Grade");
+    CHECK(clip && clip->timelines.front()->layers.size() == 1);
+    CHECK(!fla::otherapps::needsBaking(document));
+    bool told = false;
+    for (const std::string& note : notes)
+        told = told || note.find("Vignette has no filter") != std::string::npos;
+    CHECK(told);
 }

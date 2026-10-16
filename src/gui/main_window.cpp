@@ -108,6 +108,7 @@
 #include "../edit/library_commands.h"
 #include "../edit/property_command.h"
 #include "phoenix_view.h"
+#include "player.h"
 #include "movie_export.h"
 #include "script_tool.h"
 #include "../jsfl/tool_script.h"
@@ -146,6 +147,7 @@
 #include "../data/static_text.h"
 #include "../data/layer.h"
 #include "../data/timeline.h"
+#include "../data/symbol.h"
 #include "../writer/xfl_content.h"
 #include "../writer/xfl_folder_writer.h"
 #include "../phx/container.h"
@@ -5675,7 +5677,57 @@ bool MainWindow::writeForOtherApps(const QString& path, QString& error, int* bak
             std::unique_ptr<fla::FLADocument> copy(parser.parse(temporary.toStdString()));
             if (copy && copy->document)
             {
-                fla::otherapps::bakeCompositing(*copy->document, notes);
+                // Effects with no filter in other apps are drawn into
+                // bitmaps, by a view of the copy of its own, as an exported
+                // movie draws them (no camera: other apps have none).
+                Player player;
+                PhoenixView view(&player);
+                view.setDocument(copy.get());
+                view.setCameraView(false);
+                const fla::Document* drawnDocument = copy->document;
+                const fla::otherapps::Renderer render = [&view, drawnDocument](const fla::otherapps::Drawing& drawing) {
+                    fla::otherapps::Picture picture;
+                    const fla::Timeline* timeline = drawing.timeline;
+                    if (!timeline)
+                        return picture;
+                    // A scene's stage (with room round it for an instance
+                    // partly off it), or what a symbol draws on the frame.
+                    QRectF area;
+                    const auto& scenes = drawnDocument->timelines;
+                    if (std::find(scenes.begin(), scenes.end(), timeline) != scenes.end())
+                    {
+                        area = QRectF(0, 0, drawnDocument->width, drawnDocument->height);
+                        if (drawing.element)
+                            area.adjust(-area.width() / 4.0, -area.height() / 4.0, area.width() / 4.0, area.height() / 4.0);
+                    }
+                    else if (const auto* symbol = dynamic_cast<const fla::Symbol*>(timeline->parent))
+                        area = view.symbolFramesBounds(symbol, drawing.frame, drawing.frame);
+                    if (!area.isValid() || area.isEmpty())
+                        return picture;
+                    const double margin = std::min(drawing.margin, 2000.0) + 2.0;
+                    area.adjust(-margin, -margin, margin, margin);
+                    // A pixel a stage pixel, unless that is huge.
+                    const double scale = std::min(1.0, 4096.0 / std::max(area.width(), area.height()));
+                    const QImage image =
+                        view.renderTimelinePart(timeline, drawing.from, drawing.to, drawing.element, drawing.frame, area, scale);
+                    if (image.isNull())
+                        return picture;
+                    picture.width = image.width();
+                    picture.height = image.height();
+                    picture.x = area.left();
+                    picture.y = area.top();
+                    picture.scale = scale;
+                    picture.pixels.resize(static_cast<size_t>(image.width()) * static_cast<size_t>(image.height()));
+                    for (int y = 0; y < image.height(); ++y)
+                    {
+                        const auto* line = reinterpret_cast<const uint32_t*>(image.constScanLine(y));
+                        std::copy(line, line + image.width(),
+                            picture.pixels.begin() + static_cast<std::ptrdiff_t>(static_cast<size_t>(y) * image.width()));
+                    }
+                    return picture;
+                };
+                fla::otherapps::bakeCompositing(*copy->document, notes, render);
+                view.setDocument(nullptr);
                 bakeNodeGraphs(*copy->document, notes);
                 written = writeDocumentFile(*copy->document, path, error);
             }

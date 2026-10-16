@@ -752,6 +752,55 @@ QImage PhoenixView::renderTimelineFrame(const fla::Timeline* timeline, int frame
     return image;
 }
 
+QImage PhoenixView::renderTimelinePart(const fla::Timeline* timeline, int from, int to, const fla::Element* element,
+    int frame, const QRectF& area, double scale)
+{
+    if (!timeline || !area.isValid() || area.isEmpty() || scale <= 0.0)
+        return QImage();
+    const QSize size(std::max(1, static_cast<int>(std::ceil(area.width() * scale))),
+        std::max(1, static_cast<int>(std::ceil(area.height() * scale))));
+    QImage image(size, QImage::Format_ARGB32_Premultiplied);
+    if (image.isNull())
+        return image;
+    image.fill(Qt::transparent);
+    QPainter painter(&image);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    painter.setRenderHint(QPainter::TextAntialiasing, true);
+    painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
+    painter.scale(scale, scale);
+    painter.translate(-area.topLeft());
+    const QTransform savedView = viewTransform;
+    const QRectF savedVisible = _visibleRect;
+    const int savedOverride = _frameOverride;
+    const bool wasExporting = _exporting;
+    const fla::Timeline* savedRange = _rangeTimeline;
+    const int savedFrom = _rangeFrom;
+    const int savedTo = _rangeTo;
+    const fla::Element* savedOnly = _onlyElement;
+    viewTransform = painter.transform();
+    _visibleRect = area;
+    _frameOverride = std::max(0, frame);
+    _exporting = true;
+    _rangeTimeline = timeline;
+    _rangeFrom = std::max(0, from);
+    _rangeTo = std::min(static_cast<int>(timeline->layers.size()), to);
+    _onlyElement = element;
+    _clipSequences.clear();
+    // Played from the frame asked for, as a scene plays (a symbol's
+    // timeline the same: its frame is the one shown).
+    drawTimeline(painter, timeline);
+    _onlyElement = savedOnly;
+    _rangeTimeline = savedRange;
+    _rangeFrom = savedFrom;
+    _rangeTo = savedTo;
+    _exporting = wasExporting;
+    _frameOverride = savedOverride;
+    viewTransform = savedView;
+    _visibleRect = savedVisible;
+    painter.end();
+    return image;
+}
+
 void PhoenixView::paintEvent(QPaintEvent *event)
 {
     if (_zoom != _toldZoom || _rotation != _toldRotation)
@@ -3839,8 +3888,10 @@ void PhoenixView::drawLayer(QPainter& painter, const fla::Layer* layer, fla::Loo
 
     if (state.frame && state.frame->visible)
     {
-        // A parented layer's content sits in its parent's element's space.
-        const QTransform parent = parentTransform(layer, state.frame, loopType, firstFrame);
+        // A parented layer's content sits in its parent's element's space;
+        // an element drawn on its own for a bitmap stays in its layer's.
+        const QTransform parent = _onlyElement && _onlyElement->parent == state.frame
+            ? QTransform() : parentTransform(layer, state.frame, loopType, firstFrame);
         const bool parented = !parent.isIdentity();
         if (parented)
         {
@@ -3970,6 +4021,9 @@ void PhoenixView::drawFrame(QPainter& painter, const fla::Frame* frame, const fl
                     break;
                 }
             }
+            // One element on its own, for a bitmap of it.
+            if (!skip && _onlyElement && _onlyElement->parent == frame && element != _onlyElement)
+                skip = true;
             if (!skip && culling)
             {
                 // An instance by everything its symbol draws over all its

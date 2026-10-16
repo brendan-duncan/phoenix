@@ -2,11 +2,17 @@
 
 #include "adjustments.h"
 #include "behaviors.h"
+#include "frame_bake.h"
 #include "library_commands.h"
+#include "library_media.h"
 #include "templates.h"
 
+#include "../data/bitmap.h"
+#include "../data/bitmap_decoder.h"
+#include "../data/bitmap_instance.h"
 #include "../data/document.h"
 #include "../data/filter.h"
+#include "../data/folder.h"
 #include "../data/frame.h"
 #include "../data/group.h"
 #include "../data/layer.h"
@@ -17,6 +23,7 @@
 #include "../data/timeline.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdlib>
 #include <functional>
 #include <map>
@@ -332,7 +339,9 @@ void bakeMattes(Document& document, Timeline& timeline, std::vector<std::string>
     }
 }
 
-// Adjustment layers -------------------------------------------------------------
+// Effects ----------------------------------------------------------------------
+
+constexpr double kPi = 3.14159265358979323846;
 
 double number(const behaviors::Applied& applied, const char* name, int frame, double fallback)
 {
@@ -342,45 +351,366 @@ double number(const behaviors::Applied& applied, const char* name, int frame, do
     return text.empty() || end == text.c_str() ? fallback : value;
 }
 
-/// The filters and color effect \a effects make on \a frame.
-void effectsAt(const std::vector<behaviors::Applied>& effects, int frame, std::vector<Filter>& filters, ColorTransform& color)
+void colorOf(const behaviors::Applied& applied, const char* name, int frame, const char* fallback, uint8_t rgb[3])
+{
+    unsigned char parsed[3] = {0, 0, 0};
+    templates::colorOf(fallback, parsed);
+    templates::colorOf(applied.valueAt(name, frame, fallback), parsed);
+    for (int c = 0; c < 3; ++c)
+        rgb[c] = parsed[c];
+}
+
+/// Whether any setting of \a effects is keyed, so they change over time.
+bool keyedAny(const std::vector<behaviors::Applied>& effects)
 {
     for (const behaviors::Applied& applied : effects)
+        for (const auto& [name, value] : applied.params)
+            if (applied.keyed(name))
+                return true;
+    return false;
+}
+
+/// Whether every one of \a effects can be carried on each of \a frames
+/// frames from \a first, as filters and a color effect over \a color.
+bool carriedThroughout(const std::vector<behaviors::Applied>& effects, int first, int frames, const ColorTransform& color)
+{
+    for (int f = first; f < first + (keyedAny(effects) ? std::max(1, frames) : 1); ++f)
     {
-        if (!applied.enabled)
-            continue;
-        const double amount = std::clamp(number(applied, "amount", frame, 100.0) / 100.0, 0.0, 1.0);
-        if (applied.type == "blur")
+        std::vector<Filter> filters;
+        ColorTransform each = color;
+        if (!carryEffects(effects, f, filters, each))
+            return false;
+    }
+    return true;
+}
+
+/// The names of the effects that cannot be carried on any of \a frames
+/// frames from \a first, for a note: "Ripple has", "Ripple and Grain have".
+std::string uncarried(const std::vector<behaviors::Applied>& effects, int first, int frames, const ColorTransform& color)
+{
+    std::set<std::string> names;
+    std::vector<std::string> ordered;
+    for (int f = first; f < first + (keyedAny(effects) ? std::max(1, frames) : 1); ++f)
+    {
+        std::vector<Filter> filters;
+        ColorTransform each = color;
+        std::vector<std::string> left;
+        carryEffects(effects, f, filters, each, &left);
+        for (const std::string& name : left)
+            if (names.insert(name).second)
+                ordered.push_back(name);
+    }
+    std::string text;
+    for (size_t i = 0; i < ordered.size(); ++i)
+        text += (i == 0 ? "" : i + 1 == ordered.size() ? " and " : ", ") + ordered[i];
+    return text + (ordered.size() == 1 ? " has" : " have");
+}
+
+// Bitmaps of what effects make --------------------------------------------------
+
+/// Where a bitmap is put on a frame: the library bitmap, its top left corner
+/// in the timeline's space and its pixels to the timeline's pixel. No
+/// bitmap when nothing shows.
+struct Placed
+{
+    std::string bitmap;
+    double x = 0.0;
+    double y = 0.0;
+    double scale = 1.0;
+};
+
+/// The pictures drawn for effects, made library bitmaps as they come (one
+/// for each different picture) so only where they go is kept.
+struct Bitmaps
+{
+    Document& document;
+    std::map<uint64_t, std::string> made;
+
+    Placed add(const Picture& picture, const std::string& name)
+    {
+        Placed placed;
+        const int width = picture.width, height = picture.height;
+        if (width <= 0 || height <= 0 || picture.pixels.size() != static_cast<size_t>(width) * static_cast<size_t>(height))
+            return placed;
+        // Trimmed to what shows.
+        int left = width, top = height, right = -1, bottom = -1;
+        for (int y = 0; y < height; ++y)
+            for (int x = 0; x < width; ++x)
+                if (picture.pixels[static_cast<size_t>(y) * width + x] >> 24)
+                {
+                    left = std::min(left, x);
+                    right = std::max(right, x);
+                    top = std::min(top, y);
+                    bottom = std::max(bottom, y);
+                }
+        if (right < left || bottom < top)
+            return placed;
+        const int w = right - left + 1, h = bottom - top + 1;
+        std::vector<uint32_t> pixels(static_cast<size_t>(w) * static_cast<size_t>(h));
+        for (int y = 0; y < h; ++y)
+            std::copy_n(picture.pixels.begin() + static_cast<std::ptrdiff_t>(static_cast<size_t>(top + y) * width + left), w,
+                pixels.begin() + static_cast<std::ptrdiff_t>(static_cast<size_t>(y) * w));
+        const double scale = picture.scale > 0.0 ? picture.scale : 1.0;
+        placed.x = picture.x + left / scale;
+        placed.y = picture.y + top / scale;
+        placed.scale = scale;
+        // The same picture again is the same bitmap.
+        uint64_t hash = 1469598103934665603ull;
+        const auto mix = [&hash](uint64_t value) {
+            hash ^= value;
+            hash *= 1099511628211ull;
+        };
+        mix(static_cast<uint64_t>(w));
+        mix(static_cast<uint64_t>(h));
+        for (const uint32_t p : pixels)
+            mix(p);
+        const auto found = made.find(hash);
+        if (found != made.end())
         {
-            Filter blur;
-            blur.type = Filter::Type::Blur;
-            blur.blurX = blur.blurY = number(applied, "radius", frame, 6.0) * 2.0 * amount;
-            blur.quality = 3;
-            filters.push_back(blur);
+            placed.bitmap = found->second;
+            return placed;
         }
-        else if (applied.type == "color")
+        const char* const folderName = "Baked effects";
+        if (std::none_of(document.folders.begin(), document.folders.end(),
+                [folderName](const Folder* folder) { return folder && folder->name == folderName; }))
         {
-            Filter adjust;
-            adjust.type = Filter::Type::AdjustColor;
-            adjust.brightness = number(applied, "brightness", frame, 0.0) * amount;
-            adjust.contrast = number(applied, "contrast", frame, 0.0) * amount;
-            adjust.saturation = number(applied, "saturation", frame, 0.0) * amount;
-            adjust.hue = number(applied, "hue", frame, 0.0) * amount;
-            filters.push_back(adjust);
+            auto* folder = new Folder(&document);
+            folder->name = folderName;
+            folder->itemId = media::newItemId();
+            document.folders.push_back(folder);
         }
-        else if (applied.type == "tint")
+        std::string base = name;
+        for (char& c : base)
+            if (c == '/' || c == '\\' || c == ':' || c == '*' || c == '?' || c == '"' || c == '<' || c == '>' || c == '|')
+                c = ' ';
+        Bitmap* bitmap = media::newBitmap(document, std::string(folderName) + "/" + base, std::string(), w, h,
+            encodeLosslessBitmap(w, h, pixels), false);
+        bitmap->parent = &document;
+        document.resources.push_back(bitmap);
+        made[hash] = bitmap->name;
+        placed.bitmap = bitmap->name;
+        return placed;
+    }
+};
+
+/// \a placed on \a frame, or nothing when nothing shows.
+BitmapInstance* bitmapOn(Frame* frame, const Placed& placed)
+{
+    if (placed.bitmap.empty())
+        return nullptr;
+    auto* instance = new BitmapInstance(frame);
+    instance->libraryItemName = placed.bitmap;
+    instance->transform = Transform(1.0 / placed.scale, 0.0, 0.0, 1.0 / placed.scale, placed.x, placed.y);
+    return instance;
+}
+
+/// What the renderer drew for the export, before anything changed: the
+/// adjustment layers drawn with all below them a frame at a time, and the
+/// instances drawn on their own over their keyframes' frames.
+struct Drawn
+{
+    std::map<const Layer*, std::vector<Placed>> layers;
+    std::map<const Element*, std::map<int, Placed>> instances;
+};
+
+std::string named(const std::string& name, const char* fallback)
+{
+    return name.empty() ? std::string(fallback) : name;
+}
+
+void drawForBitmaps(Document& document, const Renderer& render, Bitmaps& bitmaps, Drawn& drawn)
+{
+    for (Timeline* timeline : allTimelines(document))
+    {
+        const int count = static_cast<int>(timeline->layers.size());
+        for (int a = 0; a < count; ++a)
         {
-            std::string text = applied.valueAt("color", frame, "#3050A0");
-            unsigned char rgb[3] = {0x30, 0x50, 0xA0};
-            templates::colorOf(text, rgb);
-            color.tintMultiplier = amount;
-            for (int c = 0; c < 3; ++c)
-                color.tintColor[c] = rgb[c];
+            Layer* layer = timeline->layers[static_cast<size_t>(a)];
+            if (!layer)
+                continue;
+            if (compositing::isAdjustment(*layer))
+            {
+                const std::vector<behaviors::Applied> effects = compositing::effectsOf(*layer);
+                const std::vector<Layer*> below(timeline->layers.begin() + a + 1, timeline->layers.end());
+                const int length = lengthOf(below);
+                if (below.empty() || carriedThroughout(effects, 0, length, ColorTransform()))
+                    continue;
+                // It and everything below it, a picture a frame; what is
+                // below is in the pictures, so nothing more is drawn there.
+                std::vector<Placed>& placed = drawn.layers[layer];
+                for (int f = 0; f < length; ++f)
+                {
+                    Drawing drawing;
+                    drawing.timeline = timeline;
+                    drawing.from = a;
+                    drawing.to = count;
+                    drawing.frame = f;
+                    drawing.margin = compositing::reach(effects, f);
+                    placed.push_back(bitmaps.add(render(drawing), named(layer->name, "Adjustment") + " " + std::to_string(f + 1)));
+                }
+                break;
+            }
+            for (Frame* frame : layer->frames)
+            {
+                if (!frame)
+                    continue;
+                for (Element* element : frame->elements)
+                {
+                    if (!element || element->elementType() != Element::Type::SymbolInstance ||
+                        !compositing::hasInstanceEffects(*element))
+                        continue;
+                    auto* instance = static_cast<SymbolInstance*>(element);
+                    const std::vector<behaviors::Applied> effects = compositing::instanceEffectsOf(*instance);
+                    const int span = std::max(1, frame->duration);
+                    if (carriedThroughout(effects, frame->index, span, instance->colorTransform))
+                        continue;
+                    std::map<int, Placed>& placed = drawn.instances[element];
+                    const std::string name = named(instance->name, named(instance->libraryItemName, "Instance").c_str());
+                    for (int f = frame->index; f < frame->index + span; ++f)
+                    {
+                        Drawing drawing;
+                        drawing.timeline = timeline;
+                        drawing.from = a;
+                        drawing.to = a + 1;
+                        drawing.element = element;
+                        drawing.frame = f;
+                        drawing.margin = compositing::reach(effects, f);
+                        placed[f] = bitmaps.add(render(drawing), name + " " + std::to_string(f + 1));
+                    }
+                }
+            }
         }
     }
 }
 
-void bakeAdjustments(Document& document, Timeline& timeline, std::vector<std::string>& notes)
+// Effects on instances ------------------------------------------------------------
+
+void bakeInstanceEffects(Document& document, Timeline& timeline, const Drawn& drawn, std::vector<std::string>& notes)
+{
+    for (Layer* layer : timeline.layers)
+    {
+        if (!layer)
+            continue;
+        // A keyframe at a time; frames made of one are passed over.
+        for (size_t k = 0; k < layer->frames.size(); ++k)
+        {
+            Frame* key = layer->frames[k];
+            if (!key)
+                continue;
+            struct Target
+            {
+                size_t index;
+                const SymbolInstance* original;
+                std::vector<behaviors::Applied> effects;
+                ColorTransform color;
+                const std::map<int, Placed>* placed;
+            };
+            std::vector<Target> targets;
+            bool split = false;
+            for (size_t e = 0; e < key->elements.size(); ++e)
+            {
+                Element* element = key->elements[e];
+                if (!element || element->elementType() != Element::Type::SymbolInstance)
+                    continue;
+                const std::vector<behaviors::Applied> effects = compositing::instanceEffectsOf(*element);
+                if (effects.empty())
+                    continue;
+                const auto found = drawn.instances.find(element);
+                const std::map<int, Placed>* placed = found == drawn.instances.end() ? nullptr : &found->second;
+                targets.push_back({e, static_cast<SymbolInstance*>(element), effects,
+                    static_cast<SymbolInstance*>(element)->colorTransform, placed});
+                // Keyed settings or bitmaps change from frame to frame.
+                split = split || placed || keyedAny(effects);
+            }
+            if (targets.empty())
+                continue;
+            const int first = key->index;
+            const int span = std::max(1, key->duration);
+            for (const Target& target : targets)
+            {
+                const std::string what = "Instance of " + named(target.original->libraryItemName, "a symbol") +
+                    (target.original->name.empty() ? std::string() : " (" + target.original->name + ")") + " on layer " + layer->name;
+                if (target.placed)
+                    notes.push_back(what + ": " + uncarried(target.effects, first, span, target.color) +
+                        " no filter in other apps, so it is drawn into a bitmap on each frame where it changes.");
+                else if (!carriedThroughout(target.effects, first, span, target.color))
+                    notes.push_back(what + ": " + uncarried(target.effects, first, span, target.color) +
+                        " no filter in other apps and is left out.");
+            }
+            if (split && span > 1)
+                frames::convertToFrameByFrame(*layer, first, first + span - 1, document.frameRate);
+            // Each frame of the span, now a keyframe each when split.
+            const int last = first + span - 1;
+            for (Frame* frame : layer->frames)
+            {
+                if (!frame || frame->index < first || frame->index > last)
+                    continue;
+                for (const Target& target : targets)
+                {
+                    if (target.index >= frame->elements.size() ||
+                        frame->elements[target.index]->elementType() != Element::Type::SymbolInstance)
+                        continue;
+                    auto* instance = static_cast<SymbolInstance*>(frame->elements[target.index]);
+                    removeAttribute(*instance, compositing::kInstanceEffects);
+                    if (target.placed)
+                    {
+                        // The instance as drawn, effects and all.
+                        const auto at = target.placed->find(frame->index);
+                        BitmapInstance* bitmap = bitmapOn(frame, at == target.placed->end() ? Placed() : at->second);
+                        if (bitmap)
+                            frame->elements[target.index] = bitmap;
+                        else
+                            frame->elements[target.index] = nullptr;
+                        delete instance;
+                        continue;
+                    }
+                    // Its effects before the filters it had.
+                    std::vector<Filter> filters;
+                    carryEffects(target.effects, frame->index, filters, instance->colorTransform);
+                    instance->filters.insert(instance->filters.begin(), filters.begin(), filters.end());
+                }
+                frame->elements.erase(std::remove(frame->elements.begin(), frame->elements.end(), nullptr), frame->elements.end());
+            }
+            if (split && span > 1)
+            {
+                frames::mergeHeldFrames(*layer, first, last);
+                // The frames now there are this keyframe's; on to the next.
+                while (k + 1 < layer->frames.size() && layer->frames[k + 1] && layer->frames[k + 1]->index <= last)
+                    ++k;
+            }
+        }
+    }
+}
+
+/// Instances in groups, which bakeInstanceEffects passes over: their
+/// effects carried as filters where they can be, on their keyframe's
+/// first frame.
+void bakeGroupedEffects(Timeline& timeline, std::vector<std::string>& notes)
+{
+    for (Layer* layer : timeline.layers)
+        for (Frame* frame : layer ? layer->frames : std::vector<Frame*>())
+            for (Element* element : frame ? frame->elements : std::vector<Element*>())
+                eachElement(element, [&](Element* each) {
+                    if (each->elementType() != Element::Type::SymbolInstance)
+                        return;
+                    auto* instance = static_cast<SymbolInstance*>(each);
+                    const std::vector<behaviors::Applied> effects = compositing::instanceEffectsOf(*instance);
+                    if (effects.empty())
+                        return;
+                    removeAttribute(*instance, compositing::kInstanceEffects);
+                    std::vector<Filter> filters;
+                    std::vector<std::string> left;
+                    if (!carryEffects(effects, frame->index, filters, instance->colorTransform, &left))
+                        notes.push_back("Instance of " + named(instance->libraryItemName, "a symbol") + " in a group on layer " +
+                            layer->name + ": " + uncarried(effects, frame->index, 1, ColorTransform()) +
+                            " no filter in other apps and is left out.");
+                    instance->filters.insert(instance->filters.begin(), filters.begin(), filters.end());
+                });
+}
+
+// Adjustment layers -------------------------------------------------------------
+
+void bakeAdjustments(Document& document, Timeline& timeline, const Drawn& drawn, std::vector<std::string>& notes)
 {
     for (size_t a = 0; a < timeline.layers.size(); ++a)
     {
@@ -388,13 +718,8 @@ void bakeAdjustments(Document& document, Timeline& timeline, std::vector<std::st
         if (!adjustment || !compositing::isAdjustment(*adjustment))
             continue;
         const std::vector<behaviors::Applied> effects = compositing::effectsOf(*adjustment);
-        for (const behaviors::Applied& applied : effects)
-            if (applied.enabled && applied.type != "blur" && applied.type != "color" && applied.type != "tint")
-            {
-                const behaviors::Definition* definition = compositing::find(applied.type);
-                notes.push_back("Adjustment layer " + adjustment->name + ": " +
-                    (definition ? definition->name : applied.type) + " has no filter in other apps and is left out.");
-            }
+        const auto found = drawn.layers.find(adjustment);
+        const std::vector<Placed>* pictures = found == drawn.layers.end() ? nullptr : &found->second;
         removeAttribute(*adjustment, compositing::kAdjustmentLayer);
         removeAttribute(*adjustment, compositing::kAdjustments);
         if (a + 1 >= timeline.layers.size())
@@ -433,15 +758,48 @@ void bakeAdjustments(Document& document, Timeline& timeline, std::vector<std::st
         timeline.layers.resize(a + 1);
         addSymbol(document, clip);
         // An adjustment layer further down now sits inside the clip.
-        bakeAdjustments(document, *inside, notes);
+        bakeAdjustments(document, *inside, drawn, notes);
+
+        if (pictures)
+        {
+            // Drawn: the layer shows what it and everything below it made,
+            // a bitmap a frame, a keyframe only where the picture changes.
+            for (Frame* frame : adjustment->frames)
+                delete frame;
+            adjustment->frames.clear();
+            adjustment->layerType = Layer::Type::Normal;
+            for (int f = 0; f < static_cast<int>(pictures->size()); ++f)
+            {
+                const Placed& placed = (*pictures)[static_cast<size_t>(f)];
+                Frame* held = adjustment->frames.empty() ? nullptr : adjustment->frames.back();
+                const Placed* before = f > 0 ? &(*pictures)[static_cast<size_t>(f - 1)] : nullptr;
+                if (held && before && before->bitmap == placed.bitmap && before->x == placed.x && before->y == placed.y &&
+                    before->scale == placed.scale)
+                {
+                    ++held->duration;
+                    continue;
+                }
+                auto* frame = new Frame(adjustment);
+                frame->index = f;
+                frame->duration = 1;
+                if (BitmapInstance* bitmap = bitmapOn(frame, placed))
+                    frame->elements.push_back(bitmap);
+                adjustment->frames.push_back(frame);
+            }
+            notes.push_back("Adjustment layer " + adjustment->name + ": " + uncarried(effects, 0, length, ColorTransform()) +
+                " no filter in other apps, so it and the layers below it are drawn into a bitmap on each frame "
+                "where the picture changes; the layers themselves are kept in the movie clip \"" + clip->name +
+                "\" in the library.");
+            return bakeAdjustments(document, timeline, drawn, notes);
+        }
+        if (!carriedThroughout(effects, 0, length, ColorTransform()))
+            notes.push_back("Adjustment layer " + adjustment->name + ": " + uncarried(effects, 0, length, ColorTransform()) +
+                " no filter in other apps and is left out.");
 
         // The adjustment layer shows the clip, with the effects as filters:
         // a keyframe a frame where a setting is keyed, one otherwise.
-        bool keyed = false;
+        const bool keyed = keyedAny(effects);
         bool hadArt = false;
-        for (const behaviors::Applied& applied : effects)
-            for (const auto& [name, value] : applied.params)
-                keyed = keyed || applied.keyed(name);
         for (Frame* frame : adjustment->frames)
             hadArt = hadArt || (frame && !frame->elements.empty());
         // Art on it limits where the effects reach: it becomes a mask over
@@ -471,7 +829,7 @@ void bakeAdjustments(Document& document, Timeline& timeline, std::vector<std::st
             instance->libraryItemName = clip->name;
             instance->symbol = clip;
             instance->symbolType = SymbolType::MovieClip;
-            effectsAt(effects, f, instance->filters, instance->colorTransform);
+            carryEffects(effects, f, instance->filters, instance->colorTransform);
             frame->elements.push_back(instance);
             adjustment->frames.push_back(frame);
         }
@@ -501,11 +859,213 @@ void bakeAdjustments(Document& document, Timeline& timeline, std::vector<std::st
         notes.push_back("Adjustment layer " + adjustment->name + ": the layers below it are in the movie clip \"" + clip->name +
             "\", which plays on its own in other apps" +
             (hadArt ? "; its art became a mask over the adjusted copy, so the effects reach only where it is, hard-edged." : "."));
-        return bakeAdjustments(document, timeline, notes);
+        return bakeAdjustments(document, timeline, drawn, notes);
     }
 }
 
 } // namespace
+
+bool carryEffects(const std::vector<behaviors::Applied>& effects, int frame, std::vector<Filter>& filters,
+    ColorTransform& color, std::vector<std::string>* left)
+{
+    bool all = true;
+    // The color effect holds one of them, and only when nothing else is in
+    // it: the instance's own tint, say, cannot be mixed with another.
+    bool colorFree = color.isIdentity();
+    for (const behaviors::Applied& applied : effects)
+    {
+        const behaviors::Definition* definition = compositing::find(applied.type);
+        if (!applied.enabled || !definition)
+            continue;
+        // At 0 Phoenix leaves the picture as it is.
+        const double setting = number(applied, "amount", frame, 100.0);
+        if (setting <= 0.0)
+            continue;
+        const double amount = std::clamp(setting / 100.0, 0.0, 1.0);
+        const std::string& type = applied.type;
+        const auto value = [&](const char* name, double fallback) { return number(applied, name, frame, fallback); };
+        bool carried = true;
+        if (type == "blur")
+        {
+            Filter blur;
+            blur.type = Filter::Type::Blur;
+            blur.blurX = blur.blurY = value("radius", 6.0) * 2.0 * amount;
+            blur.quality = 3;
+            filters.push_back(blur);
+        }
+        else if (type == "dirblur")
+        {
+            // A smear straight across or down is a Blur on that axis alone,
+            // one box as Phoenix's is; a slanted one is not.
+            const double length = value("length", 20.0) * amount;
+            const double angle = value("angle", 0.0) * kPi / 180.0;
+            const double across = std::fabs(std::cos(angle)), down = std::fabs(std::sin(angle));
+            const double slant = std::sin(15.0 * kPi / 180.0);
+            if (length >= 0.5 && down > slant && across > slant)
+                carried = false;
+            else if (length >= 0.5)
+            {
+                Filter blur;
+                blur.type = Filter::Type::Blur;
+                blur.blurX = down <= slant ? length : 0.0;
+                blur.blurY = across <= slant ? length : 0.0;
+                blur.quality = 1;
+                filters.push_back(blur);
+            }
+        }
+        else if (type == "lensblur")
+        {
+            // Without its bright spots blooming it is a plain blur.
+            if (value("highlights", 50.0) > 0.0)
+                carried = false;
+            else if (value("radius", 8.0) >= 0.5)
+            {
+                Filter blur;
+                blur.type = Filter::Type::Blur;
+                blur.blurX = blur.blurY = value("radius", 8.0) * 2.0 * amount;
+                blur.quality = 2;
+                filters.push_back(blur);
+            }
+        }
+        else if (type == "color" || type == "huesat")
+        {
+            const bool hueSat = type == "huesat";
+            const auto truthy = [](const std::string& text) { return text == "true" || text == "1"; };
+            if (hueSat && truthy(applied.valueAt("colorize", frame, "false")))
+                carried = false;
+            else
+            {
+                Filter adjust;
+                adjust.type = Filter::Type::AdjustColor;
+                adjust.brightness = value(hueSat ? "lightness" : "brightness", 0.0) * amount;
+                adjust.contrast = hueSat ? 0.0 : value("contrast", 0.0) * amount;
+                adjust.saturation = value("saturation", 0.0) * amount;
+                adjust.hue = value("hue", 0.0) * amount;
+                filters.push_back(adjust);
+            }
+        }
+        else if (type == "glow" || type == "outline")
+        {
+            // A Glow in the color asked for: an outline is a glow strong
+            // enough to be solid near the edge, as Phoenix draws it; a glow
+            // spreads from the whole shape rather than its bright parts.
+            const bool outline = type == "outline";
+            const double reach = value(outline ? "width" : "radius", outline ? 4.0 : 12.0);
+            if (reach > 0.0)
+            {
+                Filter glow;
+                glow.type = Filter::Type::Glow;
+                glow.blurX = glow.blurY = reach * 2.0;
+                glow.quality = 3;
+                glow.strength = outline ? 3.0 : std::max(0.0, value("intensity", 100.0) / 100.0);
+                const std::string own = applied.valueAt("color", frame, outline ? "#FFFFFF" : "");
+                colorOf(applied, "color", frame, own.empty() ? "#FFFFFF" : own.c_str(), glow.color);
+                glow.color[3] = static_cast<uint8_t>(std::lround(255.0 * amount));
+                filters.push_back(glow);
+            }
+        }
+        else if (type == "tint" || type == "fill")
+        {
+            // Fill is a full tint: the color, keeping the alpha.
+            if (!colorFree)
+                carried = false;
+            else
+            {
+                uint8_t rgb[3];
+                colorOf(applied, "color", frame, type == "tint" ? "#3050A0" : "#FF4060", rgb);
+                color.tintMultiplier = amount;
+                for (int c = 0; c < 3; ++c)
+                    color.tintColor[c] = rgb[c];
+                colorFree = false;
+            }
+        }
+        else if (type == "levels")
+        {
+            // A straight line from the input range to the output one is a
+            // multiplier and an offset, so long as it does not stretch
+            // (the color effect goes up to 100 percent) and has no gamma.
+            const double inBlack = value("inBlack", 0.0);
+            const double inWhite = std::max(inBlack + 1.0, value("inWhite", 255.0));
+            const double outBlack = value("outBlack", 0.0), outWhite = value("outWhite", 255.0);
+            const double slope = (outWhite - outBlack) / (inWhite - inBlack);
+            const double multiplier = 1.0 + (slope - 1.0) * amount;
+            const double offset = (outBlack - inBlack * slope) * amount;
+            if (std::fabs(value("gamma", 1.0) - 1.0) > 0.005 || multiplier > 1.0 + 1e-6 || multiplier < 0.0 ||
+                std::fabs(offset) > 255.0)
+                carried = false;
+            else if (std::fabs(multiplier - 1.0) > 1e-6 || std::fabs(offset) >= 0.5)
+            {
+                if (!colorFree)
+                    carried = false;
+                else
+                {
+                    color.redMultiplier = color.greenMultiplier = color.blueMultiplier = multiplier;
+                    color.redOffset = color.greenOffset = color.blueOffset = static_cast<int>(std::lround(offset));
+                    colorFree = false;
+                }
+            }
+        }
+        else if (type == "linearwipe" || type == "radialwipe" || type == "blinds" || type == "dissolve")
+        {
+            // Not started: nothing; finished: nothing left to see.
+            const double completion = value("completion", 0.0);
+            if (completion >= 100.0)
+                color.alphaMultiplier = 0.0;
+            else if (completion > 0.0)
+                carried = false;
+        }
+        else if (type == "curves")
+        {
+            // Points on the straight line change nothing.
+            const std::string points = applied.valueAt("points", frame, "0,0 255,255");
+            const char* at = points.c_str();
+            char* end = nullptr;
+            for (;;)
+            {
+                const double in = std::strtod(at, &end);
+                if (end == at)
+                    break;
+                at = end;
+                while (*at == ',' || *at == ' ')
+                    ++at;
+                const double out = std::strtod(at, &end);
+                if (end == at)
+                    break;
+                at = end;
+                while (*at == ',' || *at == ' ')
+                    ++at;
+                carried = carried && std::fabs(in - out) < 0.5;
+            }
+        }
+        // The rest change nothing at these settings and are otherwise
+        // beyond a filter.
+        else if (type == "grain")
+            carried = value("strength", 20.0) <= 0.0;
+        else if (type == "vignette")
+            carried = value("darkness", 60.0) <= 0.0;
+        else if (type == "chromatic")
+            carried = value("distance", 4.0) == 0.0;
+        else if (type == "bulge")
+            carried = value("height", 50.0) == 0.0;
+        else if (type == "ripple")
+            carried = value("height", 6.0) == 0.0;
+        else if (type == "bend")
+            carried = value("strength", 30.0) == 0.0;
+        else if (type == "radialblur")
+            carried = value("strength", 10.0) == 0.0;
+        else if (type == "displace")
+            carried = applied.valueAt("layer", frame, "").empty();
+        else
+            carried = false;
+        if (!carried)
+        {
+            all = false;
+            if (left)
+                left->push_back(definition->name);
+        }
+    }
+    return all;
+}
 
 bool needsBaking(const Document& document)
 {
@@ -515,27 +1075,39 @@ bool needsBaking(const Document& document)
         for (const Layer* layer : timeline->layers)
             if (layer && (compositing::isAdjustment(*layer) || compositing::matteOf(*layer) != compositing::Matte::None))
                 return true;
-        bool templated = false;
+        bool found = false;
         eachElement(*timeline, [&](Element* element) {
-            templated = templated || (element->elementType() == Element::Type::SymbolInstance &&
-                                         templates::any(*static_cast<SymbolInstance*>(element)));
+            found = found || (element->elementType() == Element::Type::SymbolInstance &&
+                                 (templates::any(*static_cast<SymbolInstance*>(element)) ||
+                                     !compositing::instanceEffectsOf(*element).empty()));
         });
-        if (templated)
+        if (found)
             return true;
     }
     return false;
 }
 
-void bakeCompositing(Document& document, std::vector<std::string>& notes)
+void bakeCompositing(Document& document, std::vector<std::string>& notes, const Renderer& render)
 {
+    // What effects with no filter make is drawn first, while the document
+    // is still as Phoenix shows it.
+    Bitmaps bitmaps{document, {}};
+    Drawn drawn;
+    if (render)
+        drawForBitmaps(document, render, bitmaps, drawn);
     const int templated = bakeTemplates(document);
     if (templated > 0)
         notes.push_back(std::to_string(templated) + " template instance" + (templated == 1 ? "" : "s") +
             " now show symbols with their words and colors written in.");
     for (Timeline* timeline : allTimelines(document))
+    {
+        bakeInstanceEffects(document, *timeline, drawn, notes);
+        bakeGroupedEffects(*timeline, notes);
+    }
+    for (Timeline* timeline : allTimelines(document))
         bakeMattes(document, *timeline, notes);
     for (Timeline* timeline : allTimelines(document))
-        bakeAdjustments(document, *timeline, notes);
+        bakeAdjustments(document, *timeline, drawn, notes);
 }
 
 } // namespace fla::otherapps

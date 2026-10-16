@@ -719,6 +719,14 @@ public:
     /// What the symbol draws over frames \a first to \a last, in its space.
     QRectF symbolFramesBounds(const fla::Symbol* symbol, int first, int last);
 
+    /// Layers \a from to \a to - 1 of \a timeline (a scene's or a
+    /// symbol's) on frame \a frame, drawn as exports draw them, \a area of
+    /// its space at \a scale pixels per pixel on a clear image; with
+    /// \a element, only that element of its layer. What Export FLA for
+    /// Other Apps bakes into bitmaps where an effect has no filter there.
+    QImage renderTimelinePart(const fla::Timeline* timeline, int from, int to, const fla::Element* element, int frame,
+        const QRectF& area, double scale);
+
 public slots:
     void onPlayerFrameChanged(int frame);
 
@@ -969,6 +977,9 @@ private:
     int shownFrame() const;
 
     const fla::Layer* _onlyLayer = nullptr;
+    /// While set, only this element of its keyframe is drawn
+    /// (renderTimelinePart).
+    const fla::Element* _onlyElement = nullptr;
     bool _onionSkin = false;
     bool _lightTable = false;
     RenderPass _renderPass = RenderPass::All;
