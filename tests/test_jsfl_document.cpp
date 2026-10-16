@@ -257,6 +257,30 @@ TEST(jsfl_document_text_blend_and_filters)
                     "no filter\n");
 }
 
+TEST(jsfl_document_combine_and_distribute_to_keyframes)
+{
+    Fixture f;
+    f.host.style.objectDrawing = true;
+    f.host.style.hasFill = true;
+    CHECK(f.run("var d = fl.getDocumentDOM(), tl = d.getTimeline();\n"
+                "d.addNewRectangle({left: 0, top: 0, right: 20, bottom: 20}, 0);\n"
+                "d.addNewRectangle({left: 10, top: 10, right: 30, bottom: 30}, 0);\n"
+                "d.addNewRectangle({left: 100, top: 100, right: 120, bottom: 120}, 0);\n"
+                "var e = tl.layers[0].frames[0].elements;\n"
+                "d.selection = [e[0], e[1]]; fl.trace(d.union() + ' ' + tl.layers[0].frames[0].elements.length);\n"
+                "e = tl.layers[0].frames[0].elements; d.selection = [e[0], e[1]];\n"
+                "fl.trace(d.intersect() + ' ' + tl.layers[0].frames[0].elements.length);\n"
+                "d.selectNone(); fl.trace(d.punch());\n"
+                "var lib = d.library; lib.addNewItem('graphic', 'Dot');\n"
+                "tl.addNewLayer('Dots');\n"
+                "for (var i = 0; i < 3; i++) lib.addItemToDocument({x: i * 30, y: 0}, 'Dot');\n"
+                "d.selection = tl.layers[0].frames[0].elements; fl.trace(d.distributeToKeyframes() + ' ' + tl.layers[0].frameCount);\n"
+                "var n = []; for (var i = 0; i < 3; i++) n.push(tl.layers[0].frames[i].startFrame + ':' + tl.layers[0].frames[i].elements.length);\n"
+                "fl.trace(n.join(' '));\n")
+              .ok);
+    expectOutput(f, "true 2\nfalse 2\nfalse\ntrue 3\n0:1 1:1 2:1\n");
+}
+
 TEST(jsfl_timeline_reverse_frames_and_guides)
 {
     Fixture f;

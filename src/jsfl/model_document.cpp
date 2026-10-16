@@ -18,6 +18,7 @@
 #include "../data/symbol_instance.h"
 #include "../data/symbol_list.h"
 #include "../data/timeline.h"
+#include "../edit/combine_objects.h"
 #include "../edit/command_stack.h"
 #include "../edit/document_settings.h"
 #include "../edit/drawing_style.h"
@@ -308,6 +309,59 @@ Value& filterAt(std::vector<Value>& filters, const Value& index)
     if (at < 0 || at >= static_cast<int>(filters.size()))
         throw Error("There is no filter " + index.toString() + ".");
     return filters[static_cast<size_t>(at)];
+}
+
+/// \a elements in the order they stack, bottom first.
+std::vector<fla::Element*> bottomFirst(std::vector<fla::Element*> elements)
+{
+    const auto depth = [](const fla::Element* element) {
+        const fla::Frame* frame = frameOf(element);
+        if (!frame)
+            return 0;
+        return static_cast<int>(std::find(frame->elements.begin(), frame->elements.end(), element) - frame->elements.begin());
+    };
+    std::stable_sort(elements.begin(), elements.end(),
+        [&depth](const fla::Element* a, const fla::Element* b) { return depth(a) < depth(b); });
+    return elements;
+}
+
+/// Modify > Combine Objects on the selected drawing objects of one frame;
+/// false when there are not two, or nothing would be left.
+bool combineSelection(Document& d, fla::combine::Operation operation, const char* name)
+{
+    std::vector<fla::Shape*> shapes;
+    fla::Frame* frame = nullptr;
+    for (fla::Element* element : bottomFirst(selectedElements(d.session, d.document)))
+    {
+        fla::Frame* owner = frameOf(element);
+        if (element->elementType() != fla::Element::Type::Shape || !owner || (frame && owner != frame))
+            continue;
+        frame = owner;
+        shapes.push_back(static_cast<fla::Shape*>(element));
+    }
+    fla::combine::Result result;
+    if (shapes.size() < 2 || !fla::combine::apply(operation, shapes, result))
+        return false;
+    fla::Selection& selection = d.session.host().selection(d.document);
+    selection.clear();
+    if (result.replacement)
+    {
+        // The new object goes where the lowest of them was.
+        const auto at = std::find(frame->elements.begin(), frame->elements.end(), shapes.front());
+        result.replacement->parent = frame;
+        d.push(fla::CommandPtr(new fla::AddElementCommand(frame, result.replacement, name, &selection,
+            at == frame->elements.end() ? -1 : static_cast<int>(at - frame->elements.begin()))));
+    }
+    for (const auto& rewrite : result.rewritten)
+    {
+        d.push(fla::CommandPtr(new fla::SetShapeContentsCommand(rewrite.first, *rewrite.second, name)));
+        delete rewrite.second;
+    }
+    for (fla::Shape* shape : result.removed)
+        d.push(fla::CommandPtr(new fla::RemoveElementCommand(frame, shape, name, &selection)));
+    if (result.replacement)
+        selection.select(result.replacement);
+    return true;
 }
 
 bool sceneNamed(const fla::Document& data, const std::string& name)
@@ -1122,12 +1176,52 @@ const ClassInfo& Document::classInfo() const
                 return Value();
             fla::Selection& selection = d.session.host().selection(d.document);
             std::vector<fla::CommandPtr> commands = fla::layers::distributeToLayers(*timeline, d.session.host().currentLayer(d.document),
-                needSelection(d.session, d.document), d.data().symbolList, &selection);
+                bottomFirst(needSelection(d.session, d.document)), d.data().symbolList, &selection);
             selection.clear();
             for (fla::CommandPtr& command : commands)
                 d.push(std::move(command));
             return Value();
         });
+        def.method("distributeToKeyframes", 0, [](Document& d, const Args&) {
+            // The selected objects of one frame, bottom first; the first
+            // stays and each next one gets the keyframe after.
+            const std::vector<fla::Element*> elements = bottomFirst(needSelection(d.session, d.document));
+            fla::Frame* frame = frameOf(elements.front());
+            fla::Layer* layer = frame ? dynamic_cast<fla::Layer*>(frame->parent) : nullptr;
+            if (!layer || elements.size() < 2 || layer->isLocked() ||
+                std::any_of(elements.begin(), elements.end(), [frame](const fla::Element* element) { return element->parent != frame; }))
+                return Value(false);
+            const int at = frame->index;
+            const int count = static_cast<int>(elements.size());
+            fla::Selection& selection = d.session.host().selection(d.document);
+            selection.clear();
+            d.push(fla::CommandPtr(new fla::EditFramesCommand({layer}, "Distribute to Keyframes", [layer, at, count](std::vector<fla::Frame*>&) {
+                fla::timeline::insertFrames(*layer, at, count - 1);
+                for (int k = 1; k < count; ++k)
+                    fla::timeline::insertKeyframe(*layer, at + k, true);
+            })));
+            for (int k = 1; k < count; ++k)
+            {
+                fla::Frame* target = nullptr;
+                for (fla::Frame* candidate : layer->frames)
+                    if (candidate && candidate->index == at + k)
+                        target = candidate;
+                fla::Element* element = elements[static_cast<size_t>(k)];
+                fla::Element* copy = target ? fla::cloneElement(*element, target) : nullptr;
+                if (!copy)
+                    continue;
+                fla::relinkSymbols(*copy, d.data().symbolList);
+                d.push(fla::CommandPtr(new fla::AddElementCommand(target, copy, "Distribute to Keyframes", &selection)));
+                d.push(fla::CommandPtr(new fla::RemoveElementCommand(frame, element, "Distribute to Keyframes", &selection)));
+            }
+            return Value(true);
+        });
+        def.method("union", 0, [](Document& d, const Args&) { return Value(combineSelection(d, fla::combine::Operation::Union, "Union")); });
+        def.method("intersect", 0, [](Document& d, const Args&) {
+            return Value(combineSelection(d, fla::combine::Operation::Intersect, "Intersect"));
+        });
+        def.method("punch", 0, [](Document& d, const Args&) { return Value(combineSelection(d, fla::combine::Operation::Punch, "Punch")); });
+        def.method("crop", 0, [](Document& d, const Args&) { return Value(combineSelection(d, fla::combine::Operation::Crop, "Crop")); });
 
         // Text fields, through the selection.
         def.method("getTextString", 2, [](Document& d, const Args& args) { return callOnSelection(d, "getTextString", args); });
