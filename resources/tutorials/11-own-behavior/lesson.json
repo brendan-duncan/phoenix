@@ -4,6 +4,7 @@
   "minutes": 10,
   "order": 11,
   "guide": "behaviors.html",
+  "tags": ["Motion Graphics", "Scripting"],
   "start": {
     "document": "start"
   },

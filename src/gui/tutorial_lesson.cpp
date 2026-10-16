@@ -43,6 +43,15 @@ bool readLesson(const QString& folder, TutorialLesson& lesson, QString& error)
     lesson.minutes = root.value("minutes").toInt(5);
     lesson.order = root.value("order").toInt(100);
     lesson.guide = root.value("guide").toString();
+    for (const QJsonValue& tag : root.value("tags").toArray())
+        if (!tag.toString().trimmed().isEmpty())
+            lesson.tags << tag.toString().trimmed();
+    for (const char* name : {"thumbnail.gif", "thumbnail.png"})
+        if (QFileInfo::exists(QDir(folder).filePath(name)))
+        {
+            lesson.thumbnail = QDir(folder).filePath(name);
+            break;
+        }
 
     const QJsonObject start = root.value("start").toObject();
     if (start.contains("new"))

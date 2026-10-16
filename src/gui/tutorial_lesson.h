@@ -68,6 +68,11 @@ struct TutorialLesson
     int minutes = 5;
     int order = 100;
     QString guide;
+    /// What it is about, to find it by: "Animation", "Motion Graphics".
+    QStringList tags;
+    /// A picture of how it turns out, to know it by: thumbnail.gif (which
+    /// plays) or thumbnail.png in its folder; empty when it has none.
+    QString thumbnail;
     /// "new", "document" or empty.
     QString startKind;
     QString startDocument;

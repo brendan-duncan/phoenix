@@ -4,6 +4,7 @@
   "minutes": 10,
   "order": 7,
   "guide": "tweens.html",
+  "tags": ["Animation"],
   "start": {"document": "start"},
   "final": "final",
   "steps": [

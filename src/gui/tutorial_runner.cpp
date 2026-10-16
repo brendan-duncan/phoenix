@@ -10,6 +10,8 @@
 #include "toolbox.h"
 
 #include <QAbstractButton>
+#include <QButtonGroup>
+#include <QGridLayout>
 #include <QAction>
 #include <QApplication>
 #include <QDateTime>
@@ -22,6 +24,7 @@
 #include <QFileInfo>
 #include <QGuiApplication>
 #include <QHBoxLayout>
+#include <QImageReader>
 #include <QKeyEvent>
 #include <QLabel>
 #include <QListWidget>
@@ -1158,7 +1161,7 @@ TutorialsDialog::TutorialsDialog(QWidget* parent)
     : QDialog(parent)
 {
     setWindowTitle("Tutorials");
-    resize(560, 460);
+    resize(860, 560);
     QVBoxLayout* layout = new QVBoxLayout(this);
     QLabel* intro = new QLabel("Each lesson walks through a task in Phoenix. A small window tells you what to do, "
                                "and the control to use is circled. Lessons work on a new document of their own.",
@@ -1166,17 +1169,72 @@ TutorialsDialog::TutorialsDialog(QWidget* parent)
     intro->setWordWrap(true);
     layout->addWidget(intro);
 
-    _list = new QListWidget(this);
-    _list->setIconSize(QSize(64, 40));
-    layout->addWidget(_list, 1);
-    _summary = new QLabel(this);
-    _summary->setWordWrap(true);
-    _summary->setMinimumHeight(48);
-    _summary->setAlignment(Qt::AlignTop | Qt::AlignLeft);
-    layout->addWidget(_summary);
-
     QStringList problems;
     const std::vector<TutorialLesson> lessons = tutorials::allLessons(&problems);
+
+    // The tags to show only some of them by, in the order lessons first
+    // use them: the basics first.
+    QStringList tags;
+    for (const TutorialLesson& lesson : lessons)
+        for (const QString& tag : lesson.tags)
+            if (!tags.contains(tag))
+                tags << tag;
+    if (!tags.isEmpty())
+    {
+        QWidget* bar = new QWidget(this);
+        QGridLayout* grid = new QGridLayout(bar);
+        grid->setContentsMargins(0, 0, 0, 0);
+        grid->setHorizontalSpacing(4);
+        grid->setVerticalSpacing(4);
+        QButtonGroup* group = new QButtonGroup(this);
+        group->setExclusive(true);
+        QStringList choices = {QString()};
+        choices << tags;
+        const int across = 7;
+        for (int i = 0; i < choices.size(); ++i)
+        {
+            QToolButton* button = new QToolButton(bar);
+            button->setText(choices[i].isEmpty() ? QString("All") : choices[i]);
+            button->setCheckable(true);
+            button->setAutoRaise(true);
+            button->setProperty("tag", choices[i]);
+            button->setToolTip(choices[i].isEmpty() ? QString("Every lesson") : QString("Only the lessons about %1").arg(choices[i]));
+            group->addButton(button);
+            grid->addWidget(button, i / across, i % across);
+            _tagButtons << button;
+            connect(button, &QToolButton::clicked, this, [this, tag = choices[i]]() { filterBy(tag); });
+        }
+        grid->setColumnStretch(across, 1);
+        layout->addWidget(bar);
+    }
+
+    QHBoxLayout* middle = new QHBoxLayout();
+    _list = new QListWidget(this);
+    _list->setIconSize(QSize(128, 72));
+    _list->setSpacing(2);
+    middle->addWidget(_list, 3);
+    // The lesson picked: its picture playing, its name and what it does.
+    QVBoxLayout* side = new QVBoxLayout();
+    _picture = new QLabel(this);
+    _picture->setFixedSize(320, 180);
+    _picture->setAlignment(Qt::AlignCenter);
+    _picture->setStyleSheet("QLabel { background: palette(base); border: 1px solid palette(mid); }");
+    side->addWidget(_picture);
+    _title = new QLabel(this);
+    _title->setWordWrap(true);
+    QFont bold = _title->font();
+    bold.setBold(true);
+    bold.setPointSizeF(bold.pointSizeF() * 1.15);
+    _title->setFont(bold);
+    side->addWidget(_title);
+    _summary = new QLabel(this);
+    _summary->setWordWrap(true);
+    _summary->setAlignment(Qt::AlignTop | Qt::AlignLeft);
+    _summary->setFixedWidth(320);
+    side->addWidget(_summary);
+    side->addStretch(1);
+    middle->addLayout(side, 0);
+    layout->addLayout(middle, 1);
     for (const TutorialLesson& lesson : lessons)
     {
         const bool done = tutorials::finished(lesson.id);
@@ -1185,14 +1243,36 @@ TutorialsDialog::TutorialsDialog(QWidget* parent)
         if (done)
             status += QString::fromUtf8(" • finished");
         else if (reached > 0)
-            status += QString::fromUtf8(" • reached step %1 of %2").arg(reached + 1).arg(lesson.steps.size());
+            status += QString::fromUtf8(" • reached step %1 of %2")
+                          .arg(std::min<int>(reached + 1, static_cast<int>(lesson.steps.size())))
+                          .arg(lesson.steps.size());
+        if (!lesson.tags.isEmpty())
+            status += QString::fromUtf8(" • ") + lesson.tags.join(", ");
         QListWidgetItem* item = new QListWidgetItem(QString("%1\n%2").arg(lesson.title, status), _list);
         item->setData(Qt::UserRole, lesson.id);
         item->setData(Qt::UserRole + 1, lesson.summary);
         item->setData(Qt::UserRole + 2, !lesson.finalDocument.isEmpty());
-        const QString thumbnail = QDir(lesson.folder).filePath("thumbnail.png");
-        if (QFileInfo::exists(thumbnail))
-            item->setIcon(QIcon(thumbnail));
+        item->setData(Qt::UserRole + 3, lesson.tags);
+        item->setData(Qt::UserRole + 4, lesson.thumbnail);
+        item->setData(Qt::UserRole + 5, lesson.title);
+        // In the list, still: its middle frame, which shows more than the
+        // first (a line not yet drawn on); the one picked plays.
+        if (!lesson.thumbnail.isEmpty())
+        {
+            // Read through to it: a GIF's frames build on the ones before.
+            QImageReader reader(lesson.thumbnail);
+            const int middle = std::max(0, reader.imageCount() / 2);
+            QImage still = reader.read();
+            for (int frame = 1; frame <= middle && reader.canRead(); ++frame)
+            {
+                const QImage next = reader.read();
+                if (next.isNull())
+                    break;
+                still = next;
+            }
+            if (!still.isNull())
+                item->setIcon(QIcon(QPixmap::fromImage(still)));
+        }
     }
 
     QLabel* own = new QLabel(QString("<small>Lessons of your own go in <a href=\"%1\">%2</a>, a folder each with its "
@@ -1240,7 +1320,7 @@ TutorialsDialog::TutorialsDialog(QWidget* parent)
     connect(_list, &QListWidget::currentItemChanged, this, [this, start, result](QListWidgetItem* item) {
         start->setEnabled(item != nullptr);
         result->setEnabled(item && item->data(Qt::UserRole + 2).toBool());
-        _summary->setText(item ? item->data(Qt::UserRole + 1).toString() : QString());
+        preview(item);
         if (item)
             start->setText(tutorials::finished(item->data(Qt::UserRole).toString()) ? "Start Again" : "Start");
     });
@@ -1251,4 +1331,54 @@ TutorialsDialog::TutorialsDialog(QWidget* parent)
     layout->addWidget(buttons);
     if (_list->count() > 0)
         _list->setCurrentRow(0);
+    // The tag chosen last time.
+    const QString remembered = QSettings().value("tutorialsTag").toString();
+    filterBy(tags.contains(remembered) ? remembered : QString());
+}
+
+void TutorialsDialog::filterBy(const QString& tag)
+{
+    for (QToolButton* button : _tagButtons)
+        button->setChecked(button->property("tag").toString() == tag);
+    QListWidgetItem* first = nullptr;
+    for (int row = 0; row < _list->count(); ++row)
+    {
+        QListWidgetItem* item = _list->item(row);
+        const bool shown = tag.isEmpty() || item->data(Qt::UserRole + 3).toStringList().contains(tag);
+        item->setHidden(!shown);
+        if (shown && !first)
+            first = item;
+    }
+    QSettings().setValue("tutorialsTag", tag);
+    // The one picked stays picked if it still shows.
+    if (!_list->currentItem() || _list->currentItem()->isHidden())
+        _list->setCurrentItem(first);
+    if (!first)
+        preview(nullptr);
+}
+
+void TutorialsDialog::preview(QListWidgetItem* item)
+{
+    if (_movie)
+    {
+        _movie->stop();
+        _movie->deleteLater();
+        _movie = nullptr;
+    }
+    _picture->clear();
+    _title->setText(item ? item->data(Qt::UserRole + 5).toString() : QString());
+    _summary->setText(item ? item->data(Qt::UserRole + 1).toString() : QString());
+    const QString thumbnail = item ? item->data(Qt::UserRole + 4).toString() : QString();
+    if (thumbnail.isEmpty())
+        return;
+    if (thumbnail.endsWith(".gif", Qt::CaseInsensitive))
+    {
+        _movie = new QMovie(thumbnail, QByteArray(), this);
+        _movie->setScaledSize(_picture->size() - QSize(2, 2));
+        _picture->setMovie(_movie);
+        _movie->start();
+    }
+    else
+        _picture->setPixmap(QPixmap(thumbnail).scaled(_picture->size() - QSize(2, 2), Qt::KeepAspectRatio,
+            Qt::SmoothTransformation));
 }

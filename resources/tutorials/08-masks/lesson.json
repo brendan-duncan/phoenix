@@ -4,6 +4,7 @@
   "minutes": 8,
   "order": 8,
   "guide": "masks-guides.html",
+  "tags": ["Animation"],
   "start": {"document": "start"},
   "final": "final",
   "steps": [

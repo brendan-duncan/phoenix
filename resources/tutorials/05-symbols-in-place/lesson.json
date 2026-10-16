@@ -3,6 +3,7 @@
   "summary": "Turn a drawing into a graphic symbol, place it twice, edit it in place and watch both copies change, then tint one and set how a graphic loops.",
   "minutes": 7,
   "order": 5,
+  "tags": ["Symbols"],
   "start": {"document": "start"},
   "final": "final",
   "steps": [

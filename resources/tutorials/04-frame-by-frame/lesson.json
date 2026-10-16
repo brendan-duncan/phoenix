@@ -3,6 +3,7 @@
   "summary": "Draw a bouncing ball one keyframe at a time with F6 and F7, use onion skinning to see the frames around the one you draw, step through it, and play it on a loop.",
   "minutes": 8,
   "order": 4,
+  "tags": ["Animation", "Drawing"],
   "start": {"new": {"width": 1280, "height": 720, "fps": 12}},
   "final": "final",
   "steps": [

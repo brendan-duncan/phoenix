@@ -4,6 +4,7 @@
   "minutes": 8,
   "order": 9,
   "guide": "timeline.html",
+  "tags": ["Rigging", "Animation"],
   "start": {"document": "start"},
   "final": "final",
   "steps": [

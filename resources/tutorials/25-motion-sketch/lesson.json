@@ -4,6 +4,7 @@
   "minutes": 6,
   "order": 25,
   "guide": "tweens.html#motion-sketch",
+  "tags": ["Animation", "Motion Graphics"],
   "start": {
     "document": "start"
   },

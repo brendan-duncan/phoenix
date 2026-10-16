@@ -3,6 +3,7 @@
   "summary": "Find your way around Phoenix: the toolbox and its flyouts, the edit bar and stage controls, the timeline, the Properties panel's tabs, the Library, Color and Swatches panels, and workspaces.",
   "minutes": 6,
   "order": 2,
+  "tags": ["Getting Started"],
   "start": {"new": {"width": 1280, "height": 720, "fps": 24}},
   "steps": [
     {

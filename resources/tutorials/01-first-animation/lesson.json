@@ -4,6 +4,7 @@
   "minutes": 10,
   "order": 1,
   "guide": "first-animation.html",
+  "tags": ["Getting Started", "Animation"],
   "start": {"new": {"width": 1280, "height": 720, "fps": 24}},
   "final": "final",
   "steps": [

@@ -3,6 +3,7 @@
   "summary": "See how shapes drawn in merge mode cut into each other, keep shapes apart with Object Drawing, and use Break Apart and Group to move between the two.",
   "minutes": 7,
   "order": 3,
+  "tags": ["Getting Started", "Drawing"],
   "start": {"new": {"width": 1280, "height": 720, "fps": 24}},
   "final": "final",
   "steps": [

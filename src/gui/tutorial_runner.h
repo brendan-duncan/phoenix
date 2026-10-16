@@ -13,6 +13,7 @@ class MainWindow;
 class QAction;
 class QLabel;
 class QListWidget;
+class QListWidgetItem;
 class QMenu;
 class QPushButton;
 class QTimer;
@@ -210,8 +211,17 @@ public:
     bool finalChosen() const { return _finalChosen; }
 
 private:
+    /// Only the lessons with \a tag show; all of them for an empty one.
+    void filterBy(const QString& tag);
+    /// The lesson picked, its picture playing beside the list.
+    void preview(QListWidgetItem* item);
+
     QListWidget* _list = nullptr;
+    QLabel* _picture = nullptr;
+    QLabel* _title = nullptr;
     QLabel* _summary = nullptr;
+    class QMovie* _movie = nullptr;
+    QList<class QToolButton*> _tagButtons;
     QString _chosen;
     bool _finalChosen = false;
 };
