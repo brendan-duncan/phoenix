@@ -3,6 +3,7 @@
 #include "pdf_objects.h"
 
 #include "zlib.h"
+#include "zstd.h"
 
 #include <algorithm>
 #include <array>
@@ -63,6 +64,38 @@ std::vector<uint8_t> inflateAll(const uint8_t* data, size_t size)
             break;
     }
     inflateEnd(&stream);
+    return out;
+}
+
+/// Zstandard frames, one after another, decompressed: as much as could be
+/// read.
+std::vector<uint8_t> zstdAll(const uint8_t* data, size_t size)
+{
+    std::vector<uint8_t> out;
+    ZSTD_DStream* stream = ZSTD_createDStream();
+    if (!stream)
+        return out;
+    // A window past 128 MB is more than any real file asks for.
+    ZSTD_DCtx_setParameter(stream, ZSTD_d_windowLogMax, 27);
+    ZSTD_inBuffer in{data, size, 0};
+    std::vector<uint8_t> buffer(ZSTD_DStreamOutSize());
+    for (;;)
+    {
+        const size_t before = in.pos;
+        ZSTD_outBuffer piece{buffer.data(), buffer.size(), 0};
+        const size_t status = ZSTD_decompressStream(stream, &piece, &in);
+        if (ZSTD_isError(status))
+            break;
+        out.insert(out.end(), buffer.begin(), buffer.begin() + static_cast<std::ptrdiff_t>(piece.pos));
+        // Past a quarter of a gigabyte the data is damage, or a bomb.
+        if (out.size() > (size_t(1) << 28))
+            break;
+        // Done once the input is used and nothing more is held back; stuck
+        // on bytes after the last frame that are not one.
+        if ((in.pos == in.size && piece.pos < piece.size) || (piece.pos == 0 && in.pos == before))
+            break;
+    }
+    ZSTD_freeDStream(stream);
     return out;
 }
 
@@ -1127,12 +1160,26 @@ Artwork readIllustratorPrivateData(const std::vector<uint8_t>& data)
         }
         return readIllustrator(std::string(body.begin(), body.end()));
     }
-    if (text.find("%AI24_ZStandard_Data") != std::string::npos)
+    const char* const zstandard = "%AI24_ZStandard_Data";
+    const size_t zmark = text.find(zstandard);
+    if (zmark != std::string::npos)
     {
-        Artwork art;
-        note(art, "This Illustrator file was saved without PDF content and compressed in a way Phoenix cannot read "
-                  "yet. Save it from Illustrator with \"Create PDF Compatible File\" turned on.");
-        return art;
+        // The first frame, a line break or so past the mark.
+        size_t start = zmark + std::strlen(zstandard);
+        for (size_t k = start; k < std::min(data.size(), start + 16) && k + 4 <= data.size(); ++k)
+            if (data[k] == 0x28 && data[k + 1] == 0xB5 && data[k + 2] == 0x2F && data[k + 3] == 0xFD)
+            {
+                start = k;
+                break;
+            }
+        const std::vector<uint8_t> body = zstdAll(data.data() + start, data.size() - start);
+        if (body.empty())
+        {
+            Artwork art;
+            note(art, "The file's Illustrator data could not be decompressed.");
+            return art;
+        }
+        return readIllustrator(std::string(body.begin(), body.end()));
     }
     return readIllustrator(text);
 }

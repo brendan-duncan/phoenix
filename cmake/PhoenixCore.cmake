@@ -245,7 +245,7 @@ function(phoenix_add_core target src)
         target_compile_definitions(${target} PUBLIC UNICODE _UNICODE _ENABLE_EXTENDED_ALIGNED_STORAGE)
     endif()
     if(CORE_FILES)
-        target_link_libraries(${target} PUBLIC tinyxml2 zlibstatic)
+        target_link_libraries(${target} PUBLIC tinyxml2 zlibstatic zstd_decompress)
         target_include_directories(${target} PUBLIC
             ${src}/third_party/zlib
             ${CMAKE_BINARY_DIR}/src/third_party/zlib)

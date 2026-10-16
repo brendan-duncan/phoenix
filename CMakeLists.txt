@@ -112,6 +112,7 @@ FetchContent_MakeAvailable(quickjs)
 set(tinyxml2_SHARED_LIBS OFF CACHE BOOL "Don't build tinyxml2 as a shared library")
 set(tinyxml2_BUILD_TESTING OFF CACHE BOOL "Don't build tinyxml2 tests")
 add_subdirectory(src/third_party/tinyxml2)
+add_subdirectory(src/third_party/zstd)
 add_subdirectory(src/third_party/libvterm)
 
 set(HEADERS

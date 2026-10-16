@@ -6,8 +6,9 @@
 - A C++17 compiler
 - Git and a network connection for the first configure: the ActionScript parser
   ([libas3](https://github.com/brendan-duncan/libas3)) is fetched at configure
-  time, and so is Qt unless one is already installed (see "Finding Qt"). zlib
-  and tinyxml2 are vendored under `src/third_party` and need nothing.
+  time, and so is Qt unless one is already installed (see "Finding Qt"). zlib,
+  tinyxml2 and Zstandard's decompressor are vendored under `src/third_party`
+  and need nothing.
 
 Qt does not need to be installed: the configure step downloads a trimmed Qt 6
 (Core, Gui, Widgets, Svg, their plugins and tools, about 40 MB) into
@@ -160,8 +161,8 @@ listed once, in `cmake/PhoenixCore.cmake`, and built once as the `phoenix_core`
 object library that both the app and the tests link. A new Qt-free source goes
 in that list (in the group for what it needs), not in the app's own list.
 
-The tests also build on their own, with no Qt installed, using the zlib and
-tinyxml2 kept in `src/third_party`:
+The tests also build on their own, with no Qt installed, using the zlib,
+tinyxml2 and Zstandard kept in `src/third_party`:
 
 ```
 cmake -S tests -B build-tests
