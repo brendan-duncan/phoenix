@@ -646,9 +646,12 @@ Image read(const std::vector<uint8_t>& bytes)
         }
         else if (compression == 1)
         {
-            std::vector<size_t> sizes(channels, 0);
-            for (int c = 0; c < channels; ++c)
-                for (int row = 0; row < image.height; ++row)
+            // The format allows 56 channels; past the end of the file the
+            // counts stop.
+            const int counted = std::min<int>(channels, 56);
+            std::vector<size_t> sizes(static_cast<size_t>(std::max(counted, planes)), 0);
+            for (int c = 0; c < counted && !in.failed; ++c)
+                for (int row = 0; row < image.height && !in.failed; ++row)
                     sizes[static_cast<size_t>(c)] += format.large ? in.u32() : in.u16();
             for (int c = 0; c < planes && !in.failed; ++c)
             {

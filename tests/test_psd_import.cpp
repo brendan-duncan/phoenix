@@ -167,6 +167,24 @@ TEST(psd_damaged_sizes_are_not_given_memory)
     Spec good{"Good", 0, 0, 2, 2, 0, false, 255, {raw(4, 255), raw(4, 1), raw(4, 2), raw(4, 3)}};
     const fla::psd::Image image = fla::psd::read(document({wrapped, claimed, good}));
     CHECK(image.layers.size() == 1 && image.layers[0].name == "Good" && image.layers[0].rgba.size() == 16);
+
+    // A flattened image claiming 65535 channels of 300000 rows, its row
+    // counts cut off: read up to the end, not billions of times.
+    Writer flat;
+    flat.text("8BPS");
+    flat.put(1, 2);
+    flat.put(0, 6);
+    flat.put(0xffff, 2);
+    flat.put(300000, 4);
+    flat.put(1, 4);
+    flat.put(8, 2);
+    flat.put(3, 2);
+    flat.put(0, 4);
+    flat.put(0, 4);
+    flat.put(0, 4);
+    flat.put(1, 2); // PackBits
+    flat.put(0, 4);
+    CHECK(!fla::psd::read(flat.bytes).ok);
 }
 
 namespace {
