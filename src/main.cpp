@@ -1,3 +1,4 @@
+#include "gui/crash_dump.h"
 #include "gui/app_identity.h"
 #include "gui/command_line.h"
 #include "gui/mcp_server.h"
@@ -101,6 +102,9 @@ public:
 
 int main(int argc, char *argv[])
 {
+    // A crash leaves a dump to find out from what (Windows).
+    CrashDump::install();
+
     // Before anything else: the installer and the updater run Phoenix with
     // arguments of their own, which this answers and exits on.
     Updater::handleStartup();

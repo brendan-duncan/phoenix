@@ -437,6 +437,7 @@ set(SOURCES
     src/gui/envelope_dialog.cpp
     src/gui/ease_curve_dialog.cpp
     src/gui/file_association.cpp
+    src/gui/crash_dump.cpp
     src/gui/color_panel.cpp
     src/gui/video_import.cpp
     src/gui/swatches_panel.cpp
@@ -558,6 +559,13 @@ endif()
 if(MSVC)
     # Scripts run on the window's thread; room for deep recursion in them.
     target_link_options(Phoenix PRIVATE /STACK:8388608)
+    # Symbols for a Release build too, beside it as Phoenix.pdb, so a crash
+    # dump (crash_dump.cpp) reads as functions and lines. The code is
+    # optimized just the same.
+    target_compile_options(Phoenix PRIVATE $<$<CONFIG:Release>:/Zi>)
+    target_compile_options(phoenix_core PRIVATE $<$<CONFIG:Release>:/Zi>)
+    target_link_options(Phoenix PRIVATE $<$<CONFIG:Release>:/DEBUG /OPT:REF /OPT:ICF>)
+    target_link_libraries(Phoenix PRIVATE dbghelp)
     # main_window.cpp has more sections than an object file holds by
     # default once inlining adds its own (RelWithDebInfo).
     target_compile_options(Phoenix PRIVATE /bigobj)
