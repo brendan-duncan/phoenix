@@ -9,7 +9,52 @@
 #include "../src/data/timeline.h"
 #include "../src/parser/fla_doctor.h"
 
+#include <filesystem>
+#include <fstream>
 #include <memory>
+
+TEST(the_doctor_salvages_nothing_outside_its_folder)
+{
+    // Stored entries: the document, one named to climb out of the folder,
+    // and a deflated one whose header ends the file.
+    std::vector<uint8_t> zip;
+    const auto entry = [&zip](const std::string& name, const std::string& text, uint16_t method) {
+        const auto u16 = [&zip](uint32_t v) {
+            zip.push_back(static_cast<uint8_t>(v));
+            zip.push_back(static_cast<uint8_t>(v >> 8));
+        };
+        zip.insert(zip.end(), {0x50, 0x4B, 0x03, 0x04, 20, 0, 0, 0});
+        u16(method);
+        zip.insert(zip.end(), 8, 0); // time, date, crc
+        u16(static_cast<uint32_t>(text.size()));
+        u16(0);
+        u16(static_cast<uint32_t>(text.size()));
+        u16(0);
+        u16(static_cast<uint32_t>(name.size()));
+        u16(0);
+        zip.insert(zip.end(), name.begin(), name.end());
+        zip.insert(zip.end(), text.begin(), text.end());
+    };
+    entry("DOMDocument.xml", "<DOMDocument/>", 0);
+    entry("../phoenix_doctor_escaped.txt", "out", 0);
+    entry("LIBRARY/end.xml", "", 8);
+    namespace fs = std::filesystem;
+    const fs::path base = fs::temp_directory_path() / "phoenix_doctor_salvage";
+    fs::remove_all(base);
+    fs::create_directories(base);
+    const fs::path archive = base / "broken.fla";
+    {
+        std::ofstream out(archive, std::ios::binary);
+        out.write(reinterpret_cast<const char*>(zip.data()), static_cast<std::streamsize>(zip.size()));
+    }
+    std::vector<std::string> recovered, notes;
+    std::string error;
+    CHECK(fla::doctor::salvage(archive.u8string(), (base / "out").u8string(), recovered, notes, error));
+    CHECK(fs::exists(base / "out" / "DOMDocument.xml"));
+    CHECK(!fs::exists(base / "phoenix_doctor_escaped.txt"));
+    CHECK(recovered.size() == 1);
+    fs::remove_all(base);
+}
 
 TEST(the_doctor_finds_and_repairs_broken_frames_and_missing_symbols)
 {

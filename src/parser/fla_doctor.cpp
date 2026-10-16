@@ -1,6 +1,7 @@
 #include "fla_doctor.h"
 
 #include "zip_reader.h"
+#include "../writer/xfl_content.h"
 
 #include "../data/bitmap.h"
 #include "../data/bitmap_fill.h"
@@ -555,7 +556,7 @@ bool salvage(const std::string& path, const std::string& folder, std::vector<std
             z_stream stream{};
             if (inflateInit2(&stream, -MAX_WBITS) == Z_OK)
             {
-                stream.next_in = const_cast<Bytef*>(&data[start]);
+                stream.next_in = const_cast<Bytef*>(data.data() + start);
                 stream.avail_in = static_cast<uInt>(data.size() - start);
                 uint8_t buffer[65536];
                 int status = Z_OK;
@@ -574,7 +575,8 @@ bool salvage(const std::string& path, const std::string& folder, std::vector<std
                 inflateEnd(&stream);
             }
         }
-        if (ok && !name.empty() && name.back() != '/')
+        // A name that climbs out of the folder is never written.
+        if (ok && !name.empty() && name.back() != '/' && XFLContent::isSafeRelativePath(name))
         {
             const fs::path target = fs::u8path(folder) / fs::u8path(name);
             fs::create_directories(target.parent_path(), ignored);
@@ -603,7 +605,7 @@ bool salvage(const std::string& path, const std::string& folder, std::vector<std
          include = include->NextSiblingElement("Include"))
     {
         const char* href = include->Attribute("href");
-        if (!href)
+        if (!href || !XFLContent::isSafeRelativePath(href))
             continue;
         const fs::path file = root / "LIBRARY" / fs::u8path(href);
         std::ifstream in(file, std::ios::binary);
