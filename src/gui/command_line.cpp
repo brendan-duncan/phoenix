@@ -7,6 +7,7 @@
 #include "phoenix_view.h"
 #include "player.h"
 #include "../jsfl/behavior_frames.h"
+#include "../jsfl/native_extensions.h"
 
 #include "../data/action_script.h"
 #include "../data/document.h"
@@ -115,13 +116,17 @@ const char* const kHelp =
     "      file back. batch <folder> --update-links --save does every shot.\n"
     "\n"
     "  run-script <script.jsfl|script.py> [document ...] [--timeout SECONDS]\n"
+    "             [--no-native-extensions]\n"
     "      Opens the documents and runs a JSFL or Python script on them with no\n"
     "      window (Python scripts use your own Python 3.8 or later; set\n"
     "      PHOENIX_PYTHON to pick a python or virtual environment).\n"
     "      What it traces goes to standard output, its alerts too; confirm\n"
     "      answers yes, prompt its default, and an open-file dialog the first\n"
     "      document. Exits 1 when the script fails. The script stops after\n"
-    "      --timeout seconds (600 unless given; 0 for no limit).\n"
+    "      --timeout seconds (600 unless given; 0 for no limit). Native\n"
+    "      extension libraries in External Libraries load as in the window;\n"
+    "      --no-native-extensions (or PHOENIX_NATIVE_EXTENSIONS=off) leaves\n"
+    "      them out, here and in batch.\n"
     "\n"
     "  play <file> [--frames N] [--tree] [--click-all] [--image <out.png>]\n"
     "      Plays the movie as Control > Test Movie does, scripts and all, for N\n"
@@ -936,7 +941,10 @@ bool convert(const std::string& in, const std::string& out, std::string& error)
 int run(const QStringList& arguments)
 {
     const QString name = arguments.value(1);
-    const QStringList args = arguments.mid(2);
+    QStringList args = arguments.mid(2);
+    // Scripts run without the native libraries in External Libraries.
+    if (args.removeAll("--no-native-extensions") > 0)
+        jsfl::native::setEnabled(false);
     if (name == "render")
     {
         if (args.isEmpty())
