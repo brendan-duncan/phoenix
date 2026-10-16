@@ -5,6 +5,8 @@
 #include "../src/data/frame.h"
 #include "../src/data/group.h"
 #include "../src/data/layer.h"
+#include "../src/data/morph_segment.h"
+#include "../src/data/morph_shape.h"
 #include "../src/data/resource.h"
 #include "../src/data/shape.h"
 #include "../src/data/symbol_list.h"
@@ -16,6 +18,7 @@
 #include "../src/util/swf_writer.h"
 
 #include <cmath>
+#include <functional>
 #include <memory>
 #include <string>
 
@@ -503,4 +506,286 @@ TEST(swf_import_survives_damaged_headers)
     // ADPCM claiming far more samples than its data holds.
     const std::vector<int16_t> samples = swf::decodeAdpcm({0x00, 0x00, 0x00}, 1, 0xFFFFFFFFu);
     CHECK(samples.size() <= 13);
+}
+
+namespace {
+
+/// PlaceObject2 of character \a id at depth 1, or a move of what is there,
+/// with the matrix (a, b, c, d, then tx, ty in twips) and, unless 256, an
+/// alpha multiplier in 256ths.
+std::vector<uint8_t> placeAt(int id, bool move, double a, double b, double c, double d, int tx, int ty,
+    int alpha = 256)
+{
+    Bits bits;
+    bits.byte(static_cast<uint8_t>((move ? 0x01 : 0x02) | 0x04 | (alpha != 256 ? 0x08 : 0)));
+    bits.byte(1);
+    bits.byte(0);
+    if (!move)
+    {
+        bits.byte(static_cast<uint8_t>(id & 0xFF));
+        bits.byte(static_cast<uint8_t>(id >> 8));
+    }
+    bits.align();
+    const auto fixed = [](double v) { return static_cast<int>(std::lround(v * 65536.0)); };
+    bits.put(1, 1);
+    bits.put(22, 5);
+    bits.signedBits(fixed(a), 22);
+    bits.signedBits(fixed(d), 22);
+    bits.put(1, 1);
+    bits.put(22, 5);
+    bits.signedBits(fixed(b), 22);
+    bits.signedBits(fixed(c), 22);
+    bits.put(20, 5);
+    bits.signedBits(tx, 20);
+    bits.signedBits(ty, 20);
+    if (alpha != 256)
+    {
+        bits.align();
+        bits.put(0, 1); // no offsets
+        bits.put(1, 1); // multipliers
+        bits.put(10, 4);
+        for (int m : {256, 256, 256, alpha})
+            bits.signedBits(m, 10);
+    }
+    return bits.bytes;
+}
+
+struct Converted
+{
+    Parsed parsed;
+    std::string report;
+    const fla::Layer* layer = nullptr;
+};
+
+/// A movie of \a frames frames, each placing a red square by \a placeFrame
+/// (the shape's id and the frame to a PlaceObject2), converted with
+/// \a options; its one layer.
+Converted convertFrames(int frames, const std::function<std::vector<uint8_t>(int, int)>& placeFrame,
+    const SwfImport::Options& options = SwfImport::Options())
+{
+    swf::Writer writer(400, 400, 24.0, {255, 255, 255, 255});
+    swf::Fill red;
+    red.color = {255, 0, 0, 255};
+    const int shape = writer.defineShape(red, square(20));
+    for (int f = 0; f < frames; ++f)
+    {
+        writer.tag(26, placeFrame(shape, f));
+        writer.showFrame();
+    }
+    Converted converted;
+    std::map<std::string, std::vector<uint8_t>> files;
+    std::string error;
+    CHECK(SwfImport::convert(writer.finish(false), files, error, &converted.report, options));
+    converted.parsed = parse(files);
+    if (converted.parsed.document && !converted.parsed.document->timelines.empty() &&
+        !converted.parsed.document->timelines[0]->layers.empty())
+        converted.layer = converted.parsed.document->timelines[0]->layers[0];
+    return converted;
+}
+
+} // namespace
+
+TEST(swf_import_puts_even_movement_back_as_a_classic_tween)
+{
+    // Ten frames sliding right 5 pixels a frame and fading out, then four
+    // frames held.
+    const auto slide = [](int shape, int f) {
+        const int at = std::min(f, 9);
+        return placeAt(shape, f > 0, 1, 0, 0, 1, at * 100, 400, 256 - at * 24);
+    };
+    Converted converted = convertFrames(14, slide);
+    CHECK(converted.layer != nullptr);
+    if (!converted.layer)
+        return;
+    // A tween over frames 0 to 8, and the last keyframe held to the end.
+    CHECK(converted.layer->frames.size() == 2);
+    if (converted.layer->frames.size() != 2)
+        return;
+    const fla::Frame* tween = converted.layer->frames[0];
+    CHECK(tween->tweenType == fla::TweenType::Motion && tween->duration == 9 && tween->acceleration == 0);
+    CHECK(converted.layer->frames[1]->index == 9 && converted.layer->frames[1]->duration == 5);
+    CHECK(converted.layer->frames[1]->tweenType == fla::TweenType::None);
+    CHECK(converted.report.find("1 classic tween;") != std::string::npos);
+
+    // Kept baked when asked: a keyframe for each placement.
+    SwfImport::Options baked;
+    baked.recognizeTweens = false;
+    Converted kept = convertFrames(14, slide, baked);
+    CHECK(kept.layer && kept.layer->frames.size() == 14);
+}
+
+TEST(swf_import_finds_the_ease_and_turn_of_a_tween)
+{
+    // Easing in (-50) across 2000 twips over 10 frames.
+    Converted eased = convertFrames(11, [](int shape, int f) {
+        const double t = f / 10.0;
+        const double p = t * 0.5 + t * t * 0.5;
+        return placeAt(shape, f > 0, 1, 0, 0, 1, static_cast<int>(std::lround(2000 * p)), 0);
+    });
+    CHECK(eased.layer && eased.layer->frames.size() == 2);
+    if (eased.layer && !eased.layer->frames.empty())
+        CHECK(eased.layer->frames[0]->tweenType == fla::TweenType::Motion &&
+              eased.layer->frames[0]->acceleration == -50);
+
+    // A whole turn clockwise over 12 frames about the origin, ending as it
+    // started.
+    Converted spun = convertFrames(13, [](int shape, int f) {
+        const double angle = f * 3.14159265358979323846 / 6.0;
+        return placeAt(shape, f > 0, std::cos(angle), std::sin(angle), -std::sin(angle), std::cos(angle), 4000, 4000);
+    });
+    CHECK(spun.layer && spun.layer->frames.size() == 2);
+    if (spun.layer && !spun.layer->frames.empty())
+    {
+        const fla::Frame* tween = spun.layer->frames[0];
+        CHECK(tween->tweenType == fla::TweenType::Motion && tween->duration == 12);
+        CHECK(tween->motionTweenRotate == "clockwise" && tween->motionTweenRotateTimes == 1);
+    }
+}
+
+TEST(swf_import_keeps_uneven_frames_baked)
+{
+    // Jumping about: no tween shows these, so each frame is a keyframe.
+    const int xs[6] = {0, 100, 150, 400, 410, 900};
+    Converted converted = convertFrames(6, [&xs](int shape, int f) {
+        return placeAt(shape, f > 0, 1, 0, 0, 1, xs[f], 0);
+    });
+    CHECK(converted.layer && converted.layer->frames.size() == 6);
+    if (converted.layer)
+        for (const fla::Frame* frame : converted.layer->frames)
+            CHECK(frame->tweenType == fla::TweenType::None);
+    CHECK(converted.report.find("tween") == std::string::npos);
+}
+
+TEST(swf_import_puts_a_morph_back_as_a_shape_tween)
+{
+    // Morph 3: a red square 50 twips a side growing to a blue one of 100,
+    // shown at ratios running evenly over ten frames.
+    Bits head;
+    head.byte(3);
+    head.byte(0);
+    for (int r = 0; r < 2; ++r)
+    {
+        head.align();
+        head.put(15, 5);
+        for (int v : {0, 2000, 0, 2000})
+            head.signedBits(v, 15);
+    }
+    Bits body;
+    body.byte(1); // one fill, solid
+    body.byte(0x00);
+    for (uint8_t c : {255, 0, 0, 255, 0, 0, 255, 255})
+        body.byte(c);
+    body.byte(0); // no lines
+    body.align();
+    body.put(1, 4);
+    body.put(0, 4);
+    for (int flag : {0, 0, 0, 0, 1, 1})
+        body.put(static_cast<uint32_t>(flag), 1); // fill 0 and a move
+    body.put(15, 5);
+    body.signedBits(0, 15);
+    body.signedBits(0, 15);
+    body.put(1, 1);
+    squareEdges(body, 1000);
+    body.put(0, 6);
+    Bits end;
+    end.put(0, 4);
+    end.put(0, 4);
+    for (int flag : {0, 0, 0, 0, 0, 1})
+        end.put(static_cast<uint32_t>(flag), 1);
+    end.put(15, 5);
+    end.signedBits(0, 15);
+    end.signedBits(0, 15);
+    squareEdges(end, 2000);
+    end.put(0, 6);
+    std::vector<uint8_t> tag = head.bytes;
+    const uint32_t offset = static_cast<uint32_t>(body.bytes.size());
+    for (int i = 0; i < 4; ++i)
+        tag.push_back(static_cast<uint8_t>((offset >> (8 * i)) & 0xFF));
+    tag.insert(tag.end(), body.bytes.begin(), body.bytes.end());
+    tag.insert(tag.end(), end.bytes.begin(), end.bytes.end());
+
+    swf::Writer writer(200, 200, 24.0, {255, 255, 255, 255});
+    writer.tag(46, tag);
+    for (int f = 0; f <= 10; ++f)
+    {
+        const int ratio = static_cast<int>(std::lround(65535.0 * f / 10.0));
+        if (f == 0)
+            writer.tag(26, {0x12, 1, 0, 3, 0, static_cast<uint8_t>(ratio & 0xFF), static_cast<uint8_t>(ratio >> 8)});
+        else
+            writer.tag(26, {0x11, 1, 0, static_cast<uint8_t>(ratio & 0xFF), static_cast<uint8_t>(ratio >> 8)});
+        writer.showFrame();
+    }
+    const std::vector<uint8_t> movie = writer.finish(false);
+    std::map<std::string, std::vector<uint8_t>> files;
+    std::string error, report;
+    CHECK(SwfImport::convert(movie, files, error, &report));
+    CHECK(report.find("1 shape tween") != std::string::npos);
+    Parsed parsed = parse(files);
+    CHECK(parsed.document && parsed.document->timelines.size() == 1);
+    if (!parsed.document)
+        return;
+    const fla::Layer* layer = parsed.document->timelines[0]->layers[0];
+    CHECK(layer->frames.size() == 2);
+    if (layer->frames.size() != 2)
+        return;
+    const fla::Frame* tween = layer->frames[0];
+    CHECK(tween->tweenType == fla::TweenType::Shape && tween->duration == 10);
+    // One outline of four sides, from the small square's corner to the
+    // large one's.
+    CHECK(tween->morphShape && tween->morphShape->segments.size() == 1);
+    if (tween->morphShape && tween->morphShape->segments.size() == 1)
+    {
+        const fla::MorphSegment* segment = tween->morphShape->segments[0];
+        CHECK(segment->curves.size() == 4 && segment->fillIndex1 == 1);
+        if (segment->curves.size() == 4)
+        {
+            CHECK(std::fabs(segment->curves[1]->anchorPointA.x - 50) < 1e-6 &&
+                  std::fabs(segment->curves[1]->anchorPointA.y - 50) < 1e-6);
+            CHECK(std::fabs(segment->curves[1]->anchorPointB.x - 100) < 1e-6 &&
+                  std::fabs(segment->curves[1]->anchorPointB.y - 100) < 1e-6);
+        }
+    }
+    CHECK(layer->frames[1]->index == 10 && layer->frames[1]->elements.size() == 1);
+
+    // Kept baked when asked.
+    std::map<std::string, std::vector<uint8_t>> baked;
+    SwfImport::Options options;
+    options.recognizeTweens = false;
+    CHECK(SwfImport::convert(movie, baked, error, nullptr, options));
+    Parsed kept = parse(baked);
+    CHECK(kept.document && kept.document->timelines[0]->layers[0]->frames.size() == 11);
+}
+
+TEST(swf_import_brings_back_a_video_as_an_item_of_its_size)
+{
+    // Video 7: 48 frames of 320x240 VP6, shown over three frames with a
+    // picture each.
+    swf::Writer writer(400, 300, 24.0, {255, 255, 255, 255});
+    writer.tag(60, {7, 0, 48, 0, 0x40, 0x01, 0xF0, 0x00, 0x00, 4});
+    for (int f = 0; f < 3; ++f)
+    {
+        writer.tag(61, {7, 0, static_cast<uint8_t>(f), 0, 0x00});
+        if (f == 0)
+            writer.tag(26, {0x02, 1, 0, 7, 0});
+        else
+            writer.tag(26, {0x11, 1, 0, static_cast<uint8_t>(f), 0}); // a move to picture f
+        writer.showFrame();
+    }
+    std::map<std::string, std::vector<uint8_t>> files;
+    std::string error, report;
+    CHECK(SwfImport::convert(writer.finish(false), files, error, &report));
+    CHECK(report.find("video pictures") != std::string::npos);
+    Parsed parsed = parse(files);
+    CHECK(parsed.document && parsed.document->videos.size() == 1);
+    if (!parsed.document || parsed.document->videos.size() != 1)
+        return;
+    const fla::Document::VideoInfo& video = parsed.document->videos[0];
+    CHECK(video.width == 320 && video.height == 240 && std::fabs(video.fps - 24.0) < 1e-9);
+    const auto xml = files["DOMDocument.xml"];
+    CHECK(std::string(xml.begin(), xml.end()).find("length=\"2\"") != std::string::npos);
+    // Placed on the stage, one keyframe across the pictures it plays.
+    const fla::Layer* layer = parsed.document->timelines[0]->layers[0];
+    CHECK(layer->frames.size() == 1 && layer->frames[0]->duration == 3);
+    CHECK(layer->frames[0]->elements.size() == 1 &&
+          layer->frames[0]->elements[0]->elementType() == fla::Element::Type::Raw);
 }

@@ -1,6 +1,8 @@
 #include "swf_import.h"
 
 #include "../data/bitmap_decoder.h"
+#include "../edit/transform_blend.h"
+#include "../edit/tween_ease.h"
 #include "../util/lzma.h"
 #include "../util/swf_sound.h"
 
@@ -690,6 +692,9 @@ struct Placement
     std::vector<Filter> filters;
     /// Bumped on every change, so a span of frames is where it holds.
     long version = 0;
+    /// Set anew when a character is placed rather than moved: a movie clip
+    /// starts over then.
+    long instance = 0;
 };
 
 struct SoundUse
@@ -728,7 +733,8 @@ struct Character
         Bitmap,
         Sound,
         EditText,
-        Font
+        Font,
+        Video
     };
     Kind kind = Kind::Shape;
     ShapeData shape;
@@ -744,6 +750,11 @@ struct Character
     std::vector<uint8_t> data;
     std::string soundFormat;
     uint32_t sampleCount = 0;
+    // Videos: their frames and codec.
+    int videoFrames = 0;
+    int codec = 0;
+    // Shapes, static text and morph shapes: their bounds, in twips.
+    Rect bounds;
     // 9-slice, in twips.
     bool scale9 = false;
     Rect grid;
@@ -822,6 +833,10 @@ class Converter
 public:
     std::string report;
 
+    explicit Converter(const Options& options)
+        : _options(options)
+    {}
+
     bool run(const std::vector<uint8_t>& file, std::map<std::string, std::vector<uint8_t>>& files, std::string& error)
     {
         if (file.size() < 8 || !isSwf(file.data(), file.size()))
@@ -869,6 +884,7 @@ public:
     }
 
 private:
+    Options _options;
     int _version = 10;
     double _frameRate = 24.0;
     int _width = 550, _height = 400;
@@ -1088,10 +1104,6 @@ private:
         case 13:
         case 62: // DefineFontInfo, read in define
             return;
-        case 60:
-        case 61:
-            leftOut("video");
-            return;
         case 87:
             leftOut("binary data");
             return;
@@ -1111,6 +1123,7 @@ private:
             if (tag.left() > 0)
                 p.color = readColorTransform(tag, false);
             p.version = ++_version_counter;
+            p.instance = p.version;
             list[depth] = p;
             return;
         }
@@ -1142,6 +1155,7 @@ private:
                 if (!move)
                     p = Placement();
                 p.character = character;
+                p.instance = _version_counter + 1;
             }
         }
         if (hasMatrix)
@@ -1481,6 +1495,20 @@ private:
         case 37:
             defineEditText(tag);
             return true;
+        case 60: // DefineVideoStream: its size and length; the pictures are
+                 // not decoded.
+        {
+            Character& c = _characters[tag.u16()];
+            c.kind = Character::Kind::Video;
+            c.videoFrames = tag.u16();
+            c.width = tag.u16();
+            c.height = tag.u16();
+            tag.u8();
+            c.codec = tag.u8();
+            return true;
+        }
+        case 61: // VideoFrame
+            return true;
         case 78: // DefineScalingGrid
         {
             const int id = tag.u16();
@@ -1514,12 +1542,13 @@ private:
     void defineShape(Reader& tag, int version)
     {
         const int id = tag.u16();
-        readRect(tag);
+        const Rect bounds = readRect(tag);
         if (version == 4)
         {
             readRect(tag);
             tag.u8();
         }
+        _characters[id].bounds = bounds;
         std::vector<std::vector<Fill>> fills{readFills(tag, version)};
         std::vector<std::vector<Line>> lines{readLines(tag, version)};
         tag.align();
@@ -1534,8 +1563,14 @@ private:
     void defineMorph(Reader& tag, bool two)
     {
         const int id = tag.u16();
-        readRect(tag);
-        readRect(tag);
+        // The bounds of the shape at both ends.
+        Rect bounds = readRect(tag);
+        const Rect end = readRect(tag);
+        bounds.left = std::min(bounds.left, end.left);
+        bounds.right = std::max(bounds.right, end.right);
+        bounds.top = std::min(bounds.top, end.top);
+        bounds.bottom = std::max(bounds.bottom, end.bottom);
+        _characters[id].bounds = bounds;
         if (two)
         {
             readRect(tag);
@@ -2011,7 +2046,7 @@ private:
     void defineText(Reader& tag, bool two)
     {
         const int id = tag.u16();
-        readRect(tag);
+        _characters[id].bounds = readRect(tag);
         const Matrix matrix = readMatrix(tag);
         const int glyphBits = tag.u8();
         const int advanceBits = tag.u8();
@@ -2171,6 +2206,7 @@ private:
         case Character::Kind::Button: folder = "Buttons/Button "; break;
         case Character::Kind::Bitmap: folder = "Bitmaps/Bitmap "; break;
         case Character::Kind::Sound: folder = "Sounds/Sound "; break;
+        case Character::Kind::Video: folder = "Videos/Video "; break;
         default: break;
         }
         c.name = uniqueName(folder + std::to_string(id));
@@ -2668,6 +2704,17 @@ private:
         }
         case Character::Kind::EditText:
             return editTextElement(doc, c, p);
+        case Character::Kind::Video:
+        {
+            tinyxml2::XMLElement* video = doc.NewElement("DOMVideoInstance");
+            video->SetAttribute("libraryItemName", nameOf(p.character).c_str());
+            if (!p.name.empty())
+                video->SetAttribute("name", p.name.c_str());
+            video->SetAttribute("frameRight", c.width * 20);
+            video->SetAttribute("frameBottom", c.height * 20);
+            writeMatrix(doc, video, p.matrix);
+            return video;
+        }
         default:
             return nullptr;
         }
@@ -2810,6 +2857,604 @@ private:
         layers->InsertEndChild(layer);
     }
 
+    // -- Tweens ---------------------------------------------------------------
+
+    /// Frames \a start up to \a end of a depth where one placement holds;
+    /// none for an empty span.
+    struct Span
+    {
+        int start = 0, end = 0;
+        const Placement* placement = nullptr;
+    };
+
+    /// A classic tween's settings, as the keyframe that starts it gives them.
+    struct Tween
+    {
+        fla::TweenRotation rotation = fla::TweenRotation::Auto;
+        int turns = 0;
+        int acceleration = 0;
+    };
+
+    /// The longest a recognized tween runs, and the frame checks a movie
+    /// may spend recognizing them, past which its frames stay baked.
+    static constexpr int kMaxTween = 1000;
+    static constexpr long kTweenBudget = 50000000;
+    long _tweenWork = 0;
+    /// How far, in twips, a tween may put a point from where the baked
+    /// frame has it: the rounding of the frame's own matrix and a little.
+    static constexpr double kStray = 0.75;
+    std::map<int, Rect> _bounds;
+
+    /// The bounds of character \a id in its own space, in twips: a shape's
+    /// own, a symbol's from everything it places.
+    Rect boundsOf(int id, int depth = 0)
+    {
+        const auto done = _bounds.find(id);
+        if (done != _bounds.end())
+            return done->second;
+        Rect box;
+        const auto found = _characters.find(id);
+        if (found == _characters.end() || depth > kMaxNesting)
+            return box;
+        const Character& c = found->second;
+        if (c.kind == Character::Kind::EditText)
+            box = c.edit.bounds;
+        else if (c.kind == Character::Kind::Video)
+            box = Rect{0, c.width * 20.0, 0, c.height * 20.0};
+        else if (c.timeline && (c.kind == Character::Kind::Sprite || c.kind == Character::Kind::Button))
+        {
+            _bounds[id] = box; // back in itself: nothing more
+            bool any = false;
+            std::set<long> seen;
+            for (const auto& frame : c.timeline->frames)
+                for (const auto& [at, placement] : frame)
+                {
+                    if (placement.character == id || !seen.insert(placement.version).second)
+                        continue;
+                    const Rect inner = boundsOf(placement.character, depth + 1);
+                    const double xs[2] = {inner.left, inner.right}, ys[2] = {inner.top, inner.bottom};
+                    for (double x : xs)
+                        for (double y : ys)
+                        {
+                            double px, py;
+                            placement.matrix.apply(x, y, px, py);
+                            if (!any)
+                                box = Rect{px, px, py, py};
+                            box.left = std::min(box.left, px);
+                            box.right = std::max(box.right, px);
+                            box.top = std::min(box.top, py);
+                            box.bottom = std::max(box.bottom, py);
+                            any = true;
+                        }
+                }
+        }
+        else
+            box = c.bounds;
+        _bounds[id] = box;
+        return box;
+    }
+    int _tweens = 0;
+    int _shapeTweens = 0;
+
+    static fla::Transform transformOf(const Matrix& m) { return fla::Transform(m.a, m.b, m.c, m.d, m.tx / 20.0, m.ty / 20.0); }
+
+    static fla::ColorTransform colorOf(const ColorTransform& cx)
+    {
+        fla::ColorTransform color;
+        color.redMultiplier = cx.mul[0];
+        color.greenMultiplier = cx.mul[1];
+        color.blueMultiplier = cx.mul[2];
+        color.alphaMultiplier = cx.mul[3];
+        color.redOffset = cx.add[0];
+        color.greenOffset = cx.add[1];
+        color.blueOffset = cx.add[2];
+        color.alphaOffset = cx.add[3];
+        return color;
+    }
+
+    static bool sameFilters(const std::vector<Placement::Filter>& a, const std::vector<Placement::Filter>& b)
+    {
+        if (a.size() != b.size())
+            return false;
+        for (size_t i = 0; i < a.size(); ++i)
+        {
+            if (a[i].element != b[i].element || a[i].attributes != b[i].attributes ||
+                a[i].entries.size() != b[i].entries.size())
+                return false;
+            for (size_t e = 0; e < a[i].entries.size(); ++e)
+            {
+                const Rgba& x = a[i].entries[e].first;
+                const Rgba& y = b[i].entries[e].first;
+                if (x.r != y.r || x.g != y.g || x.b != y.b || x.a != y.a ||
+                    a[i].entries[e].second != b[i].entries[e].second)
+                    return false;
+            }
+        }
+        return true;
+    }
+
+    std::map<int, bool> _animated;
+
+    /// Whether character \a id plays frames of its own, or holds something
+    /// that does. Phoenix starts a movie clip over at each keyframe it is
+    /// on, so those keep the keyframes the movie gave them: joining them
+    /// into a tween would change what they show.
+    bool animated(int id, int depth = 0)
+    {
+        const auto done = _animated.find(id);
+        if (done != _animated.end())
+            return done->second;
+        const auto found = _characters.find(id);
+        if (found == _characters.end() || !found->second.timeline ||
+            (found->second.kind != Character::Kind::Sprite && found->second.kind != Character::Kind::Button))
+            return false;
+        // Nested past reason, or back in itself: taken to play.
+        if (depth > kMaxNesting)
+            return true;
+        _animated[id] = true;
+        const TimelineData& timeline = *found->second.timeline;
+        bool plays = found->second.kind == Character::Kind::Sprite && timeline.frameCount > 1;
+        for (size_t f = 0; f < timeline.frames.size() && !plays; ++f)
+            for (const auto& [at, placement] : timeline.frames[f])
+                if (placement.character != id && animated(placement.character, depth + 1))
+                {
+                    plays = true;
+                    break;
+                }
+        _animated[id] = plays;
+        return plays;
+    }
+
+    /// Whether \a a and \a b place the same instance the same way. A
+    /// video's ratio is the picture it shows, which its item plays on
+    /// anyway.
+    bool samePlacement(const Placement& a, const Placement& b)
+    {
+        const auto found = _characters.find(a.character);
+        const bool video = found != _characters.end() && found->second.kind == Character::Kind::Video;
+        return !animated(a.character) && a.character == b.character && a.instance == b.instance && a.matrix == b.matrix &&
+            a.color == b.color && a.name == b.name && (video || a.ratio == b.ratio) && a.clipDepth == b.clipDepth &&
+            a.blend == b.blend && sameFilters(a.filters, b.filters);
+    }
+
+    /// Whether \a b can end a classic tween that \a a starts: the same
+    /// symbol, kept on (a movie clip placed anew starts over), with only its
+    /// matrix and color changed.
+    bool tweensTo(const Placement& a, const Placement& b)
+    {
+        const auto found = _characters.find(a.character);
+        if (found == _characters.end() || a.character != b.character)
+            return false;
+        const Character::Kind kind = found->second.kind;
+        if (kind != Character::Kind::Shape && kind != Character::Kind::Sprite && kind != Character::Kind::Button)
+            return false;
+        if (kind != Character::Kind::Shape && (a.instance != b.instance || animated(a.character)))
+            return false;
+        return a.name == b.name && a.clipDepth == b.clipDepth && a.blend == b.blend &&
+            sameFilters(a.filters, b.filters);
+    }
+
+    /// Whether every frame from span \a i up to span \a j shows what a
+    /// classic tween between the two with \a tween's settings would, within
+    /// rounding: no corner of it more than kStray twips from where the movie
+    /// has it, and a step of color.
+    bool tweenShows(const std::vector<Span>& spans, size_t i, size_t j, const Tween& tween)
+    {
+        const Placement& a = *spans[i].placement;
+        const Placement& b = *spans[j].placement;
+        // Where the corners of what is placed land, in twips, measures how
+        // far a frame strays: a shape's bounds, else a symbol's.
+        const Rect box = boundsOf(a.character);
+        const double corners[4][2] = {
+            {box.left, box.top}, {box.right, box.top}, {box.left, box.bottom}, {box.right, box.bottom}};
+        const fla::Transform from = transformOf(a.matrix), to = transformOf(b.matrix);
+        const fla::ColorTransform fromColor = colorOf(a.color), toColor = colorOf(b.color);
+        const bool colored = !(a.color == b.color);
+        const double duration = spans[j].start - spans[i].start;
+        const std::vector<fla::Point> noCurve;
+        for (size_t k = i; k < j; ++k)
+        {
+            const Placement& p = *spans[k].placement;
+            for (int f = std::max(spans[k].start, spans[i].start + 1); f < spans[k].end; ++f)
+            {
+                ++_tweenWork;
+                const double t = fla::easeProgress((f - spans[i].start) / duration, tween.acceleration, noCurve);
+                const fla::Transform m = fla::blendTransforms(from, to, t, tween.rotation, tween.turns);
+                for (const auto& corner : corners)
+                {
+                    const double x = corner[0], y = corner[1];
+                    const double dx = (m.m11 - p.matrix.a) * x + (m.m21 - p.matrix.c) * y + m.tx * 20.0 - p.matrix.tx;
+                    const double dy = (m.m12 - p.matrix.b) * x + (m.m22 - p.matrix.d) * y + m.ty * 20.0 - p.matrix.ty;
+                    if (std::fabs(dx) > kStray || std::fabs(dy) > kStray)
+                        return false;
+                }
+                if (!colored)
+                {
+                    if (!(p.color == a.color))
+                        return false;
+                    continue;
+                }
+                const fla::ColorTransform c = fla::blendColorTransforms(fromColor, toColor, t);
+                const double muls[4] = {c.redMultiplier, c.greenMultiplier, c.blueMultiplier, c.alphaMultiplier};
+                const int adds[4] = {c.redOffset, c.greenOffset, c.blueOffset, c.alphaOffset};
+                for (int n = 0; n < 4; ++n)
+                    if (std::fabs(muls[n] - p.color.mul[n]) > 1.5 / 256.0 || std::abs(adds[n] - p.color.add[n]) > 1)
+                        return false;
+            }
+        }
+        return true;
+    }
+
+    /// How frames fit a classic tween: they do, they come close to one (a
+    /// longer one may fit), or they are nothing like one.
+    enum class Fit
+    {
+        Fits,
+        Near,
+        Off
+    };
+
+    /// The settings of a classic tween from span \a i to span \a j that
+    /// shows every frame between as it is: its turn worked out from the
+    /// angle frame by frame, its ease from how far along each frame is.
+    Fit fitTween(const std::vector<Span>& spans, size_t i, size_t j, Tween& tween)
+    {
+        const Placement& a = *spans[i].placement;
+        const Placement& b = *spans[j].placement;
+        // Ending where it starts, it must have gone somewhere between (a
+        // whole turn).
+        if (a.matrix == b.matrix && a.color == b.color)
+        {
+            bool moved = false;
+            for (size_t k = i + 1; k < j && !moved; ++k)
+                moved = !(spans[k].placement->matrix == a.matrix);
+            if (!moved)
+                return Fit::Off;
+        }
+        // The last tween's settings, which usually carry on.
+        if (tweenShows(spans, i, j, tween))
+            return Fit::Fits;
+
+        constexpr double kTurn = 2.0 * 3.14159265358979323846;
+        const auto angleOf = [](const Matrix& m) { return std::atan2(m.b, m.a); };
+        const auto wrap = [kTurn](double angle) {
+            angle = std::fmod(angle, kTurn);
+            if (angle > kTurn / 2)
+                angle -= kTurn;
+            else if (angle < -kTurn / 2)
+                angle += kTurn;
+            return angle;
+        };
+        // What each frame holds, the tween's first to its last.
+        std::vector<const Placement*> run;
+        for (size_t k = i; k < j; ++k)
+            for (int f = spans[k].start; f < spans[k].end; ++f)
+                run.push_back(spans[k].placement);
+        run.push_back(&b);
+        // The angle turned through by each frame, and the measure that
+        // changes most from one keyframe to the other, to say how far along
+        // each frame is: pixels of movement, hundredths of scale or of a
+        // radian, steps of color.
+        std::vector<double> turned(run.size(), 0.0);
+        for (size_t f = 1; f < run.size(); ++f)
+            turned[f] = turned[f - 1] + wrap(angleOf(run[f]->matrix) - angleOf(run[f - 1]->matrix));
+        const auto measures = [&](size_t f, double out[13]) {
+            const Matrix& m = run[f]->matrix;
+            const ColorTransform& cx = run[f]->color;
+            out[0] = m.tx / 20.0;
+            out[1] = m.ty / 20.0;
+            out[2] = std::hypot(m.a, m.b) * 100.0;
+            out[3] = std::hypot(m.c, m.d) * 100.0;
+            out[4] = turned[f] * 100.0;
+            for (int n = 0; n < 4; ++n)
+            {
+                out[5 + n] = cx.mul[n] * 255.0;
+                out[9 + n] = cx.add[n];
+            }
+        };
+        double first[13], last[13];
+        measures(0, first);
+        measures(run.size() - 1, last);
+        int channel = 0;
+        for (int n = 1; n < 13; ++n)
+            if (std::fabs(last[n] - first[n]) > std::fabs(last[channel] - first[channel]))
+                channel = n;
+        const double change = last[channel] - first[channel];
+        if (change == 0.0)
+            return Fit::Off;
+        // An ease bends progress t to t + e t (1 - t), e from -1 (in) to 1
+        // (out): e by least squares.
+        double sum = 0.0, weights = 0.0;
+        const double duration = static_cast<double>(run.size() - 1);
+        for (size_t f = 1; f + 1 < run.size(); ++f)
+        {
+            double values[13];
+            measures(f, values);
+            const double t = f / duration;
+            const double w = t * (1.0 - t);
+            sum += ((values[channel] - first[channel]) / change - t) * w;
+            weights += w * w;
+        }
+        const double bend = weights > 0.0 ? sum / weights : 0.0;
+        // Far off any such curve, a longer tween from here will not be one
+        // either; near one, a later keyframe may fit where this one missed
+        // (part of an eased tween is eased by an amount between whole
+        // steps).
+        const double rounding[13] = {0.1, 0.1, 0.01, 0.01, 0.01, 2, 2, 2, 2, 2, 2, 2, 2};
+        const double slack = std::max(rounding[channel], 0.01 * std::fabs(change));
+        if (std::fabs(bend) > 1.0 + 1e-9)
+            return Fit::Off;
+        for (size_t f = 1; f + 1 < run.size(); ++f)
+        {
+            double values[13];
+            measures(f, values);
+            const double t = f / duration;
+            if (std::fabs(values[channel] - first[channel] - change * (t + bend * t * (1.0 - t))) > slack)
+                return Fit::Off;
+        }
+        const int ease = static_cast<int>(std::lround(std::clamp(bend, -1.0, 1.0) * 100.0));
+
+        // Which way it turns: the short way, or round as far as it went.
+        std::vector<std::pair<fla::TweenRotation, int>> rotations = {{fla::TweenRotation::Auto, 0}};
+        const double total = turned.back();
+        if (std::fabs(total) > 1e-9)
+        {
+            const double straight = std::fmod(angleOf(b.matrix) - angleOf(a.matrix), kTurn);
+            if (total > 0)
+            {
+                const double base = straight < 0.0 ? straight + kTurn : straight;
+                const long turns = std::lround((total - base) / kTurn);
+                if (turns >= 0)
+                    rotations.emplace_back(fla::TweenRotation::Clockwise, static_cast<int>(turns));
+            }
+            else
+            {
+                const double base = straight > 0.0 ? straight - kTurn : straight;
+                const long turns = std::lround((base - total) / kTurn);
+                if (turns >= 0)
+                    rotations.emplace_back(fla::TweenRotation::CounterClockwise, static_cast<int>(turns));
+            }
+        }
+        rotations.emplace_back(fla::TweenRotation::None, 0);
+        for (const auto& [rotation, turns] : rotations)
+            for (int acceleration : {ease, ease - 1, ease + 1})
+            {
+                if (acceleration < -100 || acceleration > 100)
+                    continue;
+                const Tween candidate{rotation, turns, acceleration};
+                if (tweenShows(spans, i, j, candidate))
+                {
+                    tween = candidate;
+                    return Fit::Fits;
+                }
+            }
+        return Fit::Near;
+    }
+
+    /// The span that ends the longest classic tween starting at span \a i,
+    /// its settings in \a tween; \a i itself when the frames from there are
+    /// no clean tween.
+    size_t tweenEnd(const std::vector<Span>& spans, size_t i, Tween& tween)
+    {
+        const Placement* first = spans[i].placement;
+        if (!first || _tweenWork > kTweenBudget)
+            return i;
+        size_t best = i;
+        Tween trying;
+        for (size_t j = i + 1; j < spans.size(); ++j)
+        {
+            const Placement* last = spans[j].placement;
+            if (!last || !tweensTo(*first, *last) || spans[j].start - spans[i].start > kMaxTween ||
+                _tweenWork > kTweenBudget)
+                break;
+            // A keyframe straight after another needs no tween.
+            if (spans[j].start - spans[i].start < 2)
+                continue;
+            const Fit fit = fitTween(spans, i, j, trying);
+            if (fit == Fit::Off)
+                break;
+            if (fit == Fit::Near)
+                continue;
+            // An ease or a turn has to show over more than one frame
+            // between, or any three frames would make a tween.
+            const bool plain = trying.acceleration == 0 && (trying.rotation == fla::TweenRotation::Auto ||
+                                                               trying.rotation == fla::TweenRotation::None);
+            if (spans[j].start - spans[i].start < (plain ? 2 : 3))
+                continue;
+            best = j;
+            tween = trying;
+        }
+        return best;
+    }
+
+    /// Whether a shape tween can show morph \a m as the SWF does: bitmap
+    /// fills that hold still, and gradients that only scale (a tween blends
+    /// a turning gradient's angle, where the movie blends its matrix).
+    static bool morphTweens(const MorphData& m)
+    {
+        for (size_t i = 0; i < m.startFills.size() && i < m.endFills.size(); ++i)
+        {
+            const Fill& a = m.startFills[i];
+            const Fill& b = m.endFills[i];
+            if (a.type >= 0x40 && !(a.matrix == b.matrix))
+                return false;
+            const Matrix& x = a.gradient.matrix;
+            const Matrix& y = b.gradient.matrix;
+            if ((a.type == 0x10 || a.type == 0x12 || a.type == 0x13) && !(x == y) &&
+                (x.b != 0 || x.c != 0 || y.b != 0 || y.c != 0 || (x.a < 0) != (y.a < 0) || (x.d < 0) != (y.d < 0)))
+                return false;
+        }
+        return true;
+    }
+
+    /// How the ratios of a morph from span \a i to span \a j fit a shape
+    /// tween's progress, its ease in \a tween.
+    Fit fitRatio(const std::vector<Span>& spans, size_t i, size_t j, Tween& tween)
+    {
+        const double from = spans[i].placement->ratio;
+        const double change = spans[j].placement->ratio - from;
+        if (change == 0)
+            return Fit::Off;
+        const double duration = spans[j].start - spans[i].start;
+        const std::vector<fla::Point> noCurve;
+        const auto shows = [&](int acceleration) {
+            for (size_t k = i; k < j; ++k)
+                for (int f = std::max(spans[k].start, spans[i].start + 1); f < spans[k].end; ++f)
+                {
+                    ++_tweenWork;
+                    const double t = fla::easeProgress((f - spans[i].start) / duration, acceleration, noCurve);
+                    if (std::fabs(from + change * t - spans[k].placement->ratio) > 2.0)
+                        return false;
+                }
+            return true;
+        };
+        if (shows(tween.acceleration))
+            return Fit::Fits;
+        double sum = 0.0, weights = 0.0;
+        for (size_t k = i; k < j; ++k)
+            for (int f = std::max(spans[k].start, spans[i].start + 1); f < spans[k].end; ++f)
+            {
+                const double t = (f - spans[i].start) / duration;
+                const double w = t * (1.0 - t);
+                sum += ((spans[k].placement->ratio - from) / change - t) * w;
+                weights += w * w;
+            }
+        const double bend = weights > 0.0 ? sum / weights : 0.0;
+        if (std::fabs(bend) > 1.0 + 1e-9)
+            return Fit::Off;
+        const double slack = std::max(2.0, 0.01 * std::fabs(change));
+        for (size_t k = i; k < j; ++k)
+            for (int f = std::max(spans[k].start, spans[i].start + 1); f < spans[k].end; ++f)
+            {
+                const double t = (f - spans[i].start) / duration;
+                if (std::fabs(from + change * (t + bend * t * (1.0 - t)) - spans[k].placement->ratio) > slack)
+                    return Fit::Off;
+            }
+        const int ease = static_cast<int>(std::lround(std::clamp(bend, -1.0, 1.0) * 100.0));
+        for (int acceleration : {ease, ease - 1, ease + 1})
+            if (acceleration >= -100 && acceleration <= 100 && shows(acceleration))
+            {
+                tween = Tween{fla::TweenRotation::Auto, 0, acceleration};
+                return Fit::Fits;
+            }
+        return Fit::Near;
+    }
+
+    /// The span that ends the longest shape tween starting at span \a i: a
+    /// morph shape held in place while its ratio runs on, evenly or with an
+    /// ease; \a i itself when there is none.
+    size_t morphTweenEnd(const std::vector<Span>& spans, size_t i, Tween& tween)
+    {
+        const Placement* first = spans[i].placement;
+        if (!first || _tweenWork > kTweenBudget)
+            return i;
+        const auto found = _characters.find(first->character);
+        if (found == _characters.end() || found->second.kind != Character::Kind::Morph ||
+            !morphTweens(found->second.morph))
+            return i;
+        size_t best = i;
+        Tween trying;
+        for (size_t j = i + 1; j < spans.size(); ++j)
+        {
+            const Placement* last = spans[j].placement;
+            if (!last || last->character != first->character || !(last->matrix == first->matrix) ||
+                !(last->color == first->color) || last->name != first->name || last->clipDepth != first->clipDepth ||
+                spans[j].start - spans[i].start > kMaxTween || _tweenWork > kTweenBudget)
+                break;
+            if (spans[j].start - spans[i].start < 2)
+                continue;
+            const Fit fit = fitRatio(spans, i, j, trying);
+            if (fit == Fit::Off)
+                break;
+            if (fit == Fit::Near || spans[j].start - spans[i].start < (trying.acceleration == 0 ? 2 : 3))
+                continue;
+            best = j;
+            tween = trying;
+        }
+        return best;
+    }
+
+    /// A morph coordinate: twips over 256, as the file writes them.
+    static std::string morphPoint(double x, double y)
+    {
+        return number(x / 256.0, 6) + ", " + number(y / 256.0, 6);
+    }
+
+    /// The MorphShape a shape tween from \a a to \a b keeps, both placed by
+    /// \a place: a segment for each outline, its points from one shape to
+    /// the other. Null when the two do not match point for point.
+    tinyxml2::XMLElement* morphElement(tinyxml2::XMLDocument& doc, const ShapeData& a, const ShapeData& b,
+        const Matrix& place)
+    {
+        if (a.runs.size() != b.runs.size() || a.runs.empty())
+            return nullptr;
+        tinyxml2::XMLElement* morph = doc.NewElement("MorphShape");
+        tinyxml2::XMLElement* segments = doc.NewElement("morphSegments");
+        morph->InsertEndChild(segments);
+        for (size_t k = 0; k < a.runs.size(); ++k)
+        {
+            const Run& from = a.runs[k];
+            const Run& to = b.runs[k];
+            if (from.commands.size() != to.commands.size() || from.fill0 != to.fill0 || from.fill1 != to.fill1 ||
+                from.line != to.line)
+            {
+                doc.DeleteNode(morph);
+                return nullptr;
+            }
+            tinyxml2::XMLElement* segment = nullptr;
+            double ax = 0, ay = 0, bx = 0, by = 0;
+            for (size_t c = 0; c < from.commands.size(); ++c)
+            {
+                const Command& p = from.commands[c];
+                const Command& q = to.commands[c];
+                if (p.kind != q.kind || (p.kind != 'M' && !segment))
+                {
+                    doc.DeleteNode(morph);
+                    return nullptr;
+                }
+                double px, py, qx, qy;
+                place.apply(p.x, p.y, px, py);
+                place.apply(q.x, q.y, qx, qy);
+                if (p.kind == 'M')
+                {
+                    segment = doc.NewElement("MorphSegment");
+                    segment->SetAttribute("startPointA", morphPoint(px, py).c_str());
+                    segment->SetAttribute("startPointB", morphPoint(qx, qy).c_str());
+                    if (from.line)
+                        segment->SetAttribute("strokeIndex1", from.line);
+                    if (from.fill0)
+                        segment->SetAttribute("fillIndex1", from.fill0);
+                    if (from.fill1)
+                        segment->SetAttribute("fillIndex2", from.fill1);
+                    segments->InsertEndChild(segment);
+                }
+                else
+                {
+                    // A line's control point is its middle.
+                    double pcx = (ax + px) / 2, pcy = (ay + py) / 2, qcx = (bx + qx) / 2, qcy = (by + qy) / 2;
+                    if (p.kind == 'Q')
+                    {
+                        place.apply(p.cx, p.cy, pcx, pcy);
+                        place.apply(q.cx, q.cy, qcx, qcy);
+                    }
+                    tinyxml2::XMLElement* curve = doc.NewElement("MorphCurves");
+                    curve->SetAttribute("controlPointA", morphPoint(pcx, pcy).c_str());
+                    curve->SetAttribute("anchorPointA", morphPoint(px, py).c_str());
+                    curve->SetAttribute("controlPointB", morphPoint(qcx, qcy).c_str());
+                    curve->SetAttribute("anchorPointB", morphPoint(qx, qy).c_str());
+                    if (p.kind == 'L')
+                        curve->SetAttribute("isLine", "true");
+                    segment->InsertEndChild(curve);
+                }
+                ax = px;
+                ay = py;
+                bx = qx;
+                by = qy;
+            }
+        }
+        return morph;
+    }
+
     tinyxml2::XMLElement* timelineElement(tinyxml2::XMLDocument& doc, const std::string& name, const TimelineData& t,
         bool button)
     {
@@ -2927,37 +3572,79 @@ private:
                 layer->SetAttribute("locked", "true");
             }
             tinyxml2::XMLElement* list = doc.NewElement("frames");
-            int start = 0;
-            long current = -2;
-            const auto versionAt = [&](int f) -> long {
+            // The spans of frames each placement holds for.
+            std::vector<Span> spans;
+            for (int f = 0; f < static_cast<int>(t.frames.size()); ++f)
+            {
                 const auto& map = t.frames[static_cast<size_t>(f)];
                 const auto found = map.find(depth);
-                return found == map.end() ? -1 : found->second.version;
-            };
-            const auto flush = [&](int end) {
-                if (end <= start)
-                    return;
-                tinyxml2::XMLElement* frame = frameElement(doc, start, end - start);
+                const Placement* placement = found == map.end() ? nullptr : &found->second;
+                const Placement* before = spans.empty() ? nullptr : spans.back().placement;
+                // Moved to where it already is, it holds on too.
+                if (!spans.empty() && ((before ? before->version : -1) == (placement ? placement->version : -1) ||
+                                          (_options.recognizeTweens && before && placement &&
+                                              samePlacement(*before, *placement))))
+                    spans.back().end = f + 1;
+                else
+                    spans.push_back(Span{f, f + 1, placement});
+            }
+            for (size_t i = 0; i < spans.size();)
+            {
+                Tween tween;
+                size_t next = _options.recognizeTweens ? tweenEnd(spans, i, tween) : i;
+                // A morph shape whose ratio runs on: a shape tween, its
+                // morph made from the shapes at either end.
+                tinyxml2::XMLElement* morph = nullptr;
+                if (_options.recognizeTweens && next == i)
+                {
+                    next = morphTweenEnd(spans, i, tween);
+                    if (next > i)
+                    {
+                        const Placement& a = *spans[i].placement;
+                        const MorphData& m = _characters[a.character].morph;
+                        morph = morphElement(doc, morphAt(m, a.ratio), morphAt(m, spans[next].placement->ratio),
+                            a.matrix);
+                        if (!morph)
+                            next = i;
+                    }
+                }
+                const int end = next > i ? spans[next].start : spans[i].end;
+                tinyxml2::XMLElement* frame = frameElement(doc, spans[i].start, end - spans[i].start);
+                if (morph)
+                {
+                    frame->SetAttribute("tweenType", "shape");
+                    frame->SetAttribute("keyMode", 17922);
+                    if (tween.acceleration != 0)
+                        frame->SetAttribute("acceleration", tween.acceleration);
+                    frame->InsertEndChild(morph);
+                    ++_shapeTweens;
+                }
+                else if (next > i)
+                {
+                    frame->SetAttribute("tweenType", "motion");
+                    frame->SetAttribute("motionTweenSnap", "true");
+                    frame->SetAttribute("keyMode", 22017);
+                    if (tween.acceleration != 0)
+                        frame->SetAttribute("acceleration", tween.acceleration);
+                    if (tween.rotation == fla::TweenRotation::None)
+                        frame->SetAttribute("motionTweenRotate", "none");
+                    else if (tween.rotation != fla::TweenRotation::Auto)
+                    {
+                        frame->SetAttribute("motionTweenRotate",
+                            tween.rotation == fla::TweenRotation::Clockwise ? "clockwise" : "counter-clockwise");
+                        if (tween.turns > 0)
+                            frame->SetAttribute("motionTweenRotateTimes", tween.turns);
+                    }
+                    ++_tweens;
+                }
                 tinyxml2::XMLElement* elements = doc.NewElement("elements");
-                const auto& map = t.frames[static_cast<size_t>(start)];
-                const auto found = map.find(depth);
-                if (found != map.end())
-                    if (tinyxml2::XMLElement* element = placedElement(doc, found->second))
+                if (spans[i].placement)
+                    if (tinyxml2::XMLElement* element = placedElement(doc, *spans[i].placement))
                         elements->InsertEndChild(element);
                 frame->InsertEndChild(elements);
                 list->InsertEndChild(frame);
-            };
-            for (int f = 0; f < static_cast<int>(t.frames.size()); ++f)
-            {
-                const long version = versionAt(f);
-                if (version != current)
-                {
-                    flush(f);
-                    start = f;
-                    current = version;
-                }
+                i = next > i ? next : i + 1;
             }
-            flush(static_cast<int>(t.frames.size()));
             layer->InsertEndChild(list);
             layers->InsertEndChild(layer);
             layerIndex[depth] = index++;
@@ -3106,6 +3793,24 @@ private:
         tinyxml2::XMLElement* media = doc.NewElement("media");
         for (auto& [id, c] : _characters)
         {
+            if (c.kind == Character::Kind::Video)
+            {
+                // Its size, rate and length, without its pictures.
+                static const char* types[7] = {"", "", "h263 media", "screen share", "on2 vp6", "on2 vp6 alpha",
+                    "screen share v2"};
+                const double rate = _frameRate > 0 ? _frameRate : 24.0;
+                tinyxml2::XMLElement* item = doc.NewElement("DOMVideoItem");
+                item->SetAttribute("name", nameOf(id).c_str());
+                if (c.codec >= 2 && c.codec <= 6)
+                    item->SetAttribute("videoType", types[c.codec]);
+                item->SetAttribute("fps", number(rate).c_str());
+                item->SetAttribute("width", c.width);
+                item->SetAttribute("height", c.height);
+                item->SetAttribute("length", number(c.videoFrames / rate).c_str());
+                media->InsertEndChild(item);
+                leftOut("video pictures (each video is an item of its size and length)");
+                continue;
+            }
             if (c.data.empty())
                 continue;
             if (c.kind == Character::Kind::Bitmap)
@@ -3161,8 +3866,20 @@ private:
 
     void writeReport()
     {
-        std::string text = "Imported from an SWF movie: its frames come baked, with no tweens, eases, layer names "
-                           "or library folders of the original.";
+        std::string text = "Imported from an SWF movie: its frames come baked, with no layer names or library "
+                           "folders of the original.";
+        if (_tweens > 0 || _shapeTweens > 0)
+        {
+            const auto count = [](int n, const char* what) {
+                return std::to_string(n) + " " + what + (n == 1 ? "" : "s");
+            };
+            text += " Frames that change as a tween would came back as ";
+            if (_tweens > 0)
+                text += count(_tweens, "classic tween") + (_shapeTweens > 0 ? " and " : "");
+            if (_shapeTweens > 0)
+                text += count(_shapeTweens, "shape tween");
+            text += "; the rest keep a keyframe wherever anything changes.";
+        }
         if (_scripts > 0 || _abc > 0)
             text += " Its ActionScript was compiled and cannot be turned back into source; frames that had "
                     "scripts carry a comment saying so.";
@@ -3194,9 +3911,9 @@ bool isSwf(const unsigned char* head, size_t size)
 }
 
 bool convert(const std::vector<uint8_t>& swf, std::map<std::string, std::vector<uint8_t>>& files, std::string& error,
-    std::string* report)
+    std::string* report, const Options& options)
 {
-    Converter converter;
+    Converter converter(options);
     if (!converter.run(swf, files, error))
         return false;
     if (report)

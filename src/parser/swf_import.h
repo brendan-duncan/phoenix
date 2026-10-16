@@ -20,14 +20,22 @@
 /// JPEG with alpha, lossless); sounds, event and streamed (MP3, ADPCM,
 /// raw); static text as its glyph outlines, dynamic and input text as text
 /// fields; 9-slice grids, and class names (SymbolClass, ExportAssets) as
-/// symbol names and linkage. A shape placed only once goes in where it is
-/// placed; one placed more often becomes a graphic symbol.
+/// symbol names and linkage; videos as items of their size, rate and
+/// length, placed where the movie shows them (their pictures are not
+/// decoded). A shape placed only once goes in where it is placed; one
+/// placed more often becomes a graphic symbol.
 ///
-/// What cannot come back, and the report says so: tweens and eases (the
-/// frames come baked), layer names, library folders and symbol names
-/// (unless the movie exported them), guide layers, and scripts: compiled
-/// ActionScript cannot be turned back into source, so a frame that had a
-/// script gets a comment saying so. Free of Qt.
+/// The frames come baked, a placement on each; where a symbol moves, turns,
+/// scales or changes color across frames just as a classic tween between
+/// two of them would show it (evenly or with an ease), those frames go back
+/// to a classic tween; a placement that only moves to where it already is
+/// holds on the keyframe before.
+///
+/// What cannot come back, and the report says so: tweens that are not that
+/// clean, layer names, library folders and symbol names (unless the movie
+/// exported them), guide layers, and scripts: compiled ActionScript cannot
+/// be turned back into source, so a frame that had a script gets a comment
+/// saying so. Free of Qt.
 namespace SwfImport {
 
 /// Pixels of an image the converter cannot decode itself (a JPEG it must
@@ -46,6 +54,14 @@ struct Image
 using ImageDecoder = std::function<bool(const std::vector<uint8_t>& bytes, Image& image)>;
 void setImageDecoder(ImageDecoder decoder);
 
+/// Choices for a conversion.
+struct Options
+{
+    /// Classic tweens where the baked frames show one; false keeps a
+    /// keyframe wherever anything changes.
+    bool recognizeTweens = true;
+};
+
 /// Whether \a head (the file's first bytes) starts an SWF movie.
 bool isSwf(const unsigned char* head, size_t size);
 
@@ -54,6 +70,6 @@ bool isSwf(const unsigned char* head, size_t size);
 /// cannot be read; \a report, when given, lists what could not be brought
 /// back.
 bool convert(const std::vector<uint8_t>& swf, std::map<std::string, std::vector<uint8_t>>& files, std::string& error,
-    std::string* report = nullptr);
+    std::string* report = nullptr, const Options& options = Options());
 
 } // namespace SwfImport
