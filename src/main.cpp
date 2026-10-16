@@ -101,6 +101,9 @@ public:
 } // namespace
 
 #ifdef Q_OS_WIN
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
 #include <windows.h>
 
 /// Phoenix is a console program, so the commands that print (render,

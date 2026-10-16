@@ -4,6 +4,8 @@ What changed in each release of Phoenix, newest first.
 
 ## 0.14.0 (Unreleased)
 
+- Many crashes fixed: closing a document tab, adding bones then closing, undoing while an AI assistant edits, objects kept by scripts after they are gone, Test Movie clips made and removed by frame scripts, very large blurs, and high-density screens running out of memory
+- Started from Explorer or a shortcut, Phoenix no longer leaves a console window open beside it
 - Damaged or hostile SWF, FLA, PSD, EPS, PDF, SVG, extension and lip sync files are refused or read in part, rather than hanging Phoenix, closing it, or writing outside their folder
 - The Behaviors panel, Echo and Posterize Time, Mask Edge, bone springs, 3D Lights and Depth and template sliders use hot text numbers (drag to scrub, click to type) instead of arrow boxes
 - On Windows, a crash leaves a report in %LOCALAPPDATA%\Phoenix\Crashes to send with a bug report
