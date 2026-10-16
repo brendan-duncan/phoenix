@@ -45,7 +45,7 @@ static NSString* toNS(const QString& text)
     }
     const QString text = QString::fromNSString(message);
     void (^done)(void) = [completionHandler copy];
-    QTimer::singleShot(0, view, [view, text, done]() {
+    QTimer::singleShot(0, view.data(), [view, text, done]() {
         bool accepted = true;
         QString answer;
         HtmlViewBridge::answer(*view, "alert", text, QString(), accepted, answer);
@@ -66,7 +66,7 @@ static NSString* toNS(const QString& text)
         completionHandler(NO);
         return;
     }
-    QTimer::singleShot(0, view, [view, text, done]() {
+    QTimer::singleShot(0, view.data(), [view, text, done]() {
         bool accepted = true;
         QString answer;
         HtmlViewBridge::answer(*view, "confirm", text, QString(), accepted, answer);
@@ -91,7 +91,7 @@ static NSString* toNS(const QString& text)
     void (^done)(NSString*) = [completionHandler copy];
     // The page waits for the answer, given once the window's events have
     // run, so what answers it is not inside WebKit's callback.
-    QTimer::singleShot(0, view, [view, text, preset, done]() {
+    QTimer::singleShot(0, view.data(), [view, text, preset, done]() {
         const QString mark = QString::fromLatin1(HtmlView::kCallMark);
         if (text.startsWith(mark))
         {
