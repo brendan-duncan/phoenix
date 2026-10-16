@@ -1317,6 +1317,18 @@ private:
     /// The timelines being drawn on a canvas of their own for their
     /// adjustment layers.
     QSet<const fla::Timeline*> _compositing;
+    /// Whether \a timeline has anything that works on pixels: a node graph,
+    /// an adjustment layer, a layer mode.
+    static bool hasEffects(const fla::Timeline* timeline);
+    /// In the view, \a timeline drawn as a picture of the stage alone, as an
+    /// export makes it, so its effects go by the stage's edges rather than
+    /// the window's; what shows off the stage is drawn without them. False
+    /// when there is no room for the picture.
+    bool drawStageEffects(QPainter& painter, const fla::Timeline* timeline, fla::LoopType loopType, int firstFrame);
+    /// The device the view's stage is being drawn on, while it is.
+    const QPaintDevice* _viewDevice = nullptr;
+    /// While what is off the stage is drawn: effects left out.
+    bool _effectsOff = false;
     /// \a timeline composited through its node graph onto the painter's
     /// device.
     void drawNodeGraph(QPainter& painter, const fla::Timeline* timeline, const fla::nodegraph::Graph& graph,

@@ -2,6 +2,10 @@
 
 What changed in each release of Phoenix, newest first.
 
+## Unreleased
+
+- Node graphs, adjustment layers and layer modes work on the stage alone in the view, as in an export: Vignette, ramps, wipes and other effects that go by the edges follow the stage's edges, not the window's, and art off the stage shows without them
+
 ## 0.15.0
 
 - Node graphs: Time Offset and Frame Hold nodes; a renamed layer keeps its Layer nodes; SVG exports show the graph; Export FLA for Other Apps bakes each graph into a layer of pictures; scripts and AI assistants can list, read and set graphs

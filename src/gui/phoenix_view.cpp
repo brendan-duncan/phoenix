@@ -1235,6 +1235,91 @@ void PhoenixView::drawNodeGraph(QPainter& painter, const fla::Timeline* timeline
     painter.restore();
 }
 
+bool PhoenixView::hasEffects(const fla::Timeline* timeline)
+{
+    if (!timeline)
+        return false;
+    if (fla::nodegraph::active(*timeline))
+        return true;
+    return std::any_of(timeline->layers.begin(), timeline->layers.end(), [](const fla::Layer* layer) {
+        return layer && (fla::compositing::isAdjustment(*layer) ||
+                            fla::compositing::layerModeOf(*layer) != fla::compositing::LayerMode::Normal);
+    });
+}
+
+bool PhoenixView::drawStageEffects(QPainter& painter, const fla::Timeline* timeline, fla::LoopType loopType, int firstFrame)
+{
+    const fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
+    if (!document || document->width <= 0 || document->height <= 0 || !painter.device())
+        return false;
+    bool invertible = false;
+    const QTransform fromStage = viewTransform.inverted(&invertible);
+    if (!invertible)
+        return false;
+    const QRectF stage(0, 0, document->width, document->height);
+    const qreal ratio = painter.device()->devicePixelRatioF();
+    const QSize device = devicePixels(painter.device());
+
+    // The stage at the device's density, or, zoomed in so far that the
+    // picture would not fit in memory, less sharp.
+    double scale = std::sqrt(std::fabs(viewTransform.determinant())) * ratio;
+    const double budget = std::max(static_cast<double>(device.width()) * device.height(), 4096.0 * 4096.0);
+    const double wanted = stage.width() * stage.height() * scale * scale;
+    if (wanted > budget)
+        scale *= std::sqrt(budget / wanted);
+    QImage canvas(std::max(1, qCeil(stage.width() * scale - 1e-6)), std::max(1, qCeil(stage.height() * scale - 1e-6)),
+        QImage::Format_ARGB32_Premultiplied);
+    if (canvas.isNull() || scale <= 0.0)
+        return false;
+    canvas.fill(Qt::transparent);
+    {
+        // The whole stage drawn, what the window shows of it or not, so
+        // effects that reach across it (a blur, a ripple) have it all.
+        const QTransform viewBefore = viewTransform;
+        const QRectF visibleBefore = _visibleRect;
+        viewTransform = QTransform::fromScale(scale, scale);
+        _visibleRect = stage;
+        QPainter canvasPainter(&canvas);
+        canvasPainter.setRenderHints(painter.renderHints());
+        canvasPainter.setTransform(painter.transform() * fromStage * viewTransform);
+        drawTimeline(canvasPainter, timeline, loopType, firstFrame);
+        canvasPainter.end();
+        viewTransform = viewBefore;
+        _visibleRect = visibleBefore;
+    }
+
+    // Off the stage, where the window shows it: the art without effects.
+    const QPolygonF stageOnDevice = viewTransform.map(QPolygonF(stage));
+    const QRectF window(QPointF(0, 0), QSizeF(device) / std::max<qreal>(1.0, ratio));
+    const bool covered = stageOnDevice.containsPoint(window.topLeft(), Qt::OddEvenFill) &&
+                         stageOnDevice.containsPoint(window.topRight(), Qt::OddEvenFill) &&
+                         stageOnDevice.containsPoint(window.bottomLeft(), Qt::OddEvenFill) &&
+                         stageOnDevice.containsPoint(window.bottomRight(), Qt::OddEvenFill);
+    if (((!_clipOutsideStage && _showPasteboard) || inSymbol()) && !covered)
+    {
+        QPainterPath outside;
+        outside.addRect(window);
+        QPainterPath inside;
+        inside.addPolygon(stageOnDevice);
+        inside.closeSubpath();
+        painter.save();
+        const QTransform at = painter.transform();
+        painter.resetTransform();
+        painter.setClipPath(outside.subtracted(inside), Qt::IntersectClip);
+        painter.setTransform(at);
+        _effectsOff = true;
+        drawTimeline(painter, timeline, loopType, firstFrame);
+        _effectsOff = false;
+        painter.restore();
+    }
+
+    painter.save();
+    painter.setTransform(viewTransform);
+    painter.drawImage(stage, canvas);
+    painter.restore();
+    return true;
+}
+
 QMap<int, QImage> PhoenixView::nodePictures(const fla::Timeline* timeline, const fla::nodegraph::Graph& graph,
     const QSize& size, QMap<int, QString>* problems)
 {
@@ -1718,6 +1803,13 @@ void PhoenixView::drawStageContents(QPainter& painter, const fla::Document* docu
 {
     const QTransform rootFull = painter.transform();
     viewTransform = rootFull;
+    struct ViewDevice
+    {
+        const QPaintDevice*& device;
+        const QPaintDevice* before;
+        ~ViewDevice() { device = before; }
+    } viewDevice{_viewDevice, _viewDevice};
+    _viewDevice = painter.device();
     if (_movie)
     {
         _buttonAreas.clear();
@@ -2447,8 +2539,16 @@ void PhoenixView::drawTimeline(QPainter& painter, const fla::Timeline* timeline,
         }
     }
 
+    // In the view, effects work on a picture of the stage alone, as they do
+    // in an export, so Vignette darkens the stage's edges, not the window's.
+    if (!_exporting && !_vectorMasks && !_effectsOff && _viewDevice && painter.device() == _viewDevice &&
+        !_compositing.contains(timeline) && hasEffects(timeline) &&
+        drawStageEffects(painter, timeline, loopType, firstFrame))
+        return;
+
     // A timeline with a node graph is composited through it.
-    if (!_vectorMasks && painter.device() && !_compositing.contains(timeline) && fla::nodegraph::active(*timeline))
+    if (!_vectorMasks && !_effectsOff && painter.device() && !_compositing.contains(timeline) &&
+        fla::nodegraph::active(*timeline))
     {
         if (const std::shared_ptr<const fla::nodegraph::Graph> graph = fla::nodegraph::of(*timeline))
         {
@@ -2460,7 +2560,7 @@ void PhoenixView::drawTimeline(QPainter& painter, const fla::Timeline* timeline,
     // Adjustment layers change what is under them, so the timeline's layers
     // are drawn on an image of their own that they can work on, then that
     // image onto the painter.
-    if (!_vectorMasks && painter.device() && !_compositing.contains(timeline) &&
+    if (!_vectorMasks && !_effectsOff && painter.device() && !_compositing.contains(timeline) &&
         std::any_of(timeline->layers.begin(), timeline->layers.end(), [](const fla::Layer* layer) {
             return layer && (fla::compositing::isAdjustment(*layer) ||
                                 fla::compositing::layerModeOf(*layer) != fla::compositing::LayerMode::Normal);
@@ -2841,12 +2941,14 @@ void PhoenixView::drawTimeline(QPainter& painter, const fla::Timeline* timeline,
         // Stencil, Silhouette and Preserve Transparency work on what is
         // drawn under the layer.
         const fla::compositing::LayerMode layerMode = fla::compositing::layerModeOf(*layer);
-        if (layerMode != fla::compositing::LayerMode::Normal && drawLayerMode(painter, layer, layerMode, loopType, firstFrame))
+        if (layerMode != fla::compositing::LayerMode::Normal && !_effectsOff &&
+            drawLayerMode(painter, layer, layerMode, loopType, firstFrame))
             continue;
         // An adjustment layer: its effects on everything drawn under it.
         if (fla::compositing::isAdjustment(*layer))
         {
-            drawAdjustmentLayer(painter, layer, loopType, firstFrame);
+            if (!_effectsOff)
+                drawAdjustmentLayer(painter, layer, loopType, firstFrame);
             continue;
         }
         // A track matte: the layer shown through the one above it.
