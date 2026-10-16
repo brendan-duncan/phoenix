@@ -54,7 +54,7 @@ namespace SwatchList { enum : uint32_t { Name = 1, Colors = 2, Xml = 3 }; }
 
 namespace Symbol { enum : uint32_t {
     Name = 1, ItemId = 2, LastModified = 3, Href = 4, SymbolType = 5, OtherSymbolType = 6, IncludeAttributes = 7,
-    Scale9 = 8, ScaleGrid = 9, Timelines = 10, Xfl = 15,
+    Scale9 = 8, ScaleGrid = 9, Timelines = 10, ItemElement = 11, Xfl = 15,
 }; }
 
 namespace Timeline { enum : uint32_t {

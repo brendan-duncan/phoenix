@@ -2044,7 +2044,10 @@ bool parseSymbolInclude(const tinyxml2::XMLElement* element, fla::SymbolList* sy
     }
 
     const tinyxml2::XMLElement* root = symbolDoc.RootElement();
-    if (!root || std::strcmp(root->Name(), "DOMSymbolItem") != 0)
+    // A component (from the Components panel) is a symbol too, with its
+    // parameters and class definitions besides.
+    const bool component = root && std::strcmp(root->Name(), "DOMComponentItem") == 0;
+    if (!root || (!component && std::strcmp(root->Name(), "DOMSymbolItem") != 0))
     {
         std::cerr << "Root element of symbol file is not DOMSymbolItem: " << href << std::endl;
         _currentFile.clear();
@@ -2052,6 +2055,8 @@ bool parseSymbolInclude(const tinyxml2::XMLElement* element, fla::SymbolList* sy
     }
 
     fla::Symbol* symbol = new fla::Symbol(symbolList);
+    if (component)
+        symbol->itemElement = root->Name();
     symbol->name = getAttribute(root, "name");
     symbol->itemId = getAttribute(root, "itemID");
     symbol->lastModified = getAttribute(root, "lastModified");

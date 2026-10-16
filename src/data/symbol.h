@@ -29,6 +29,11 @@ public:
     /// Graphic for it.
     std::string otherSymbolType;
 
+    /// The element its file is rooted at when not DOMSymbolItem:
+    /// "DOMComponentItem" for a component, whose parameters and class
+    /// definitions are kept with the other attributes and children.
+    std::string itemElement;
+
     /// The attributes of the Include that names the symbol in the document
     /// (itemIcon, loadImmediate, itemID, lastModified), as read.
     std::vector<std::pair<std::string, std::string>> includeAttributes;

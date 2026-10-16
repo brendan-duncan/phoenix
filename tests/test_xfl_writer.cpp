@@ -1606,3 +1606,45 @@ TEST(xfl_bakes_textured_paint_for_animate_and_reads_it_back)
             ++tiles;
     CHECK(tiles == 1);
 }
+
+TEST(xfl_reads_a_component_as_a_symbol_and_keeps_it_one)
+{
+    // A component's file is rooted at DOMComponentItem rather than
+    // DOMSymbolItem; it reads as a symbol and is written back as it came.
+    const std::string documentXml =
+        "<DOMDocument xmlns='http://ns.adobe.com/xfl/2008/'>"
+        "<symbols><Include href='Button.xml'/></symbols>"
+        "<timelines><DOMTimeline name='Scene 1'><layers><DOMLayer name='L'><frames><DOMFrame index='0'>"
+        "<elements/></DOMFrame></frames></DOMLayer></layers></DOMTimeline></timelines></DOMDocument>";
+    const std::string buttonXml =
+        "<DOMComponentItem xmlns='http://ns.adobe.com/xfl/2008/' name='Button' itemID='44a4944a-00000029' "
+        "linkageExportForAS='true' linkageClassName='fl.controls.Button' actionscriptClass='fl.controls.Button'>"
+        "<timeline><DOMTimeline name='Button'><layers><DOMLayer name='assets'><frames><DOMFrame index='0'>"
+        "<elements/></DOMFrame></frames></DOMLayer></layers></DOMTimeline></timeline>"
+        "<component><parametersAsXML/></component>"
+        "</DOMComponentItem>";
+    std::map<std::string, std::vector<uint8_t>> files;
+    files["DOMDocument.xml"] = std::vector<uint8_t>(documentXml.begin(), documentXml.end());
+    files["LIBRARY/Button.xml"] = std::vector<uint8_t>(buttonXml.begin(), buttonXml.end());
+    ZipReader reader;
+    reader.openMemory(files);
+    DocumentParser parser(&reader);
+    std::unique_ptr<fla::Document> document(parser.parse(documentXml, nullptr));
+    CHECK(document != nullptr);
+    if (!document || !document->symbolList)
+        return;
+    const auto found = document->symbolList->symbolMap.find("Button");
+    CHECK(found != document->symbolList->symbolMap.end());
+    if (found == document->symbolList->symbolMap.end())
+        return;
+    const fla::Symbol* button = found->second;
+    CHECK(button->itemElement == "DOMComponentItem");
+    CHECK(button->timelines.size() == 1);
+
+    XFLWriter writer;
+    const std::string written = writer.writeSymbol(*button);
+    CHECK(written.find("<DOMComponentItem") != std::string::npos);
+    CHECK(written.find("DOMSymbolItem") == std::string::npos);
+    CHECK(written.find("linkageClassName=\"fl.controls.Button\"") != std::string::npos);
+    CHECK(written.find("<parametersAsXML") != std::string::npos);
+}

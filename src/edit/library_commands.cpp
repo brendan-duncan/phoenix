@@ -555,6 +555,7 @@ Symbol* cloneSymbol(const Symbol& symbol, const std::string& name)
     copy->href = name + ".xml";
     copy->symbolType = symbol.symbolType;
     copy->otherSymbolType = symbol.otherSymbolType;
+    copy->itemElement = symbol.itemElement;
     copy->extraAttributes = symbol.extraAttributes;
     copy->presentAttributes = symbol.presentAttributes;
     copy->scale9 = symbol.scale9;

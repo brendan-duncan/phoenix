@@ -690,6 +690,7 @@ Writer encodeSymbol(const fla::Symbol& symbol)
     writeString(w, s::Symbol::Href, symbol.href);
     writeInt(w, s::Symbol::SymbolType, static_cast<int>(symbol.symbolType), static_cast<int>(fla::SymbolType::Graphic));
     writeString(w, s::Symbol::OtherSymbolType, symbol.otherSymbolType);
+    writeString(w, s::Symbol::ItemElement, symbol.itemElement);
     writeKeyValues(w, s::Symbol::IncludeAttributes, symbol.includeAttributes);
     writeBool(w, s::Symbol::Scale9, symbol.scale9);
     writeRectangle(w, s::Symbol::ScaleGrid, symbol.scaleGridLeft, symbol.scaleGridTop, symbol.scaleGridRight,

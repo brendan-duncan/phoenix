@@ -1077,6 +1077,7 @@ fla::Symbol* readSymbol(const Reader& field, fla::SymbolList* list, Context& con
             symbol->symbolType = readEnum(r, 3, fla::SymbolType::Graphic, symbol->phxUnknown);
             break;
         case s::Symbol::OtherSymbolType: symbol->otherSymbolType = r.string(); break;
+        case s::Symbol::ItemElement: symbol->itemElement = r.string(); break;
         case s::Symbol::IncludeAttributes:
         {
             std::pair<std::string, std::string> kv;

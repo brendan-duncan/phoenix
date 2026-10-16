@@ -5,6 +5,7 @@ What changed in each release of Phoenix, newest first.
 ## Unreleased
 
 - HTML extension panels (CEP) show in Phoenix: Window > Extensions opens them as docks, their scripts run JSFL in a context that keeps its functions between calls, and their panel menus, context menus, file access and events work
+- FLA files with components (Button, ColorPicker, ComboBox and the rest) open instead of failing, and keep their components when saved
 
 ## 0.14.0
 

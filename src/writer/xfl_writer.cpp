@@ -1434,7 +1434,7 @@ std::string XFLWriter::writeSymbol(const Symbol& symbol)
     XMLDocument doc;
     doc.InsertEndChild(doc.NewDeclaration());
 
-    XMLElement* root = doc.NewElement("DOMSymbolItem");
+    XMLElement* root = doc.NewElement(symbol.itemElement.empty() ? "DOMSymbolItem" : symbol.itemElement.c_str());
     root->SetAttribute("xmlns", "http://ns.adobe.com/xfl/2008/");
     root->SetAttribute("xmlns:xsi", "http://www.w3.org/2001/XMLSchema-instance");
     PresentScope present(root, symbol.presentAttributes);
