@@ -2134,28 +2134,28 @@ void PropertiesPanel::editLightsAndDepth(fla::Document* document)
     auto* lightOn = new QCheckBox("Shade 3D movie clips by a light", &dialog);
     lightOn->setChecked(light.on);
     const auto spin = [&dialog](double low, double high, double value, const QString& suffix, int decimals = 0) {
-        auto* box = new QDoubleSpinBox(&dialog);
+        auto* box = new HotDoubleSpinBox(&dialog);
         box->setRange(low, high);
         box->setDecimals(decimals);
         box->setValue(value);
         box->setSuffix(suffix);
         return box;
     };
-    QDoubleSpinBox* azimuth = spin(-180, 180, light.azimuth, QString::fromUtf8("\u00b0"));
+    HotDoubleSpinBox* azimuth = spin(-180, 180, light.azimuth, QString::fromUtf8("\u00b0"));
     azimuth->setToolTip(QString::fromUtf8("Where the light comes from, round from above: 90\u00b0 from the right, -90\u00b0 from the left"));
-    QDoubleSpinBox* elevation = spin(-90, 90, light.elevation, QString::fromUtf8("\u00b0"));
+    HotDoubleSpinBox* elevation = spin(-90, 90, light.elevation, QString::fromUtf8("\u00b0"));
     elevation->setToolTip(QString::fromUtf8("How far out toward you the light is: 90\u00b0 straight from the front, 0\u00b0 grazing"));
-    QDoubleSpinBox* ambient = spin(0, 100, light.ambient * 100.0, "%");
+    HotDoubleSpinBox* ambient = spin(0, 100, light.ambient * 100.0, "%");
     ambient->setToolTip("Light everywhere: how bright a clip turned away from the light still is");
-    QDoubleSpinBox* intensity = spin(0, 1000, light.intensity * 100.0, "%");
+    HotDoubleSpinBox* intensity = spin(0, 1000, light.intensity * 100.0, "%");
     intensity->setToolTip("How strong the light is");
     auto* color = new QLineEdit(QColor(light.color[0], light.color[1], light.color[2]).name().toUpper(), &dialog);
     color->setToolTip("The light's color as #RRGGBB");
     auto* depthOn = new QCheckBox("Blur 3D movie clips away from a focus depth", &dialog);
     depthOn->setChecked(depth.on);
-    QDoubleSpinBox* focus = spin(-10000, 10000, depth.focus, " Z");
+    HotDoubleSpinBox* focus = spin(-10000, 10000, depth.focus, " Z");
     focus->setToolTip("The depth (Z) that is sharp");
-    QDoubleSpinBox* aperture = spin(0, 1000, depth.aperture, " px per 100", 1);
+    HotDoubleSpinBox* aperture = spin(0, 1000, depth.aperture, " px per 100", 1);
     aperture->setToolTip("How much blur for each hundred pixels nearer or further than the focus");
     form->addRow(lightOn);
     form->addRow("From", azimuth);
@@ -2631,15 +2631,18 @@ void PropertiesPanel::addTemplateSection(QVBoxLayout* layout, fla::SymbolInstanc
                 line->addWidget(on, 1);
                 break;
             }
-            QSpinBox* frame = new QSpinBox(holder);
+            HotSpinBox* frame = new HotSpinBox(holder);
             frame->setRange(0, field.frames);
             frame->setSpecialValueText("as drawn");
             int shown = 0;
             frame->setValue(fla::templates::frameOf(value.toStdString(), shown) ? std::min(shown, field.frames) : 0);
             frame->setSuffix(QString(" of %1").arg(field.frames));
             frame->setToolTip("The frame this part holds on; as drawn plays it as the symbol does");
-            connect(frame, &QSpinBox::valueChanged, this,
-                [set, name](int at) { set(name, at > 0 ? std::to_string(at) : std::string()); });
+            // Kept once the number is set, not at each step of a drag.
+            connect(frame, &HotText::editFinished, this, [set, name, frame]() {
+                const int at = frame->value();
+                set(name, at > 0 ? std::to_string(at) : std::string());
+            });
             line->addWidget(frame, 1);
             break;
         }

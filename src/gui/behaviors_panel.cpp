@@ -1,6 +1,7 @@
 #include "behaviors_panel.h"
 
 #include "behavior_library.h"
+#include "hot_text.h"
 #include "text_layout.h"
 #include "theme.h"
 
@@ -631,19 +632,20 @@ void BehaviorsPanel::fillSettings()
             QWidget* holder = new QWidget(_settings);
             QHBoxLayout* line = new QHBoxLayout(holder);
             line->setContentsMargins(0, 0, 0, 0);
-            QSpinBox* seed = new QSpinBox(holder);
+            HotSpinBox* seed = new HotSpinBox(holder);
             seed->setRange(0, 9999);
-            seed->setValue(static_cast<int>(std::lround(std::atof(current.c_str()))));
-            seed->setKeyboardTracking(false);
-            // Wide enough for four digits beside its arrows, whatever the font.
-            seed->setFixedWidth(seed->sizeHint().width());
+            {
+                const QSignalBlocker quiet(seed);
+                seed->setValue(static_cast<int>(std::lround(std::atof(current.c_str()))));
+            }
             seed->setToolTip("Another seed gives another, equally random, result");
             QPushButton* again = new QPushButton("New", holder);
             again->setToolTip("A new seed");
             line->addWidget(seed);
             line->addWidget(again, 1);
-            connect(seed, &QSpinBox::valueChanged, this,
-                [this, row, name](int value) { setParam(row, name, std::to_string(value), false); });
+            connect(seed, &HotText::valueChanged, this, [this, row, name](double value, bool live) {
+                setParam(row, name, std::to_string(static_cast<int>(std::lround(value))), live);
+            });
             connect(again, &QPushButton::clicked, seed, [seed]() { seed->setValue(newSeed()); });
             addRow(holder);
         }
@@ -660,16 +662,18 @@ void BehaviorsPanel::fillSettings()
             QSlider* slider = new QSlider(Qt::Horizontal, holder);
             slider->setRange(0, std::max(1, steps));
             slider->setMinimumWidth(60);
-            QDoubleSpinBox* box = new QDoubleSpinBox(holder);
+            HotDoubleSpinBox* box = new HotDoubleSpinBox(holder);
             const int decimals = step >= 1.0 ? 0 : step >= 0.1 ? 1 : step >= 0.01 ? 2 : 3;
             box->setDecimals(decimals);
             box->setRange(low, high);
             box->setSingleStep(step);
-            box->setKeyboardTracking(false);
-            box->setMinimumWidth(72);
-            box->setMaximumWidth(96);
+            box->setStep(step);
+            box->setMinimumWidth(56);
             const double value = current.empty() ? spec.value : std::atof(current.c_str());
-            box->setValue(value);
+            {
+                const QSignalBlocker quiet(box);
+                box->setValue(value);
+            }
             slider->setValue(static_cast<int>(std::lround((value - low) / step)));
             line->addWidget(slider, 1);
             line->addWidget(box);
@@ -679,7 +683,7 @@ void BehaviorsPanel::fillSettings()
                 box->setValue(v);
                 setParam(row, name, numberText(v), true);
             });
-            connect(box, &QDoubleSpinBox::valueChanged, this, [this, row, name, slider, low, step](double v) {
+            connect(box, &HotText::valueChanged, this, [this, row, name, slider, low, step](double v, bool) {
                 const QSignalBlocker quiet(slider);
                 slider->setValue(static_cast<int>(std::lround((v - low) / step)));
                 setParam(row, name, numberText(v), true);
