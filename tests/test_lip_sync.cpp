@@ -52,6 +52,14 @@ TEST(lip_sync_reads_rhubarb_and_papagayo_and_keys_the_mouth)
     CHECK(keys[4] == std::make_pair(34, 9));
     stack.undo();
     CHECK(layer.frames.size() == 1 && layer.frames[0]->duration == 60);
+
+    // Times past any timeline, or not numbers at all, are held or dropped.
+    const std::vector<fla::lipsync::Cue> wild = fla::lipsync::parse("nan\tA\ninf\tB\n1e300\tC\n-5\tD\n", 24.0);
+    CHECK(wild.size() == 2 && wild[0].shape == "D" && wild[0].time == 0.0);
+    CHECK(wild.size() == 2 && wild[1].time * 24.0 <= fla::kMaxFrames);
+    stack.push(fla::lipsync::apply(layer, *mouth, wild, chart, 10, 24.0));
+    for (const fla::Frame* f : layer.frames)
+        CHECK(f->index >= 0 && f->index <= fla::kMaxFrames);
 }
 
 TEST(lip_sync_listens_to_loudness_without_rhubarb)

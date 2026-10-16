@@ -143,12 +143,15 @@ std::vector<Cue> parse(const std::string& text, double frameRate)
             continue;
         char* end = nullptr;
         const double value = std::strtod(when.c_str(), &end);
-        if (end == when.c_str())
+        if (end == when.c_str() || !std::isfinite(value))
             continue;
         Cue cue;
         cue.shape = shape;
-        // Papagayo counts frames from 1; Rhubarb gives seconds.
-        cue.time = moho ? std::max(0.0, (value - 1.0) / std::max(frameRate, 1.0)) : value;
+        // Papagayo counts frames from 1; Rhubarb gives seconds. Either is
+        // held within the longest timeline there can be.
+        const double fps = std::max(frameRate, 1.0);
+        cue.time = moho ? (value - 1.0) / fps : value;
+        cue.time = std::clamp(cue.time, 0.0, kMaxFrames / fps);
         cues.push_back(cue);
     }
     std::stable_sort(cues.begin(), cues.end(), [](const Cue& a, const Cue& b) { return a.time < b.time; });
@@ -212,7 +215,9 @@ CommandPtr apply(Layer& layer, const SymbolInstance& mouth, const std::vector<Cu
     {
         const auto found = chart.find(cue.shape);
         const int shown = found == chart.end() ? 1 : std::max(1, found->second);
-        const int frame = start + static_cast<int>(std::lround(cue.time * fps));
+        const double at = cue.time * fps;
+        const int frame = clampFrameIndex(
+            static_cast<int64_t>(start) + (at > 0.0 ? std::llround(std::min(at, static_cast<double>(kMaxFrames))) : 0));
         if (!keys.empty() && keys.back().first == frame)
             keys.back().second = shown;
         else if (keys.empty() || keys.back().second != shown)
