@@ -132,7 +132,7 @@ struct Type
 {
     std::string id;
     std::string name;
-    /// "Input", "Combine", "Transform", "Blur", "Color", "Distort",
+    /// "Input", "Combine", "Transform", "Time", "Blur", "Color", "Distort",
     /// "Generate", "Transition", "Utility" or "Output".
     std::string category;
     std::string description;
@@ -188,10 +188,11 @@ struct Context
     /// y' = b x + d y + ty.
     double a = 1.0, b = 0.0, c = 0.0, d = 1.0, tx = 0.0, ty = 0.0;
     /// A layer (or a folder's layers) by name, drawn the size of the
-    /// picture; false when there is none of that name.
-    std::function<bool(const std::string& layer, Image& into)> layer;
-    /// The timeline's layers but \a taken, stacked as usual.
-    std::function<bool(const std::vector<std::string>& taken, Image& into)> rest;
+    /// picture on \a frame (the context's own, or another for a time node);
+    /// false when there is none of that name.
+    std::function<bool(const std::string& layer, int frame, Image& into)> layer;
+    /// The timeline's layers but \a taken, stacked as usual, on \a frame.
+    std::function<bool(const std::vector<std::string>& taken, int frame, Image& into)> rest;
 
     double pixelsPerUnit() const;
 };

@@ -14,6 +14,7 @@ QColor categoryColor(const std::string& category)
         {"Input", QColor(0x3E, 0x8E, 0x66)},
         {"Combine", QColor(0x4A, 0x6F, 0xA8)},
         {"Transform", QColor(0x8E, 0x5C, 0xA8)},
+        {"Time", QColor(0xB0, 0x5C, 0x86)},
         {"Blur", QColor(0x3D, 0x84, 0xC6)},
         {"Color", QColor(0xC0, 0x5E, 0x3E)},
         {"Distort", QColor(0xA8, 0x7A, 0x34)},
@@ -123,6 +124,13 @@ void drawIcon(QPainter& painter, const QRectF& box, const std::string& category,
         painter.setBrush(color);
         painter.setPen(Qt::NoPen);
         painter.drawPath(half);
+    }
+    else if (category == "Time")
+    {
+        // A clock.
+        painter.drawEllipse(c, 5.2 * u, 5.2 * u);
+        painter.drawLine(c, at(0, -3.2));
+        painter.drawLine(c, at(2.4, 1.2));
     }
     else if (category == "Output")
     {

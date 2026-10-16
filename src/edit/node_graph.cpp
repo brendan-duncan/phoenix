@@ -127,6 +127,13 @@ std::vector<Type> makeTypes()
     add("opacity", "Opacity", "Transform", "Fades the picture.", {"In"},
         {number("amount", "Opacity (percent)", 100, 0, 100, 1)});
 
+    add("timeoffset", "Time Offset", "Time",
+        "Shows what comes in as it is some frames earlier (less than 0) or later: a part of the scene running "
+        "behind the rest, a trail made of copies.",
+        {"In"}, {number("frames", "Frames", -2, -10000, 10000, 1)});
+    add("framehold", "Frame Hold", "Time", "Holds what comes in on one frame of the timeline, however the rest moves on.",
+        {"In"}, {number("frame", "Frame", 1, 1, 100000, 1)});
+
     for (const behaviors::Definition& effect : compositing::definitions())
     {
         std::vector<ParamSpec> params;
@@ -670,7 +677,7 @@ const Type* type(const std::string& id)
 
 const std::vector<std::string>& categories()
 {
-    static const std::vector<std::string> list = {"Input", "Combine", "Transform", "Blur", "Color", "Distort",
+    static const std::vector<std::string> list = {"Input", "Combine", "Transform", "Time", "Blur", "Color", "Distort",
         "Generate", "Transition", "Utility", "Output"};
     return list;
 }
@@ -861,7 +868,7 @@ const Image& Evaluation::compute(int id)
     if (kind == "layers")
     {
         out = Image(w, h);
-        if (!_context.rest || !_context.rest(_taken, out))
+        if (!_context.rest || !_context.rest(_taken, frame, out))
             out = Image(w, h);
     }
     else if (kind == "layer")
@@ -870,7 +877,7 @@ const Image& Evaluation::compute(int id)
         const std::string name = applied.valueAt("layer", frame, std::string());
         if (name.empty())
             _problems[id] = "Choose a layer.";
-        else if (!_context.layer || !_context.layer(name, out))
+        else if (!_context.layer || !_context.layer(name, frame, out))
         {
             out = Image(w, h);
             _problems[id] = "There is no layer named " + name + ".";
@@ -998,6 +1005,26 @@ const Image& Evaluation::compute(int id)
                                     (scale((p >> 8) & 0xFF) << 8) | scale(p & 0xFF);
                 }
             });
+    }
+    else if (kind == "timeoffset" || kind == "framehold")
+    {
+        // What comes in, worked out again on another frame.
+        const Link* link = _graph.linkInto(id, 0);
+        const int other = kind == "timeoffset"
+                              ? frame + static_cast<int>(std::lround(numberAt(applied, "frames", frame, -2.0)))
+                              : static_cast<int>(std::lround(numberAt(applied, "frame", frame, 1.0))) - 1;
+        if (!link)
+            out = Image(w, h);
+        else if (other == frame)
+            copyOf(input(0));
+        else
+        {
+            Context shifted = _context;
+            shifted.frame = std::max(0, other);
+            Evaluation then(_graph, shifted);
+            const Image& image = then.at(link->from);
+            copyOf(image.empty() ? nullptr : &image);
+        }
     }
     else if (kind == "dot" || kind == "output")
     {

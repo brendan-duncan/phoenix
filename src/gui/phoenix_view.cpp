@@ -1067,7 +1067,8 @@ fla::nodegraph::Context PhoenixView::graphContext(const QTransform& transform, q
 
     // Some of the timeline's layers drawn into a picture of the graph's.
     const auto draw = [this, transform, ratio, timeline, loopType, firstFrame, hints](
-                          const QSet<const fla::Layer*>& layers, bool keep, fla::nodegraph::Image& into) {
+                          const QSet<const fla::Layer*>& layers, bool keep, int frame, int now,
+                          fla::nodegraph::Image& into) {
         QImage canvas(reinterpret_cast<uchar*>(into.pixels.data()), into.width, into.height, into.width * 4,
             QImage::Format_ARGB32_Premultiplied);
         canvas.setDevicePixelRatio(ratio);
@@ -1081,7 +1082,11 @@ fla::nodegraph::Context PhoenixView::graphContext(const QTransform& transform, q
         _graphLayers = layers;
         _graphKeep = keep;
         _compositing.insert(timeline);
-        drawTimeline(painter, timeline, loopType, firstFrame);
+        // Another frame (for a time node): that frame of the timeline, held.
+        if (frame == now)
+            drawTimeline(painter, timeline, loopType, firstFrame);
+        else
+            drawTimeline(painter, timeline, fla::LoopType::SingleFrame, frame);
         _compositing.remove(timeline);
         _graphTimeline = timelineBefore;
         _graphLayers = layersBefore;
@@ -1114,19 +1119,20 @@ fla::nodegraph::Context PhoenixView::graphContext(const QTransform& transform, q
             }
         }
     };
-    context.layer = [draw, named](const std::string& name, fla::nodegraph::Image& into) {
+    const int now = context.frame;
+    context.layer = [draw, named, now](const std::string& name, int frame, fla::nodegraph::Image& into) {
         QSet<const fla::Layer*> layers;
         named(name, layers);
         if (layers.isEmpty())
             return false;
-        draw(layers, true, into);
+        draw(layers, true, frame, now, into);
         return true;
     };
-    context.rest = [draw, named](const std::vector<std::string>& taken, fla::nodegraph::Image& into) {
+    context.rest = [draw, named, now](const std::vector<std::string>& taken, int frame, fla::nodegraph::Image& into) {
         QSet<const fla::Layer*> layers;
         for (const std::string& name : taken)
             named(name, layers);
-        draw(layers, false, into);
+        draw(layers, false, frame, now, into);
         return true;
     };
     return context;

@@ -21,6 +21,7 @@ struct Fixture
     std::vector<std::string> taken;
     std::map<std::string, uint32_t> layers{{"Red", kRed}, {"Blue", kBlue}};
     uint32_t rest = 0xFF00FF00u;
+    std::vector<int> framesDrawn;
 
     Fixture(int w = 4, int h = 4)
     {
@@ -28,14 +29,15 @@ struct Fixture
         context.height = h;
         context.stageWidth = w;
         context.stageHeight = h;
-        context.layer = [this](const std::string& name, Image& into) {
+        context.layer = [this](const std::string& name, int frame, Image& into) {
             const auto found = layers.find(name);
             if (found == layers.end())
                 return false;
-            std::fill(into.pixels.begin(), into.pixels.end(), found->second);
+            framesDrawn.push_back(frame);
+            std::fill(into.pixels.begin(), into.pixels.end(), name == "Changing" && frame > 0 ? kBlue : found->second);
             return true;
         };
-        context.rest = [this](const std::vector<std::string>& except, Image& into) {
+        context.rest = [this](const std::vector<std::string>& except, int, Image& into) {
             taken = except;
             std::fill(into.pixels.begin(), into.pixels.end(), rest);
             return true;
@@ -278,4 +280,36 @@ TEST(layer_nodes_follow_a_renamed_layer)
     CHECK(renamed && renamed->node(3)->applied.params.at("layer") == "Hero Walk");
     CHECK(renamed->node(4)->applied.valueAt("layer", 0, "") == "Hero Walk");
     CHECK(renamed->node(4)->applied.valueAt("layer", 12, "") == "Sidekick");
+}
+
+TEST(time_nodes_show_another_frame)
+{
+    Fixture f;
+    f.layers["Changing"] = kRed;
+    f.context.frame = 5;
+    Graph graph;
+    graph.nodes.push_back(make("layer", 1, 0, 0));
+    graph.nodes[0].applied.params["layer"] = "Changing";
+    graph.nodes.push_back(make("framehold", 2, 0, 0));
+    graph.nodes.push_back(make("output", 3, 0, 0));
+    CHECK(graph.connect(1, 2, 0) && graph.connect(2, 3, 0));
+    {
+        // Held on frame 1 (the first, 0 here): red, though frame 5 is blue.
+        Evaluation evaluation(graph, f.context);
+        CHECK(pixel(evaluation.output(), 1, 1) == kRed);
+        CHECK(!f.framesDrawn.empty() && f.framesDrawn.back() == 0);
+    }
+    graph.node(2)->applied.type = "timeoffset";
+    graph.node(2)->applied.params = {{"frames", "-3"}};
+    f.framesDrawn.clear();
+    {
+        Evaluation evaluation(graph, f.context);
+        CHECK(pixel(evaluation.output(), 1, 1) == kBlue);
+        CHECK(f.framesDrawn.size() == 1 && f.framesDrawn[0] == 2);
+    }
+    // Before the first frame, the first.
+    graph.node(2)->applied.params["frames"] = "-20";
+    f.framesDrawn.clear();
+    Evaluation evaluation(graph, f.context);
+    CHECK(pixel(evaluation.output(), 1, 1) == kRed && f.framesDrawn[0] == 0);
 }
