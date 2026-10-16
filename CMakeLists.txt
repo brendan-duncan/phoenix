@@ -505,7 +505,7 @@ set(SOURCES
 # one. OFF leaves Python scripting out.
 option(PHOENIX_PYTHON "Run Python scripts with the user's own Python" ON)
 if(PHOENIX_PYTHON)
-    list(APPEND HEADERS src/python/python_api.h src/python/python_engine.h)
+    list(APPEND HEADERS src/python/python_api.h src/python/python_engine.h src/python/python_keywords.h)
 endif()
 
 # The Qt-free core, compiled once for the app and the tests.

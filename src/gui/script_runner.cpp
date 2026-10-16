@@ -699,6 +699,7 @@ ScriptRunner::ScriptRunner(MainWindow& window)
 #ifdef PHOENIX_PYTHON
     // Python itself is only looked for when a Python script first runs.
     _python = std::make_unique<python::Engine>(*_host);
+    _python->setJsflEngine(_engine.get());
 #endif
 
     // The first window that people work in takes scripts other Phoenix

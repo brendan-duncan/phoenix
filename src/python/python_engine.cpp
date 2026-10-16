@@ -5,6 +5,7 @@
 #include "python_engine.h"
 
 #include "python_api.h"
+#include "python_keywords.h"
 
 #include "../jsfl/model.h"
 
@@ -68,6 +69,8 @@ struct Bound
     PyObject head;
     ObjectPtr* object;
     const jsfl::Method* method;
+    /// The class that defines the method, for its parameters' names.
+    const ClassInfo* owner;
     unsigned generation;
 };
 
@@ -534,6 +537,7 @@ PyObject* getMember(PyObject* self, void* closure)
         auto* bound = reinterpret_cast<Bound*>(made);
         bound->object = new ObjectPtr(object);
         bound->method = &member.owner->methods[member.index];
+        bound->owner = member.owner;
         bound->generation = g_generation;
         return made;
     });
@@ -559,14 +563,6 @@ PyObject* callBound(PyObject* self, PyObject* args, PyObject* keywords)
 {
     return guarded([self, args, keywords]() -> PyObject* {
         const auto* bound = reinterpret_cast<const Bound*>(self);
-        Py_ssize_t at = 0;
-        PyObject* key = nullptr;
-        PyObject* item = nullptr;
-        if (keywords && PY.PyDict_Next(keywords, &at, &key, &item))
-        {
-            PY.PyErr_SetString(PY.TypeError, (bound->method->name + "() takes no keyword arguments").c_str());
-            return nullptr;
-        }
         if (!g_inRun || bound->generation != g_generation)
             throw jsfl::Error("This method belongs to a script run that has ended; get it again from fl.");
         requireRunThread();
@@ -574,6 +570,44 @@ PyObject* callBound(PyObject* self, PyObject* args, PyObject* keywords)
         const Py_ssize_t count = PY.PyTuple_Size(args);
         for (Py_ssize_t i = 0; i < count; ++i)
             list.push_back(fromPy(PY.PyTuple_GetItem(args, i)));
+        // Keywords go to their parameters' places; places they skip are
+        // left out, as JSFL's undefined.
+        Py_ssize_t at = 0;
+        PyObject* key = nullptr;
+        PyObject* item = nullptr;
+        while (keywords && PY.PyDict_Next(keywords, &at, &key, &item))
+        {
+            const std::string keyword = textOf(key);
+            const std::vector<std::string>* names = parameterNames(bound->owner->name, bound->method->name);
+            size_t place = names ? names->size() : 0;
+            for (size_t i = 0; names && i < names->size(); ++i)
+            {
+                if ((*names)[i] == keyword || snake((*names)[i]) == keyword)
+                    place = i;
+            }
+            if (!names)
+            {
+                PY.PyErr_SetString(PY.TypeError, (bound->method->name + "() takes no keyword arguments").c_str());
+                return nullptr;
+            }
+            if (place == names->size())
+            {
+                std::string message = bound->method->name + "() has no parameter " + keyword + "; it takes";
+                for (size_t i = 0; i < names->size(); ++i)
+                    message += (i ? ", " : " ") + snake((*names)[i]);
+                PY.PyErr_SetString(PY.TypeError, message.c_str());
+                return nullptr;
+            }
+            if (place < list.size() && !list[place].isUndefined())
+            {
+                PY.PyErr_SetString(PY.TypeError,
+                    (bound->method->name + "() got " + keyword + " both by position and by name").c_str());
+                return nullptr;
+            }
+            if (list.size() <= place)
+                list.resize(place + 1);
+            list[place] = fromPy(item);
+        }
         const ObjectPtr object = *bound->object;
         return toPy(bound->method->call(*object, list));
     });
@@ -1332,9 +1366,9 @@ jsfl::RunResult Engine::run(const std::string& source, const std::string& name, 
         // in the phoenix module, for code the script imports.
         const std::shared_ptr<jsfl::Flash> flash = jsfl::makeFlash(session);
         PyObject* runGlobals = globals.get();
-        flash->runScript = [&session, runGlobals](const std::string& other, const std::string& function, const Args& args) {
+        flash->runScript = [this, &session, runGlobals](const std::string& other, const std::string& function, const Args& args) {
             if (!isScript(other))
-                throw jsfl::Error("A Python script runs other Python scripts, not " + other + ".");
+                return runJsfl(session, other, function, args);
             std::string text;
             if (!readFile(other, text))
                 throw jsfl::Error("Could not read the script " + other + ".");
@@ -1458,6 +1492,39 @@ jsfl::RunResult Engine::run(const std::string& source, const std::string& name, 
     _running = false;
     flushEvents();
     return result;
+}
+
+jsfl::Value Engine::runJsfl(jsfl::Session& session, const std::string& path, const std::string& function, const Args& args)
+{
+    // What Python changed so far is one step to undo, the JSFL script's
+    // another; Python's objects are checked afresh after it.
+    session.settle();
+    std::unique_ptr<jsfl::Engine> own;
+    jsfl::Engine* engine = _jsfl && !_jsfl->running() ? _jsfl : (own = std::make_unique<jsfl::Engine>(_host)).get();
+    jsfl::RunOptions options;
+    options.undoName = session.undoName();
+    options.callFunction = function;
+    options.callArguments = args;
+    // Python's Stop and time limit reach the JSFL script too.
+    if (Guard* guard = g_guard.load())
+    {
+        if (guard->hasDeadline)
+        {
+            const double left = std::chrono::duration<double>(guard->deadline - Clock::now()).count();
+            options.timeLimit = std::max(0.001, left);
+        }
+        options.poll = [guard, engine]() {
+            if (guard->poll)
+                guard->poll();
+            if (guard->stop && *guard->stop)
+                engine->stop();
+        };
+    }
+    const jsfl::RunResult result = engine->runFile(path, options);
+    session.settle();
+    if (!result.ok)
+        throw jsfl::Error(result.report());
+    return result.returned;
 }
 
 void Engine::dispatch(const std::string& type)

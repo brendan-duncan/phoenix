@@ -7,6 +7,10 @@
 #include <string>
 #include <vector>
 
+namespace jsfl {
+class Session;
+}
+
 namespace python {
 
 /// Runs Python scripts over the same object model JSFL scripts use: `fl`,
@@ -48,15 +52,25 @@ public:
     /// Drops every listener, and the scripts kept for them.
     void forgetListeners();
 
+    /// The JSFL engine fl.runScript("x.jsfl") runs JSFL scripts with, so
+    /// their event listeners live on with the window's; without one, each
+    /// such script gets an engine of its own.
+    void setJsflEngine(jsfl::Engine* engine) { _jsfl = engine; }
+
 private:
     jsfl::RunResult run(const std::string& source, const std::string& name, const std::string& path,
         const jsfl::RunOptions& options);
+    /// fl.runScript of a JSFL script: run, and \a function in it called
+    /// with \a args when given. What it comes to, or an error.
+    jsfl::Value runJsfl(jsfl::Session& session, const std::string& path, const std::string& function,
+        const jsfl::Args& args);
     void flushEvents();
     /// The events listened for, and the first script listening to each,
     /// from Python's side (its lock held).
     void readEvents();
 
     jsfl::Host& _host;
+    jsfl::Engine* _jsfl = nullptr;
     std::atomic<bool> _stop{false};
     bool _running = false;
     std::map<std::string, std::string> _events;

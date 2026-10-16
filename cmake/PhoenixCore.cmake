@@ -198,6 +198,7 @@ set(PHOENIX_CORE_JSFL_SOURCES
 set(PHOENIX_CORE_PYTHON_SOURCES
     python/python_api.cpp
     python/python_engine.cpp
+    python/python_keywords.cpp
 )
 
 # Playing movies with their ActionScript (Control > Test Movie): libas3.

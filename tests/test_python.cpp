@@ -325,6 +325,93 @@ TEST(python_run_script_calls_a_function_in_another_file)
     std::filesystem::remove_all(folder);
 }
 
+TEST(python_methods_take_keyword_arguments)
+{
+    if (!havePython())
+        return;
+    Fixture f;
+    // By the snake_case name or the JSFL one; skipped places are left out,
+    // as JSFL's undefined.
+    CHECK(f.run("tl = fl.getDocumentDOM().getTimeline()\n"
+                "tl.add_new_layer(name='Ink', add_above=True)\n"
+                "tl.insert_frames(4, all_layers=True)\n"
+                "tl.insertFrames(numFrames=2, allLayers=False)\n"
+                "print([layer.name for layer in tl.layers], [layer.frame_count for layer in tl.layers])\n"
+                "print(tl.find_layer_index(name='Layer_1'))\n")
+              .ok);
+    CHECK_OUTPUT(f, "['Ink', 'Layer_1'] [7, 5]\n[1]\n");
+    CHECK(fla::timeline::layerEnd(*f.scene().layers[0]) == 7);
+    CHECK(fla::timeline::layerEnd(*f.scene().layers[1]) == 5);
+
+    // Mistakes are TypeErrors that say what the method takes.
+    const jsfl::RunResult unknown =
+        f.run("fl.getDocumentDOM().getTimeline().insert_frames(5, every_layer=True)", "Test Script", true);
+    CHECK(!unknown.ok);
+    CHECK(unknown.message.rfind("TypeError:", 0) == 0);
+    CHECK(unknown.message.find("num_frames, all_layers, frame_num_index") != std::string::npos);
+    const jsfl::RunResult twice =
+        f.run("fl.getDocumentDOM().getTimeline().insert_frames(5, num_frames=5)", "Test Script", true);
+    CHECK(!twice.ok);
+    CHECK(twice.message.find("both by position and by name") != std::string::npos);
+    const jsfl::RunResult none = f.run("fl.getDocumentDOM().select_all(everything=True)", "Test Script", true);
+    CHECK(!none.ok);
+    CHECK(none.message.find("takes no keyword arguments") != std::string::npos);
+}
+
+TEST(python_run_script_runs_jsfl)
+{
+    if (!havePython())
+        return;
+    Fixture f;
+    const std::filesystem::path folder = std::filesystem::temp_directory_path() / "phoenix_python_jsfl_tests";
+    std::filesystem::create_directories(folder);
+    const std::filesystem::path helper = folder / "helper.jsfl";
+    {
+        std::ofstream out(helper, std::ios::binary);
+        out << "fl.trace('loaded');\n"
+               "function add(a, b) { return a + b; }\n"
+               "function addLayer(name) { fl.getDocumentDOM().getTimeline().addNewLayer(name); return {made: name}; }\n"
+               "function layerOf(doc) { return doc.getTimeline().layers[0]; }\n";
+    }
+    const std::filesystem::path last = folder / "last.jsfl";
+    {
+        std::ofstream out(last, std::ios::binary);
+        out << "var doc = fl.getDocumentDOM();\ndoc.width + 1;\n";
+    }
+    const size_t before = f.host.commands.count();
+    // A function's answer comes back; a script alone gives its last value.
+    // Phoenix's objects pass in, but not back out (they end with the JSFL
+    // run).
+    CHECK(f.run("uri = FLfile.platformPathToURI(r'" + helper.u8string() + "')\n"
+                "print(fl.runScript(uri, 'add', 2, 3))\n"
+                "print(fl.run_script(uri, 'addLayer', 'Ink'))\n"
+                "print(fl.runScript(uri, 'layerOf', fl.getDocumentDOM()))\n"
+                "print(fl.runScript(FLfile.platformPathToURI(r'" + last.u8string() + "')))\n"
+                "fl.getDocumentDOM().getTimeline().layers[0].name = 'Top'\n",
+        "Mixed")
+              .ok);
+    CHECK_OUTPUT(f, "loaded\n5\nloaded\n{'made': 'Ink'}\nloaded\nNone\n551\n");
+    CHECK(f.scene().layers.size() == 2);
+    CHECK(f.scene().layers[0]->name == "Top");
+    CHECK(f.host.commands.count() > before);
+    CHECK(!f.host.commands.isInMacro());
+
+    // An error in the JSFL script is a phoenix.Error in Python.
+    const std::filesystem::path broken = folder / "broken.jsfl";
+    {
+        std::ofstream out(broken, std::ios::binary);
+        out << "\nnothing.here();\n";
+    }
+    f.host.output.clear();
+    CHECK(f.run("import phoenix\ntry:\n    fl.runScript(FLfile.platformPathToURI(r'" + broken.u8string() +
+                "'))\nexcept phoenix.Error as error:\n    print('caught', 'broken.jsfl:2' in str(error))\n"
+                "try:\n    fl.runScript(FLfile.platformPathToURI(r'" + helper.u8string() +
+                "'), 'missing')\nexcept phoenix.Error as error:\n    print('caught', 'no function missing' in str(error))\n")
+              .ok);
+    CHECK_OUTPUT(f, "caught True\nloaded\ncaught True\n");
+    std::filesystem::remove_all(folder);
+}
+
 TEST(python_listeners_hear_events_until_removed)
 {
     if (!havePython())
