@@ -3,6 +3,7 @@
 
 #include "../data/frame.h"
 #include "../data/symbol_instance.h"
+#include "../edit/behaviors.h"
 #include "../edit/command_stack.h"
 #include "../edit/property_command.h"
 #include "../edit/timeline_edit.h"
@@ -80,6 +81,17 @@ const EasePreset kEases[] = {
     {"Back Out", 0.34, 1.56, 0.64, 1.0},
     {"Back In Out", 0.68, -0.6, 0.32, 1.6},
 };
+
+/// Time Remap's Frame shown, the last such behavior that is on (the last to
+/// set it wins); null when there is none.
+fla::behaviors::Applied* remapOf(std::vector<fla::behaviors::Applied>& list)
+{
+    fla::behaviors::Applied* found = nullptr;
+    for (fla::behaviors::Applied& applied : list)
+        if (applied.type == "timeremap" && applied.enabled)
+            found = &applied;
+    return found;
+}
 
 constexpr double kKeyHalf = 4.0;
 constexpr double kHandleRadius = 3.5;
@@ -517,18 +529,15 @@ MotionEditorPanel::MotionEditorPanel(MotionEditorLinks links, QWidget* parent)
     });
     connect(_keyFrame, &HotSpinBox::valueChanged, this, [this](int frame) {
         const int index = _curve->selectedKey();
-        if (_updating || index <= 0 || !_frame)
+        const bool remap = currentRow().remap;
+        if (_updating || index <= 0 || (remap ? !_remap : !_frame))
             return;
         std::vector<fla::motion::PropertyKey> keys = _curve->keys();
-        std::string* xml = fla::timeline::motionOf(*_frame);
-        fla::MotionObject motion;
-        if (!xml || !motion.parse(*xml))
-            return;
-        const double frames = motion.frames(_links.frameRate ? _links.frameRate() : 24.0);
-        const double perFrame = frames > 0.0 ? motion.duration() / frames : 1.0;
+        const double perFrame = this->perFrame();
+        const int span = remap ? remapFrames() : _frame->duration;
         const size_t i = static_cast<size_t>(index);
         const double low = keys[i - 1].time + perFrame;
-        const double high = i + 1 < keys.size() ? keys[i + 1].time - perFrame : (_frame->duration - 1) * perFrame;
+        const double high = i + 1 < keys.size() ? keys[i + 1].time - perFrame : (span - 1) * perFrame;
         keys[i].time = std::max(low, std::min(high, (frame - 1) * perFrame));
         _curve->setKeys(keys);
         writeKeys(true, "Keyframe Frame");
@@ -557,30 +566,114 @@ void MotionEditorPanel::refresh()
     if (_editing)
         return;
     _frame = _links.span ? _links.span() : nullptr;
-    const bool on = _frame && fla::timeline::motionOf(*_frame);
+    if (_frame && !fla::timeline::motionOf(*_frame))
+        _frame = nullptr;
+    _remap = _links.remapped ? _links.remapped() : nullptr;
+    if (_remap && !dynamic_cast<const fla::Frame*>(_remap->parent))
+        _remap = nullptr;
+    const bool on = _frame || _remap;
     for (QWidget* widget : std::initializer_list<QWidget*>{_properties, _curve, _add, _remove, _keyFrame, _keyValue,
              _ease, _spanEase})
         widget->setEnabled(on);
     if (!on)
     {
-        _frame = nullptr;
-        _title->setText("Select an object with a motion tween, or put the playhead in one.");
+        _title->setText("Select an object with a motion tween or Time Remap, or put the playhead in a motion tween.");
         _curve->setCurve({}, 1, 1.0, 0);
         return;
     }
-    _title->setText(QString("Motion tween, frames %1 to %2").arg(_frame->index + 1).arg(_frame->index + _frame->duration));
+    if (_frame)
+        _title->setText(
+            QString("Motion tween, frames %1 to %2").arg(_frame->index + 1).arg(_frame->index + _frame->duration));
+    else
+        _title->setText(QString("Time Remap, frames %1 to %2: the frame of the symbol shown, frame by frame")
+                            .arg(remapStart() + 1)
+                            .arg(remapStart() + remapFrames()));
     buildRows();
     _updating = true;
-    _spanEase->setValue(fla::motion::spanEase(*fla::timeline::motionOf(*_frame)));
-    _keyFrame->setRange(1, std::max(1, _frame->duration));
+    _spanEase->setEnabled(_frame != nullptr);
+    if (_frame)
+        _spanEase->setValue(fla::motion::spanEase(*fla::timeline::motionOf(*_frame)));
     _updating = false;
     showProperty();
 }
 
+int MotionEditorPanel::remapStart() const
+{
+    const auto* keyframe = _remap ? dynamic_cast<const fla::Frame*>(_remap->parent) : nullptr;
+    return keyframe ? keyframe->index : 0;
+}
+
+int MotionEditorPanel::remapFrames() const
+{
+    const auto* keyframe = _remap ? dynamic_cast<const fla::Frame*>(_remap->parent) : nullptr;
+    int frames = keyframe ? std::max(1, keyframe->duration) : 1;
+    for (const fla::motion::PropertyKey& key : remapKeys())
+        frames = std::max(frames, static_cast<int>(std::lround(key.time)) + 1);
+    return frames;
+}
+
+std::vector<fla::motion::PropertyKey> MotionEditorPanel::remapKeys() const
+{
+    if (!_remap)
+        return {};
+    std::vector<fla::behaviors::Applied> list = fla::behaviors::of(*_remap);
+    const fla::behaviors::Applied* remap = remapOf(list);
+    if (!remap)
+        return {};
+    const int start = remapStart();
+    std::vector<fla::motion::PropertyKey> keys = remap->curve("frame");
+    if (keys.empty())
+        return {fla::motion::PropertyKey::at(0.0, remap->number("frame", 1.0))};
+    // From the start of the keyframe: keys before it count only for the
+    // value it starts on.
+    const double first = fla::motion::valueOf(keys, start);
+    keys.erase(std::remove_if(keys.begin(), keys.end(),
+                   [start](const fla::motion::PropertyKey& key) { return key.time < start; }),
+        keys.end());
+    for (fla::motion::PropertyKey& key : keys)
+        key.time -= start;
+    if (keys.empty() || keys.front().time > 0.0)
+        keys.insert(keys.begin(), fla::motion::PropertyKey::at(0.0, first));
+    return keys;
+}
+
+double MotionEditorPanel::perFrame() const
+{
+    if (currentRow().remap || !_frame)
+        return 1.0;
+    std::string* xml = fla::timeline::motionOf(*_frame);
+    fla::MotionObject motion;
+    if (!xml || !motion.parse(*xml))
+        return 1.0;
+    const double frames = motion.frames(_links.frameRate ? _links.frameRate() : 24.0);
+    return frames > 0.0 ? motion.duration() / frames : 1.0;
+}
+
 void MotionEditorPanel::showProperty()
 {
+    const Row& shown = currentRow();
+    if (shown.remap)
+    {
+        if (!_remap)
+            return;
+        // Frames on the keyframe's span, the frame shown counted from 1.
+        const int frames = remapFrames();
+        const int current = _links.currentFrame ? _links.currentFrame() - remapStart() : 0;
+        _curve->setCurve(remapKeys(), frames, 1.0, std::max(0, std::min(frames - 1, current)));
+        _updating = true;
+        _keyFrame->setRange(1, frames);
+        _spanEase->setEnabled(false);
+        _updating = false;
+        _keyValue->setSuffix("");
+        updateKeyFields();
+        return;
+    }
     if (!_frame)
         return;
+    _updating = true;
+    _keyFrame->setRange(1, std::max(1, _frame->duration));
+    _spanEase->setEnabled(true);
+    _updating = false;
     std::string* xml = fla::timeline::motionOf(*_frame);
     fla::MotionObject motion;
     if (!xml || !motion.parse(*xml))
@@ -601,21 +694,15 @@ void MotionEditorPanel::updateKeyFields()
 {
     const int index = _curve->selectedKey();
     _updating = true;
-    _remove->setEnabled(_frame && index > 0);
-    _keyValue->setEnabled(_frame && index >= 0);
-    _keyFrame->setEnabled(_frame && index > 0);
-    if (index >= 0 && _frame)
+    const bool on = _frame || _remap;
+    _remove->setEnabled(on && index > 0);
+    _keyValue->setEnabled(on && index >= 0);
+    _keyFrame->setEnabled(on && index > 0);
+    if (index >= 0 && on && static_cast<size_t>(index) < _curve->keys().size())
     {
         const fla::motion::PropertyKey& key = _curve->keys()[static_cast<size_t>(index)];
         _keyValue->setValue(key.value);
-        std::string* xml = fla::timeline::motionOf(*_frame);
-        fla::MotionObject motion;
-        if (xml && motion.parse(*xml))
-        {
-            const double frames = motion.frames(_links.frameRate ? _links.frameRate() : 24.0);
-            const double perFrame = frames > 0.0 ? motion.duration() / frames : 1.0;
-            _keyFrame->setValue(static_cast<int>(std::lround(key.time / perFrame)) + 1);
-        }
+        _keyFrame->setValue(static_cast<int>(std::lround(key.time / perFrame())) + 1);
     }
     _updating = false;
 }
@@ -624,13 +711,24 @@ void MotionEditorPanel::cancelDrag()
 {
     if (!_editing)
         return;
-    if (_frame)
+    if (_editingRemap)
+    {
+        if (_remap)
+            _remap->extraAttributes = _attributesBefore;
+    }
+    else if (_frame)
         _frame->extraChildren = _before;
     _editing = false;
+    _editingRemap = false;
 }
 
 void MotionEditorPanel::writeKeys(bool done, const char* name)
 {
+    if (currentRow().remap)
+    {
+        writeRemap(done, name);
+        return;
+    }
     if (!_frame)
         return;
     if (!_editing)
@@ -679,20 +777,77 @@ void MotionEditorPanel::writeKeys(bool done, const char* name)
         _links.changed();
 }
 
+void MotionEditorPanel::writeRemap(bool done, const char* name)
+{
+    if (!_remap)
+        return;
+    if (!_editing)
+    {
+        _attributesBefore = _remap->extraAttributes;
+        _editing = true;
+        _editingRemap = true;
+    }
+    // Back on the instance's timeline, its frames from 1 up.
+    const Row& row = currentRow();
+    const int start = remapStart();
+    std::vector<fla::motion::PropertyKey> keys = _curve->keys();
+    for (fla::motion::PropertyKey& key : keys)
+    {
+        const double kept = std::clamp(key.value, row.lowest, row.highest);
+        key.nextValue += kept - key.value;
+        key.previousValue += kept - key.value;
+        key.value = kept;
+        key.time = std::round(key.time) + start;
+    }
+    const std::vector<std::pair<std::string, std::string>> now = _remap->extraAttributes;
+    _remap->extraAttributes = _attributesBefore;
+    std::vector<fla::behaviors::Applied> list = fla::behaviors::of(*_remap);
+    fla::behaviors::Applied* remap = remapOf(list);
+    if (!remap)
+    {
+        _remap->extraAttributes = now;
+        return;
+    }
+    remap->setCurve("frame", keys);
+    const std::vector<std::pair<std::string, std::string>> after = fla::behaviors::withBehaviors(*_remap, list);
+    _remap->extraAttributes = after;
+    if (done)
+    {
+        _remap->extraAttributes = _attributesBefore;
+        _editing = false;
+        _editingRemap = false;
+        if (after != _attributesBefore)
+        {
+            if (fla::CommandStack* stack = _links.commands ? _links.commands() : nullptr)
+            {
+                stack->push(fla::CommandPtr(new fla::SetPropertyCommand<std::vector<std::pair<std::string, std::string>>>(
+                    _remap->extraAttributes, _attributesBefore, after, name)));
+                stack->breakMergeChain();
+            }
+            else
+            {
+                _remap->extraAttributes = after;
+            }
+        }
+        updateKeyFields();
+    }
+    if (_links.behaviorsChanged)
+        _links.behaviorsChanged();
+    else if (_links.changed)
+        _links.changed();
+}
+
 void MotionEditorPanel::addKeyAtPlayhead()
 {
-    if (!_frame)
+    const bool remap = currentRow().remap;
+    if (remap ? !_remap : !_frame)
         return;
-    std::string* xml = fla::timeline::motionOf(*_frame);
-    fla::MotionObject motion;
-    if (!xml || !motion.parse(*xml))
-        return;
-    const double frames = motion.frames(_links.frameRate ? _links.frameRate() : 24.0);
-    const double perFrame = frames > 0.0 ? motion.duration() / frames : 1.0;
-    const int at = _links.currentFrame ? _links.currentFrame() - _frame->index : 0;
+    const double perFrame = this->perFrame();
+    const int span = remap ? remapFrames() : _frame->duration;
+    const int at = _links.currentFrame ? _links.currentFrame() - (remap ? remapStart() : _frame->index) : 0;
     std::vector<fla::motion::PropertyKey> keys = _curve->keys();
-    const size_t index = fla::motion::splitAt(keys, std::max(0, std::min(_frame->duration - 1, at)) * perFrame);
-    _curve->setCurve(keys, _frame->duration, perFrame, at);
+    const size_t index = fla::motion::splitAt(keys, std::max(0, std::min(span - 1, at)) * perFrame);
+    _curve->setCurve(keys, span, perFrame, at);
     _curve->selectKey(static_cast<int>(index));
     writeKeys(true, "Add Property Keyframe");
 }
@@ -768,7 +923,8 @@ void MotionEditorPanel::buildRows()
     // numbers, at the values the object has when the tween does not set them.
     std::vector<Row> rows;
     for (const PropertyRow& row : kTransformRows)
-        rows.push_back({row.label, row.id, row.unit, row.fallback});
+        if (_frame)
+            rows.push_back({row.label, row.id, row.unit, row.fallback});
     const auto* instance = _frame && _frame->elements.size() == 1
         ? dynamic_cast<const fla::SymbolInstance*>(_frame->elements.front()) : nullptr;
     if (instance)
@@ -815,6 +971,15 @@ void MotionEditorPanel::buildRows()
                 rows.push_back(row);
             }
         }
+    }
+    // Time Remap's Frame shown, from the first frame of the symbol.
+    if (_remap)
+    {
+        Row row{"Frame shown (Time Remap)", "phoenixTimeRemap", "", 1.0};
+        row.lowest = 1.0;
+        row.highest = 100000.0;
+        row.remap = true;
+        rows.push_back(row);
     }
     const QString current = _properties->currentItem() ? _properties->currentItem()->text() : QString();
     bool same = rows.size() == _rows.size();

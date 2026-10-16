@@ -881,3 +881,32 @@ TEST(movie_runtime_clip_event_gathering_outlives_its_clip)
     CHECK(errors.empty());
     CHECK(traced.size() == 2 && traced[0] == "loaded" && traced[1] == "ok");
 }
+
+TEST(movie_runtime_holds_a_clip_where_its_time_remap_says)
+{
+    // A clip of ten frames on a scene of ten, held on the scene's frames
+    // run backwards rather than playing on by itself.
+    Movie movie;
+    fla::Symbol* wheel = movie.symbol("Wheel", fla::SymbolType::MovieClip, 10);
+    fla::Layer* layer = movie.layer(*movie.root, "art");
+    fla::Frame* frame = movie.frame(*layer, 0, 10);
+    movie.place(*frame, *wheel, "wheel");
+    fla::play::MovieRuntime runtime(*movie.root, 24.0);
+    runtime.heldFrame = [](const fla::play::Clip& clip) {
+        return clip.symbol && clip.symbol->name == "Wheel" ? 9 - clip.parent->frame : -1;
+    };
+    runtime.start();
+    fla::play::Clip* clip = runtime.root().named("wheel");
+    CHECK(clip != nullptr);
+    if (!clip)
+        return;
+    for (int step = 1; step <= 4; ++step)
+    {
+        runtime.step();
+        CHECK(runtime.root().frame == step && clip->frame == 9 - step);
+    }
+    // Let go, it plays on from there.
+    runtime.heldFrame = nullptr;
+    runtime.step();
+    CHECK(clip->frame == 6);
+}

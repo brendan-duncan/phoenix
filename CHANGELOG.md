@@ -5,6 +5,7 @@ What changed in each release of Phoenix, newest first.
 ## Unreleased
 
 - Layers show badges for the effects they have on (motion blur, echo or posterize time, layer mode, mask edge, effect layer, node graph); hover for what each does, click to change its settings
+- Time Remap works on movie clips too, which follow it instead of playing on their own (in Test Movie as well), and its Frame shown can be shaped as a curve in the Motion Editor
 - Bone springs bend boned shapes too: a shape's sprung bones trail, swing past and settle, on the stage, in Test Movie and in exports
 - Node graphs: Window > Node Graph composites a timeline's layers through nodes (Layer, Merge with 13 blend modes, Composite, Matte, Mix, Transform and every adjustment effect), each node showing a picture of its result; search to add nodes, drop links on empty space, view any node on the stage, bypass, backdrops, a minimap, and keyed settings
 - HTML extension panels (CEP) show in Phoenix: Window > Extensions opens them as docks, their scripts run JSFL in a context that keeps its functions between calls, and their panel menus, context menus, file access and events work

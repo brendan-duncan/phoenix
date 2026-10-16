@@ -319,7 +319,7 @@ behavior({
         {"timeremap", R"JS(
 behavior({
     name: "Time Remap",
-    description: "Says which frame of the graphic shows, frame by frame: key Frame shown from 1 to 48 over 96 frames for slow motion, hold it still for a freeze, key it from high to low to run it backwards; Blend between frames cross-fades in slow motion. The graphic's own loop is set aside while it is on.",
+    description: "Says which frame of the graphic or movie clip shows, frame by frame: key Frame shown from 1 to 48 over 96 frames for slow motion, hold it still for a freeze, key it from high to low to run it backwards, or shape it as a curve in the Motion Editor; Blend between frames cross-fades in slow motion. The symbol's own loop or playing is set aside while it is on.",
     params: {
         frame: { label: "Frame shown", value: 1, min: 1, max: 100000, step: 0.1 },
         blend: { label: "Blend between frames", type: "checkbox", value: false }

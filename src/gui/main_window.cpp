@@ -31,6 +31,7 @@
 #include "arrange_panels.h"
 #include "behavior_library.h"
 #include "behaviors_panel.h"
+#include "../edit/behaviors.h"
 #include "../edit/controllers.h"
 #include "../jsfl/behavior_frames.h"
 #include "../edit/shape_operators.h"
@@ -1929,6 +1930,17 @@ void MainWindow::createPanels()
     MotionEditorLinks motionLinks;
     motionLinks.commands = [this]() { return &_editContext.commandStack(); };
     motionLinks.span = [this]() { return currentMotionSpan(); };
+    motionLinks.remapped = [this]() -> fla::SymbolInstance* {
+        const std::vector<fla::Element*> elements = selectedElements();
+        if (elements.size() != 1 || !elements.front() ||
+            elements.front()->elementType() != fla::Element::Type::SymbolInstance)
+            return nullptr;
+        auto* instance = static_cast<fla::SymbolInstance*>(elements.front());
+        for (const fla::behaviors::Applied& applied : fla::behaviors::of(*instance))
+            if (applied.type == "timeremap" && applied.enabled)
+                return instance;
+        return nullptr;
+    };
     motionLinks.currentFrame = [this]() { return _player ? _player->currentFrame() : 0; };
     motionLinks.frameRate = [this]() {
         return _flaDocument && _flaDocument->document && _flaDocument->document->frameRate > 0.0
@@ -1938,6 +1950,13 @@ void MainWindow::createPanels()
         if (_phoenixView)
         {
             _phoenixView->invalidateBounds();
+            _phoenixView->update();
+        }
+    };
+    motionLinks.behaviorsChanged = [this]() {
+        if (_phoenixView)
+        {
+            _phoenixView->clearCaches();
             _phoenixView->update();
         }
     };

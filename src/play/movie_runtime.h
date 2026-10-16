@@ -197,6 +197,12 @@ public:
     /// symbol's class (its linkage) on each clip of it. Set before start().
     void setClasses(const std::map<std::string, std::string>& sources, const std::string& documentClass);
 
+    /// The frame (from 0) \a clip is held on rather than playing on by
+    /// itself, as a Time Remap behavior on its instance says for its
+    /// parent's frame; -1 when it plays as it would. Set by whatever draws
+    /// the movie. A held clip goes to that frame as the movie steps, its
+    /// scripts there run when it gets there.
+    std::function<int(const Clip& clip)> heldFrame;
     /// Whether \a clip's art is at (\a x, \a y) on the stage, as drawn; set
     /// by whatever draws the movie. Without it, its box counts.
     std::function<bool(const Clip& clip, double x, double y)> hitShape;

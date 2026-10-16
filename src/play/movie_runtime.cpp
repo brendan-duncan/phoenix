@@ -1715,7 +1715,18 @@ void MovieRuntime::advance(Clip& clip, std::vector<Clip*>& entered)
         runFrameScripts(clip);
         return;
     }
-    if (clip.playing && !clip.button && clip.length > 1)
+    // Time remapped: on the frame its behavior says, whatever it would play.
+    const int held = heldFrame && !clip.button && clip.parent && clip.placed ? heldFrame(clip) : -1;
+    if (held >= 0)
+    {
+        const int to = std::clamp(held, 0, std::max(0, clip.length - 1));
+        const bool moved = to != clip.frame;
+        clip.frame = to;
+        syncChildren(clip, entered);
+        if (moved)
+            runFrameScripts(clip);
+    }
+    else if (clip.playing && !clip.button && clip.length > 1)
     {
         clip.frame = (clip.frame + 1) % clip.length;
         syncChildren(clip, entered);

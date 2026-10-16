@@ -13,6 +13,7 @@
 #include "../src/edit/adjustments.h"
 #include "../src/edit/templates.h"
 #include "../src/edit/motion_blur.h"
+#include "../src/edit/motion_object.h"
 #include "../src/edit/audio_analysis.h"
 #include "../src/data/document.h"
 #include "../src/data/static_text.h"
@@ -1398,4 +1399,41 @@ TEST(layer_echo_and_posterize_time)
     CHECK(mb::posterized(read, 1) == 0 && mb::posterized(read, 3) == 2 && mb::posterized(read, 4) == 4);
     layer.extraAttributes = mb::withLayerTime(layer, mb::LayerTime());
     CHECK(layer.extraAttributes.empty());
+}
+
+TEST(time_remap_frame_shown_shaped_as_a_curve)
+{
+    Applied remap;
+    remap.type = "timeremap";
+    remap.setKey("frame", 0, "1");
+    remap.setKey("frame", 20, "21");
+    // A straight line without handles, as before.
+    CHECK(remap.valueAt("frame", 10, "") == "11");
+    std::vector<fla::motion::PropertyKey> curve = remap.curve("frame");
+    CHECK(curve.size() == 2 && curve[0].time == 0.0 && curve[1].value == 21.0);
+    // Eased out of the first key and into the last: slow, fast, slow.
+    curve[0].nextTime = 10.0;
+    curve[0].nextValue = 1.0;
+    curve[1].previousTime = -10.0;
+    curve[1].previousValue = 21.0;
+    remap.setCurve("frame", curve);
+    CHECK(remap.keyed("frame"));
+    const double early = std::stod(remap.valueAt("frame", 2, ""));
+    CHECK(early > 1.0 && early < 2.5);
+    CHECK(near(std::stod(remap.valueAt("frame", 10, "")), 11.0, 1e-6));
+    // The keys read as plain values; the handles come back as set.
+    const auto keys = remap.keys("frame");
+    CHECK(keys.size() == 2 && keys[0].second == "1" && keys[1].second == "21");
+    const std::vector<fla::motion::PropertyKey> again = remap.curve("frame");
+    CHECK(again.size() == 2 && near(again[0].nextTime, 10.0) && near(again[1].previousTime, -10.0));
+    // Keying a value keeps the curve's handles on every key.
+    remap.setKey("frame", 20, "31");
+    CHECK(near(remap.curve("frame")[1].previousTime, -10.0) && near(remap.curve("frame")[1].previousValue, 31.0));
+    // Kept through the instance's attribute.
+    const std::vector<Applied> back = decode(encode({remap}));
+    CHECK(back.size() == 1 && back[0].params == remap.params);
+    // Taking the keys away leaves the value.
+    remap.removeKey("frame", 0, "5");
+    remap.removeKey("frame", 20, "5");
+    CHECK(!remap.keyed("frame") && remap.valueAt("frame", 3, "") == "5");
 }

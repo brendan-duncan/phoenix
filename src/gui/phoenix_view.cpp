@@ -4411,8 +4411,11 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
                     color.blueOffset = static_cast<int>(std::lround(color.blueOffset * shade));
                 }
             }
-            // Time remapping: a graphic held on the frame a behavior says.
-            if (behaviorDelta.hold >= 0 && instance->symbolType == fla::SymbolType::Graphic)
+            // Time remapping: a graphic or a movie clip held on the frame a
+            // behavior says, a clip's own playing set aside (a movie playing
+            // keeps the clip there too, so what is inside it follows).
+            if (behaviorDelta.hold >= 0 && (instance->symbolType == fla::SymbolType::Graphic ||
+                                               instance->symbolType == fla::SymbolType::MovieClip))
             {
                 frameOffset = std::min(behaviorDelta.hold, symbolLength(symbol) - 1);
                 loopType = fla::LoopType::SingleFrame;
@@ -7092,6 +7095,15 @@ void PhoenixView::setMovie(fla::play::MovieRuntime* movie)
             if (art == _movieArt.end() || !art->second.timeline)
                 return false;
             return movieArtAt(*art->second.timeline, art->second.frame, art->second.toStage, QPointF(x, y));
+        };
+        // A movie clip with Time Remap on it shows the frame the behavior
+        // gives for its parent's frame, rather than playing by itself.
+        _movie->heldFrame = [this](const fla::play::Clip& clip) {
+            if (!clip.placed || !clip.parent || !fla::behaviors::any(*clip.placed))
+                return -1;
+            const fla::behaviors::Copies copies =
+                behaviorCopies(*clip.placed, clip.placed->transform, clip.parent->frame);
+            return copies.empty() ? -1 : copies.front().hold;
         };
     }
     clearCaches();

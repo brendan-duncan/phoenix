@@ -14,6 +14,10 @@ namespace fla {
 class DOMElement;
 class SymbolInstance;
 
+namespace motion {
+struct PropertyKey;
+}
+
 /// Behaviors: animation worked out each frame rather than keyed. A symbol
 /// instance carries a list of them (Wiggle, Oscillate, Follow with lag...),
 /// each with its own settings; on every frame they move, turn, scale and
@@ -38,7 +42,8 @@ struct Applied
     /// A setting can be keyed: its text is then "@frame=value;frame=value"
     /// (frames on the instance's own timeline, from 0). Numbers run in a
     /// straight line from key to key and hold past the first and last;
-    /// anything else holds until the next key.
+    /// anything else holds until the next key. A number shaped as a curve
+    /// follows it instead (see curve).
     bool keyed(const std::string& name) const;
     std::vector<std::pair<int, std::string>> keys(const std::string& name) const;
     /// The setting's value on \a frame, or \a fallback when it is not set.
@@ -48,6 +53,16 @@ struct Applied
     /// Takes the key on \a frame away; with no key left, the setting is
     /// \a value from then on.
     void removeKey(const std::string& name, int frame, const std::string& value);
+
+    /// A keyed number as a curve, as the Motion Editor shapes it: each key
+    /// at its frame (time in frames) with its Bezier handles. A key may
+    /// carry its handles after its value ("value~in frames,in value,out
+    /// frames,out value", from the key); between two keys without them the
+    /// value runs in a straight line. Empty when the setting is not keyed.
+    std::vector<motion::PropertyKey> curve(const std::string& name) const;
+    /// Keys the setting as \a keys say, at whole frames, keeping each key's
+    /// handles where they bend the line.
+    void setCurve(const std::string& name, const std::vector<motion::PropertyKey>& keys);
 };
 
 /// A setting a behavior offers, as its file declares it; the Behaviors
