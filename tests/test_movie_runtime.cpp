@@ -710,3 +710,174 @@ TEST(movie_runtime_finds_class_files_beside_the_document)
     CHECK(classes.count("Star") && classes.at("Star").find("package game") != std::string::npos);
     fs::remove_all(folder);
 }
+
+namespace {
+
+/// Gives frame \a index of \a symbol's first layer a script.
+void symbolScript(fla::Symbol& symbol, int index, const std::string& code)
+{
+    fla::Frame* frame = symbol.timelines[0]->layers[0]->frames[static_cast<size_t>(index)];
+    frame->actionScript = new fla::ActionScript(frame);
+    frame->actionScript->code = code;
+}
+
+} // namespace
+
+TEST(movie_runtime_objects_of_freed_clips_do_nothing)
+{
+    // A script keeps a clip and its methods past the frame that drops it.
+    Movie movie;
+    movie.root->name = "Scene 1";
+    fla::Symbol* hat = movie.symbol("Hat", fla::SymbolType::MovieClip, 2);
+    fla::Layer* art = movie.layer(*movie.root, "art");
+    movie.place(*movie.frame(*art, 0, 1), *hat, "hat");
+    movie.frame(*art, 1, 2);
+    fla::Layer* actions = movie.layer(*movie.root, "actions");
+    movie.frame(*actions, 0, 1,
+        "var keep = hat;\n"
+        "var go = hat.gotoAndStop;\n"
+        "var listen = hat.addEventListener;\n"
+        "var hit = hat.hitTest;\n");
+    movie.frame(*actions, 1, 1);
+    movie.frame(*actions, 2, 1,
+        "stop();\n"
+        "trace(keep._x);\n"
+        "go(2);\n"
+        "listen('enterFrame', function() {});\n"
+        "trace(hit(0, 0));\n"
+        "keep.score = 3;\n"
+        "trace(keep.score);\n");
+
+    std::vector<std::string> traced;
+    std::vector<std::string> errors;
+    fla::play::MovieRuntime runtime(*movie.root, 12.0);
+    runtime.trace = [&traced](const std::string& line) { traced.push_back(line); };
+    runtime.error = [&errors](const std::string& line) { errors.push_back(line); };
+    runtime.start();
+    runtime.step();
+    CHECK(!runtime.root().named("hat"));
+    runtime.step();
+    runtime.step();
+    for (const std::string& error : errors)
+        std::printf("    %s\n", error.c_str());
+    CHECK(errors.empty());
+    CHECK(traced.size() == 3 && traced[0] == "undefined" && traced[1] == "false" && traced[2] == "3");
+}
+
+TEST(movie_runtime_passes_over_clips_a_frame_took_off)
+{
+    // The root is sent where the clip is not, then the clip is sent on: the
+    // clip is gone by its turn, and its frame's script does not run.
+    Movie movie;
+    movie.root->name = "Scene 1";
+    fla::Symbol* kid = movie.symbol("Kid", fla::SymbolType::MovieClip, 2);
+    symbolScript(*kid, 0, "stop();");
+    symbolScript(*kid, 1, "trace('kid two');");
+    fla::Layer* art = movie.layer(*movie.root, "art");
+    movie.place(*movie.frame(*art, 0, 2), *kid, "kid");
+    movie.frame(*art, 2, 1);
+    fla::Layer* actions = movie.layer(*movie.root, "actions");
+    movie.frame(*actions, 0, 1);
+    movie.frame(*actions, 1, 1, "stop();\ngotoAndStop(3);\nkid.gotoAndStop(2);\n");
+    movie.frame(*actions, 2, 1);
+
+    std::vector<std::string> traced;
+    std::vector<std::string> errors;
+    fla::play::MovieRuntime runtime(*movie.root, 12.0);
+    runtime.trace = [&traced](const std::string& line) { traced.push_back(line); };
+    runtime.error = [&errors](const std::string& line) { errors.push_back(line); };
+    runtime.start();
+    runtime.step();
+    CHECK(runtime.root().frame == 2 && !runtime.root().named("kid"));
+    CHECK(traced.empty() && errors.empty());
+}
+
+TEST(movie_runtime_children_made_and_taken_off_as_clips_play)
+{
+    // Each clip's frame script adds to its parent while the parent's
+    // children play on, and the next time round replaces what it added.
+    Movie movie;
+    movie.root->name = "Scene 1";
+    fla::Symbol* hat = movie.symbol("Hat", fla::SymbolType::MovieClip, 1);
+    hat->extraAttributes.emplace_back("linkageIdentifier", "hat");
+    fla::Symbol* spawner = movie.symbol("Spawner", fla::SymbolType::MovieClip, 2);
+    symbolScript(*spawner, 1, "_parent.attachMovie('hat', 'from_' + _name, 1);");
+    fla::Layer* art = movie.layer(*movie.root, "art");
+    fla::Frame* frame = movie.frame(*art, 0, 1);
+    for (int i = 0; i < 20; ++i)
+        movie.place(*frame, *spawner, "s" + std::to_string(i));
+
+    std::vector<std::string> errors;
+    fla::play::MovieRuntime runtime(*movie.root, 12.0);
+    runtime.setLibrary({hat}, {}, {});
+    runtime.error = [&errors](const std::string& line) { errors.push_back(line); };
+    runtime.start();
+    runtime.step();
+    CHECK(runtime.madeChildren(runtime.root()).size() == 20);
+    runtime.step();
+    runtime.step();
+    CHECK(runtime.madeChildren(runtime.root()).size() == 20);
+    CHECK(runtime.root().children.size() == 40);
+    CHECK(errors.empty());
+}
+
+TEST(movie_runtime_add_child_refuses_a_cycle)
+{
+    Movie movie;
+    movie.root->name = "Scene 1";
+    fla::Symbol* star = movie.symbol("Star", fla::SymbolType::MovieClip, 1);
+    star->extraAttributes.emplace_back("linkageClassName", "Star");
+    fla::Layer* actions = movie.layer(*movie.root, "actions");
+    movie.frame(*actions, 0, 1,
+        "stop();\n"
+        "var a = new Star();\n"
+        "var b = new Star();\n"
+        "addChild(a);\n"
+        "a.addChild(b);\n"
+        "b.addChild(a);\n"
+        "a.addChild(a);\n"
+        "trace(a.parent == this, b.parent == a);\n");
+
+    std::vector<std::string> traced;
+    std::vector<std::string> errors;
+    fla::play::MovieRuntime runtime(*movie.root, 12.0);
+    runtime.setLibrary({star}, {}, {});
+    runtime.trace = [&traced](const std::string& line) { traced.push_back(line); };
+    runtime.error = [&errors](const std::string& line) { errors.push_back(line); };
+    runtime.start();
+    for (const std::string& error : errors)
+        std::printf("    %s\n", error.c_str());
+    CHECK(errors.empty());
+    CHECK(traced.size() == 1 && traced[0] == "true true");
+    const std::vector<fla::play::Clip*> made = runtime.madeChildren(runtime.root());
+    CHECK(made.size() == 1 && made[0]->children.size() == 1 && made[0]->children[0]->children.empty());
+    runtime.step();
+}
+
+TEST(movie_runtime_clip_event_gathering_outlives_its_clip)
+{
+    // __onClipEvent stays about after the clip whose handlers it gathered
+    // is freed: called again it changes nothing.
+    Movie movie;
+    movie.root->name = "Scene 1";
+    fla::Symbol* mc = movie.symbol("Mc", fla::SymbolType::MovieClip, 1);
+    fla::Layer* art = movie.layer(*movie.root, "art");
+    movie.place(*movie.frame(*art, 0, 1), *mc, "mc", "onClipEvent (load) {\n\ttrace('loaded');\n}\n");
+    movie.frame(*art, 1, 2);
+    fla::Layer* actions = movie.layer(*movie.root, "actions");
+    movie.frame(*actions, 0, 2);
+    movie.frame(*actions, 2, 1, "stop();\n__onClipEvent(['load'], function() {});\ntrace('ok');\n");
+
+    std::vector<std::string> traced;
+    std::vector<std::string> errors;
+    fla::play::MovieRuntime runtime(*movie.root, 12.0);
+    runtime.trace = [&traced](const std::string& line) { traced.push_back(line); };
+    runtime.error = [&errors](const std::string& line) { errors.push_back(line); };
+    runtime.start();
+    runtime.step();
+    runtime.step();
+    for (const std::string& error : errors)
+        std::printf("    %s\n", error.c_str());
+    CHECK(errors.empty());
+    CHECK(traced.size() == 2 && traced[0] == "loaded" && traced[1] == "ok");
+}

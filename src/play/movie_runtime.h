@@ -38,6 +38,19 @@ namespace play {
 /// What a script has not set comes from the timeline as drawn.
 struct Clip
 {
+    Clip() = default;
+    ~Clip();
+    Clip(const Clip&) = delete;
+    Clip& operator=(const Clip&) = delete;
+
+    /// Points at it while it lives, null once it is freed: what its script
+    /// object and the functions bound to it hold, so a script keeping them
+    /// after it is gone finds nothing rather than freed memory.
+    std::shared_ptr<Clip*> life = std::make_shared<Clip*>(this);
+    /// Taken off the stage for good (forgotten): its scripts no longer run,
+    /// though it may not be freed until no script is running.
+    bool gone = false;
+
     const Symbol* symbol = nullptr;
     const Timeline* timeline = nullptr;
     Clip* parent = nullptr;
@@ -341,7 +354,12 @@ private:
     as3::ValuePtr property(Clip& clip, const std::string& name);
     bool setProperty(Clip& clip, const std::string& name, const as3::ValuePtr& value);
     as3::ValuePtr objectFor(Clip& clip);
+    /// Marks  clip and what is in it gone, and lets go of every pointer
+    /// to them the runtime keeps.
     void forget(Clip& clip);
+    void letGo(std::vector<Clip*> going);
+    /// Frees the clips taken off (_gone), once no script is running.
+    void freeGone();
 
     std::vector<const Timeline*> _scenes;
     int _scene = 0;
@@ -403,6 +421,10 @@ private:
     /// those ActionScript 3 made that are not on the stage.
     std::vector<Clip*> _madeToEnter;
     std::vector<std::unique_ptr<Clip>> _offStage;
+    /// Clips the frames took off, freed once no script is running and the
+    /// frames have settled, so nothing still at work on them is left
+    /// holding freed memory.
+    std::vector<std::unique_ptr<Clip>> _gone;
     int _madeCount = 0;
 };
 

@@ -345,16 +345,30 @@ class ClipObject : public as3::HostObject
 public:
     ClipObject(MovieRuntime& runtime, Clip& clip)
         : _runtime(runtime)
-        , _clip(clip)
+        , _life(clip.life)
     {}
 
-    as3::ValuePtr get(const std::string& name) override { return _runtime.property(_clip, name); }
-    bool set(const std::string& name, as3::ValuePtr value) override { return _runtime.setProperty(_clip, name, value); }
+    // Once the clip is freed, only what scripts set on the object is left.
+    as3::ValuePtr get(const std::string& name) override
+    {
+        Clip* clip = *_life;
+        return clip ? _runtime.property(*clip, name) : nullptr;
+    }
+    bool set(const std::string& name, as3::ValuePtr value) override
+    {
+        Clip* clip = *_life;
+        return clip && _runtime.setProperty(*clip, name, value);
+    }
 
 private:
     MovieRuntime& _runtime;
-    Clip& _clip;
+    std::shared_ptr<Clip*> _life;
 };
+
+Clip::~Clip()
+{
+    *life = nullptr;
+}
 
 MovieRuntime::MovieRuntime(const Timeline& root, double frameRate)
     : MovieRuntime(std::vector<const Timeline*>{&root}, frameRate)
@@ -386,6 +400,7 @@ void MovieRuntime::start()
     _focus = TextFocus();
     _madeToEnter.clear();
     _offStage.clear();
+    _gone.clear();
     _madeCount = 0;
     _started = std::chrono::steady_clock::now();
     if (stopAllSounds)
@@ -789,21 +804,24 @@ as3::ValuePtr MovieRuntime::soundObject(const std::string& linkage, bool actionS
     using as3::Value;
     using Args = std::vector<as3::ValuePtr>;
     as3::ValuePtr sound = Value::makeObject();
-    // The object's own state, read back by its methods.
-    Value* self = sound.get();
+    // The object's own state, read back by its methods: held weakly, as
+    // the methods are on it, and one a script keeps may outlive it.
+    const std::weak_ptr<Value> weak = sound;
     sound->setProperty("__linkage", Value::makeString(linkage));
     sound->setProperty("__volume", Value::makeNumber(100));
     sound->setProperty("__channel", Value::makeNumber(-1));
-    const auto start = [this, self](double offset, int loops) {
-        const std::string linked = self->getProperty("__linkage")->toString();
+    const auto start = [this, weak](double offset, int loops) {
+        const as3::ValuePtr self = weak.lock();
+        const std::string linked = self ? self->getProperty("__linkage")->toString() : std::string();
         if (linked.empty() || !playSound)
             return -1;
         const int channel = playSound(linked, offset, std::max(1, loops), self->getProperty("__volume")->toNumber() / 100.0);
         self->setProperty("__channel", Value::makeNumber(channel));
         return channel;
     };
-    sound->setProperty("attachSound", Value::makeNativeFunction([self](const Args& args) {
-        self->setProperty("__linkage", Value::makeString(args.empty() ? std::string() : args[0]->toString()));
+    sound->setProperty("attachSound", Value::makeNativeFunction([weak](const Args& args) {
+        if (const as3::ValuePtr self = weak.lock())
+            self->setProperty("__linkage", Value::makeString(args.empty() ? std::string() : args[0]->toString()));
         return Value::makeUndefined();
     }));
     // AS2: start(seconds in, loops).
@@ -811,7 +829,10 @@ as3::ValuePtr MovieRuntime::soundObject(const std::string& linkage, bool actionS
         start(args.empty() ? 0.0 : args[0]->toNumber(), args.size() > 1 ? static_cast<int>(args[1]->toNumber()) : 1);
         return Value::makeUndefined();
     }));
-    sound->setProperty("stop", Value::makeNativeFunction([this, self](const Args&) {
+    sound->setProperty("stop", Value::makeNativeFunction([this, weak](const Args&) {
+        const as3::ValuePtr self = weak.lock();
+        if (!self)
+            return Value::makeUndefined();
         const int channel = static_cast<int>(self->getProperty("__channel")->toNumber());
         if (channel >= 0 && stopSound)
             stopSound(channel);
@@ -819,12 +840,14 @@ as3::ValuePtr MovieRuntime::soundObject(const std::string& linkage, bool actionS
             stopAllSounds();
         return Value::makeUndefined();
     }));
-    sound->setProperty("setVolume", Value::makeNativeFunction([self](const Args& args) {
-        self->setProperty("__volume", Value::makeNumber(args.empty() ? 100 : args[0]->toNumber()));
+    sound->setProperty("setVolume", Value::makeNativeFunction([weak](const Args& args) {
+        if (const as3::ValuePtr self = weak.lock())
+            self->setProperty("__volume", Value::makeNumber(args.empty() ? 100 : args[0]->toNumber()));
         return Value::makeUndefined();
     }));
-    sound->setProperty("getVolume", Value::makeNativeFunction([self](const Args&) {
-        return self->getProperty("__volume");
+    sound->setProperty("getVolume", Value::makeNativeFunction([weak](const Args&) {
+        const as3::ValuePtr self = weak.lock();
+        return self ? self->getProperty("__volume") : Value::makeUndefined();
     }));
     // ActionScript 3: play(milliseconds in, loops), a SoundChannel back.
     sound->setProperty("play", Value::makeNativeFunction([this, start](const Args& args) {
@@ -1128,21 +1151,25 @@ class TextFieldObject : public as3::HostObject
 public:
     TextFieldObject(MovieRuntime& runtime, Clip& clip, const std::string& name)
         : _runtime(runtime)
-        , _clip(clip)
+        , _life(clip.life)
         , _name(name)
     {}
 
-    Clip& clip() const { return _clip; }
+    /// The clip it is on, or null once that is freed.
+    Clip* clip() const { return *_life; }
     const std::string& name() const { return _name; }
 
     as3::ValuePtr get(const std::string& property) override
     {
+        Clip* clip = *_life;
         if (property == "text" || property == "htmlText")
         {
-            const auto set = _clip.texts.find(_name);
-            if (set != _clip.texts.end())
+            if (!clip)
+                return as3::Value::makeString(std::string());
+            const auto set = clip->texts.find(_name);
+            if (set != clip->texts.end())
                 return as3::Value::makeString(set->second);
-            const StaticText* field = fieldNamed(_clip.timeline, _clip.frame, _name);
+            const StaticText* field = fieldNamed(clip->timeline, clip->frame, _name);
             return as3::Value::makeString(field ? drawnText(*field) : std::string());
         }
         if (property == "length")
@@ -1159,8 +1186,11 @@ public:
     {
         if (property != "text" && property != "htmlText")
             return false;
+        Clip* clip = *_life;
+        if (!clip)
+            return true;
         const std::string text = value ? value->toString() : std::string();
-        _clip.texts[_name] = property == "htmlText" ? withoutTags(text) : text;
+        clip->texts[_name] = property == "htmlText" ? withoutTags(text) : text;
         if (_runtime.changed)
             _runtime.changed();
         return true;
@@ -1168,7 +1198,7 @@ public:
 
 private:
     MovieRuntime& _runtime;
-    Clip& _clip;
+    std::shared_ptr<Clip*> _life;
     std::string _name;
 };
 
@@ -1259,7 +1289,8 @@ void MovieRuntime::eachClip(const std::function<void(Clip&)>& visit)
             if (child)
                 children.push_back(child.get());
         for (Clip* child : children)
-            walk(*child);
+            if (!child->gone)
+                walk(*child);
     };
     walk(*_root);
 }
@@ -1320,8 +1351,9 @@ void MovieRuntime::dispatch(Clip& target, const std::string& type, bool bubbles,
         // A listener may add or take off others: these are the ones there were.
         const std::vector<Clip::Listener> listeners = found->second;
         for (const Clip::Listener& listener : listeners)
-            runFunction(listener.function, {event}, listener.scope ? *listener.scope : *at,
-                (at->name.empty() ? at->key : at->name) + ", " + type, listener.source);
+            if (!at->gone && !(listener.scope && listener.scope->gone))
+                runFunction(listener.function, {event}, listener.scope ? *listener.scope : *at,
+                    (at->name.empty() ? at->key : at->name) + ", " + type, listener.source);
     }
 }
 
@@ -1450,38 +1482,80 @@ void MovieRuntime::syncChildren(Clip& clip, std::vector<Clip*>& entered)
         if (gone && gone->made)
             kept.push_back(std::move(gone));
         else if (gone)
+        {
             forget(*gone);
+            _gone.push_back(std::move(gone));
+        }
     }
     clip.children = std::move(kept);
 }
 
 void MovieRuntime::forget(Clip& clip)
 {
-    if (_hovered && (_hovered == &clip))
+    std::vector<Clip*> going;
+    std::function<void(Clip&)> mark = [&](Clip& at) {
+        at.gone = true;
+        going.push_back(&at);
+        for (const auto& child : at.children)
+            if (child)
+                mark(*child);
+    };
+    mark(clip);
+    letGo(going);
+}
+
+void MovieRuntime::letGo(std::vector<Clip*> going)
+{
+    std::sort(going.begin(), going.end());
+    const auto among = [&going](const Clip* clip) { return std::binary_search(going.begin(), going.end(), clip); };
+    if (among(_hovered))
         _hovered = nullptr;
-    if (_pressed && (_pressed == &clip))
+    if (among(_pressed))
         _pressed = nullptr;
-    _sent.erase(std::remove(_sent.begin(), _sent.end(), &clip), _sent.end());
-    if (_drag.clip == &clip)
+    _sent.erase(std::remove_if(_sent.begin(), _sent.end(), among), _sent.end());
+    _madeToEnter.erase(std::remove_if(_madeToEnter.begin(), _madeToEnter.end(), among), _madeToEnter.end());
+    if (among(_drag.clip))
         _drag = Drag();
-    if (_focus.clip == &clip)
+    if (among(_focus.clip))
         _focus = TextFocus();
-    // Listeners whose script was on it go with it.
-    Clip* gone = &clip;
+    // Listeners whose script was on one go with it, wherever they are.
     std::function<void(Clip&)> drop = [&](Clip& at) {
+        if (among(&at))
+            return;
         for (auto& [type, list] : at.listeners)
             list.erase(std::remove_if(list.begin(), list.end(),
-                           [gone](const Clip::Listener& listener) { return listener.scope == gone; }),
+                           [&among](const Clip::Listener& listener) { return among(listener.scope); }),
                 list.end());
         for (const auto& child : at.children)
-            if (child && child.get() != gone)
+            if (child)
                 drop(*child);
     };
-    if (_root && _root.get() != gone)
+    if (_root)
         drop(*_root);
-    for (auto& child : clip.children)
-        if (child)
-            forget(*child);
+    for (const auto& clip : _offStage)
+        if (clip)
+            drop(*clip);
+}
+
+void MovieRuntime::freeGone()
+{
+    // Only once no script is running: one may be at work on them.
+    if (_current || _gone.empty())
+        return;
+    std::vector<std::unique_ptr<Clip>> gone;
+    gone.swap(_gone);
+    // What was added to them since they went goes with them.
+    std::vector<Clip*> going;
+    std::function<void(Clip&)> gather = [&](Clip& at) {
+        going.push_back(&at);
+        for (const auto& child : at.children)
+            if (child)
+                gather(*child);
+    };
+    for (const auto& clip : gone)
+        if (clip)
+            gather(*clip);
+    letGo(going);
 }
 
 void MovieRuntime::enter(std::vector<Clip*>& entered)
@@ -1490,18 +1564,23 @@ void MovieRuntime::enter(std::vector<Clip*>& entered)
     // load run, its first frame's scripts run, and its own children made.
     for (size_t i = 0; i < entered.size(); ++i)
     {
+        // One a script before it took off is passed over.
+        if (entered[i]->gone)
+            continue;
         Clip& clip = *entered[i];
-        if (clip.placed && !clip.button)
+        if (clip.placed && !clip.button && clip.parent)
         {
             const std::string script = instanceScript(*clip.placed);
             if (!script.empty())
             {
-                // Run with __onClipEvent gathering the handlers.
-                std::map<std::string, as3::ValuePtr>& handlers = clip.clipEvents;
-                _vm->registerBuiltin("__onClipEvent", [&handlers](const std::vector<as3::ValuePtr>& args) {
-                    if (args.size() >= 2)
+                // Run with __onClipEvent gathering the handlers, into the
+                // clip as long as it lives.
+                const std::shared_ptr<Clip*> life = clip.life;
+                _vm->registerBuiltin("__onClipEvent", [life](const std::vector<as3::ValuePtr>& args) {
+                    Clip* gathering = *life;
+                    if (gathering && args.size() >= 2)
                         for (const as3::ValuePtr& event : args[0]->elements)
-                            handlers[event->toString()] = args[1];
+                            gathering->clipEvents[event->toString()] = args[1];
                     return as3::Value::makeUndefined();
                 });
                 run(clip.placed, script, *clip.parent, clip.name.empty() ? clip.key : clip.name);
@@ -1545,7 +1624,10 @@ void MovieRuntime::applyScene(int scene, int frame, bool play)
     Clip& root = *_root;
     for (auto& child : root.children)
         if (child)
+        {
             forget(*child);
+            _gone.push_back(std::move(child));
+        }
     root.children.clear();
     _scene = scene;
     root.timeline = _scenes[static_cast<size_t>(scene)];
@@ -1575,6 +1657,8 @@ void MovieRuntime::settle()
             made.swap(_madeToEnter);
             for (size_t i = 0; i < made.size(); ++i)
             {
+                if (made[i]->gone)
+                    continue;
                 syncChildren(*made[i], made);
                 runClass(*made[i]);
                 if (!made[i]->button)
@@ -1596,17 +1680,22 @@ void MovieRuntime::settle()
         std::vector<Clip*> entered;
         for (Clip* clip : sent)
         {
+            if (clip->gone)
+                continue;
             syncChildren(*clip, entered);
             runFrameScripts(*clip);
         }
         for (size_t i = 0; i < entered.size(); ++i)
         {
+            if (entered[i]->gone)
+                continue;
             Clip& clip = *entered[i];
             syncChildren(clip, entered);
             if (!clip.button)
                 runFrameScripts(clip);
         }
     }
+    freeGone();
     if (changed)
         changed();
 }
@@ -1636,8 +1725,14 @@ void MovieRuntime::advance(Clip& clip, std::vector<Clip*>& entered)
     {
         syncChildren(clip, entered);
     }
+    // Scripts may add children or take them off as they go: these are the
+    // ones there were, each still on it when its turn comes.
+    std::vector<Clip*> now;
     for (const auto& child : clip.children)
-        if (std::find(before.begin(), before.end(), child.get()) != before.end())
+        if (child && std::find(before.begin(), before.end(), child.get()) != before.end())
+            now.push_back(child.get());
+    for (Clip* child : now)
+        if (!child->gone && child->parent == &clip)
             advance(*child, entered);
 }
 
@@ -2062,13 +2157,18 @@ as3::ValuePtr MovieRuntime::property(Clip& clip, const std::string& name)
         }
         return label.empty() ? Value::makeNull() : Value::makeString(label);
     }
+    // The methods below are bound to the clip through its life, so one a
+    // script keeps after the clip is freed does nothing.
+    const std::shared_ptr<Clip*> life = clip.life;
     // addEventListener(type, listener): the listener's names are looked up
     // where the script that added it runs.
     if (name == "addEventListener" || name == "removeEventListener" || name == "hasEventListener")
     {
-        Clip* target = &clip;
         const std::string which = name;
-        return Value::makeNativeFunction([this, target, which](const std::vector<as3::ValuePtr>& args) {
+        return Value::makeNativeFunction([this, life, which](const std::vector<as3::ValuePtr>& args) {
+            Clip* target = *life;
+            if (!target)
+                return Value::makeUndefined();
             const std::string type = args.empty() ? std::string() : args[0]->toString();
             std::vector<Clip::Listener>& list = target->listeners[type];
             if (which == "hasEventListener")
@@ -2085,10 +2185,12 @@ as3::ValuePtr MovieRuntime::property(Clip& clip, const std::string& name)
         });
     }
     // Dragging, and what is under a point or another clip.
-    Clip* self = &clip;
     if (name == "startDrag")
     {
-        return Value::makeNativeFunction([this, self](const std::vector<as3::ValuePtr>& args) {
+        return Value::makeNativeFunction([this, life](const std::vector<as3::ValuePtr>& args) {
+            Clip* self = *life;
+            if (!self)
+                return Value::makeUndefined();
             std::vector<double> bounds;
             if (args.size() >= 5)
             {
@@ -2114,7 +2216,10 @@ as3::ValuePtr MovieRuntime::property(Clip& clip, const std::string& name)
         });
     if (name == "hitTest" || name == "hitTestPoint" || name == "hitTestObject")
     {
-        return Value::makeNativeFunction([this, self](const std::vector<as3::ValuePtr>& args) {
+        return Value::makeNativeFunction([this, life](const std::vector<as3::ValuePtr>& args) {
+            Clip* self = *life;
+            if (!self)
+                return Value::makeBoolean(false);
             // hitTest(x, y, shapeFlag) and hitTestPoint: a point on the
             // stage; hitTest(target) and hitTestObject: another clip.
             if (args.size() >= 2 && args[0]->isNumber())
@@ -2127,7 +2232,10 @@ as3::ValuePtr MovieRuntime::property(Clip& clip, const std::string& name)
     // Clips made by scripts.
     if (name == "attachMovie")
     {
-        return Value::makeNativeFunction([this, self](const std::vector<as3::ValuePtr>& args) {
+        return Value::makeNativeFunction([this, life](const std::vector<as3::ValuePtr>& args) {
+            Clip* self = *life;
+            if (!self || self->gone)
+                return Value::makeUndefined();
             const Symbol* symbol = linked(args.empty() ? std::string() : args[0]->toString());
             if (!symbol)
                 return Value::makeUndefined();
@@ -2145,8 +2253,9 @@ as3::ValuePtr MovieRuntime::property(Clip& clip, const std::string& name)
     }
     if (name == "duplicateMovieClip")
     {
-        return Value::makeNativeFunction([this, self](const std::vector<as3::ValuePtr>& args) {
-            if (!self->symbol || !self->parent)
+        return Value::makeNativeFunction([this, life](const std::vector<as3::ValuePtr>& args) {
+            Clip* self = *life;
+            if (!self || self->gone || !self->symbol || !self->parent)
                 return Value::makeUndefined();
             Clip* made = makeClip(self->parent, *self->symbol, args.empty() ? std::string() : args[0]->toString());
             made->made->transform = self->placed ? self->placed->transform : Transform();
@@ -2161,17 +2270,22 @@ as3::ValuePtr MovieRuntime::property(Clip& clip, const std::string& name)
         });
     }
     if (name == "removeMovieClip")
-        return Value::makeNativeFunction([this, self](const std::vector<as3::ValuePtr>&) {
-            if (self->made)
+        return Value::makeNativeFunction([this, life](const std::vector<as3::ValuePtr>&) {
+            if (Clip* self = *life; self && self->made)
                 takeOff(*self, false);
             return Value::makeUndefined();
         });
     if (name == "addChild" || name == "addChildAt")
     {
-        return Value::makeNativeFunction([this, self](const std::vector<as3::ValuePtr>& args) {
-            Clip* child = args.empty() ? nullptr : clipOfValue(args[0]);
-            if (!child || !child->made || child == self)
+        return Value::makeNativeFunction([this, life](const std::vector<as3::ValuePtr>& args) {
+            Clip* self = *life;
+            Clip* child = args.empty() || !self ? nullptr : clipOfValue(args[0]);
+            if (!child || !child->made || child->gone || self->gone)
                 return args.empty() ? Value::makeNull() : args[0];
+            // Not into itself or what is in it: the clip would own itself.
+            for (const Clip* at = self; at; at = at->parent)
+                if (at == child)
+                    return args[0];
             if (child->parent != self)
             {
                 takeOff(*child, true);
@@ -2192,8 +2306,9 @@ as3::ValuePtr MovieRuntime::property(Clip& clip, const std::string& name)
     }
     if (name == "removeChild")
     {
-        return Value::makeNativeFunction([this, self](const std::vector<as3::ValuePtr>& args) {
-            Clip* child = args.empty() ? nullptr : clipOfValue(args[0]);
+        return Value::makeNativeFunction([this, life](const std::vector<as3::ValuePtr>& args) {
+            Clip* self = *life;
+            Clip* child = args.empty() || !self ? nullptr : clipOfValue(args[0]);
             if (child && child->made && child->parent == self)
                 takeOff(*child, true);
             return args.empty() ? Value::makeNull() : args[0];
@@ -2201,17 +2316,17 @@ as3::ValuePtr MovieRuntime::property(Clip& clip, const std::string& name)
     }
     if (name == "getChildByName")
     {
-        Clip* target = &clip;
-        return Value::makeNativeFunction([this, target](const std::vector<as3::ValuePtr>& args) {
-            Clip* child = args.empty() ? nullptr : target->named(args[0]->toString());
+        return Value::makeNativeFunction([this, life](const std::vector<as3::ValuePtr>& args) {
+            Clip* target = *life;
+            Clip* child = args.empty() || !target ? nullptr : target->named(args[0]->toString());
             return child ? objectFor(*child) : Value::makeNull();
         });
     }
     // Its timeline methods, bound to it.
-    const auto method = [this, &clip](std::function<void(Clip&, const std::vector<as3::ValuePtr>&)> act) {
-        Clip* target = &clip;
-        return Value::makeNativeFunction([act, target](const std::vector<as3::ValuePtr>& args) {
-            act(*target, args);
+    const auto method = [life](std::function<void(Clip&, const std::vector<as3::ValuePtr>&)> act) {
+        return Value::makeNativeFunction([act, life](const std::vector<as3::ValuePtr>& args) {
+            if (Clip* target = *life)
+                act(*target, args);
             return Value::makeUndefined();
         });
     };
@@ -2278,8 +2393,8 @@ bool MovieRuntime::setProperty(Clip& clip, const std::string& name, const as3::V
     {
         // ActionScript 3's stage.focus = name_txt.
         const auto field = value && value->host ? std::dynamic_pointer_cast<TextFieldObject>(value->host) : nullptr;
-        if (field)
-            focusText(&field->clip(), fieldNamed(field->clip().timeline, field->clip().frame, field->name()));
+        if (field && field->clip())
+            focusText(field->clip(), fieldNamed(field->clip()->timeline, field->clip()->frame, field->name()));
         else
             focusText(nullptr, nullptr);
     }
