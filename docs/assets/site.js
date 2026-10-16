@@ -66,6 +66,7 @@ const NAV = [
     { href: "rigging.html", title: "Rigs and motion" },
     { href: "motion-graphics.html", title: "Motion graphics" },
     { href: "behaviors.html", title: "Behaviors" },
+    { href: "node-graph.html", title: "Node graphs" },
     { href: "sound.html", title: "Sound" },
     { href: "actionscript.html", title: "ActionScript and Test Movie" },
   ] },

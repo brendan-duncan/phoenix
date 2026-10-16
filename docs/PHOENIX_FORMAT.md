@@ -195,6 +195,14 @@ are kept, and an FLA export lists them as possibly lost.
 | `multiplane-camera` | Multiplane camera | a guide layer: the shot is not framed, moved, colored or given depth |
 | `pegs` | Pegs | ordinary symbols |
 | `deformers` | Deformers | the instances without their bend |
+| `behaviors` | Behaviors | the instances as keyed, without the motion their behaviors add |
+| `shape-operators` | Shape operators | the shapes as drawn, without Trim Paths, Wiggle Path or Zig-zag |
+| `text-animators` | Text animators | the text as typed, its letters still |
+| `compositing` | Track mattes and adjustment layers | matte layers drawn plainly and adjustment layers without their blur or color |
+| `node-graph` | Node graphs | the layers stacked as usual, without the graph's effects, merges and mattes |
+| `mask-edges` | Mask edges and layer modes | masks hard-edged and not inverted, layers drawn normally |
+| `motion-blur` | Motion blur, echo and posterize time | the layers drawn sharp, every frame, without echoes |
+| `templates` | Template fields | the symbols' text and colors as drawn, the same in every instance, nothing pinned to the text |
 | `master-controllers` | Master controllers | the properties as keyed, without the sliders |
 | `3d-rotation` | 3D rotation and depth | the movie clips flat, without their 3D turn |
 | `parenting-options` | Layer parenting options | child layers taking on all of the parent's transform |
@@ -204,6 +212,7 @@ are kept, and an FLA export lists them as possibly lost.
 | `mouth-charts` | Lip sync mouth charts | the mouth frames as set, without the chart |
 | `layer-transparency` | Layer transparency | the layers drawn solid |
 | `see-through-stage` | See-through stage | an opaque stage color |
+| `safe-zones` | Safe zones and aspect-ratio guides | the stage without them |
 | `other-phoenix-settings` | Other Phoenix settings | the document without them |
 
 ## Versioning and compatibility

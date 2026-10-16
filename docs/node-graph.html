@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Node graphs · Phoenix User Guide</title>
+<meta name="description" content="Composite a timeline's layers through a graph of nodes: effects, merges, mattes and transforms, with a picture of each node's result.">
+<meta name="keywords" content="node graph compositing nodes merge composite matte mix transform opacity blur glow color effects reroute backdrop bypass keyed settings output layer node other layers">
+<link rel="icon" href="assets/img/logo.png">
+<link rel="stylesheet" href="assets/site.css">
+<script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<main>
+<article class="content">
+
+<p class="eyebrow">Animation</p>
+<h1>Node graphs</h1>
+<p class="lead">A timeline's layers normally stack, top over bottom. A node graph composites them instead: each layer you take out of the stack becomes a picture that flows through effect, merge, matte and transform nodes into the Output, and the Output is what the timeline shows, on the stage and in everything you export.</p>
+
+<figure>
+  <img src="assets/shots/node-graph.webp" alt="The Node Graph panel: a Fractal Noise node inside a green Background backdrop links through a reroute point into the Under input of a Merge node, whose result goes through Hue/Saturation into the Output; each node shows a picture of its result, and a Layer node named Shadow shows a red warning" width="1352" height="306">
+  <figcaption>Each node shows what it gives. A red mark says something is wrong, here a layer that is not there.</figcaption>
+</figure>
+
+<h2>Start a graph</h2>
+
+<p>Choose <strong>Window &rsaquo; Node Graph</strong>. The panel shows the graph of the timeline you are editing: the scene, or the symbol you are inside. A timeline with no graph shows <strong>Create Node Graph</strong>, which makes one with two nodes: <strong>Other Layers</strong> linked to the <strong>Output</strong>. Nothing on the stage changes yet, since Other Layers brings in every layer, stacked as usual.</p>
+
+<p>The <strong>On</strong> switch at the top turns the graph off and on. Off, the layers stack as usual and the graph is kept for later. <strong>&#8943; &rsaquo; Remove Node Graph</strong> takes it away.</p>
+
+<h2>Nodes</h2>
+
+<table>
+  <thead><tr><th>Kind</th><th>Nodes</th></tr></thead>
+  <tbody>
+    <tr><td>Input</td><td class="wrap"><strong>Layer</strong> takes one layer (or a folder's layers) out of the stack to work on alone. <strong>Other Layers</strong> brings in every layer no Layer node took. <strong>Solid Color</strong> fills the picture with a color.</td></tr>
+    <tr><td>Combine</td><td class="wrap"><strong>Merge</strong> puts one picture over another by a blend mode (Normal, Multiply, Screen, Overlay, Darken, Lighten, Add, Subtract, Difference, Hard Light, Soft Light, Color Dodge, Color Burn) at an opacity. <strong>Composite</strong> stacks any number of pictures, its first input on top; it gains an input each time you use its last. <strong>Mix</strong> fades from one picture to another. <strong>Matte</strong> shows a picture through another by its alpha or brightness, or their inverse.</td></tr>
+    <tr><td>Transform</td><td class="wrap"><strong>Transform</strong> moves, scales and turns the picture about the middle of the stage. <strong>Opacity</strong> fades it.</td></tr>
+    <tr><td>Effects</td><td class="wrap">Every adjustment effect is a node too: blurs and Glow; color (Color Correction, Tint, Levels, Curves, Hue/Saturation, Tritone, Vignette, Grain, Chromatic Aberration); distortions (Turbulent and Wave Displace, Bulge, Ripple, Bend, Displacement Map, which takes its map through a second input); generators (Gradient Ramp, 4-Color Gradient, Fill, Outline, Fractal Noise); and transitions (Linear and Radial Wipe, Venetian Blinds, Block Dissolve). See <a href="behaviors.html#effects">Adjustment effects</a>.</td></tr>
+    <tr><td>Utility</td><td class="wrap"><strong>Reroute</strong> is a point a link passes through, to tidy the graph.</td></tr>
+    <tr><td>Output</td><td class="wrap">What the timeline shows. There is one, and it cannot be deleted.</td></tr>
+  </tbody>
+</table>
+
+<p>A Layer node that does not reach the Output leaves its layer in the stack, so a node you are still wiring never makes a layer vanish.</p>
+
+<h2>Working in the graph</h2>
+
+<ul>
+  <li><strong>Add a node:</strong> press <kbd>Tab</kbd>, double-click empty space, click <strong>+ Add Node</strong>, or right-click. Type a few letters of its name to find it; Up, Down and Enter pick. The nodes you added last come first.</li>
+  <li><strong>Link nodes:</strong> drag from a node's output (on its right) to another's input (on its left), or the other way. Drop a link on a node to use its first free input. Drop it on empty space to add a node there, already linked: the list shows only the nodes that fit.</li>
+  <li><strong>Unlink:</strong> drag a link off the input it goes into and let go on empty space, <kbd>Alt</kbd>+click it, or click it and press <kbd>Delete</kbd>.</li>
+  <li><strong>Put a node into a link:</strong> drag a node that has no links onto a link; the link lights up, and dropping the node puts it in between.</li>
+  <li><strong>Move nodes:</strong> drag them. A node lines up with the nodes near it, a dashed line showing which, and otherwise snaps to the grid; hold <kbd>Alt</kbd> to place it freely. Shift-click or Ctrl-click to select several, or drag a box round them.</li>
+  <li><strong>Find your way:</strong> scroll to zoom, drag with the middle or right button (or hold <kbd>Space</kbd>) to pan, <kbd>F</kbd> frames the selection and <kbd>Home</kbd> the whole graph. When part of the graph is out of view, a map in the corner shows it all; drag in the map to go there.</li>
+  <li><strong>Tidy:</strong> <kbd>L</kbd> (<strong>Line Up</strong>) sets the selected nodes, or all of them, in columns by how they link. <kbd>B</kbd> puts a backdrop behind the selection: a colored frame with a title, which moves the nodes inside it. Double-click a link to add a reroute point on it.</li>
+  <li><strong>Copy:</strong> <kbd>Ctrl</kbd>+<kbd>C</kbd>, <kbd>Ctrl</kbd>+<kbd>V</kbd> and <kbd>Ctrl</kbd>+<kbd>D</kbd> copy, paste and duplicate nodes with the links between them, also between timelines.</li>
+</ul>
+
+<h2>Looking at a node</h2>
+
+<p>Each node shows a picture of what it gives, on the frame you are on. <kbd>H</kbd> hides the picture of the selected nodes to keep them small; <strong>Pictures</strong> at the top hides them all.</p>
+
+<p>To see one node's result full size, click the eye in its title, or select it and press <kbd>V</kbd>: the stage shows that node in place of the Output until you click the eye again, press <kbd>Esc</kbd> or close the panel. What you export always shows the Output.</p>
+
+<p><kbd>D</kbd> bypasses the selected nodes: each passes its first input through unchanged, drawn faded with a line straight through, to compare with and without it.</p>
+
+<h2>Settings and keys</h2>
+
+<p>Select a node to see its settings beside the graph. Drag a number, or click it to type, and use the slider for its range. Each setting has a diamond: click it to key the setting on the current frame, so it changes over time, as in the Behaviors panel. A filled diamond means a key on this frame; a colored hollow one, keys on other frames. Double-click a node's title, or edit the name at the top of its settings, to give it a name of its own; double-click a Layer node's picture to select its layer in the timeline.</p>
+
+<p>Every change is one step to undo, and a setting dragged is one step.</p>
+
+<h2>Graphs in symbols</h2>
+
+<p>A symbol's timeline can have a graph of its own: enter the symbol and the panel shows its graph. Every instance of the symbol shows the graph's Output, so a glow or grade built once goes wherever the symbol does.</p>
+
+<h2>Other apps</h2>
+
+<p>The graph is kept in the FLA file in a setting other apps ignore: they show the timeline's layers stacked as usual, without the graph's effects. Saving says so. Phoenix's own exports (video, image sequences, GIF, SWF) show the graph's Output.</p>
+
+</article>
+</main>
+</body>
+</html>
