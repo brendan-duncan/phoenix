@@ -1252,6 +1252,28 @@ TEST(text_on_a_path_and_wiggly_letters)
     // No guide: the letters stay put.
     CHECK(ta::apply({onPath}, letters, 0, 0, 24.0, nullptr)[1].none());
 
+    // Vertical text: three letters down a column, 12 apart. They go along
+    // the line by their place down it, upright as in the column where the
+    // line runs down, turned a quarter less than the line elsewhere.
+    std::vector<ta::Letter> column = letters;
+    for (int i = 0; i < 3; ++i)
+    {
+        column[i].vertical = true;
+        column[i].middleX = 6.0;
+        column[i].middleY = 6.0 + 12.0 * i;
+    }
+    Applied down = ta::defaults("path", 1);
+    changes = ta::apply({down}, column, 0, 0, 24.0, &path);
+    CHECK(near(column[1].middleX + changes[1].x, 100.0) && near(column[1].middleY + changes[1].y, 12.0));
+    CHECK(near(changes[2].rotation, 0.0) && near(column[2].middleY + changes[2].y, 24.0));
+    ta::PathInText across;
+    across.length = 100.0;
+    across.at = [](double d) { return fla::Point(d, 50.0); };
+    across.angleAt = [](double) { return 0.0; };
+    changes = ta::apply({down}, column, 0, 0, 24.0, &across);
+    CHECK(near(column[2].middleX + changes[2].x, 24.0) && near(column[2].middleY + changes[2].y, 50.0));
+    CHECK(near(changes[0].rotation, -90.0));
+
     // Wiggly: each letter its own way, the same on the same frame, and all
     // alike when wholly together.
     Applied wiggly = ta::defaults("wiggly", 3);

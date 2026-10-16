@@ -403,10 +403,14 @@ std::vector<Change> apply(const std::vector<Applied>& list, const std::vector<Le
             const double shift = param(applied, "shift", frame, 0.0);
             const bool turn = flag(applied, "turn", frame, true);
             const bool wrap = flag(applied, "wrap", frame, false);
-            const double first = letters.empty() ? 0.0 : letters.front().middleX;
+            // Vertical text goes along by its place down the column, its
+            // letters' tops toward where the line comes from, as they stand
+            // in the column.
+            const bool vertical = !letters.empty() && letters.front().vertical;
+            const double first = letters.empty() ? 0.0 : vertical ? letters.front().middleY : letters.front().middleX;
             for (size_t i = 0; i < letters.size(); ++i)
             {
-                double along = margin + letters[i].middleX - first;
+                double along = margin + (vertical ? letters[i].middleY : letters[i].middleX) - first;
                 if (wrap)
                     along -= path->length * std::floor(along / path->length);
                 else if (along < 0.0 || along > path->length)
@@ -424,7 +428,7 @@ std::vector<Change> apply(const std::vector<Applied>& list, const std::vector<Le
                 changes[i].x += x - letters[i].middleX;
                 changes[i].y += y - letters[i].middleY;
                 if (turn)
-                    changes[i].rotation += angle;
+                    changes[i].rotation += vertical ? angle - 90.0 : angle;
             }
         }
         else if (type == "wiggly")

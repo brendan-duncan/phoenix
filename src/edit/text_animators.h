@@ -43,6 +43,10 @@ struct Letter
     /// own space (the middle of its advance, across; of its line, down).
     double middleX = 0.0;
     double middleY = 0.0;
+    /// A letter of vertical text: it reads down its column, so along a
+    /// path it goes by its place down the field, standing as vertical
+    /// letters stand, their tops toward where the line comes from.
+    bool vertical = false;
 };
 
 /// The line of the motion guide the field's layer is under, for Text on a

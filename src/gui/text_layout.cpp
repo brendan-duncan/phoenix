@@ -744,7 +744,29 @@ std::vector<fla::textanim::Letter> letters(const fla::StaticText& text)
     // Which line each character is on, from the layout the stage draws.
     std::vector<int> lineOf(static_cast<size_t>(joined.length()), 0);
     int lines = 1;
-    if (!isVertical(text))
+    if (isVertical(text))
+    {
+        // Each letter's middle is its cell's, and each column a line.
+        int column = 0;
+        double columnX = 0.0;
+        bool first = true;
+        for (const Cell& cell : verticalCells(text, nullptr))
+        {
+            if (cell.index < 0 || cell.index >= joined.length())
+                continue;
+            if (!first && std::fabs(cell.rect.left() - columnX) > 1.0e-6)
+                ++column;
+            first = false;
+            columnX = cell.rect.left();
+            fla::textanim::Letter& letter = list[static_cast<size_t>(cell.index)];
+            letter.middleX = cell.rect.center().x();
+            letter.middleY = cell.rect.center().y();
+            letter.vertical = true;
+            lineOf[static_cast<size_t>(cell.index)] = column;
+        }
+        lines = column + 1;
+    }
+    else
     {
         const Layout laid = layout(text);
         lines = std::max(1, static_cast<int>(laid.lines.size()));
@@ -827,11 +849,86 @@ void drawBlurredLetter(QPainter& painter, const QFont& font, const QColor& ink, 
     painter.drawImage(box, image);
 }
 
+/// One letter as \a change leaves it: moved, turned and scaled about
+/// \a middle, faded, tinted, blurred or swapped, its baseline starting at
+/// \a at.
+void drawChangedLetter(QPainter& painter, const QFont& font, QColor ink, const QPointF& middle, const QPointF& at,
+    const QString& letter, const fla::textanim::Change& change, double opacity)
+{
+    painter.save();
+    painter.translate(middle.x() + change.x, middle.y() + change.y);
+    painter.rotate(change.rotation);
+    // Turned in depth, seen in perspective from in front.
+    if (change.turnX != 0.0 || change.turnY != 0.0)
+    {
+        QTransform depth;
+        depth.rotate(change.turnX, Qt::XAxis, 1024.0);
+        depth.rotate(change.turnY, Qt::YAxis, 1024.0);
+        painter.setTransform(depth, true);
+    }
+    painter.scale(change.scale, change.scale);
+    painter.translate(-middle);
+    painter.setOpacity(opacity * std::min(1.0, change.alpha));
+    const QString shown = change.character ? QString(QChar(static_cast<char16_t>(change.character))) : letter;
+    if (change.tint > 0.0)
+    {
+        const double u = std::min(1.0, change.tint);
+        const QColor to(static_cast<int>((change.tintColor >> 16) & 0xFF), static_cast<int>((change.tintColor >> 8) & 0xFF),
+            static_cast<int>(change.tintColor & 0xFF));
+        ink = QColor::fromRgbF(ink.redF() + (to.redF() - ink.redF()) * u, ink.greenF() + (to.greenF() - ink.greenF()) * u,
+            ink.blueF() + (to.blueF() - ink.blueF()) * u, ink.alphaF());
+    }
+    painter.setFont(font);
+    painter.setPen(QPen(ink, 1.0));
+    if (change.blur > 0.05)
+        drawBlurredLetter(painter, font, ink, at, shown, change.blur);
+    else
+        painter.drawText(at, shown);
+    painter.restore();
+}
+
+/// Vertical text with its letters changed: each about the middle of the
+/// cell it stands in, upright in its column as draw() sets it.
+void drawAnimatedVertical(QPainter& painter, const fla::StaticText& text, const std::vector<fla::textanim::Change>& changes)
+{
+    QRectF bounds;
+    const std::vector<Cell> cells = verticalCells(text, &bounds);
+    const QString joined = joinedText(text);
+    painter.setBrush(Qt::NoBrush);
+    if (text.textType != fla::StaticText::TextType::Static && s_fieldOutlines)
+    {
+        QPen outline(QColor(0, 0, 0), 0.0);
+        outline.setStyle(Qt::DotLine);
+        painter.setPen(outline);
+        painter.drawRect(bounds);
+    }
+    const double opacity = painter.opacity();
+    for (const Cell& cell : cells)
+    {
+        if (cell.index >= joined.length() || isBreak(joined[cell.index]) || text.runs.empty() || joined[cell.index].isSpace())
+            continue;
+        const fla::textanim::Change change = cell.index < static_cast<int>(changes.size())
+            ? changes[static_cast<size_t>(cell.index)] : fla::textanim::Change();
+        if (change.alpha <= 0.0 || change.scale == 0.0)
+            continue;
+        const fla::TextRun& run = text.runs[static_cast<size_t>(cell.run)];
+        const QFont font = fontFor(run);
+        const QFontMetricsF metrics(font);
+        const QString letter(joined[cell.index]);
+        // Centered across the column, its line as tall as the cell, as
+        // draw() aligns it.
+        const QPointF middle = cell.rect.center();
+        const QPointF at(middle.x() - metrics.horizontalAdvance(letter) / 2.0,
+            cell.rect.top() + (cell.rect.height() - metrics.height()) / 2.0 + metrics.ascent());
+        drawChangedLetter(painter, font, colorOf(run), middle, at, letter, change, opacity);
+    }
+}
+
 void drawAnimated(QPainter& painter, const fla::StaticText& text, const std::vector<fla::textanim::Change>& changes)
 {
     if (isVertical(text))
     {
-        draw(painter, text);
+        drawAnimatedVertical(painter, text, changes);
         return;
     }
     const Layout laid = layout(text);
@@ -869,36 +966,7 @@ void drawAnimated(QPainter& painter, const fla::StaticText& text, const std::vec
                 const double x = segment.x + metrics.horizontalAdvance(part.left(k));
                 const double width = metrics.horizontalAdvance(part.mid(k, 1));
                 const QPointF middle(x + width / 2.0, line.top + line.height / 2.0);
-                painter.save();
-                painter.translate(middle.x() + change.x, middle.y() + change.y);
-                painter.rotate(change.rotation);
-                // Turned in depth, seen in perspective from in front.
-                if (change.turnX != 0.0 || change.turnY != 0.0)
-                {
-                    QTransform depth;
-                    depth.rotate(change.turnX, Qt::XAxis, 1024.0);
-                    depth.rotate(change.turnY, Qt::YAxis, 1024.0);
-                    painter.setTransform(depth, true);
-                }
-                painter.scale(change.scale, change.scale);
-                painter.translate(-middle);
-                painter.setOpacity(opacity * std::min(1.0, change.alpha));
-                const QString shown = change.character ? QString(QChar(static_cast<char16_t>(change.character))) : part.mid(k, 1);
-                QColor ink = colorOf(run);
-                if (change.tint > 0.0)
-                {
-                    const double u = std::min(1.0, change.tint);
-                    const QColor to(static_cast<int>((change.tintColor >> 16) & 0xFF), static_cast<int>((change.tintColor >> 8) & 0xFF),
-                        static_cast<int>(change.tintColor & 0xFF));
-                    ink = QColor::fromRgbF(ink.redF() + (to.redF() - ink.redF()) * u, ink.greenF() + (to.greenF() - ink.greenF()) * u,
-                        ink.blueF() + (to.blueF() - ink.blueF()) * u, ink.alphaF());
-                }
-                painter.setPen(QPen(ink, 1.0));
-                if (change.blur > 0.05)
-                    drawBlurredLetter(painter, font, ink, QPointF(x, baseline), shown, change.blur);
-                else
-                    painter.drawText(QPointF(x, baseline), shown);
-                painter.restore();
+                drawChangedLetter(painter, font, colorOf(run), middle, QPointF(x, baseline), part.mid(k, 1), change, opacity);
             }
         }
     }
