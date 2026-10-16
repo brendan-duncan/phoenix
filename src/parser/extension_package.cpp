@@ -254,14 +254,17 @@ std::string folderName(const std::string& id)
     std::string out;
     for (char c : id)
         out += std::isalnum(static_cast<unsigned char>(c)) || c == '.' || c == '-' || c == '_' ? c : '_';
-    return out.empty() ? std::string("extension") : out;
+    // Dots alone ("." or "..") would name the folder itself or its parent.
+    return out.find_first_not_of('.') == std::string::npos ? std::string("extension") : out;
 }
 
+/// A field of the record: tabs and line ends (and the other control
+/// characters) would start a new field or line, so they become spaces.
 std::string escapeLine(const std::string& value)
 {
     std::string out;
     for (char c : value)
-        out += c == '\n' ? ' ' : c == '\r' ? ' ' : c;
+        out += static_cast<unsigned char>(c) < 0x20 || c == 0x7F ? ' ' : c;
     return out;
 }
 
@@ -276,12 +279,12 @@ void writeRecord(const Installed& installed, const std::map<std::string, uint64_
     out << "author\t" << escapeLine(p.author) << "\n";
     out << "description\t" << escapeLine(p.description) << "\n";
     for (const Package::Panel& panel : p.panels)
-        out << "panel\t" << escapeLine(panel.id) << "\t" << escapeLine(panel.menu) << "\t" << panel.mainPath << "\t"
-            << panel.scriptPath << "\n";
+        out << "panel\t" << escapeLine(panel.id) << "\t" << escapeLine(panel.menu) << "\t" << escapeLine(panel.mainPath)
+            << "\t" << escapeLine(panel.scriptPath) << "\n";
     for (const std::string& placed : installed.placed)
     {
         const auto found = hashes.find(placed);
-        out << "placed\t" << placed << "\t" << (found != hashes.end() ? found->second : 0) << "\n";
+        out << "placed\t" << escapeLine(placed) << "\t" << (found != hashes.end() ? found->second : 0) << "\n";
     }
 }
 
@@ -370,6 +373,11 @@ bool install(const std::string& path, const std::string& configFolder, const std
     if (package.id.empty())
     {
         error = "This package does not say what it is called.";
+        return false;
+    }
+    if (package.id.find_first_not_of('.') == std::string::npos)
+    {
+        error = "This package's name is only dots, which Phoenix cannot make a folder of.";
         return false;
     }
     // One of the same id is replaced.

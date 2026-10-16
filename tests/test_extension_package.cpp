@@ -143,3 +143,36 @@ TEST(extension_packages_read_html_panels_from_their_manifest)
     fs::create_directories(empty);
     CHECK(!extensions::read(empty.string(), read, error) && !error.empty());
 }
+
+TEST(extension_packages_keep_to_their_folder_and_record)
+{
+    TempFolder temp;
+    const fs::path config = temp.path / "Configuration";
+    const fs::path extensionsFolder = temp.path / "Extensions";
+    const auto manifest = [](const std::string& id, const std::string& mainPath) {
+        return "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+               "<ExtensionManifest Version=\"6.0\" ExtensionBundleId=\"" + id + "\" ExtensionBundleName=\"X\">\n"
+               "  <DispatchInfoList><Extension Id=\"panel\"><DispatchInfo>\n"
+               "    <Resources><MainPath>" + mainPath + "</MainPath><ScriptPath>./host.jsfl</ScriptPath></Resources>\n"
+               "  </DispatchInfo></Extension></DispatchInfoList>\n"
+               "</ExtensionManifest>\n";
+    };
+    // An id of dots alone would install into the extensions' own folder or
+    // its parent.
+    const fs::path dots = temp.path / "dots";
+    put(dots / "CSXS" / "manifest.xml", manifest("..", "./index.html"));
+    extensions::Installed installed;
+    std::vector<std::string> notes;
+    std::string error;
+    CHECK(!extensions::install(dots.string(), config.string(), extensionsFolder.string(), installed, notes, error));
+    CHECK(!fs::exists(temp.path / "package"));
+
+    // A tab and a line end in a path stay inside its field of the record.
+    const fs::path tabbed = temp.path / "tabbed";
+    put(tabbed / "CSXS" / "manifest.xml", manifest("com.example.tabbed", "./a&#9;b&#10;placed&#9;x.html"));
+    CHECK(extensions::install(tabbed.string(), config.string(), extensionsFolder.string(), installed, notes, error));
+    const std::vector<extensions::Installed> all = extensions::list(extensionsFolder.string());
+    CHECK(all.size() == 1 && all[0].package.panels.size() == 1 && all[0].placed.empty());
+    if (all.size() == 1 && all[0].package.panels.size() == 1)
+        CHECK(all[0].package.panels[0].scriptPath == "host.jsfl");
+}
