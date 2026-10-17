@@ -12,6 +12,7 @@ What changed in each release of Phoenix, newest first.
 - HTML5 Canvas scripts draw in Test Movie: `createjs.Shape` and its `Graphics` (fills, strokes, gradients, bitmap fills, arcs, shapes and the short forms), `Text`, `Bitmap`, `Container`, `Sprite` with `SpriteSheet`, and `MovieClip` timelines made in code
 - HTML5 Canvas scripts' filters, `cache()`, `shadow`, masks and `compositeOperation` show in Test Movie, and `skewX`, `skewY`, `regX` and `regY` move objects as in CreateJS
 - HTML5 Canvas scripts reach an instance before its keyframe, and an instance placed again by a later keyframe keeps its listeners
+- SWF movies with ActionScript 1 and 2 run their scripts when opened: Test Movie and `Phoenix play` run the compiled frame actions, `#initclip` actions, button `on()` and movie clip `onClipEvent()` handlers, with prototypes, ActionScript 2 classes, `Object.registerClass`, `onEnterFrame` and `setInterval`
 
 ## 0.17.1
 

@@ -211,6 +211,7 @@ set(PHOENIX_CORE_PYTHON_SOURCES
 # QuickJS for HTML5 Canvas JavaScript.
 set(PHOENIX_CORE_PLAY_SOURCES
     play/movie_runtime.cpp
+    play/avm1_player.cpp
     play/canvas/createjs.cpp
     play/canvas/scripts.cpp
     play/display/bitmap_data.cpp

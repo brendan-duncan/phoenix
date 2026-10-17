@@ -673,6 +673,28 @@ struct EditText
     int maxLength = 0;
 };
 
+/// ActionScript 1 and 2 as the movie has it compiled: a frame's DoAction, a
+/// sprite's DoInitAction (on the frame of the main timeline it comes in), a
+/// movie clip's handler (the events it runs on, as PlaceObject numbers them,
+/// and the key of a keyPress) or a button's (its conditions). Kept with the
+/// frame or the instance as a CompiledActions element, which Test Movie
+/// runs.
+struct CompiledAction
+{
+    enum class Kind
+    {
+        Frame,
+        Init,
+        Clip,
+        Button
+    };
+    Kind kind = Kind::Frame;
+    int sprite = 0;
+    uint32_t events = 0;
+    int key = 0;
+    std::vector<uint8_t> actions;
+};
+
 struct Placement
 {
     int character = 0;
@@ -695,6 +717,8 @@ struct Placement
     /// Set anew when a character is placed rather than moved: a movie clip
     /// starts over then.
     long instance = 0;
+    /// A movie clip's handlers (onClipEvent), as placed.
+    std::shared_ptr<const std::vector<CompiledAction>> clipActions;
 };
 
 struct SoundUse
@@ -712,6 +736,8 @@ struct TimelineData
     std::map<int, std::string> labels;
     std::map<int, std::vector<SoundUse>> sounds;
     std::map<int, std::string> scripts;
+    /// The frames' compiled actions, in the order they come.
+    std::map<int, std::vector<CompiledAction>> actions;
     // A streamed soundtrack.
     int streamCodec = -1;
     int streamRate = 0;
@@ -760,7 +786,23 @@ struct Character
     Rect grid;
     std::string linkage;
     int uses = 0;
+    // Buttons: their handlers, which each instance carries.
+    std::vector<CompiledAction> buttonActions;
 };
+
+/// Bytes as hexadecimal text, for compiled actions in XML.
+std::string hexOf(const std::vector<uint8_t>& bytes)
+{
+    static const char digits[] = "0123456789abcdef";
+    std::string text;
+    text.reserve(bytes.size() * 2);
+    for (const uint8_t byte : bytes)
+    {
+        text += digits[byte >> 4];
+        text += digits[byte & 15];
+    }
+    return text;
+}
 
 // ---------------------------------------------------------------------------
 // Writing helpers
@@ -915,7 +957,19 @@ private:
     void keepActionScript3(std::map<std::string, std::vector<uint8_t>>& files)
     {
         if (_abcFiles.empty())
+        {
+            // ActionScript 1 and 2, kept compiled with the frames and the
+            // instances: the publish settings say which, for Test Movie.
+            if (_scripts == 0 || files.count("PublishSettings.xml"))
+                return;
+            const std::string settings = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<flash_profiles>\n"
+                                         "<flash_profile version=\"1.0\" name=\"Default\" current=\"true\">\n"
+                                         "<PublishFlashProperties enabled=\"true\">\n"
+                                         "<ActionScriptVersion>2</ActionScriptVersion>\n"
+                                         "</PublishFlashProperties>\n</flash_profile>\n</flash_profiles>\n";
+            files["PublishSettings.xml"].assign(settings.begin(), settings.end());
             return;
+        }
         for (size_t i = 0; i < _abcFiles.size(); ++i)
             files["bin/abc/" + std::to_string(i + 1) + ".abc"] = _abcFiles[i];
         if (files.count("PublishSettings.xml"))
@@ -963,6 +1017,7 @@ private:
         shift(t.labels, slice.labels);
         shift(t.sounds, slice.sounds);
         shift(t.scripts, slice.scripts);
+        shift(t.actions, slice.actions);
         if (t.streamCodec >= 0 && t.streamFirst >= first && t.streamFirst < end)
         {
             slice.streamCodec = t.streamCodec;
@@ -1114,14 +1169,28 @@ private:
                     }
                 }
                 break;
-            case 12: // DoAction
+            case 12: // DoAction: kept as compiled, which Test Movie runs
+            {
+                CompiledAction action;
+                action.actions = tag.bytes(tag.left());
+                timeline.actions[frame].push_back(std::move(action));
                 timeline.scripts[frame] += "// ActionScript compiled into the SWF (" + std::to_string(length) +
-                    " bytes) cannot be turned back into source.\n";
+                    " bytes): it runs as compiled when the movie plays, but cannot be turned back into source.\n";
                 ++_scripts;
                 break;
-            case 59: // DoInitAction
+            }
+            case 59: // DoInitAction: a sprite's #initclip actions
+            {
+                CompiledAction action;
+                action.kind = CompiledAction::Kind::Init;
+                action.sprite = tag.u16();
+                action.actions = tag.bytes(tag.left());
+                timeline.actions[frame].push_back(std::move(action));
+                timeline.scripts[frame] += "// ActionScript compiled into the SWF to set up a symbol (#initclip, " +
+                    std::to_string(length) + " bytes): it runs as compiled when the movie plays.\n";
                 ++_scripts;
                 break;
+            }
             case 72:
             case 82: // DoABC: (flags and a name, then) the abcFile
                 ++_abc;
@@ -1273,11 +1342,50 @@ private:
                 p.filters = readFilters(tag);
             if (flags2 & 0x02)
                 p.blend = tag.u8();
+            if (flags2 & 0x04)
+                tag.u8(); // cache as bitmap
+            if (flags2 & 0x20)
+                tag.u8(); // visible
+            if (flags2 & 0x40)
+                tag.u32(); // background color
         }
+        if (flags & 0x80)
+            p.clipActions = readClipActions(tag);
         if (p.character == 0)
             return;
         p.version = ++_version_counter;
         list[depth] = p;
+    }
+
+    /// A placement's CLIPACTIONS: its handlers, each with the events it
+    /// runs on (16 bits of them before SWF 6), and a keyPress's key.
+    std::shared_ptr<const std::vector<CompiledAction>> readClipActions(Reader& tag)
+    {
+        auto actions = std::make_shared<std::vector<CompiledAction>>();
+        const bool wide = _version >= 6;
+        tag.u16();
+        if (wide)
+            tag.u32();
+        else
+            tag.u16();
+        while (tag.left() >= (wide ? 4u : 2u))
+        {
+            CompiledAction action;
+            action.kind = CompiledAction::Kind::Clip;
+            action.events = wide ? tag.u32() : tag.u16();
+            if (action.events == 0 || tag.left() < 4)
+                break;
+            size_t size = std::min<size_t>(tag.u32(), tag.left());
+            if (wide && (action.events & (1u << 17)) && size > 0)
+            {
+                action.key = tag.u8();
+                --size;
+            }
+            action.actions = tag.bytes(size);
+            actions->push_back(std::move(action));
+            ++_scripts;
+        }
+        return actions->empty() ? nullptr : actions;
     }
 
     std::vector<Placement::Filter> readFilters(Reader& tag)
@@ -1820,15 +1928,17 @@ private:
     void defineButton(Reader& tag, bool two)
     {
         const int id = tag.u16();
+        int actionOffset = 0;
         if (two)
         {
             tag.u8();
-            tag.u16(); // action offset
+            actionOffset = tag.u16();
         }
         if (_reading.count(id))
             return;
         Character& c = _characters[id];
         c.kind = Character::Kind::Button;
+        c.buttonActions.clear();
         c.timeline = std::make_shared<TimelineData>();
         c.timeline->frames.resize(4);
         c.timeline->frameCount = 4;
@@ -1857,8 +1967,29 @@ private:
                     c.timeline->frames[static_cast<size_t>(state)][depth] = p;
                 }
         }
-        if (!tag.atEnd())
+        // Its handlers: DefineButton's actions run on release; DefineButton2
+        // has conditions, each with its own.
+        if (!two && tag.left() > 0)
+        {
+            CompiledAction action;
+            action.kind = CompiledAction::Kind::Button;
+            action.events = 0x0008; // OverDownToOverUp: release
+            action.actions = tag.bytes(tag.left());
+            c.buttonActions.push_back(std::move(action));
             ++_scripts;
+        }
+        while (two && actionOffset != 0 && tag.left() >= 4)
+        {
+            const size_t size = tag.u16();
+            CompiledAction action;
+            action.kind = CompiledAction::Kind::Button;
+            action.events = tag.u16();
+            action.actions = tag.bytes(size == 0 ? tag.left() : std::min(size - std::min<size_t>(size, 4), tag.left()));
+            c.buttonActions.push_back(std::move(action));
+            ++_scripts;
+            if (size == 0)
+                break;
+        }
     }
 
     void defineJpeg(Reader& tag, int code, size_t length)
@@ -2744,6 +2875,38 @@ private:
         return text;
     }
 
+    /// A CompiledActions element holding \a actions, each as hexadecimal
+    /// text: DoAction, DoInitAction (with the symbol it sets up),
+    /// ClipAction (with its events and key) and ButtonAction (with its
+    /// conditions). Test Movie runs them (see play::CompiledActions).
+    tinyxml2::XMLElement* compiledElement(tinyxml2::XMLDocument& doc, const std::vector<CompiledAction>& actions)
+    {
+        tinyxml2::XMLElement* holder = doc.NewElement("CompiledActions");
+        holder->SetAttribute("swfVersion", _version);
+        for (const CompiledAction& action : actions)
+        {
+            static const char* const names[] = {"DoAction", "DoInitAction", "ClipAction", "ButtonAction"};
+            tinyxml2::XMLElement* element = doc.NewElement(names[static_cast<int>(action.kind)]);
+            if (action.kind == CompiledAction::Kind::Init)
+            {
+                const auto sprite = _characters.find(action.sprite);
+                if (sprite != _characters.end() && sprite->second.kind == Character::Kind::Sprite)
+                    element->SetAttribute("symbol", symbolOf(action.sprite).c_str());
+            }
+            else if (action.kind == CompiledAction::Kind::Clip)
+            {
+                element->SetAttribute("events", static_cast<unsigned>(action.events));
+                if (action.key)
+                    element->SetAttribute("key", action.key);
+            }
+            else if (action.kind == CompiledAction::Kind::Button)
+                element->SetAttribute("conditions", static_cast<unsigned>(action.events));
+            element->SetText(hexOf(action.actions).c_str());
+            holder->InsertEndChild(element);
+        }
+        return holder;
+    }
+
     tinyxml2::XMLElement* placedElement(tinyxml2::XMLDocument& doc, const Placement& p)
     {
         const auto found = _characters.find(p.character);
@@ -2803,6 +2966,11 @@ private:
                 }
                 instance->InsertEndChild(filters);
             }
+            // Its handlers, as compiled: a button's are its symbol's.
+            if (c.kind == Character::Kind::Button && !c.buttonActions.empty())
+                instance->InsertEndChild(compiledElement(doc, c.buttonActions));
+            else if (c.kind == Character::Kind::Sprite && p.clipActions)
+                instance->InsertEndChild(compiledElement(doc, *p.clipActions));
             return instance;
         }
         case Character::Kind::EditText:
@@ -2886,7 +3054,10 @@ private:
         if (!c.linkage.empty())
         {
             root->SetAttribute("linkageExportForAS", "true");
-            root->SetAttribute(_version >= 9 ? "linkageClassName" : "linkageIdentifier", c.linkage.c_str());
+            // A class's name for ActionScript 3; an identifier for the
+            // attachMovie and Object.registerClass of ActionScript 1 and 2.
+            const bool actionScript3 = _abc > 0 || (_version >= 9 && _scripts == 0);
+            root->SetAttribute(actionScript3 ? "linkageClassName" : "linkageIdentifier", c.linkage.c_str());
         }
         if (c.scale9)
         {
@@ -3567,20 +3738,33 @@ private:
         const int frames = std::max(1, t.frameCount);
         int colorIndex = 0;
 
-        if (!t.scripts.empty())
+        if (!t.scripts.empty() || !t.actions.empty())
         {
             std::map<int, std::function<void(tinyxml2::XMLElement*)>> marks;
+            std::set<int> scripted;
             for (const auto& [frame, text] : t.scripts)
+                scripted.insert(frame);
+            for (const auto& [frame, actions] : t.actions)
+                scripted.insert(frame);
+            for (const int frame : scripted)
             {
-                const std::string script = text;
-                marks[frame] = [&doc, script](tinyxml2::XMLElement* f) {
-                    tinyxml2::XMLElement* as = doc.NewElement("Actionscript");
-                    tinyxml2::XMLElement* s = doc.NewElement("script");
-                    tinyxml2::XMLText* body = doc.NewText(script.c_str());
-                    body->SetCData(true);
-                    s->InsertEndChild(body);
-                    as->InsertEndChild(s);
-                    f->InsertEndChild(as);
+                const auto text = t.scripts.find(frame);
+                const std::string script = text == t.scripts.end() ? std::string() : text->second;
+                const auto compiled = t.actions.find(frame);
+                const std::vector<CompiledAction>* actions = compiled == t.actions.end() ? nullptr : &compiled->second;
+                marks[frame] = [this, &doc, script, actions](tinyxml2::XMLElement* f) {
+                    if (!script.empty())
+                    {
+                        tinyxml2::XMLElement* as = doc.NewElement("Actionscript");
+                        tinyxml2::XMLElement* s = doc.NewElement("script");
+                        tinyxml2::XMLText* body = doc.NewText(script.c_str());
+                        body->SetCData(true);
+                        s->InsertEndChild(body);
+                        as->InsertEndChild(s);
+                        f->InsertEndChild(as);
+                    }
+                    if (actions && !actions->empty())
+                        f->InsertEndChild(compiledElement(doc, *actions));
                 };
             }
             markLayer(doc, layers, "Actions", frames, colorIndex++, marks);
@@ -3998,7 +4182,7 @@ private:
         }
         if (_scripts > 0 || _abc > 0)
             text += " Its ActionScript was compiled and cannot be turned back into source; frames that had "
-                    "scripts carry a comment saying so.";
+                    "scripts carry a comment saying so. Test Movie runs it as compiled.";
         if (!_unread.empty())
         {
             text += " Left out:";

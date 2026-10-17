@@ -1,0 +1,95 @@
+#pragma once
+
+#include <cstdint>
+#include <memory>
+#include <string>
+#include <vector>
+
+namespace as3 {
+class Val;
+class VM;
+namespace avm1 {
+class Interpreter;
+}
+}
+
+namespace fla {
+
+namespace play {
+
+class MovieRuntime;
+struct Clip;
+class ActionsHost;
+
+/// ActionScript 1 and 2 as a movie opened from a SWF has it, compiled: kept
+/// on a frame (its DoActions, and the DoInitActions that come in on it) or
+/// on an instance (a movie clip's onClipEvent handlers, a button's on()
+/// handlers) as a CompiledActions element among its extra children.
+struct CompiledActions
+{
+    struct Block
+    {
+        enum class Kind
+        {
+            Frame,
+            Init,
+            Clip,
+            Button
+        };
+        Kind kind = Kind::Frame;
+        /// A DoInitAction's symbol, by library name.
+        std::string symbol;
+        /// A clip action's events (as PlaceObject numbers them) or a button
+        /// action's conditions, and a keyPress's key code.
+        uint32_t events = 0;
+        int key = 0;
+        std::shared_ptr<const std::vector<uint8_t>> actions;
+    };
+    /// The SWF version the movie was published for.
+    int version = 0;
+    std::vector<Block> blocks;
+};
+
+/// The compiled actions among an element's extra children (a frame's or an
+/// instance's), null when it has none.
+std::shared_ptr<const CompiledActions> compiledActionsIn(const std::vector<std::string>& extraChildren);
+
+/// The events a movie clip's handler runs on, as onClipEvent and on() name
+/// them ("enterFrame", "keyPress <Left>"), from its event flags and key; and
+/// those of a button's handler, from its conditions.
+std::vector<std::string> clipEventNames(uint32_t events, int key);
+std::vector<std::string> buttonEventNames(uint32_t conditions);
+
+/// Runs compiled actions on a MovieRuntime's clips: the AVM1 interpreter,
+/// with the runtime answering for the clips, their timelines and the player.
+/// Made the first time a movie has some.
+class ActionsPlayer
+{
+public:
+    ActionsPlayer(MovieRuntime& runtime, as3::VM& vm, int version);
+    ~ActionsPlayer();
+
+    ActionsPlayer(const ActionsPlayer&) = delete;
+    ActionsPlayer& operator=(const ActionsPlayer&) = delete;
+
+    as3::avm1::Interpreter& interpreter() { return *_interpreter; }
+
+    /// Runs \a block's actions on \a clip's timeline.
+    void run(const CompiledActions::Block& block, Clip& clip, const std::string& where);
+    /// A function that runs \a blocks' actions, one after another, on the
+    /// timeline it is called on: a handler for the runtime to call.
+    as3::Val handler(const std::vector<const CompiledActions::Block*>& blocks, const std::string& where);
+    /// Calls the function \a clip's object has as \a name (onEnterFrame,
+    /// onLoad), as ActionScript 1 finds it, when it has one.
+    void callHandler(Clip& clip, const std::string& name);
+
+private:
+    MovieRuntime& _runtime;
+    as3::VM& _vm;
+    std::unique_ptr<ActionsHost> _host;
+    std::unique_ptr<as3::avm1::Interpreter> _interpreter;
+};
+
+} // namespace play
+
+} // namespace fla

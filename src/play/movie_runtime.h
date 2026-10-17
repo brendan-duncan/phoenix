@@ -13,6 +13,7 @@
 
 namespace as3 {
 class BytecodeFunction;
+class Val;
 class Value;
 class VM;
 using ValuePtr = std::shared_ptr<Value>;
@@ -54,6 +55,9 @@ namespace canvas {
 class Scripts;
 struct Native;
 }
+class ActionsHost;
+class ActionsPlayer;
+struct CompiledActions;
 
 /// The root timeline, or a movie clip or button on it as it plays: which
 /// frame it is on, whether it plays on, and what scripts have set on it.
@@ -410,6 +414,8 @@ private:
     friend struct script::DisplayHost;
     friend class canvas::Scripts;
     friend struct canvas::Native;
+    friend class ActionsHost;
+    friend class ActionsPlayer;
 
     void setupGlobals();
     /// ActionScript 3's own globals (the rest are the flash.* classes).
@@ -424,6 +430,26 @@ private:
     void attachDisplay(Clip& clip);
     /// Runs the scripts of the frame \a clip is on.
     void runFrameScripts(Clip& clip);
+    /// Runs the scripts on frame \a frame (from 0) of \a clip's timeline,
+    /// where the clip is: call() of ActionScript 1.
+    void runFrameActions(Clip& clip, int frame);
+    /// The ActionScript a SWF had compiled, kept on \a element (a frame or
+    /// an instance) among \a extraChildren; null when none. Read once.
+    const CompiledActions* compiledActionsOf(const void* element, const std::vector<std::string>& extraChildren);
+    /// What runs compiled actions, made the first time they run.
+    ActionsPlayer& actionsPlayer(int version);
+    /// Runs the #initclip actions (DoInitAction) on \a clip's frame that
+    /// have not run, before what the frame places is made.
+    void runInitActions(Clip& clip);
+    /// Runs \a frame's compiled actions on \a clip: its DoActions, or its
+    /// DoInitActions when \a init.
+    void runCompiled(Clip& clip, const Frame& frame, bool init, const std::string& where);
+    /// Makes \a clip one of the class Object.registerClass gave its symbol,
+    /// once, when there is one.
+    void registeredClass(Clip& clip);
+    /// The clip a script object is, without looking for it: null for any
+    /// other value.
+    static Clip* clipOfObject(const as3::Val& value);
     /// Plays the sounds on button state frame \a state (0 Up to 3 Hit).
     void buttonSound(const Clip& button, int state);
     /// Goes on with the frames clips were sent to while scripts ran.
@@ -609,6 +635,11 @@ private:
     /// The compiled scripts, and what runs them on the VM.
     std::vector<std::vector<uint8_t>> _abcFiles;
     std::unique_ptr<as3::abc::Domain> _abcDomain;
+    /// ActionScript 1 and 2 as a SWF had it compiled: what runs it, what
+    /// each frame and instance keeps, and the DoInitActions that have run.
+    std::unique_ptr<ActionsPlayer> _actions;
+    std::map<const void*, std::shared_ptr<const CompiledActions>> _compiledActions;
+    std::vector<const void*> _initsRun;
     /// The clip the pointer was last sent over (pointerOver) and pressed
     /// on, for the display list's events when the stage does not send them.
     std::weak_ptr<display::DisplayObject> _pointerOver;
