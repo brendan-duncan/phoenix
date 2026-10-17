@@ -3,11 +3,14 @@
 #include "../src/data/document.h"
 #include "../src/data/element.h"
 #include "../src/data/fla_document.h"
+#include "../src/edit/command.h"
 #include "../src/edit/html5_export.h"
 #include "../src/edit/publish_settings.h"
 #include "../src/parser/fla_parser.h"
 
 #include <filesystem>
+#include <fstream>
+#include <map>
 #include <memory>
 #include <string>
 #include <vector>
@@ -165,4 +168,113 @@ TEST(html5_publish_settings_round_trip)
     const std::string written = fla::publish::write(canvasXml, off, "game");
     CHECK(written.find("Phoenix/HTML5") == std::string::npos);
     CHECK(!fla::publish::read(written, "game").html5);
+}
+
+namespace {
+
+/// FakeArt that also draws pictures: one small one for any run of layers,
+/// noting which run and frame.
+class PictureArt : public FakeArt
+{
+public:
+    std::vector<std::string> drawn;
+
+    std::string picture(const fla::Timeline&, int from, int to, int frame) override
+    {
+        drawn.push_back(std::to_string(from) + "-" + std::to_string(to) + "@" + std::to_string(frame));
+        return "{\"o\":[{\"i\":" + std::to_string(from) + ",\"m\":[1,0,0,1,0,0],\"b\":[0,0,1,1]}],\"b\":[0,0,1,1]}";
+    }
+};
+
+} // namespace
+
+TEST(html5_phoenix_effects_are_native_or_pictures)
+{
+    const std::unique_ptr<fla::FLADocument> file = read(kData / "html5" / "effects");
+    CHECK(file && file->document && !file->document->timelines.empty());
+    if (!file || !file->document || file->document->timelines.empty())
+        return;
+    // Layers from the top: Camera, Glow, Ball, Matte, Stripes, Wiggle,
+    // Soft, Cards, Back. The effect layer goes with the layer under it
+    // (which has motion blur too), the matte with its matted layer, the
+    // ripple no filter carries alone; the blur a filter carries stays.
+    const std::vector<fla::html5::BakedRun> runs = fla::html5::bakedRuns(*file->document->timelines.front());
+    CHECK(runs.size() == 3);
+    if (runs.size() == 3)
+    {
+        CHECK(runs[0].from == 1 && runs[0].to == 3);
+        CHECK(runs[0].why.find("an effect layer") != std::string::npos);
+        CHECK(runs[0].why.find("motion blur") != std::string::npos);
+        CHECK(runs[1].from == 3 && runs[1].to == 5 && runs[1].why == "a track matte");
+        CHECK(runs[2].from == 7 && runs[2].to == 8);
+    }
+    PictureArt art;
+    std::vector<std::string> notes;
+    const std::string content = fla::html5::content(*file->document, art, fla::html5::Options(), &notes);
+    // A picture a frame for each run, in the place of its bottom layer.
+    CHECK(art.drawn.size() == 3 * 24);
+    CHECK(has(content, "{\"k\":\"S0B1\",\"d\":458752,\"t\":\"a\",\"id\":"));
+    CHECK(has(content, "{\"k\":\"S0B7\",\"d\":131072,\"t\":\"a\",\"id\":"));
+    CHECK(notes.size() == 3);
+    CHECK(!notes.empty() && notes.front().find("Scene 1: layers Glow, Ball") == 0);
+    // The blur on the soft card as its filter.
+    CHECK(has(content, "\"k\":\"S0L6E0\""));
+    CHECK(has(content, "\"f\":[{\"t\":\"blur\",\"bx\":6,\"by\":6,\"q\":3}]"));
+    // The camera: at rest on frame 0, the back layer as drawn; its tint
+    // over the whole picture, frame by frame.
+    CHECK(has(content, "{\"k\":\"S0L8E0\",\"d\":65537,\"t\":\"a\",\"id\":0}"));
+    CHECK(has(content, "\"cc\":[0,["));
+    CHECK(has(content, "[0.65,0.65,0.65,1,89.25,47.6,0,0]]"));
+}
+
+TEST(html5_tlf_text_is_published_as_text)
+{
+    const std::unique_ptr<fla::FLADocument> file = read(kData / "html5" / "tlf");
+    CHECK(file && file->document);
+    if (!file || !file->document)
+        return;
+    FakeArt art;
+    std::vector<std::string> notes;
+    const std::string content = fla::html5::content(*file->document, art, fla::html5::Options(), &notes);
+    CHECK(notes.empty());
+    // The heading and the columns are text drawn as art; the field a
+    // reader may edit is an input field of its runs.
+    CHECK(art.calls == 2);
+    CHECK(has(content, "\"texts\":[{\"x\":0,\"y\":0,\"w\":200,\"h\":24,\"type\":\"input\",\"ml\":1,\"wrap\":1,"
+                       "\"runs\":[{\"t\":\"Type here\",\"f\":\"Arial\",\"s\":14,\"c\":0}]}]"));
+    CHECK(has(content, "\"t\":\"x\",\"id\":0,\"m\":[1,0,0,1,20,215],\"n\":\"entry\""));
+}
+
+TEST(html5_compiled_clips_publish_the_movie_they_carry)
+{
+    const std::unique_ptr<fla::FLADocument> file = read(kData / "html5" / "compiled");
+    CHECK(file && file->document);
+    if (!file || !file->document)
+        return;
+    const std::map<std::string, std::vector<uint8_t>> movies = fla::html5::compiledClips(*file->document);
+    CHECK(movies.size() == 1 && movies.count("Clip"));
+    // Left as it is, the instance is noted and left out.
+    FakeArt art;
+    std::vector<std::string> notes;
+    fla::html5::content(*file->document, art, fla::html5::Options(), &notes);
+    CHECK(notes.size() == 1);
+    // Brought in, it is a movie clip of the movie's frames.
+    std::vector<std::unique_ptr<fla::Command>> keep;
+    std::vector<std::string> said;
+    fla::html5::embedCompiledClips(*file->document, movies,
+        [](const std::vector<uint8_t>& swf) {
+            const fs::path path = fs::temp_directory_path() / "phoenix_test_clip.swf";
+            std::ofstream(path, std::ios::binary).write(reinterpret_cast<const char*>(swf.data()),
+                static_cast<std::streamsize>(swf.size()));
+            std::unique_ptr<fla::FLADocument> movie = read(path);
+            fs::remove(path);
+            return movie;
+        },
+        keep, said);
+    CHECK(said.size() == 1);
+    notes.clear();
+    const std::string content = fla::html5::content(*file->document, art, fla::html5::Options(), &notes);
+    CHECK(notes.empty());
+    CHECK(has(content, "{\"name\":\"Clip\",\"type\":\"mc\""));
+    CHECK(has(content, "\"t\":\"s\",\"id\":0,\"m\":[0.5,0,0,0.5,40,30],\"n\":\"clip\""));
 }

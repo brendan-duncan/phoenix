@@ -1332,6 +1332,40 @@ bool convertTlfText(const tinyxml2::XMLElement* element, fla::StaticText* text)
     text->instanceName = getAttribute(element, "name");
     if (!text->instanceName.empty())
         text->textType = fla::StaticText::TextType::Dynamic;
+    // What the object holding the flow (or the flow, or the element) says
+    // of the frame.
+    const tinyxml2::XMLElement* holder = xml.RootElement();
+    const auto setting = [&](const char* name) -> const char* {
+        const char* value = flow->Attribute(name);
+        if (!value && holder != flow)
+            value = holder->Attribute(name);
+        return value ? value : element->Attribute(name);
+    };
+    // Text a reader may edit or select is a field to type in or select.
+    const char* policy = setting("editPolicy");
+    if (policy && std::strcmp(policy, "readWrite") == 0)
+        text->textType = fla::StaticText::TextType::Input;
+    else if (policy && std::strcmp(policy, "readSelect") == 0)
+        text->textType = fla::StaticText::TextType::Dynamic;
+    if (text->textType != fla::StaticText::TextType::Static)
+    {
+        const char* kind = setting("type");
+        text->lineType = kind && std::strcmp(kind, "Point") == 0 ? "single line" : "multiline";
+    }
+    // The frame's padding insets the text. Its columns are not kept: the
+    // text runs across the whole frame.
+    if (!text->autoExpand)
+    {
+        const auto padding = [&](const char* name) {
+            const char* value = setting(name);
+            return value ? std::max(0.0, std::strtod(value, nullptr)) : 0.0;
+        };
+        const double left = padding("paddingLeft"), top = padding("paddingTop");
+        text->left += left;
+        text->top += top;
+        text->width = std::max(1.0, text->width - left - padding("paddingRight"));
+        text->height = std::max(1.0, text->height - top - padding("paddingBottom"));
+    }
 
     addTlfParagraphs(flow, TlfStyle(), text->runs);
     if (text->runs.empty())

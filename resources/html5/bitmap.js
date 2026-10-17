@@ -503,7 +503,7 @@ class Bitmap extends flash.display.DisplayObject {
 
 /// A BitmapData holding a published image's pixels.
 phoenix._.libraryBitmapData = function (index) {
-    var image = phoenix._.images[index];
+    var image = phoenix._.drawable(phoenix._.images[index]);
     var data = Object.create(BitmapData.prototype);
     data._transparent = true;
     data._disposed = false;

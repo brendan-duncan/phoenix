@@ -38,6 +38,7 @@
 #include "../edit/shape_operators.h"
 #include "../edit/text_animators.h"
 #include "../edit/adjustments.h"
+#include "../edit/html5_export.h"
 #include "../edit/other_apps.h"
 #include "../edit/frame_bake.h"
 #include "motion_editor.h"
@@ -5484,7 +5485,7 @@ std::vector<std::pair<int, int>> MainWindow::shapeOperatorRuns(const fla::Layer&
     return runs;
 }
 
-int MainWindow::bakeShapeOperators(fla::Layer& layer, int first, int last)
+int MainWindow::bakeShapeOperators(fla::Layer& layer, int first, int last, bool shapes)
 {
     if (!_phoenixView)
         return 0;
@@ -5530,7 +5531,7 @@ int MainWindow::bakeShapeOperators(fla::Layer& layer, int first, int last)
                 continue;
             }
             auto* shape = dynamic_cast<fla::Shape*>(frame->elements[i]);
-            if (!shape || !fla::shapeops::any(*shape))
+            if (!shapes || !shape || !fla::shapeops::any(*shape))
                 continue;
             std::vector<fla::Shape*> made = _phoenixView->bakedShape(*shape, frame->index);
             frame->elements.erase(frame->elements.begin() + static_cast<std::ptrdiff_t>(i));
@@ -5695,14 +5696,14 @@ void MainWindow::bakeNodeGraphs(fla::Document& copy, std::vector<std::string>& n
     }
 }
 
-bool MainWindow::writeForOtherApps(const QString& path, QString& error, int* bakedLayers)
+std::unique_ptr<fla::EditFramesCommand> MainWindow::bakeBehaviorsForCopy(std::shared_ptr<std::vector<std::string>> errors,
+    int* bakedLayers, bool shapes)
 {
-    if (!_flaDocument || !_flaDocument->document)
-    {
-        error = "No document is open.";
-        return false;
-    }
-    fla::Document* document = _flaDocument->document;
+    fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
+    if (bakedLayers)
+        *bakedLayers = 0;
+    if (!document)
+        return nullptr;
     // Every timeline's layers with behaviors, baked for the copy and put
     // back afterward.
     std::vector<fla::Layer*> layers;
@@ -5717,24 +5718,146 @@ bool MainWindow::writeForOtherApps(const QString& path, QString& error, int* bak
         for (fla::Symbol* symbol : document->symbolList->symbols)
             for (fla::Timeline* timeline : symbol ? symbol->timelines : std::vector<fla::Timeline*>())
                 collect(timeline);
+    // Layers holding controls (Slider, Angle, Point, Color, Checkbox
+    // Control) last: baking takes behaviors off, and the instances linked
+    // to a control read it while they are baked.
+    const auto holdsControls = [](const fla::Layer* layer) {
+        for (const fla::Frame* frame : layer->frames)
+            for (const fla::Element* element : frame ? frame->elements : std::vector<fla::Element*>())
+                if (element && element->elementType() == fla::Element::Type::SymbolInstance)
+                    for (const fla::behaviors::Applied& applied :
+                        fla::behaviors::of(*static_cast<const fla::SymbolInstance*>(element)))
+                        if (applied.type != "linkcontrol" && applied.type.size() > 7 &&
+                            applied.type.compare(applied.type.size() - 7, 7, "control") == 0)
+                            return true;
+        return false;
+    };
+    std::stable_partition(layers.begin(), layers.end(), [&](const fla::Layer* layer) { return !holdsControls(layer); });
     const double rate = document->frameRate;
-    auto errors = std::make_shared<std::vector<std::string>>();
     std::unique_ptr<fla::EditFramesCommand> baked;
     if (!layers.empty())
     {
         _selection.clear();
-        baked.reset(new fla::EditFramesCommand(layers, "Bake Behaviors", [this, layers, rate, errors](std::vector<fla::Frame*>&) {
+        baked.reset(new fla::EditFramesCommand(layers, "Bake Behaviors", [this, layers, rate, errors, shapes](std::vector<fla::Frame*>&) {
             for (fla::Layer* layer : layers)
             {
                 fla::behaviors::bakeAll(BehaviorLibrary::instance().engine(), *layer, rate, errors.get());
                 for (const auto& [first, last] : shapeOperatorRuns(*layer))
-                    bakeShapeOperators(*layer, first, last);
+                    bakeShapeOperators(*layer, first, last, shapes);
             }
         }));
         baked->redo();
     }
     if (bakedLayers)
         *bakedLayers = static_cast<int>(layers.size());
+    return baked;
+}
+
+fla::otherapps::Measure MainWindow::measureForCopies()
+{
+    fla::otherapps::Measure measure;
+    measure.textReach = [](const fla::StaticText& text, fla::Rect& reach) {
+        const QRectF box = PhoenixView::textReach(text);
+        reach = fla::Rect(fla::Point(box.left(), box.top()), fla::Point(box.right(), box.bottom()));
+        return true;
+    };
+    measure.symbolBounds = [this](const fla::Symbol& symbol, int frame, fla::Rect& bounds) {
+        const QRectF box = _phoenixView ? _phoenixView->symbolFramesBounds(&symbol, frame, frame) : QRectF();
+        if (!box.isValid())
+            return false;
+        bounds = fla::Rect(fla::Point(box.left(), box.top()), fla::Point(box.right(), box.bottom()));
+        return true;
+    };
+    return measure;
+}
+
+bool MainWindow::publishHtml5(const Html5Publish::Settings& settings, QStringList& written, QStringList& notes,
+    QString& error)
+{
+    fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
+    if (!document || !_phoenixView)
+    {
+        error = "No document is open.";
+        return false;
+    }
+    // Behaviors, shape operators and text animators go out as the
+    // keyframes they make, put back afterward.
+    auto errors = std::make_shared<std::vector<std::string>>();
+    // Shapes with operators are left for the publish to draw as pictures,
+    // which keeps them exactly as Phoenix draws them.
+    std::unique_ptr<fla::EditFramesCommand> baked = bakeBehaviorsForCopy(errors, nullptr, false);
+    bool published = false;
+    // Compiled clips carrying their movie come in as symbols of it.
+    const std::map<std::string, std::vector<uint8_t>> compiled = fla::html5::compiledClips(*document);
+    if (fla::otherapps::needsTemplateBaking(*document) || !compiled.empty())
+    {
+        // Template values, responsive time and compiled clips are written
+        // into a copy read back from a temporary file, published through a
+        // view of its own, so the document stays as it is.
+        QTemporaryDir folder;
+        const QString temporary = folder.filePath("copy.fla");
+        if (!folder.isValid())
+            error = "There is no room for a temporary copy.";
+        else if (writeDocumentFile(*document, temporary, error))
+        {
+            FLAParser parser;
+            std::unique_ptr<fla::FLADocument> copy(parser.parse(temporary.toStdString()));
+            if (copy && copy->document)
+            {
+                std::vector<std::string> baking;
+                const fla::otherapps::Measure measure = measureForCopies();
+                fla::otherapps::bakeTemplates(*copy->document, baking, &measure);
+                for (const std::string& each : baking)
+                    notes << QString::fromStdString(each);
+                // A compiled clip's movie read as Phoenix imports SWF movies.
+                std::vector<std::unique_ptr<fla::Command>> embedded;
+                std::vector<std::string> brought;
+                fla::html5::embedCompiledClips(*copy->document, compiled,
+                    [](const std::vector<uint8_t>& swf) -> std::unique_ptr<fla::FLADocument> {
+                        QTemporaryDir folder;
+                        QFile file(folder.filePath("clip.swf"));
+                        if (!folder.isValid() || !file.open(QIODevice::WriteOnly) ||
+                            file.write(reinterpret_cast<const char*>(swf.data()), static_cast<qint64>(swf.size())) !=
+                                static_cast<qint64>(swf.size()))
+                            return nullptr;
+                        file.close();
+                        FLAParser parser;
+                        return std::unique_ptr<fla::FLADocument>(parser.parse(file.fileName().toStdString()));
+                    },
+                    embedded, brought);
+                for (const std::string& each : brought)
+                    notes << QString::fromStdString(each);
+                Player player;
+                PhoenixView view(&player);
+                view.setDocument(copy.get());
+                published = Html5Publish::run(settings, view, _timelineAudio, *copy->document, written, notes, error);
+                view.setDocument(nullptr);
+            }
+            else
+                error = QString::fromStdString(parser.errorString());
+        }
+    }
+    else
+        published = Html5Publish::run(settings, *_phoenixView, _timelineAudio, *document, written, notes, error);
+    if (baked)
+        baked->undo();
+    for (const std::string& each : *errors)
+        notes << QString::fromStdString(each);
+    _phoenixView->clearCaches();
+    _phoenixView->update();
+    return published;
+}
+
+bool MainWindow::writeForOtherApps(const QString& path, QString& error, int* bakedLayers)
+{
+    if (!_flaDocument || !_flaDocument->document)
+    {
+        error = "No document is open.";
+        return false;
+    }
+    fla::Document* document = _flaDocument->document;
+    auto errors = std::make_shared<std::vector<std::string>>();
+    std::unique_ptr<fla::EditFramesCommand> baked = bakeBehaviorsForCopy(errors, bakedLayers, true);
     bool written = false;
     std::vector<std::string> notes;
     // Node graphs are baked into pictures in the copy too.
@@ -5761,19 +5884,7 @@ bool MainWindow::writeForOtherApps(const QString& path, QString& error, int* bak
             {
                 // Pinned parts are placed by how big the words and the art
                 // are drawn.
-                fla::otherapps::Measure measure;
-                measure.textReach = [](const fla::StaticText& text, fla::Rect& reach) {
-                    const QRectF box = PhoenixView::textReach(text);
-                    reach = fla::Rect(fla::Point(box.left(), box.top()), fla::Point(box.right(), box.bottom()));
-                    return true;
-                };
-                measure.symbolBounds = [this](const fla::Symbol& symbol, int frame, fla::Rect& bounds) {
-                    const QRectF box = _phoenixView ? _phoenixView->symbolFramesBounds(&symbol, frame, frame) : QRectF();
-                    if (!box.isValid())
-                        return false;
-                    bounds = fla::Rect(fla::Point(box.left(), box.top()), fla::Point(box.right(), box.bottom()));
-                    return true;
-                };
+                const fla::otherapps::Measure measure = measureForCopies();
                 // Effects with no filter in other apps are drawn into
                 // bitmaps, by a view of the copy of its own, as an exported
                 // movie draws them (no camera: other apps have none).
@@ -8589,7 +8700,7 @@ int MainWindow::renderCommand(const QString& source, const QStringList& options)
         html5.source = _documentPath;
         QStringList files, notes;
         QString error;
-        if (!Html5Publish::run(html5, *_phoenixView, _timelineAudio, *document, files, notes, error))
+        if (!publishHtml5(html5, files, notes, error))
         {
             std::fprintf(stderr, "%s\n", qPrintable(error));
             return 1;
@@ -9278,7 +9389,7 @@ bool MainWindow::publishFiles(QStringList& written, QStringList& problems, const
         html5.source = _documentPath;
         QStringList files, notes;
         QString error;
-        if (Html5Publish::run(html5, *_phoenixView, _timelineAudio, *document, files, notes, error))
+        if (publishHtml5(html5, files, notes, error))
             written << QFileInfo(html5.page).fileName();
         else
             problems << QString("%1: %2").arg(QFileInfo(html5.page).fileName(), error);

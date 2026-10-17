@@ -1,22 +1,34 @@
 #include "html5_export.h"
 
+#include "adjustments.h"
+#include "camera.h"
+#include "command.h"
 #include "deformers.h"
 #include "frame_bake.h"
 #include "frame_sound.h"
 #include "graphic_loop.h"
 #include "layer_commands.h"
+#include "layer_effects.h"
+#include "library_transfer.h"
+#include "motion_blur.h"
 #include "motion_object.h"
+#include "node_graph.h"
+#include "other_apps.h"
+#include "shape_operators.h"
 #include "swf_actionscript3.h"
 #include "script_edit.h"
 #include "three_d.h"
 #include "timeline_edit.h"
+#include "vector_import.h"
 
 #include "../data/bitmap.h"
 #include "../data/bitmap_instance.h"
 #include "../data/document.h"
+#include "../data/fla_document.h"
 #include "../data/frame.h"
 #include "../data/layer.h"
 #include "../data/raw_element.h"
+#include "../data/shape.h"
 #include "../data/static_text.h"
 #include "../data/symbol.h"
 #include "../data/symbol_instance.h"
@@ -360,6 +372,175 @@ Shown shownAt(const Frame& span, const Layer& layer, int framesIn, double frameR
     return shown;
 }
 
+/// Whether \a layer has effects on instances that no filter carries on
+/// some frame they show.
+bool uncarriedEffects(const Layer& layer)
+{
+    for (const Frame* frame : layer.frames)
+        for (const Element* element : frame ? frame->elements : std::vector<Element*>())
+        {
+            if (!element || element->elementType() != Element::Type::SymbolInstance ||
+                !compositing::hasInstanceEffects(*element))
+                continue;
+            const std::vector<behaviors::Applied> effects = compositing::instanceEffectsOf(*element);
+            for (int f = frame->index; f < frame->index + std::max(1, frame->duration); ++f)
+            {
+                std::vector<Filter> filters;
+                ColorTransform color = static_cast<const SymbolInstance*>(element)->colorTransform;
+                if (!otherapps::carryEffects(effects, f, filters, color))
+                    return true;
+            }
+        }
+    return false;
+}
+
+} // namespace
+
+std::vector<BakedRun> bakedRuns(const Timeline& timeline)
+{
+    const std::vector<Layer*>& layers = timeline.layers;
+    const int n = static_cast<int>(layers.size());
+    std::vector<BakedRun> runs;
+    const auto add = [&runs](int from, int to, const std::string& why) {
+        if (from < to)
+            runs.push_back({from, to, why});
+    };
+    const auto plain = [&layers](int i) {
+        return layers[static_cast<size_t>(i)] && layers[static_cast<size_t>(i)]->layerType != Layer::Type::Folder;
+    };
+    const auto indexOf = [&layers](const Layer* layer) {
+        const auto found = std::find(layers.begin(), layers.end(), layer);
+        return found == layers.end() ? -1 : static_cast<int>(found - layers.begin());
+    };
+    if (nodegraph::active(timeline))
+        add(0, n, "a node graph");
+    // Instances turned in 3D, which Phoenix draws in perspective, lit,
+    // shadowed and sorted by depth across their layers: all those layers.
+    int first3d = n, last3d = -1;
+    for (int i = 0; i < n; ++i)
+        if (plain(i))
+            for (const Frame* frame : layers[static_cast<size_t>(i)]->frames)
+                for (const Element* element : frame ? frame->elements : std::vector<Element*>())
+                    if (element && element->elementType() == Element::Type::SymbolInstance &&
+                        !threed::of(*static_cast<const SymbolInstance*>(element)).flat())
+                    {
+                        first3d = std::min(first3d, i);
+                        last3d = std::max(last3d, i);
+                    }
+    add(first3d, last3d + 1, "3D rotation");
+    for (int i = 0; i < n; ++i)
+    {
+        const Layer* layer = layers[static_cast<size_t>(i)];
+        if (!plain(i))
+            continue;
+        if (compositing::isAdjustment(*layer))
+            add(i, n, "an adjustment layer");
+        else if (compositing::layerModeOf(*layer) != compositing::LayerMode::Normal)
+            add(i, n, "a layer mode");
+        if (effects::isEffect(*layer))
+        {
+            // It works on the first layer under it that is not an effect.
+            int target = i + 1;
+            while (target < n && (!plain(target) || effects::isEffect(*layers[static_cast<size_t>(target)])))
+                ++target;
+            add(i, std::min(n, target + 1), "an effect layer");
+        }
+        if (layer->layerType == Layer::Type::Normal && compositing::matteOf(*layer) != compositing::Matte::None)
+        {
+            int source = i - 1;
+            while (source >= 0 && !plain(source))
+                --source;
+            add(std::max(0, source), i + 1, "a track matte");
+        }
+        if (layer->layerType == Layer::Type::Mask)
+        {
+            bool soft = !compositing::maskEdgeOf(*layer).plain();
+            for (const Frame* frame : layer->frames)
+                for (const Element* element : frame ? frame->elements : std::vector<Element*>())
+                    soft = soft || (element && compositing::elementFeatherOf(*element, 0.0) > 0.0);
+            if (soft)
+                add(i, i + 1, "a mask with a soft, grown or inverted edge");
+        }
+        const std::vector<compositing::MoreMask> more = compositing::moreMasksOf(*layer);
+        if (!more.empty())
+        {
+            int from = i, to = i + 1;
+            for (const compositing::MoreMask& mask : more)
+                for (int j = 0; j < n; ++j)
+                    if (plain(j) && layers[static_cast<size_t>(j)]->layerType == Layer::Type::Mask &&
+                        layers[static_cast<size_t>(j)]->name == mask.layer)
+                    {
+                        from = std::min(from, j);
+                        to = std::max(to, j + 1);
+                    }
+            add(from, to, "several masks");
+        }
+        if (motionblur::on(*layer) || motionblur::layerTimeOf(*layer).any())
+            add(i, i + 1, "motion blur, echo or posterize time");
+        bool operated = false;
+        for (const Frame* frame : layer->frames)
+            for (const Element* element : frame ? frame->elements : std::vector<Element*>())
+                operated = operated || (element && element->elementType() == Element::Type::Shape &&
+                                           shapeops::any(*static_cast<const Shape*>(element)));
+        if (operated)
+            add(i, i + 1, "shape operators");
+        if (uncarriedEffects(*layer))
+            add(i, i + 1, "effects on instances no filter carries");
+    }
+    if (runs.empty())
+        return runs;
+    // A mask goes with all it masks, and what is masked with its mask, so
+    // the runtime's masks are never cut in two; overlapping runs are one.
+    bool grew = true;
+    while (grew)
+    {
+        grew = false;
+        std::sort(runs.begin(), runs.end(), [](const BakedRun& a, const BakedRun& b) { return a.from < b.from; });
+        std::vector<BakedRun> merged;
+        for (const BakedRun& run : runs)
+        {
+            if (!merged.empty() && run.from < merged.back().to)
+            {
+                merged.back().to = std::max(merged.back().to, run.to);
+                if (merged.back().why.find(run.why) == std::string::npos)
+                    merged.back().why += ", " + run.why;
+                grew = true;
+            }
+            else
+                merged.push_back(run);
+        }
+        runs = merged;
+        for (BakedRun& run : runs)
+            for (int i = run.from; i < run.to; ++i)
+            {
+                if (!plain(i))
+                    continue;
+                const Layer* layer = layers[static_cast<size_t>(i)];
+                const Layer* mask = layer->layerType == Layer::Type::Mask ? layer
+                    : layer->layerType == Layer::Type::Masked                ? layer->parentLayer
+                                                                             : nullptr;
+                if (!mask)
+                    continue;
+                const int m = indexOf(mask);
+                if (m >= 0 && m < run.from)
+                {
+                    run.from = m;
+                    grew = true;
+                }
+                for (int j = 0; j < n; ++j)
+                    if (plain(j) && layers[static_cast<size_t>(j)]->parentLayer == mask && (j < run.from || j >= run.to))
+                    {
+                        run.from = std::min(run.from, j);
+                        run.to = std::max(run.to, j + 1);
+                        grew = true;
+                    }
+            }
+    }
+    return runs;
+}
+
+namespace {
+
 class Walker
 {
 public:
@@ -484,6 +665,9 @@ private:
         std::vector<std::string> sounds;
         std::vector<std::pair<int, std::string>> scripts;
         std::string scenes;
+        // The camera's color effect on each frame ("0" for none).
+        std::vector<std::string> cameraColors;
+        bool toned = false;
         int offset = 0;
         for (size_t s = 0; s < timelines.size(); ++s)
         {
@@ -493,8 +677,14 @@ private:
                 scenes += std::string(scenes.empty() ? "" : ",") + "{\"name\":" + quoted(timeline.name) + ",\"at\":" +
                     std::to_string(offset) + ",\"n\":" + std::to_string(length) + "}";
             gatherFrameData(timeline, offset, scene, labels, sounds, scripts);
+            const bool filmed = scene && camera::cameraOf(timeline);
             for (int frame = 0; frame < length; ++frame)
             {
+                const std::string tone = filmed
+                    ? colorJson(camera::stateAt(timeline, frame, _document.width, _document.height).color)
+                    : std::string();
+                cameraColors.push_back(tone.empty() ? "0" : tone);
+                toned = toned || !tone.empty();
                 const std::string state = stateJson(timeline, frame, scene, "S" + std::to_string(s));
                 const auto found = stateIndex.find(state);
                 if (found != stateIndex.end())
@@ -541,6 +731,13 @@ private:
             out += ",\"js\":[";
             for (size_t i = 0; i < scripts.size(); ++i)
                 out += std::string(i ? "," : "") + "[" + std::to_string(scripts[i].first) + "," + quoted(scripts[i].second) + "]";
+            out += "]";
+        }
+        if (toned)
+        {
+            out += ",\"cc\":[";
+            for (size_t i = 0; i < cameraColors.size(); ++i)
+                out += (i ? "," : "") + cameraColors[i];
             out += "]";
         }
         out += ",\"states\":[";
@@ -616,11 +813,38 @@ private:
             return found == layers.end() ? -1 : static_cast<int>(found - layers.begin());
         };
         const auto shown = [scene](const Layer& layer) { return !scene || layer.isVisible(); };
+        _frame = frame;
+        // A scene's multiplane camera: each layer framed by it at its
+        // depth, its color effect on the whole picture (the timeline's
+        // "cc").
+        const bool filmed = scene && camera::cameraOf(timeline);
+        const camera::State shot =
+            filmed ? camera::stateAt(timeline, frame, _document.width, _document.height) : camera::State();
+        const std::vector<BakedRun>& runs = runsOf(timeline);
         std::string out;
         for (int li = static_cast<int>(layers.size()) - 1; li >= 0; --li)
         {
             const Layer* layer = layers[static_cast<size_t>(li)];
+            // Layers Phoenix's compositing draws together: one picture, in
+            // the place of the run's bottom layer.
+            const auto run = std::find_if(runs.begin(), runs.end(),
+                [li](const BakedRun& each) { return li >= each.from && li < each.to; });
+            if (run != runs.end())
+            {
+                if (li != run->to - 1)
+                    continue;
+                const std::string json = _source.picture(timeline, run->from, run->to, frame);
+                const int art = json.empty() ? -1 : artIndexOf(json);
+                if (art >= 0)
+                    out += std::string(out.empty() ? "" : ",") + "{\"k\":" + quoted(prefix + "B" + std::to_string(run->from)) +
+                        ",\"d\":" + std::to_string((static_cast<int>(layers.size()) - li) * 65536) + ",\"t\":\"a\",\"id\":" +
+                        std::to_string(art) + "}";
+                continue;
+            }
             if (!layer || layer->layerType == Layer::Type::Folder || layer->layerType == Layer::Type::Guide || !shown(*layer))
+                continue;
+            Transform view;
+            if (filmed && !camera::view(shot, camera::depthOf(*layer), _document.width, _document.height, view))
                 continue;
             int maskGroup = -1, maskedBy = -1;
             if (layer->layerType == Layer::Type::Mask)
@@ -633,7 +857,9 @@ private:
                 continue;
             const int framesIn = frame - span->index;
             Shown here = shownAt(*span, *layer, framesIn, _rate);
-            const Transform parent = parentTransform(timeline, *layer, *span, frame, here, 0);
+            Transform parent = parentTransform(timeline, *layer, *span, frame, here, 0);
+            if (filmed)
+                parent = followedBy(parent, view);
             for (size_t ei = 0; ei < here.elements.size(); ++ei)
             {
                 const Element* element = here.elements[ei];
@@ -730,10 +956,22 @@ private:
                 if (handlers >= 0)
                     out += ",\"h\":" + std::to_string(handlers);
             }
-            const std::string color = colorJson(instance.colorTransform);
+            // Phoenix's effects on the instance, as filters before its own
+            // and its color effect (those no filter carries make its layer
+            // a picture a frame: see bakedRuns).
+            ColorTransform colorEffect = instance.colorTransform;
+            std::vector<Filter> filterList = instance.filters;
+            const Element& own = original ? *original : element;
+            if (compositing::hasInstanceEffects(own))
+            {
+                std::vector<Filter> carried;
+                otherapps::carryEffects(compositing::instanceEffectsOf(own), _frame, carried, colorEffect);
+                filterList.insert(filterList.begin(), carried.begin(), carried.end());
+            }
+            const std::string color = colorJson(colorEffect);
             if (!color.empty())
                 out += ",\"ct\":" + color;
-            const std::string filters = filtersJson(instance.filters);
+            const std::string filters = filtersJson(filterList);
             if (!filters.empty())
                 out += ",\"f\":" + filters;
             if (!instance.blendMode.empty() && instance.blendMode != "normal")
@@ -770,6 +1008,19 @@ private:
                 const auto found = _document.symbolList->symbolMap.find(component->second.symbol);
                 symbol = found == _document.symbolList->symbolMap.end() ? nullptr : found->second;
             }
+            // An ActionScript 2 component the runtime has its own of
+            // (as2components.js): its class, and a symbol standing in for
+            // its own when the library has none of it.
+            std::string as2Class;
+            if (component != _components.end() && _options.actionScript2)
+            {
+                as2Class = symbol ? attributeOf(symbol->extraAttributes, "linkageClassName")
+                                  : componentClass(component->second.symbol);
+                if (!isAs2Component(as2Class))
+                    as2Class.clear();
+                if (!symbol && !as2Class.empty())
+                    symbol = standIn(component->second.symbol, as2Class);
+            }
             if (!symbol)
             {
                 // What it is, by its tag: a video, a TLF text field...
@@ -798,6 +1049,8 @@ private:
                 out += ",\"it\":\"mc\"";
             out += placed(own);
             out += ",\"n\":" + quoted(component->second.name);
+            if (!as2Class.empty())
+                out += ",\"cp\":" + parametersJson(component->second.parameters);
             return out + masks() + "}";
         }
         default:
@@ -843,19 +1096,7 @@ private:
         if (known != _artByElement.end())
             return known->second;
         const std::string json = _source.art(element);
-        int index = -1;
-        if (!json.empty())
-        {
-            const auto found = _artIndex.find(json);
-            if (found != _artIndex.end())
-                index = found->second;
-            else
-            {
-                index = static_cast<int>(_art.size());
-                _artIndex[json] = index;
-                _art.push_back(json);
-            }
-        }
+        const int index = json.empty() ? -1 : artIndexOf(json);
         // Copies a tween makes come and go; only the document's own
         // elements are remembered by address.
         if (element.parent && dynamic_cast<const Frame*>(element.parent) &&
@@ -864,6 +1105,146 @@ private:
                 static_cast<const Frame*>(element.parent)->elements.end())
             _artByElement[&element] = index;
         return index;
+    }
+
+    /// The class of the component library item \a name: its linkage where
+    /// the file keeps the item (a compiled clip, say), else the ActionScript
+    /// 2 component of that name.
+    std::string componentClass(const std::string& name) const
+    {
+        for (const std::string& item : _document.extraMedia)
+        {
+            tinyxml2::XMLDocument xml;
+            if (item.find(name) == std::string::npos || xml.Parse(item.c_str(), item.size()) != tinyxml2::XML_SUCCESS ||
+                !xml.RootElement())
+                continue;
+            const char* itemName = xml.RootElement()->Attribute("name");
+            const char* linkage = xml.RootElement()->Attribute("linkageClassName");
+            if (itemName && name == itemName && linkage && *linkage)
+                return linkage;
+        }
+        const size_t slash = name.find_last_of('/');
+        return "mx.controls." + (slash == std::string::npos ? name : name.substr(slash + 1));
+    }
+
+    static bool isAs2Component(const std::string& cls)
+    {
+        static const char* const known[] = {"Button", "CheckBox", "RadioButton", "TextInput", "TextArea", "Label",
+            "ComboBox", "List", "NumericStepper"};
+        for (const char* each : known)
+            if (cls == std::string("mx.controls.") + each)
+                return true;
+        return false;
+    }
+
+    /// A symbol for a component the library has none of: empty, linked to
+    /// \a cls, which draws it.
+    const Symbol* standIn(const std::string& name, const std::string& cls)
+    {
+        for (const auto& made : _standIns)
+            if (made->name == name)
+                return made.get();
+        auto symbol = std::make_unique<Symbol>(nullptr);
+        symbol->name = name;
+        symbol->symbolType = SymbolType::MovieClip;
+        symbol->extraAttributes.emplace_back("linkageClassName", cls);
+        _standIns.push_back(std::move(symbol));
+        return _standIns.back().get();
+    }
+
+    /// A component's parameters (its parametersAsXML) as a JSON object of
+    /// their values, by their types.
+    static std::string parametersJson(const std::string& parameters)
+    {
+        tinyxml2::XMLDocument xml;
+        const std::string wrapped = "<parameters>" + parameters + "</parameters>";
+        if (parameters.empty() || xml.Parse(wrapped.c_str(), wrapped.size()) != tinyxml2::XML_SUCCESS)
+            return "{}";
+        std::string out;
+        for (const tinyxml2::XMLElement* property = xml.RootElement()->FirstChildElement("property"); property;
+             property = property->NextSiblingElement("property"))
+        {
+            const tinyxml2::XMLElement* inspectable = property->FirstChildElement("Inspectable");
+            if (!inspectable)
+                continue;
+            const char* variable = inspectable->Attribute("variable");
+            const char* named = inspectable->Attribute("name");
+            const std::string name = variable && *variable ? variable : named ? named : "";
+            const std::string value = inspectable->Attribute("defaultValue") ? inspectable->Attribute("defaultValue") : "";
+            const std::string type = inspectable->Attribute("type") ? inspectable->Attribute("type") : "String";
+            if (name.empty())
+                continue;
+            std::string json;
+            if (type == "Boolean")
+                json = value == "true" ? "true" : "false";
+            else if (type == "Number")
+            {
+                char* end = nullptr;
+                const double n = std::strtod(value.c_str(), &end);
+                json = !value.empty() && end && *end == '\0' ? number(n, 6) : "null";
+            }
+            else if (type == "Color")
+                json = std::to_string(std::strtoul(value.c_str() + (!value.empty() && value[0] == '#' ? 1 : 0), nullptr, 16));
+            else if (type == "Array")
+            {
+                // "[a,b]" or "a,b".
+                std::string list = value;
+                if (list.size() >= 2 && list.front() == '[' && list.back() == ']')
+                    list = list.substr(1, list.size() - 2);
+                json = "[";
+                size_t at = 0;
+                while (!list.empty() && at <= list.size())
+                {
+                    const size_t comma = std::min(list.find(',', at), list.size());
+                    json += (json.size() > 1 ? "," : "") + quoted(list.substr(at, comma - at));
+                    at = comma + 1;
+                }
+                json += "]";
+            }
+            else if (type == "Collection" || type == "Object")
+                continue;
+            else
+                json = quoted(value);
+            out += (out.empty() ? "" : ",") + quoted(name) + ":" + json;
+        }
+        return "{" + out + "}";
+    }
+
+    /// A shape's index in the content's art, the same shape once.
+    int artIndexOf(const std::string& json)
+    {
+        const auto found = _artIndex.find(json);
+        if (found != _artIndex.end())
+            return found->second;
+        const int index = static_cast<int>(_art.size());
+        _artIndex[json] = index;
+        _art.push_back(json);
+        return index;
+    }
+
+    /// The runs of \a timeline's layers published as pictures, each noted
+    /// once.
+    const std::vector<BakedRun>& runsOf(const Timeline& timeline)
+    {
+        const auto known = _runs.find(&timeline);
+        if (known != _runs.end())
+            return known->second;
+        std::vector<BakedRun>& runs = _runs[&timeline];
+        runs = bakedRuns(timeline);
+        const std::string where = _timelineName.empty() ? timeline.name : _timelineName;
+        for (const BakedRun& run : runs)
+        {
+            std::string names;
+            for (int i = run.from; i < run.to; ++i)
+            {
+                const Layer* layer = timeline.layers[static_cast<size_t>(i)];
+                if (layer && layer->layerType != Layer::Type::Folder)
+                    names += (names.empty() ? "" : ", ") + layer->name;
+            }
+            note(where + ": " + (run.to - run.from == 1 ? "layer " : "layers ") + names + " (" + run.why +
+                ") published as a picture a frame, which scripts cannot reach into.");
+        }
+        return runs;
     }
 
     /// A dynamic or input text field's description.
@@ -898,12 +1279,28 @@ private:
         for (size_t i = 0; i < text.runs.size(); ++i)
         {
             const TextRun& run = text.runs[i];
-            out += std::string(i ? "," : "") + "{\"t\":" + quoted(run.text) + ",\"f\":" +
-                quoted(run.face.empty() ? std::string("Times New Roman") : run.face) + ",\"s\":" +
+            // A face written as its PostScript name carries its style:
+            // Arial-BoldMT is Arial, bold.
+            std::string face = run.face.empty() ? std::string("Times New Roman") : run.face;
+            bool bold = attributeOf(run.extraAttributes, "bold") == "true";
+            bool italic = attributeOf(run.extraAttributes, "italic") == "true";
+            const auto endsWith = [&face](const char* end) {
+                const size_t n = std::strlen(end);
+                return face.size() > n && face.compare(face.size() - n, n, end) == 0;
+            };
+            if (face.find('-') != std::string::npos || endsWith("MT") || endsWith("PS"))
+            {
+                bool styledBold = false, styledItalic = false;
+                const std::string written = face;
+                vectors::splitFontName(written, face, styledBold, styledItalic);
+                bold = bold || styledBold;
+                italic = italic || styledItalic;
+            }
+            out += std::string(i ? "," : "") + "{\"t\":" + quoted(run.text) + ",\"f\":" + quoted(face) + ",\"s\":" +
                 number(run.size > 0.0 ? run.size : 12.0, 2) + ",\"c\":" + std::to_string(rgbOf(run.fillColor));
-            if (attributeOf(run.extraAttributes, "bold") == "true")
+            if (bold)
                 out += ",\"b\":1";
-            if (attributeOf(run.extraAttributes, "italic") == "true")
+            if (italic)
                 out += ",\"i\":1";
             switch (run.alignment)
             {
@@ -941,10 +1338,14 @@ private:
     std::map<const Symbol*, int> _symbolIndex;
     std::vector<std::string> _art;
     std::map<std::string, int> _artIndex;
+    std::map<const Timeline*, std::vector<BakedRun>> _runs;
+    /// The frame of the timeline being walked.
+    int _frame = 0;
     std::map<const Element*, int> _artByElement;
     std::vector<std::string> _texts;
     std::map<std::string, int> _textIndex;
     std::map<const RawElement*, swfmovie::Component> _components;
+    std::vector<std::unique_ptr<Symbol>> _standIns;
     /// The timeline being walked: "" for the main one, else its symbol's
     /// name; and the ids of instances' handlers (ActionScript 2).
     std::string _timelineName;
@@ -957,6 +1358,126 @@ std::string content(const Document& document, ArtSource& source, const Options& 
 {
     Walker walker(document, source, options, notes);
     return walker.run();
+}
+
+std::map<std::string, std::vector<uint8_t>> compiledClips(const Document& document)
+{
+    std::map<std::string, std::vector<uint8_t>> movies;
+    for (const std::string& item : document.extraMedia)
+    {
+        if (item.find("CompiledClip") == std::string::npos)
+            continue;
+        tinyxml2::XMLDocument xml;
+        if (xml.Parse(item.c_str(), item.size()) != tinyxml2::XML_SUCCESS || !xml.RootElement() ||
+            !std::strstr(xml.RootElement()->Name(), "CompiledClip") || !xml.RootElement()->Attribute("name"))
+            continue;
+        // The file the item names (as a bitmap names its data), when it
+        // holds a movie.
+        for (const tinyxml2::XMLAttribute* attribute = xml.RootElement()->FirstAttribute(); attribute;
+             attribute = attribute->Next())
+        {
+            const std::string key = attribute->Name();
+            if (key.size() < 4 || key.compare(key.size() - 4, 4, "HRef") != 0)
+                continue;
+            const std::string value = attribute->Value();
+            for (const auto& [path, bytes] : document.extraFiles)
+            {
+                if (path != value && path != "bin/" + value)
+                    continue;
+                const std::vector<uint8_t>& data = bytes.get();
+                if (data.size() > 8 && (data[0] == 'F' || data[0] == 'C' || data[0] == 'Z') && data[1] == 'W' &&
+                    data[2] == 'S')
+                    movies[xml.RootElement()->Attribute("name")] = data;
+            }
+        }
+    }
+    return movies;
+}
+
+void embedCompiledClips(Document& copy, const std::map<std::string, std::vector<uint8_t>>& movies,
+    const std::function<std::unique_ptr<FLADocument>(const std::vector<uint8_t>& swf)>& read,
+    std::vector<std::unique_ptr<Command>>& keep, std::vector<std::string>& notes)
+{
+    for (const auto& [name, bytes] : movies)
+    {
+        // The movie read as a document of its own, its main timeline made a
+        // movie clip symbol, copied into the copy with all it uses.
+        std::unique_ptr<FLADocument> movie = read ? read(bytes) : nullptr;
+        Document* source = movie ? movie->document : nullptr;
+        if (!source || source->timelines.empty() || !source->timelines.front())
+        {
+            notes.push_back("The compiled clip " + name + " could not be read; it is not published.");
+            continue;
+        }
+        if (!source->symbolList)
+            source->symbolList = new SymbolList(source);
+        auto* symbol = new Symbol(source->symbolList);
+        symbol->name = name;
+        while (source->symbolList->symbolMap.count(symbol->name))
+            symbol->name += " clip";
+        symbol->symbolType = SymbolType::MovieClip;
+        Timeline* timeline = source->timelines.front();
+        source->timelines.erase(source->timelines.begin());
+        timeline->parent = symbol;
+        timeline->name = symbol->name;
+        symbol->timelines.push_back(timeline);
+        source->symbolList->symbols.push_back(symbol);
+        source->symbolList->link(symbol);
+        std::vector<std::string> added;
+        CommandPtr command =
+            transfer::copyItems(copy, *source, {symbol->name}, transfer::Resolution::KeepBoth, &added);
+        if (!command)
+            continue;
+        command->redo();
+        keep.push_back(std::move(command));
+        const std::string inCopy = added.empty() ? symbol->name : added.front();
+        Symbol* made = copy.symbolList && copy.symbolList->symbolMap.count(inCopy) ? copy.symbolList->symbolMap.at(inCopy)
+                                                                                    : nullptr;
+        if (!made)
+            continue;
+        // Each instance of the compiled clip, an instance of the symbol in
+        // its place.
+        std::vector<Timeline*> timelines(copy.timelines.begin(), copy.timelines.end());
+        for (Symbol* each : copy.symbolList->symbols)
+            if (each && each != made)
+                timelines.insert(timelines.end(), each->timelines.begin(), each->timelines.end());
+        int placed = 0;
+        for (Timeline* each : timelines)
+            for (Layer* layer : each ? each->layers : std::vector<Layer*>())
+                for (Frame* frame : layer ? layer->frames : std::vector<Frame*>())
+                {
+                    if (!frame)
+                        continue;
+                    for (Element*& element : frame->elements)
+                    {
+                        auto* raw = dynamic_cast<RawElement*>(element);
+                        tinyxml2::XMLDocument xml;
+                        if (!raw || raw->xml.find("CompiledClipInstance") == std::string::npos ||
+                            xml.Parse(raw->xml.c_str(), raw->xml.size()) != tinyxml2::XML_SUCCESS || !xml.RootElement())
+                            continue;
+                        const tinyxml2::XMLElement* root = xml.RootElement();
+                        const char* item = root->Attribute("libraryItemName");
+                        if (!item || name != item)
+                            continue;
+                        auto* instance = new SymbolInstance(frame);
+                        instance->libraryItemName = made->name;
+                        instance->symbol = made;
+                        instance->symbolType = SymbolType::MovieClip;
+                        instance->name = root->Attribute("name") ? root->Attribute("name") : "";
+                        if (const tinyxml2::XMLElement* matrix = root->FirstChildElement("matrix"))
+                            if (const tinyxml2::XMLElement* m = matrix->FirstChildElement("Matrix"))
+                                instance->transform = Transform(m->DoubleAttribute("a", 1.0), m->DoubleAttribute("b", 0.0),
+                                    m->DoubleAttribute("c", 0.0), m->DoubleAttribute("d", 1.0), m->DoubleAttribute("tx", 0.0),
+                                    m->DoubleAttribute("ty", 0.0));
+                        copy.symbolInstances.push_back(instance);
+                        delete raw;
+                        element = instance;
+                        ++placed;
+                    }
+                }
+        if (placed)
+            notes.push_back("The compiled clip " + name + " is published as the movie it carries.");
+    }
 }
 
 } // namespace fla::html5

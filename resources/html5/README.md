@@ -23,9 +23,9 @@ For a page `movie.html`:
 | `movie.html` | The page: a `<div id="phoenix-stage">`, the scripts, and `phoenix.start(...)` |
 | `phoenix.js` | The runtime: libas3's `as3.js` (see "Translated ActionScript"), then this folder's files joined in this order: `core.js`, `geom.js`, `events.js`, `display.js`, `graphics.js`, `filters.js`, `render.js`, `bitmap.js`, `timeline.js`, `text.js`, `media.js`, `utils.js`, `player.js` |
 | `phoenix-createjs.js` | `createjs.js`, for an HTML5 Canvas document only: CreateJS over the runtime, for the document's JavaScript frame scripts |
-| `phoenix-as2.js` | For a movie whose scripts are ActionScript 1 or 2: libas3's `avm1.js` then `as2.js` (see "ActionScript 1 and 2") |
+| `phoenix-as2.js` | For a movie whose scripts are ActionScript 1 or 2: libas3's `avm1.js` then `as2.js` and `as2components.js` (see "ActionScript 1 and 2") |
 | `movie.content.js` | The movie: `phoenix.content({...})` with its symbols, timelines, shapes and text (see "Content") |
-| `movie_assets/` | Its pictures (`imageN.png` or `.jpg`) and sounds (`soundN.mp3`, or `.wav` where Phoenix has no MP3 encoder) |
+| `movie_assets/` | Its pictures (`imageN.png` or `.jpg`; the pictures of frames Phoenix draws itself on sheets, `framesN.webp` or `.png`) and sounds (`soundN.mp3`, `.m4a` where Phoenix's ffmpeg has no MP3 encoder, `.wav` without ffmpeg) |
 | `movie.as.js` | An ActionScript 3 movie's scripts translated to JavaScript (see "Translated ActionScript"), and `movie.as.js.map`, its source map back to the `.as` files and frames. Not there for a movie without ActionScript, whose page asks for none |
 
 The page works from a web server or opened from the disk. From the disk,
@@ -82,6 +82,7 @@ there).
 | `player.js` | Loading, the frame loop, the pointer and keys, the canvas's layout, input fields, frame sounds, and the hooks for translated ActionScript |
 | `createjs.js` | CreateJS for HTML5 Canvas documents (not part of `phoenix.js`) |
 | `as2.js` | ActionScript 1 and 2's classes over the runtime (not part of `phoenix.js`; in `phoenix-as2.js`) |
+| `as2components.js` | The ActionScript 2 version 2 components (`mx.controls.Button`, `CheckBox`, `RadioButton`, `TextInput`, `TextArea`, `Label`, `ComboBox`, `List`, `NumericStepper`), `mx.utils.Delegate` and `mx.events.EventDispatcher`, for movies without classes of their own for them (after `as2.js` in `phoenix-as2.js`) |
 
 Each frame runs as Flash Player runs one: every playing MovieClip on the
 stage moves on a frame; `enterFrame` goes to every object listening (on
@@ -290,7 +291,9 @@ face and is the host `avm1.js` asks:
   "version": 1, "width": 1280, "height": 720, "frameRate": 24, "background": 0xRRGGBB,
   "documentClass": "Main",            // when the publish settings name one
   "javaScript": true,                 // an HTML5 Canvas document
-  "images": [{"src": "movie_assets/image0.png", "w": 64, "h": 64, "name": "...", "linkage": "..."}],
+  "images": [{"src": "movie_assets/image0.png", "w": 64, "h": 64, "name": "...", "linkage": "..."},
+             {"in": 7, "r": [x, y, w, h], "w", "h"},  // a part of image 7, a sheet
+             {"src": "movie_assets/frames7.webp", "w", "h", "sheet": 1}],
   "sounds": [{"src": "movie_assets/sound0.mp3", "name": "...", "linkage": "..."}],
   "art": [Shape, ...],                // shapes, by index
   "texts": [TextField, ...],          // text fields, by index
@@ -308,12 +311,23 @@ movie's linkage identifier, the name `attachMovie` makes the symbol by
 
 **Timeline**: `{"n": frames, "labels"?: [[frame, name]], "scenes"?:
 [{"name", "at", "n"}], "sounds"?: [Sound], "js"?: [[frame, code]],
-"once"?: true, "states": [[Entry, ...], ...], "map": [state, ...]}`.
+"once"?: true, "cc"?: [ct | 0, ...], "states": [[Entry, ...], ...], "map":
+[state, ...]}`.
 Frames count from 0. `map[f]` is the index in `states` of what frame `f`
 shows: the list of what is on it, bottom to top. Frames that show the same
 share a state. A button's frames 0 to 3 are its up, over, down and hit
 states. `js` is an HTML5 Canvas document's frame scripts, as function
-bodies. `once` stops the main timeline at its end.
+bodies. `once` stops the main timeline at its end. `cc` is the main
+timeline's color transform on each frame (0 for none): a scene camera's
+color effect over the whole picture.
+
+What the runtime has nothing like (Phoenix's own compositing: adjustment
+layers, effect layers, track mattes, soft masks, motion blur, shape
+operators, 3D, node graphs) is published as pictures of each frame drawn by
+Phoenix: an entry `{"k": "S0B<layer>", "t": "a"}` of a shape holding one
+image op, in the place of the run of layers it stands for. The pictures are
+parts of sheets (an image with `in` and `r`), which `loadImages` cuts out
+by drawing from the sheet.
 
 **Entry**: one object on a frame:
 
@@ -337,6 +351,8 @@ bodies. `once` stops the main timeline at its end.
   values).
 - `bm`: its blend mode, as `BlendMode` names them.
 - `n`: its instance name.
+- `cp`: an ActionScript 2 component's parameters, `{"label": "Go", ...}`,
+  which `as2components.js` sets it up from.
 - `it`: how an instance behaves when it is not as its symbol is
   (`"graphic"`, `"mc"`, `"button"`).
 - `gf`: the frame (from 0) a graphic shows.

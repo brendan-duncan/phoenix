@@ -58,8 +58,29 @@ phoenix._.initTimeline = function (object, cls) {
         if (object instanceof MovieClip)
             phoenix._.queueScript && phoenix._.queueScript(object);
         applyFrame(object, 0);
+        if (phoenix._.premakeNamed)
+            premake(object);
     }
 };
+/// The named instances of frames still to come, made now and set as the
+/// clip's properties, for scripts that expect every instance from the
+/// start (an HTML5 Canvas document's: its published clips make them all at
+/// once); the frame that places one uses it.
+function premake(object) {
+    var made = null;
+    (object._timeline.states || []).forEach(function (state) {
+        state.forEach(function (entry) {
+            if (!entry.n || object._timelineChildren.has(entry.k) || (made && made.has(entry.k)) || object[entry.n])
+                return;
+            var child = makeObject(entry);
+            if (!child)
+                return;
+            (made || (made = new Map())).set(entry.k, child);
+            setNamed(object, entry.n, child);
+        });
+    });
+    object._premade = made;
+}
 
 /// The class to make a symbol's object with, for an instance that behaves
 /// as \a type (its own, which may not be its symbol's).
@@ -91,7 +112,7 @@ function makeObject(entry) {
             return null;
         var type = entry.it || def.type;
         var Cls = classOf(def, type);
-        phoenix._.pending = {name: entry.n || null, m: entry.m || null, def: def};
+        phoenix._.pending = {name: entry.n || null, m: entry.m || null, def: def, cp: entry.cp || null};
         try {
             object = new Cls();
         } catch (error) {
@@ -190,6 +211,18 @@ function applyFrame(object, frame) {
         return;
     var index = timeline.map ? timeline.map[Math.min(frame, timeline.map.length - 1)] : frame;
     applyState(object, index === undefined ? -1 : index);
+    // A scene's camera colors the whole picture.
+    if (timeline.cc && !object._scriptColor) {
+        var c = timeline.cc[Math.min(frame, timeline.cc.length - 1)] || C.identity;
+        var t = object._colorTransform;
+        if (t.redMultiplier !== c[0] || t.greenMultiplier !== c[1] || t.blueMultiplier !== c[2] ||
+            t.alphaMultiplier !== c[3] || t.redOffset !== c[4] || t.greenOffset !== c[5] || t.blueOffset !== c[6] ||
+            t.alphaOffset !== c[7]) {
+            t.redMultiplier = c[0]; t.greenMultiplier = c[1]; t.blueMultiplier = c[2]; t.alphaMultiplier = c[3];
+            t.redOffset = c[4]; t.greenOffset = c[5]; t.blueOffset = c[6]; t.alphaOffset = c[7];
+            object._changed();
+        }
+    }
 }
 function applyState(object, index) {
     if (index === object._stateIndex)
@@ -224,7 +257,11 @@ function applyState(object, index) {
             update(child, entry, false);
             continue;
         }
-        child = makeObject(entry);
+        child = object._premade && object._premade.get(entry.k);
+        if (child && child._character === characterOf(entry))
+            object._premade.delete(entry.k);
+        else
+            child = makeObject(entry);
         if (!child)
             continue;
         child._timelineKey = entry.k;

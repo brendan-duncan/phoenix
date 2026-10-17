@@ -128,8 +128,23 @@ function linkageOf(d) {
 function classFor(d) {
     var linkage = linkageOf(d);
     var cls = linkage ? $.registered[linkage] : null;
+    // A component the movie has no class for: the runtime's own
+    // (as2components.js), by its class name.
+    var def = d._placement && d._placement.def;
+    if (typeof cls !== "function" && def && def.linkage && builtins[def.linkage])
+        cls = builtins[def.linkage];
     return typeof cls === "function" ? cls : null;
 }
+/// Classes the runtime gives movies that have none of their own, by class
+/// name: the components (as2components.js).
+var builtins = Object.create(null);
+/// What as2components.js builds on.
+phoenix._.as2 = {
+    face: face, displayOf: function (self) { return D(self); }, avm1: $, builtins: builtins,
+    properties: function (proto, list) { properties(proto, list); },
+    methods: function (proto, list) { methods(proto, list); },
+    onEvent: function (d, event) { onEvent(d, event); }
+};
 function protoFor(d) {
     if (d instanceof flash.text.TextField)
         return G.TextField.prototype;
@@ -290,7 +305,8 @@ var common = {
     }],
     _width: [function (d) { return d.width; }, function (d, v) { finite(v, function (n) { d.width = n; }); }],
     _height: [function (d) { return d.height; }, function (d, v) { finite(v, function (n) { d.height = n; }); }],
-    _name: [function (d) { return d.name; }, function (d, v) { d.name = $.s(v); }],
+    // A level has no name of its own.
+    _name: [function (d) { return d === root() ? "" : d.name; }, function (d, v) { d.name = $.s(v); }],
     _parent: [function (d) { return d._parent && d._parent !== stage ? face(d._parent) : undefined; }],
     _target: [function (d) { return slashPath(d); }],
     _xmouse: [function (d) { return d.mouseX; }],

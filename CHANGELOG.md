@@ -13,6 +13,12 @@ What changed in each release of Phoenix, newest first.
 - HTML5 Canvas scripts' filters, `cache()`, `shadow`, masks and `compositeOperation` show in Test Movie, and `skewX`, `skewY`, `regX` and `regY` move objects as in CreateJS
 - HTML5 Canvas scripts reach an instance before its keyframe, and an instance placed again by a later keyframe keeps its listeners
 - SWF movies with ActionScript 1 and 2 run their scripts when opened: Test Movie and `Phoenix play` run the compiled frame actions, `#initclip` actions, button `on()` and movie clip `onClipEvent()` handlers, with prototypes, ActionScript 2 classes, `Object.registerClass`, `onEnterFrame` and `setInterval`
+- HTML5 pages draw Phoenix's own effects: behaviors, the multiplane camera, templates and effects a filter carries stay live; adjustment layers, effect layers, track mattes, soft masks, motion blur, shape operators, 3D and node graphs go as pictures of each frame, packed on WebP sheets
+- HTML5 pages' sounds are MP3 (or AAC) from the ffmpeg Phoenix ships, WAV only without it
+- HTML5 pages show TLF text as real text and compiled clips as the movie they carry
+- HTML5 pages of ActionScript 2 movies draw the version 2 components (Button, CheckBox, RadioButton, TextInput, TextArea, Label, ComboBox, List, NumericStepper) from their parameters, with their events
+- HTML5 Canvas pages' scripts draw as in Test Movie: CreateJS's whole Graphics API, Text, Bitmap, Sprite sheets, script-made clips, filters, shadows, masks, composite operations, skew and registration points
+- Export FLA for Other Apps bakes Link to Control behaviors with the controls they follow
 
 ## 0.17.1
 

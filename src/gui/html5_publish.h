@@ -3,10 +3,17 @@
 #include <QString>
 #include <QStringList>
 
+#include <cstdint>
+#include <map>
+#include <memory>
+#include <string>
+#include <vector>
+
 class PhoenixView;
 class TimelineAudio;
 
 namespace fla {
+class Command;
 class Document;
 }
 
@@ -57,7 +64,8 @@ QByteArray actionScript(const fla::Document& document, const QString& source, co
 /// The CreateJS layer HTML5 Canvas documents' scripts run on.
 QByteArray createJs();
 /// What ActionScript 1 and 2 translated to JavaScript runs on: libas3's
-/// avm1.js, then the runtime's as2.js (phoenix-as2.js beside the page).
+/// avm1.js, then the runtime's as2.js and as2components.js
+/// (phoenix-as2.js beside the page).
 QByteArray actionScript2Runtime();
 
 } // namespace Html5Publish

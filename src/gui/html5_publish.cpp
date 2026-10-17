@@ -8,6 +8,7 @@
 
 #include "../data/bitmap.h"
 #include "../data/document.h"
+#include "../data/symbol.h"
 #include "../edit/canvas_document.h"
 #include "../edit/html5_actionscript2.h"
 #include "../edit/html5_export.h"
@@ -26,7 +27,10 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QFontInfo>
+#include <QPainter>
 #include <QPainterPathStroker>
+#include <QProcess>
+#include <QTemporaryDir>
 
 #include <algorithm>
 #include <cmath>
@@ -124,6 +128,7 @@ public:
     ViewArt(PhoenixView& view, TimelineAudio* audio, const fla::Document& document, const QDir& folder, const QString& assets)
         : _view(view)
         , _audio(audio)
+        , _document(document)
         , _folder(folder)
         , _assets(assets)
     {
@@ -195,17 +200,26 @@ public:
             const int n = static_cast<int>(_sounds.size());
             QString file;
             QByteArray bytes;
-            std::vector<uint8_t> mp3;
-            QString mp3Error;
-            if (MovieExport::canEncodeMp3() && MovieExport::encodeMp3(pcm->samples, 44100, 2, 128, mp3, mp3Error))
-            {
+            // MP3, or AAC where Phoenix's ffmpeg has no MP3 encoder: both
+            // play in every current browser. WAV only without ffmpeg.
+            std::vector<uint8_t> encoded;
+            QString encodeError;
+            if (MovieExport::canEncodeMp3() && MovieExport::encodeMp3(pcm->samples, 44100, 2, 128, encoded, encodeError))
                 file = QString("%1/sound%2.mp3").arg(_assets).arg(n);
-                bytes = QByteArray(reinterpret_cast<const char*>(mp3.data()), static_cast<qsizetype>(mp3.size()));
-            }
+            else if (MovieExport::encodeAac(pcm->samples, 44100, 2, 128, encoded, encodeError))
+                file = QString("%1/sound%2.m4a").arg(_assets).arg(n);
+            if (!file.isEmpty())
+                bytes = QByteArray(reinterpret_cast<const char*>(encoded.data()), static_cast<qsizetype>(encoded.size()));
             else
             {
                 file = QString("%1/sound%2.wav").arg(_assets).arg(n);
                 bytes = wav(*pcm);
+                const QString why = MovieExport::ffmpegPath().isEmpty()
+                    ? QString("this Phoenix is missing its ffmpeg")
+                    : QString("ffmpeg could not encode them (%1)").arg(encodeError);
+                const QString note = QString("Sounds are written as WAV, much larger than MP3: %1.").arg(why);
+                if (!notes.contains(note))
+                    notes << note;
             }
             if (write(file, bytes))
             {
@@ -221,8 +235,63 @@ public:
         return index;
     }
 
+    std::string picture(const fla::Timeline& timeline, int from, int to, int frame) override
+    {
+        // A scene's stage, as a published movie shows it, or what a
+        // symbol's frame covers with room for the effects' reach.
+        const auto& scenes = _document.timelines;
+        const auto scene = std::find(scenes.begin(), scenes.end(), &timeline);
+        QRectF area;
+        if (scene != scenes.end())
+            area = QRectF(0, 0, std::max(1, _document.width), std::max(1, _document.height));
+        else if (const auto* symbol = dynamic_cast<const fla::Symbol*>(timeline.parent))
+            area = _view.symbolFramesBounds(symbol, frame, frame).adjusted(-64, -64, 64, 64);
+        if (!area.isValid() || area.isEmpty())
+            return std::string();
+        // Sharper than the stage's pixels, up to a size that stays small.
+        const double scale = std::clamp(1280.0 / std::max(area.width(), area.height()), 1.0, 2.0);
+        // A scene is drawn as the one shown, which its camera and motion
+        // blur work on.
+        auto& document = const_cast<fla::Document&>(_document);
+        const std::string shownScene = document.currentTimeline;
+        const bool cameraView = _view.cameraView();
+        if (scene != scenes.end())
+            document.setCurrentScene(static_cast<int>(scene - scenes.begin()));
+        _view.setCameraView(true);
+        const QImage image = _view.renderTimelinePart(&timeline, from, to, nullptr, frame, area, scale);
+        _view.setCameraView(cameraView);
+        document.currentTimeline = shownScene;
+        if (image.isNull())
+            return std::string();
+        // Only as far as something shows.
+        int left = image.width(), top = image.height(), right = -1, bottom = -1;
+        for (int y = 0; y < image.height(); ++y)
+        {
+            const QRgb* line = reinterpret_cast<const QRgb*>(image.constScanLine(y));
+            for (int x = 0; x < image.width(); ++x)
+                if (qAlpha(line[x]) != 0)
+                {
+                    left = std::min(left, x);
+                    right = std::max(right, x);
+                    top = std::min(top, y);
+                    bottom = std::max(bottom, y);
+                }
+        }
+        if (right < 0)
+            return std::string();
+        const QImage cropped = image.copy(left, top, right - left + 1, bottom - top + 1);
+        const int index = frameIndex(cropped);
+        if (index < 0)
+            return std::string();
+        const QTransform place(1.0 / scale, 0.0, 0.0, 1.0 / scale, area.left() + left / scale, area.top() + top / scale);
+        const QRectF box = place.mapRect(QRectF(0, 0, cropped.width(), cropped.height()));
+        return "{\"o\":[{\"i\":" + std::to_string(index) + ",\"m\":" + matrixJson(place) + ",\"b\":" + boxJson(box) +
+            "}],\"b\":" + boxJson(box) + "}";
+    }
+
     std::string images() override
     {
+        packFrames();
         std::string out;
         for (const std::string& image : _images)
             out += (out.empty() ? "" : ",") + image;
@@ -328,6 +397,146 @@ private:
         _images.push_back(entry + "}");
         _imageIndex[key] = n;
         return n;
+    }
+
+    /// A picture of a frame (see picture), the same pixels once; it waits
+    /// to go on a sheet (packFrames).
+    int frameIndex(const QImage& source)
+    {
+        const QImage image = source.convertToFormat(QImage::Format_ARGB32_Premultiplied);
+        QCryptographicHash hash(QCryptographicHash::Sha1);
+        hash.addData(QByteArrayView(reinterpret_cast<const char*>(image.constBits()), image.sizeInBytes()));
+        hash.addData(QByteArray::number(image.width()) + "x" + QByteArray::number(image.height()));
+        const QByteArray key = hash.result();
+        const auto found = _frameIndex.find(key);
+        if (found != _frameIndex.end())
+            return found->second;
+        const int n = static_cast<int>(_images.size());
+        _images.push_back(std::string());
+        _frames.emplace_back(n, image);
+        _frameIndex[key] = n;
+        return n;
+    }
+
+    /// \a image as the smaller of PNG and WebP (lossy, through Phoenix's
+    /// ffmpeg, where it has one); \a suffix gets which.
+    static QByteArray encoded(const QImage& image, QString& suffix)
+    {
+        QByteArray png;
+        QBuffer buffer(&png);
+        buffer.open(QIODevice::WriteOnly);
+        image.save(&buffer, "PNG");
+        suffix = "png";
+        const QString ffmpeg = MovieExport::ffmpegPath();
+        if (ffmpeg.isEmpty())
+            return png;
+        QTemporaryDir temporary;
+        if (!temporary.isValid())
+            return png;
+        const QString in = temporary.filePath("in.png"), out = temporary.filePath("out.webp");
+        QFile file(in);
+        if (!file.open(QIODevice::WriteOnly) || file.write(png) != png.size())
+            return png;
+        file.close();
+        QProcess process;
+        process.start(ffmpeg, {"-y", "-hide_banner", "-loglevel", "error", "-i", in, "-c:v", "libwebp", "-quality", "90",
+                                  "-pix_fmt", image.hasAlphaChannel() ? "yuva420p" : "yuv420p", out});
+        if (!process.waitForFinished(120000) || process.exitStatus() != QProcess::NormalExit || process.exitCode() != 0)
+            return png;
+        QFile webp(out);
+        if (!webp.open(QIODevice::ReadOnly))
+            return png;
+        const QByteArray bytes = webp.readAll();
+        if (bytes.isEmpty() || bytes.size() >= png.size())
+            return png;
+        suffix = "webp";
+        return bytes;
+    }
+
+    /// The pictures of frames, packed onto sheets (one file holding many,
+    /// each a part of it the content names) and written; one too big for a
+    /// sheet is a file of its own.
+    void packFrames()
+    {
+        if (_frames.empty())
+            return;
+        constexpr int kSheet = 2048;
+        // Apart, so smoothing at a picture's edge takes nothing of the next.
+        constexpr int kGap = 2;
+        std::vector<size_t> order(_frames.size());
+        for (size_t i = 0; i < order.size(); ++i)
+            order[i] = i;
+        std::stable_sort(order.begin(), order.end(),
+            [this](size_t a, size_t b) { return _frames[a].second.height() > _frames[b].second.height(); });
+        struct Sheet
+        {
+            std::vector<std::pair<int, QPoint>> placed;
+            int x = 0, y = 0, shelf = 0, width = 0;
+        };
+        std::vector<Sheet> sheets;
+        for (const size_t i : order)
+        {
+            const auto& [index, image] = _frames[i];
+            if (image.width() > kSheet || image.height() > kSheet)
+            {
+                QString suffix;
+                const QByteArray bytes = encoded(image, suffix);
+                const QString file = QString("%1/frame%2.%3").arg(_assets).arg(index).arg(suffix);
+                if (write(file, bytes))
+                    _images[static_cast<size_t>(index)] = "{\"src\":" + fla::html5::quoted(file.toStdString()) +
+                        ",\"w\":" + std::to_string(image.width()) + ",\"h\":" + std::to_string(image.height()) + "}";
+                continue;
+            }
+            if (sheets.empty())
+                sheets.emplace_back();
+            Sheet* sheet = &sheets.back();
+            if (sheet->x + image.width() > kSheet)
+            {
+                sheet->x = 0;
+                sheet->y += sheet->shelf;
+                sheet->shelf = 0;
+            }
+            if (sheet->y + image.height() > kSheet)
+            {
+                sheets.emplace_back();
+                sheet = &sheets.back();
+            }
+            sheet->placed.emplace_back(static_cast<int>(i), QPoint(sheet->x, sheet->y));
+            sheet->x += image.width() + kGap;
+            sheet->width = std::max(sheet->width, sheet->x);
+            sheet->shelf = std::max(sheet->shelf, image.height() + kGap);
+        }
+        for (const Sheet& sheet : sheets)
+        {
+            if (sheet.placed.empty())
+                continue;
+            QImage picture(std::max(1, sheet.width - kGap), std::max(1, sheet.y + sheet.shelf - kGap),
+                QImage::Format_ARGB32_Premultiplied);
+            picture.fill(Qt::transparent);
+            {
+                QPainter painter(&picture);
+                painter.setCompositionMode(QPainter::CompositionMode_Source);
+                for (const auto& [i, at] : sheet.placed)
+                    painter.drawImage(at, _frames[static_cast<size_t>(i)].second);
+            }
+            const int n = static_cast<int>(_images.size());
+            QString suffix;
+            const QByteArray bytes = encoded(picture, suffix);
+            const QString file = QString("%1/frames%2.%3").arg(_assets).arg(n).arg(suffix);
+            if (!write(file, bytes))
+                continue;
+            _images.push_back("{\"src\":" + fla::html5::quoted(file.toStdString()) + ",\"w\":" +
+                std::to_string(picture.width()) + ",\"h\":" + std::to_string(picture.height()) + ",\"sheet\":1}");
+            for (const auto& [i, at] : sheet.placed)
+            {
+                const auto& [index, image] = _frames[static_cast<size_t>(i)];
+                _images[static_cast<size_t>(index)] = "{\"in\":" + std::to_string(n) + ",\"r\":[" + std::to_string(at.x()) +
+                    "," + std::to_string(at.y()) + "," + std::to_string(image.width()) + "," +
+                    std::to_string(image.height()) + "],\"w\":" + std::to_string(image.width()) + ",\"h\":" +
+                    std::to_string(image.height()) + "}";
+            }
+        }
+        _frames.clear();
     }
 
     /// A brush as the runtime's fill JSON (README.md, "Shapes"); \a alpha
@@ -511,10 +720,14 @@ private:
 
     PhoenixView& _view;
     TimelineAudio* _audio;
+    const fla::Document& _document;
     QDir _folder;
     QString _assets;
     std::vector<std::string> _images;
     std::map<QByteArray, int> _imageIndex;
+    /// Pictures of frames waiting to go on sheets, by their index.
+    std::vector<std::pair<int, QImage>> _frames;
+    std::map<QByteArray, int> _frameIndex;
     std::vector<std::string> _sounds;
     std::map<std::string, int> _soundIndex;
     std::map<std::string, std::string> _soundLinkage;
@@ -623,7 +836,8 @@ QByteArray actionScript(const fla::Document& document, const QString& source, co
 QByteArray actionScript2Runtime()
 {
     return "// avm1.js (libas3): ActionScript 1 and 2's semantics for translated scripts.\n" +
-        QByteArray::fromStdString(fla::html5as2::avm1Runtime()) + "\n// as2.js\n" + resource("as2.js");
+        QByteArray::fromStdString(fla::html5as2::avm1Runtime()) + "\n// as2.js\n" + resource("as2.js") +
+        "\n// as2components.js\n" + resource("as2components.js");
 }
 
 bool run(const Settings& settings, PhoenixView& view, TimelineAudio* audio, const fla::Document& document,

@@ -702,6 +702,11 @@ function loadImages(images, base) {
     phoenix._.images = [];
     return Promise.all((images || []).map(function (desc, index) {
         return new Promise(function (resolve) {
+            // A part of a sheet: drawn from the sheet once it has come.
+            if (desc.in !== undefined) {
+                resolve();
+                return;
+            }
             if (typeof Image === "undefined") {
                 resolve();
                 return;
@@ -717,7 +722,13 @@ function loadImages(images, base) {
             };
             image.src = (base || "") + desc.src;
         });
-    }));
+    })).then(function () {
+        (images || []).forEach(function (desc, index) {
+            var sheet = desc.in !== undefined ? phoenix._.images[desc.in] : null;
+            if (sheet)
+                phoenix._.images[index] = {_sheet: sheet, _part: desc.r, width: desc.r[2], height: desc.r[3]};
+        });
+    });
 }
 /// Loads a translated ActionScript file, when there is one.
 function loadScript(url) {

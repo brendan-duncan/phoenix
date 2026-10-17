@@ -1,13 +1,20 @@
 #pragma once
 
+#include <cstdint>
+#include <functional>
+#include <map>
+#include <memory>
 #include <string>
 #include <vector>
 
 namespace fla {
 
 class Bitmap;
+class Command;
 class Document;
+class FLADocument;
 class Element;
+class Timeline;
 
 /// Publishing to HTML5: a document as the JavaScript runtime in
 /// resources/html5 plays it. This part walks the document into the movie's
@@ -36,10 +43,44 @@ public:
     /// The library sound \a name as an index into sounds(); -1 when it
     /// cannot be written.
     virtual int sound(const std::string& name) = 0;
+    /// What Phoenix draws of layers \a from to \a to - 1 of \a timeline on
+    /// its frame \a frame (from 0), compositing and all, as a published
+    /// shape's JSON holding the one picture, placed in the timeline's
+    /// space; empty when nothing shows or it cannot be drawn. For what the
+    /// runtime has nothing like (Phoenix's own compositing): it goes out as
+    /// a picture a frame, frames that look alike sharing one.
+    virtual std::string picture(const Timeline& timeline, int from, int to, int frame)
+    {
+        (void)timeline;
+        (void)from;
+        (void)to;
+        (void)frame;
+        return std::string();
+    }
     /// The JSON arrays of the pictures and sounds handed out so far.
     virtual std::string images() = 0;
     virtual std::string sounds() = 0;
 };
+
+/// A run of a timeline's layers (\a from to \a to - 1, from the top) that
+/// Phoenix's own compositing draws as one, which the runtime has nothing
+/// like, so it is published as pictures: what it is, for the notes.
+struct BakedRun
+{
+    int from = 0;
+    int to = 0;
+    std::string why;
+};
+
+/// The runs of \a timeline's layers published as pictures: a node graph's
+/// whole timeline; an adjustment layer or a layer mode (Stencil,
+/// Silhouette, Preserve Transparency) and every layer under it; an effect
+/// layer and the layer it works on; a track matte and its matte; a mask
+/// with a feathered, grown or inverted edge, or a layer under several
+/// masks, with the masks and all they mask; motion blur, echo and posterize
+/// time; shape operators; effects on instances that no filter carries; the
+/// layers with instances turned in 3D.
+std::vector<BakedRun> bakedRuns(const Timeline& timeline);
 
 /// A movie's ActionScript 1 and 2, gathered while its content is made, for
 /// translating to JavaScript (fla::html5as2): each keyframe's script, and
@@ -89,6 +130,21 @@ struct Options
 /// The content of \a document as JSON. \a notes gets what could not be
 /// published as it is.
 std::string content(const Document& document, ArtSource& source, const Options& options, std::vector<std::string>* notes);
+
+/// The movies of the compiled clips \a document carries: for each compiled
+/// clip library item naming a file of the document that is an SWF movie,
+/// the movie's bytes by the item's name.
+std::map<std::string, std::vector<uint8_t>> compiledClips(const Document& document);
+
+/// Brings each of \a movies into \a copy (a copy of a document being
+/// published) as a movie clip symbol of the movie's frames, which \a read
+/// makes a document of (Phoenix's SWF import), and makes the compiled clip
+/// instances placing it instances of that symbol. \a keep holds what copied
+/// them in, which must outlive the publish; \a notes says what came in and
+/// what could not.
+void embedCompiledClips(Document& copy, const std::map<std::string, std::vector<uint8_t>>& movies,
+    const std::function<std::unique_ptr<FLADocument>(const std::vector<uint8_t>& swf)>& read,
+    std::vector<std::unique_ptr<Command>>& keep, std::vector<std::string>& notes);
 
 /// \a value as JavaScript string literal text, quotes and all.
 std::string quoted(const std::string& value);

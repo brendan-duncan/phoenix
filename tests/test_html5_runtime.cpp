@@ -338,6 +338,59 @@ phoenix.start({}).then(function (player) {
     CHECK(same(js.output(), "hat frame 1\ntick 40 0\nhat frame 1"));
 }
 
+TEST(html5_runtime_createjs_scripts_draw_and_animate)
+{
+    Runtime js(true);
+    CHECK(js.ok);
+    CHECK(same(js.run(std::string(kMovie) + R"JS(
+movie.javaScript = true;
+movie.root.js = [[0, "this.stop();"]];
+phoenix.content(movie);
+phoenix.start({}).then(function (player) {
+    player.pause();
+    var root = player.root, parts = [];
+    var box = function (o) { var b = o.getBounds(); return b ? [b.x, b.y, b.width, b.height].map(Math.round).join(",") : "none"; };
+    // Commands, kept and changed: drawn again as they change.
+    var s = new createjs.Shape();
+    var dot = s.graphics.f("#c00").dp(0, 0, 20, 5, 0.5, -90).command;
+    s.graphics.f("#00c").p("AAAAAIPoAAIAAPoIvoAAg");
+    root.addChild(s);
+    parts.push(box(s));
+    dot.radius = 200;
+    player.tick();
+    parts.push(box(s));
+    // Registration point and skew keep x where it was set.
+    var r = new createjs.Shape();
+    r.graphics.f("red").dr(0, 0, 40, 40);
+    r.regX = r.regY = 20; r.x = 100; r.skewX = 30;
+    parts.push(r.x, r.regX, Math.round(r.skewX), Math.round(r._m[4]));
+    // Text from its point, as textAlign says.
+    var t = new createjs.Text("Hello", "20px Arial", "#000");
+    t.textAlign = "center";
+    parts.push(t.getMeasuredWidth() > 20, Math.round(t._box[0] + t._box[2] / 2));
+    // Filters show once cached; a shadow at once.
+    r.filters = [new createjs.BlurFilter(4, 4, 1)];
+    parts.push(r._filters.length);
+    r.cache(0, 0, 40, 40);
+    r.shadow = new createjs.Shadow("#000", 3, 3, 4);
+    parts.push(r._filters.length, r._filters[1] instanceof flash.filters.DropShadowFilter);
+    r.compositeOperation = "lighter";
+    parts.push(r.blendMode);
+    var gray = new createjs.ColorMatrix(0, 0, -100, 0);
+    parts.push(Math.round(gray[0] * 100), Math.round(gray[1] * 100));
+    // A clip of tweens, played by frames.
+    var mc = new createjs.MovieClip();
+    var sq = new createjs.Shape();
+    mc.timeline.addTween(createjs.Tween.get(sq).to({x: 100}, 4).to({x: 0}, 4));
+    root.addChild(mc);
+    player.tick(); player.tick();
+    parts.push(sq.parent === mc, mc.currentFrame, Math.round(sq.x), mc.totalFrames);
+    __result = parts.join(" ");
+});
+)JS"),
+        "-19,-20,119,120 -190,-200,380,362 100 20 30 90 true 0 0 2 true add 31 61 true 2 50 8"));
+}
+
 TEST(html5_runtime_runs_translated_actionscript)
 {
     // libas3's translation of a linked class, an Event subclass and a main
