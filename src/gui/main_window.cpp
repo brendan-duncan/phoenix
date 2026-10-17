@@ -597,6 +597,12 @@ MainWindow::MainWindow(const QString& initialFile, QWidget* parent, bool startup
     _penTool = std::make_unique<PenTool>(_selection, stack, _drawingStyle);
     _pencilTool = std::make_unique<PencilTool>(_selection, stack, _drawingStyle);
     _paintBrushTool = std::make_unique<PencilTool>(_selection, stack, _drawingStyle, "Paint Brush");
+    // A brush from the brush library comes into the document with the
+    // first stroke any tool draws with it.
+    _drawingStyle.paintBrushIndex = [this](const std::string& guid) {
+        fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
+        return document ? paintBrushIndexFor(*document, _editContext.commandStack(), guid) : 0;
+    };
     _textTool = std::make_unique<TextTool>(_selection, stack, _drawingStyle);
     _subselectionTool = std::make_unique<SubselectionTool>(_selection, stack);
     _phoenixView->setSelection(&_selection);

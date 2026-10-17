@@ -5,6 +5,7 @@
 #include "../data/stroke_style.h"
 
 #include <cstdint>
+#include <functional>
 #include <map>
 #include <string>
 #include <vector>
@@ -356,6 +357,13 @@ public:
     /// Builds the stroke for a new object, or null when strokes are switched
     /// off. The caller owns the result.
     StrokeStyle* createStroke(DOMElement* parent) const;
+
+    /// For a paint brush named by its guid (strokeLook.paintBrushGuid), its
+    /// index in the document being drawn in: the document's own, or the
+    /// brush library's, copied in first. Set by the window; createStroke
+    /// asks it, so any tool drawing with a brush from the library brings
+    /// the brush into the document.
+    std::function<int(const std::string& guid)> paintBrushIndex;
 
     /// Whether \a stroke is what createStroke would make: the ink bottle and
     /// the drawing tools reuse a shape's matching stroke rather than adding

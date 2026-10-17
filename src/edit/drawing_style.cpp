@@ -328,7 +328,14 @@ StrokeStyle* DrawingStyle::createStroke(DOMElement* parent) const
     copyColor(strokeColor, color->color);
     plain.fill = color;
 
-    return strokeLook.applyTo(plain, parent);
+    StrokeStyle* stroke = strokeLook.applyTo(plain, parent);
+    if (stroke && stroke->style() == StrokeStyle::Style::PaintBrush && !strokeLook.paintBrushGuid.empty() &&
+        paintBrushIndex)
+    {
+        if (const int index = paintBrushIndex(strokeLook.paintBrushGuid); index > 0)
+            stroke->paintBrushDefinition = index;
+    }
+    return stroke;
 }
 
 bool DrawingStyle::strokeMatches(const StrokeStyle& stroke) const
