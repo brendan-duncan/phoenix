@@ -1110,6 +1110,12 @@ phoenix.player = {
     get stage() { return stage; },
     get root() { return rootClip; },
     draw: drawNow,
-    errors: function () { return (phoenix._.errors || []).slice(); }
+    errors: function () { return (phoenix._.errors || []).slice(); },
+    /// Where a point of the stage is on the page (client coordinates), for
+    /// tests that send the pointer there.
+    pagePoint: function (x, y) {
+        var box = canvas ? canvas.getBoundingClientRect() : {left: 0, top: 0};
+        return [box.left + view.ox + x * view.sx, box.top + view.oy + y * view.sy];
+    }
 };
 })(phoenix);

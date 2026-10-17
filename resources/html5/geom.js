@@ -129,7 +129,9 @@ class Matrix {
     createBox(scaleX, scaleY, rotation, tx, ty) {
         rotation = rotation || 0;
         var cos = Math.cos(rotation), sin = Math.sin(rotation);
-        this.setTo(scaleX * cos, scaleX * sin, -scaleY * sin, scaleY * cos, tx || 0, ty || 0);
+        // As the player builds it: turned, then scaled along the stage's
+        // axes (so b goes with the y scale and c with the x).
+        this.setTo(scaleX * cos, scaleY * sin, -scaleX * sin, scaleY * cos, tx || 0, ty || 0);
     }
     /// The matrix beginGradientFill takes: the gradient square (-819.2 to
     /// 819.2 on each side) onto a box.
