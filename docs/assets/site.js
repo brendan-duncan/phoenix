@@ -73,7 +73,7 @@ const NAV = [
     { href: "actionscript.html", title: "ActionScript and Test Movie" },
   ] },
   { group: "Output", pages: [
-    { href: "export.html", title: "Exporting" },
+    { href: "export.html", title: "Exporting and Publishing" },
     { href: "command-line.html", title: "Command line" },
   ] },
   { group: "Studio pipeline", pages: [
