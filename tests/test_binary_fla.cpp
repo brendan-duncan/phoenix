@@ -721,7 +721,8 @@ TEST(binary_fla_sweep)
 {
     // Opt-in: PHOENIX_BINARY_FLA_LIST names a file listing binary FLAs, one
     // a line, and PHOENIX_BINARY_FLA_REPORT where to write what each read
-    // gave: a line per document, "ok", the warning, or the error. For
+    // gave: a line per document, "ok", the warning, or the error, and after
+    // a tab how many scripts it carries. For
     // comparing the reader's results across many files before and after a
     // change.
     const char* list = std::getenv("PHOENIX_BINARY_FLA_LIST");
@@ -742,6 +743,8 @@ TEST(binary_fla_sweep)
         const std::vector<uint8_t> data((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
         CompoundFile compound;
         std::string result;
+        // And how many scripts it carries: frames', buttons' and clips'.
+        int scripts = 0;
         if (!compound.read(data))
             result = "not a compound file";
         else
@@ -753,10 +756,16 @@ TEST(binary_fla_sweep)
                 result = "error: " + error;
             else
                 result = warning.empty() ? "ok" : "warning: " + warning;
+            for (const auto& [name, bytes] : files)
+            {
+                const std::string text(bytes.begin(), bytes.end());
+                for (size_t at = text.find("<script>"); at != std::string::npos; at = text.find("<script>", at + 1))
+                    ++scripts;
+            }
         }
         for (char& c : result)
             if (c == '\n' || c == '\r')
                 c = ' ';
-        out << path << '\t' << result << '\n';
+        out << path << '\t' << result << '\t' << scripts << '\n';
     }
 }

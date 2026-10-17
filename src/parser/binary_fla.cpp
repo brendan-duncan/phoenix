@@ -3,9 +3,11 @@
 #include <tinyxml2.h>
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <iterator>
 #include <memory>
 #include <set>
 #include <stdexcept>
@@ -255,6 +257,8 @@ public:
     }
 
     size_t position() const { return _at; }
+    /// Back to where position() was, for reading a stretch again another way.
+    void seek(size_t at) { _at = std::min(at, _data.size()); }
 
     /// The Contents version (0x129, 0x138, 0x143), for the few records whose
     /// layout follows the file rather than a schema of their own.
@@ -669,56 +673,544 @@ void readShapeBody(Reader& r, Object& o)
     readShapeData(r, o.shape, schema);
 }
 
-/// MX and MX 2004 scripts written in normal mode are kept as a list of
-/// actions rather than text: a u32 (0), a count, then each action, a u32
-/// naming it and fields of its own (u32s and CStrings: 'u' and 's' below).
-/// Phoenix reads past them. [S]
-void readActionList(Reader& r)
+/// One action of a script written in normal mode: what it does and its
+/// fields, in order.
+struct ListedAction
+{
+    uint32_t code = 0;
+    std::vector<uint32_t> numbers;
+    std::vector<std::string> texts;
+    /// Read by a guess at its fields, its code being one Phoenix does not
+    /// know.
+    bool unknown = false;
+};
+
+/// The fields of each action of a normal mode list: u32s and CStrings ('u'
+/// and 's'). Each starts with a u32 (0); a u32 after a CString often says
+/// whether it is an expression (1) or text (0). Learned from the SWFs
+/// published from the same documents. [S]
+const std::map<uint32_t, const char*>& listedActionFields()
 {
     static const std::map<uint32_t, const char*> fields = {
-        {0x00, "uussu"},      // go to a frame
-        {0x01, ""},           // next frame
+        {0x00, "uussu"},      // go to: what to go by, scene, frame, play (1)
+        {0x01, ""},           // play
         {0x02, ""},           // stop
-        {0x04, ""},           // play
-        {0x05, "ussu"},       // get a URL
+        {0x04, ""},           // stop all sounds
+        {0x05, "ussuuu"},     // get a URL: URL, window, method
+        {0x07, "uusuusuu"},   // load a movie: URL, location, a level (1)
         {0x08, "usu"},        // tell target
-        {0x09, ""},           // end of a block
-        {0x0A, "ussu"},       // if frame is loaded
-        {0x0B, "uuu"},        // on a button event
-        {0x0C, ""},           // end of the event
+        {0x09, ""},           // end of tell target
+        {0x0A, "ussu"},       // if frame is loaded: scene, frame
+        {0x0B, "uuu"},        // on a button event: events, key
+        {0x0C, ""},           // end of the button event
+        {0x0D, "uu"},         // on a clip event: events
+        {0x0E, ""},           // end of the clip event
         {0x0F, "us"},         // if
-        {0x10, ""},           // end of an if
+        {0x10, ""},           // else
         {0x11, "us"},         // else if
-        {0x12, ""},           // else
+        {0x12, ""},           // end of the if
         {0x13, ""},           // end of if frame is loaded
-        {0x17, "uususu"},     // set a property
-        {0x18, "ususu"},      // set a variable
-        {0x1A, "usuuuuu"},    // with
+        {0x16, "usu"},        // call a frame
+        {0x17, "uususu"},     // set a property: property, value, target
+        {0x18, "ususu"},      // set a variable: name, value
+        {0x1A, "usussssuuu"}, // start drag: target, bounds, lock, constrain
         {0x1C, "us"},         // comment
-        {0x1D, ""},           // end of a block
-        {0x29, "us"},         // expression
-        {0x2C, "usss"},       // for loop
-        {0x2D, ""},           // end of the loop
-        {0x2E, ""},           // end of a block
-        {0x3E, "usss"},       // call a function
+        {0x1D, ""},           // stop drag
+        {0x1F, "usuu"},       // unload a movie: location, a level (1)
+        {0x29, "us"},         // a statement as written
+        {0x2A, ""},           // do
+        {0x2B, "us"},         // its while
+        {0x2C, "usss"},       // for: start, condition, step
+        {0x2D, ""},           // end of the for
+        {0x2E, ""},           // break
+        {0x32, "usu"},        // with
+        {0x33, ""},           // end of with
+        {0x3E, "usss"},       // call a method: object, name, arguments
     };
+    return fields;
+}
+
+void readListedFields(Reader& r, const char* layout, ListedAction& action)
+{
+    for (const char* field = layout; *field; ++field)
+    {
+        if (*field == 'u')
+            action.numbers.push_back(r.u32());
+        else
+            action.texts.push_back(r.cstring());
+    }
+}
+
+/// Whether \a count actions Phoenix knows can be read from where \a r is.
+bool listReadsOn(Reader& r, uint32_t count)
+{
+    const std::map<uint32_t, const char*>& fields = listedActionFields();
+    try
+    {
+        for (uint32_t i = 0; i < count; ++i)
+        {
+            const auto found = fields.find(r.u32());
+            if (found == fields.end())
+                return false;
+            ListedAction ignored;
+            readListedFields(r, found->second, ignored);
+        }
+    }
+    catch (const ParseError&)
+    {
+        return false;
+    }
+    return true;
+}
+
+/// An action Phoenix does not know: its fields guessed, the fewest after
+/// which the rest of the list reads. False when no guess does.
+bool guessListedFields(Reader& r, uint32_t rest, ListedAction& action)
+{
+    const size_t at = r.position();
+    for (size_t length = 0; length <= 8; ++length)
+    {
+        for (uint32_t bits = 0; bits < (1u << length); ++bits)
+        {
+            std::string layout;
+            for (size_t i = 0; i < length; ++i)
+                layout += (bits >> i) & 1 ? 's' : 'u';
+            r.seek(at);
+            ListedAction guess;
+            guess.code = action.code;
+            guess.unknown = true;
+            try
+            {
+                readListedFields(r, layout.c_str(), guess);
+            }
+            catch (const ParseError&)
+            {
+                continue;
+            }
+            const size_t after = r.position();
+            if (listReadsOn(r, rest))
+            {
+                r.seek(after);
+                action = std::move(guess);
+                return true;
+            }
+        }
+    }
+    r.seek(at);
+    return false;
+}
+
+/// MX and MX 2004 scripts written in normal mode are kept as a list of
+/// actions rather than text: a u32 (0), a count, then each action, a u32
+/// naming it and its fields. [S]
+std::vector<ListedAction> readActionList(Reader& r)
+{
     r.u32();
     const uint32_t count = r.u32();
     if (count > 100000)
         r.fail("a bad action count");
+    const std::map<uint32_t, const char*>& fields = listedActionFields();
+    std::vector<ListedAction> actions;
     for (uint32_t i = 0; i < count; ++i)
     {
-        const auto action = fields.find(r.u32());
-        if (action == fields.end())
+        ListedAction action;
+        action.code = r.u32();
+        const auto found = fields.find(action.code);
+        if (found != fields.end())
+            readListedFields(r, found->second, action);
+        else if (!guessListedFields(r, count - i - 1, action))
             r.fail("an action Phoenix does not know");
-        for (const char* field = action->second; *field; ++field)
+        actions.push_back(std::move(action));
+    }
+    return actions;
+}
+
+// ---------------------------------------------------------------------------
+// Normal mode actions as ActionScript
+
+std::string quoted(const std::string& text)
+{
+    std::string out = "\"";
+    for (const char c : text)
+    {
+        if (c == '"' || c == '\\')
+            out += '\\';
+        if (c == '\n')
+            out += "\\n";
+        else if (c == '\r')
+            out += "\\r";
+        else
+            out += c;
+    }
+    return out + "\"";
+}
+
+/// Slash syntax variables in an expression ("/:x", "../:x", "/a/b:x") as
+/// dot syntax, which every ActionScript reads. Text in quotes is left as it
+/// is, as are slashes that divide.
+std::string dotSyntax(const std::string& expression)
+{
+    const auto word = [](char c) { return std::isalnum(static_cast<unsigned char>(c)) || c == '_' || c == '$'; };
+    std::string out;
+    size_t i = 0;
+    char quote = 0;
+    while (i < expression.size())
+    {
+        const char c = expression[i];
+        if (quote)
         {
-            if (*field == 'u')
-                r.u32();
+            out += c;
+            if (c == '\\' && i + 1 < expression.size())
+                out += expression[++i];
+            else if (c == quote)
+                quote = 0;
+            ++i;
+            continue;
+        }
+        if (c == '"' || c == '\'')
+        {
+            quote = c;
+            out += c;
+            ++i;
+            continue;
+        }
+        // A path starts where an operand may: not after a word, a closing
+        // bracket or a dot.
+        size_t back = out.size();
+        while (back > 0 && out[back - 1] == ' ')
+            --back;
+        const bool operandStart = back == 0 || !(word(out[back - 1]) || out[back - 1] == ')' ||
+            out[back - 1] == ']' || out[back - 1] == '.');
+        if (operandStart && (c == '/' || (c == '.' && expression.compare(i, 3, "../") == 0)))
+        {
+            // The path: names, slashes and "..", up to a colon and a name.
+            size_t end = i;
+            while (end < expression.size() &&
+                (word(expression[end]) || expression[end] == '/' || expression[end] == '.'))
+                ++end;
+            if (end < expression.size() && expression[end] == ':' && end + 1 < expression.size() &&
+                word(expression[end + 1]))
+            {
+                const std::string path = expression.substr(i, end - i);
+                std::string dotted = path[0] == '/' ? "_root" : "this";
+                size_t at = path[0] == '/' ? 1 : 0;
+                while (at < path.size())
+                {
+                    size_t slash = path.find('/', at);
+                    if (slash == std::string::npos)
+                        slash = path.size();
+                    const std::string part = path.substr(at, slash - at);
+                    if (part == "..")
+                        dotted += "._parent";
+                    else if (!part.empty() && part != ".")
+                        dotted += "." + part;
+                    at = slash + 1;
+                }
+                if (dotted.rfind("this.", 0) == 0)
+                    dotted = dotted.substr(5);
+                out += dotted + ".";
+                i = end + 1;
+                continue;
+            }
+        }
+        out += c;
+        ++i;
+    }
+    return out;
+}
+
+/// A field that is text, or an expression when \a expression is set.
+std::string valueText(const std::string& text, bool expression)
+{
+    if (!expression)
+        return quoted(text);
+    return text.empty() ? std::string("\"\"") : dotSyntax(text);
+}
+
+/// A frame number written as text: a number when it is one.
+std::string frameText(const std::string& frame)
+{
+    const bool number = !frame.empty() &&
+        std::all_of(frame.begin(), frame.end(), [](char c) { return c >= '0' && c <= '9'; });
+    return number ? frame : quoted(frame);
+}
+
+/// The names the player gives properties by number.
+const char* propertyName(uint32_t property)
+{
+    static const char* const names[] = {"_x", "_y", "_xscale", "_yscale", "_currentframe", "_totalframes", "_alpha",
+        "_visible", "_width", "_height", "_rotation", "_target", "_framesloaded", "_name", "_droptarget", "_url",
+        "_highquality", "_focusrect", "_soundbuftime", "_quality", "_xmouse", "_ymouse"};
+    return property < std::size(names) ? names[property] : nullptr;
+}
+
+/// The key a keyPress event names, as ActionScript writes it.
+std::string keyText(uint32_t key)
+{
+    static const std::map<uint32_t, const char*> named = {{1, "<Left>"}, {2, "<Right>"}, {3, "<Home>"},
+        {4, "<End>"}, {5, "<Insert>"}, {6, "<Delete>"}, {8, "<Backspace>"}, {13, "<Enter>"}, {14, "<Up>"},
+        {15, "<Down>"}, {16, "<PageUp>"}, {17, "<PageDown>"}, {18, "<Tab>"}, {19, "<Escape>"}, {32, "<Space>"}};
+    const auto found = named.find(key);
+    if (found != named.end())
+        return quoted(found->second);
+    return quoted(std::string(1, static_cast<char>(key)));
+}
+
+/// A button's events: press, release, release outside, roll over, roll out,
+/// drag over, drag out, then a key. [S]
+std::string buttonEvents(uint32_t events, uint32_t key)
+{
+    static const char* const names[] = {"press", "release", "releaseOutside", "rollOver", "rollOut", "dragOver",
+        "dragOut"};
+    std::string out;
+    for (size_t bit = 0; bit < std::size(names); ++bit)
+        if (events & (1u << bit))
+            out += (out.empty() ? "" : ", ") + std::string(names[bit]);
+    if ((events & 0x80) || key != 0)
+        out += (out.empty() ? "keyPress " : ", keyPress ") + keyText(key);
+    return out.empty() ? std::string("release") : out;
+}
+
+/// A clip's events, in the order the player numbers them. [S]
+std::string clipEvents(uint32_t events)
+{
+    static const char* const names[] = {"load", "enterFrame", "unload", "mouseMove", "mouseDown", "mouseUp",
+        "keyDown", "keyUp", "data"};
+    std::string out;
+    for (size_t bit = 0; bit < std::size(names); ++bit)
+        if (events & (1u << bit))
+            out += (out.empty() ? "" : ", ") + std::string(names[bit]);
+    return out.empty() ? std::string("load") : out;
+}
+
+/// A statement written out as typed: given its semicolon when it has none.
+std::string statementText(const std::string& text)
+{
+    std::string out = dotSyntax(text);
+    while (!out.empty() && (out.back() == ' ' || out.back() == '\t' || out.back() == '\r' || out.back() == '\n'))
+        out.pop_back();
+    if (out.empty() || out.back() == ';' || out.back() == '}')
+        return out;
+    return out + ";";
+}
+
+/// A normal mode script as the ActionScript it stands for: the text the
+/// script would have had in expert mode, compiled as the player compiles
+/// the actions. [S]
+std::string actionListScript(const std::vector<ListedAction>& actions)
+{
+    std::string out;
+    int depth = 0;
+    const auto line = [&](const std::string& text) {
+        out.append(static_cast<size_t>(std::max(0, depth)), '\t');
+        out += text;
+        out += '\n';
+    };
+    const auto open = [&](const std::string& text) {
+        line(text + " {");
+        ++depth;
+    };
+    const auto close = [&]() {
+        if (depth > 0)
+            --depth;
+        line("}");
+    };
+    for (const ListedAction& a : actions)
+    {
+        const auto number = [&a](size_t i) { return i < a.numbers.size() ? a.numbers[i] : 0u; };
+        const auto text = [&a](size_t i) { return i < a.texts.size() ? a.texts[i] : std::string(); };
+        if (a.unknown)
+        {
+            char note[96];
+            std::snprintf(note, sizeof(note), "// An action Phoenix does not know (0x%02X) was here.", a.code);
+            line(note);
+            continue;
+        }
+        switch (a.code)
+        {
+        case 0x00:
+        {
+            const std::string go = number(2) ? "gotoAndPlay" : "gotoAndStop";
+            const std::string scene = text(0);
+            const std::string frame = text(1);
+            switch (number(1))
+            {
+            case 3:
+                line("nextFrame();");
+                break;
+            case 4:
+                line("prevFrame();");
+                break;
+            case 5:
+                line("nextScene();");
+                break;
+            case 6:
+                line("prevScene();");
+                break;
+            default:
+            {
+                const std::string where = number(1) == 1 ? quoted(frame)
+                    : number(1) == 2                     ? valueText(frame, true)
+                                                         : frameText(frame);
+                line(go + "(" + (scene.empty() ? std::string() : quoted(scene) + ", ") + where + ");");
+                break;
+            }
+            }
+            break;
+        }
+        case 0x01:
+            line("play();");
+            break;
+        case 0x02:
+            line("stop();");
+            break;
+        case 0x04:
+            line("stopAllSounds();");
+            break;
+        case 0x05:
+        {
+            std::string call = "getURL(" + quoted(text(0));
+            if (!text(1).empty() || number(1) != 0)
+                call += ", " + quoted(text(1));
+            if (number(1) == 1 || number(1) == 2)
+                call += number(1) == 1 ? ", \"GET\"" : ", \"POST\"";
+            line(call + ");");
+            break;
+        }
+        case 0x07:
+        {
+            const std::string url = valueText(text(0), number(2) != 0);
+            if (number(1) != 0)
+                line("// A load action Phoenix does not know (" + std::to_string(number(1)) + ") was here.");
+            else if (number(4) == 1)
+                line("loadMovieNum(" + url + ", " + frameText(text(1)) + ");");
             else
-                r.cstring();
+                line("loadMovie(" + url + ", " + quoted(text(1)) + ");");
+            break;
+        }
+        case 0x08:
+            open("tellTarget (" + valueText(text(0), number(1) != 0) + ")");
+            break;
+        case 0x0A:
+            open("ifFrameLoaded (" + (text(0).empty() ? std::string() : quoted(text(0)) + ", ") + frameText(text(1)) +
+                ")");
+            break;
+        case 0x0B:
+            open("on (" + buttonEvents(number(1), number(2)) + ")");
+            break;
+        case 0x0D:
+            open("onClipEvent (" + clipEvents(number(1)) + ")");
+            break;
+        case 0x0F:
+            open("if (" + dotSyntax(text(0)) + ")");
+            break;
+        case 0x10:
+            close();
+            open("else");
+            break;
+        case 0x11:
+            close();
+            open("else if (" + dotSyntax(text(0)) + ")");
+            break;
+        case 0x09:
+        case 0x0C:
+        case 0x0E:
+        case 0x12:
+        case 0x13:
+        case 0x2D:
+        case 0x33:
+            close();
+            break;
+        case 0x16:
+            line("call(" + valueText(text(0), number(1) != 0) + ");");
+            break;
+        case 0x17:
+        {
+            const char* property = propertyName(number(1));
+            const std::string target = valueText(text(1), number(3) != 0);
+            const std::string value = valueText(text(0), number(2) != 0);
+            if (property)
+                line(std::string("setProperty(") + target + ", " + property + ", " + value + ");");
+            else
+                line("// A property Phoenix does not know (" + std::to_string(number(1)) + ") was set here.");
+            break;
+        }
+        case 0x18:
+        {
+            const std::string name = text(0);
+            const std::string value = valueText(text(1), number(2) != 0);
+            // A name is a reference to set, as typed; one in slash syntax,
+            // or one given by an expression, is set by set().
+            if (number(1) != 0)
+                line("set(" + dotSyntax(name) + ", " + value + ");");
+            else if (name.find_first_of(":/") != std::string::npos)
+            {
+                const std::string dotted = dotSyntax(name);
+                line(dotted != name && dotted.find_first_of(":/") == std::string::npos
+                        ? dotted + " = " + value + ";"
+                        : "set(" + quoted(name) + ", " + value + ");");
+            }
+            else
+                line(name + " = " + value + ";");
+            break;
+        }
+        case 0x1A:
+        {
+            std::string call = "startDrag(" + valueText(text(0), number(1) != 0) + (number(2) ? ", true" : ", false");
+            if (number(3))
+                for (size_t i = 1; i <= 4; ++i)
+                    call += ", " + valueText(text(i), true);
+            line(call + ");");
+            break;
+        }
+        case 0x1C:
+            line("// " + text(0));
+            break;
+        case 0x1D:
+            line("stopDrag();");
+            break;
+        case 0x1F:
+            line(number(1) == 1 ? "unloadMovieNum(" + frameText(text(0)) + ");"
+                                : "unloadMovie(" + quoted(text(0)) + ");");
+            break;
+        case 0x29:
+        {
+            const std::string statement = statementText(text(0));
+            if (!statement.empty())
+                line(statement);
+            break;
+        }
+        case 0x2A:
+            open("do");
+            break;
+        case 0x2B:
+            if (depth > 0)
+                --depth;
+            line("} while (" + dotSyntax(text(0)) + ");");
+            break;
+        case 0x2C:
+            open("for (" + dotSyntax(text(0)) + "; " + dotSyntax(text(1)) + "; " + dotSyntax(text(2)) + ")");
+            break;
+        case 0x2E:
+            line("break;");
+            break;
+        case 0x32:
+            open("with (" + valueText(text(0), number(1) != 0) + ")");
+            break;
+        case 0x3E:
+        {
+            const std::string object = dotSyntax(text(0));
+            line((object.empty() ? std::string() : object + ".") + text(1) + "(" + dotSyntax(text(2)) + ");");
+            break;
+        }
+        default:
+            break;
         }
     }
+    // Blocks the list left open are closed.
+    while (depth > 0)
+        close();
+    return out;
 }
 
 std::string readActions(Reader& r)
@@ -730,7 +1222,7 @@ std::string readActions(Reader& r)
     if (version == 0)
     {
         if (kind == 0)
-            readActionList(r);
+            return actionListScript(readActionList(r));
         return kind == 1 ? r.cstring() : std::string();
     }
     r.u32();
@@ -758,7 +1250,7 @@ std::string readActions(Reader& r)
     if (version >= 4 || kind == 1)
         return r.cstring();
     if (kind == 0)
-        readActionList(r);
+        return actionListScript(readActionList(r));
     return std::string();
 }
 
