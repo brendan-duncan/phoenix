@@ -2,6 +2,12 @@
 
 What changed in each release of Phoenix, newest first.
 
+## Unreleased
+
+- HTML5 Canvas scripts draw in Test Movie: `createjs.Shape` and its `Graphics` (fills, strokes, gradients, bitmap fills, arcs, shapes and the short forms), `Text`, `Bitmap`, `Container`, `Sprite` with `SpriteSheet`, and `MovieClip` timelines made in code
+- HTML5 Canvas scripts' filters, `cache()`, `shadow`, masks and `compositeOperation` show in Test Movie, and `skewX`, `skewY`, `regX` and `regY` move objects as in CreateJS
+- HTML5 Canvas scripts reach an instance before its keyframe, and an instance placed again by a later keyframe keeps its listeners
+
 ## 0.17.1
 
 - Publish Settings is laid out in two columns, where and what to publish beside the formats' options, so it fits a laptop's screen
