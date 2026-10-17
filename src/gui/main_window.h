@@ -1210,6 +1210,9 @@ private:
     QString _documentPath;
     /// What the last SWF export could not put in as it is.
     QStringList _swfNotes;
+    /// How many frames the last SWF export wrote (every scene, one after
+    /// another, when it kept the movie's structure).
+    int _swfFrames = 0;
     Player* _player;
     Updater* _updater;
     DocumentView* _documentView;

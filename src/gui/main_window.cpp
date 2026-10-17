@@ -8065,7 +8065,7 @@ int MainWindow::exportFromCommandLine(const QString& source, const QString& outp
         }
         for (const QString& note : _swfNotes)
             std::fprintf(stderr, "%s\n", qPrintable(note));
-        std::printf("Exported %d frames to %s\n", std::max(1, _phoenixView->frameCount()), qPrintable(path));
+        std::printf("Exported %d frames to %s\n", std::max(1, _swfFrames), qPrintable(path));
         return 0;
     }
     MovieExportSettings settings;
@@ -9269,6 +9269,7 @@ bool MainWindow::exportSwf(const QString& path, const QSize& size, QString& erro
         statusBar()->showMessage(_swfNotes.size() == 1 ? _swfNotes.front()
                                                        : QString("%1 (and %2 more)").arg(_swfNotes.front()).arg(_swfNotes.size() - 1),
             10000);
+    _swfFrames = writer.frames();
     const std::vector<uint8_t> bytes = writer.finish(true);
     QFile file(path);
     if (!file.open(QIODevice::WriteOnly) ||
