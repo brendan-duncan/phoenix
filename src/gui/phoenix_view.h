@@ -722,10 +722,13 @@ public:
         QTransform matrix;
         fla::ColorTransform color;
         std::vector<fla::Filter> filters;
+        /// A graphic with clips in it: the frame of its own it shows.
+        int graphicFrame = -1;
     };
     /// What \a layer shows on frame \a frame (from 0) of its timeline, as
-    /// pieces: the movie clips and buttons on it, and dynamic text with a
-    /// name or a variable and input text, apart from the art.
+    /// pieces: the movie clips and buttons on it, the graphics with those
+    /// in them, and dynamic text with a name or a variable and input text,
+    /// apart from the art.
     std::vector<CapturedPiece> captureLayerFrame(const fla::Layer* layer, int frame);
 
     /// While set, renderFrame draws nothing of the scene but \a layer (its
@@ -1325,6 +1328,8 @@ private:
         std::vector<CapturedPiece> pieces;
         int element = -1;
         size_t mark = 0;
+        /// Whether each graphic met holds clips (swfmovie::holdsClips).
+        std::map<const fla::Symbol*, bool> holdsClips;
     };
     Capture* _capture = nullptr;
     /// The art recorded since the mark, as a piece of the element drawn.

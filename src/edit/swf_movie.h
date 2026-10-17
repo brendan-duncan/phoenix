@@ -14,6 +14,7 @@
 namespace fla {
 
 class Document;
+class Frame;
 class Layer;
 class StaticText;
 class Symbol;
@@ -30,8 +31,14 @@ class Timeline;
 /// #initclip, ActionScript 2 classes and the symbols linked to them.
 ///
 /// The art (shapes, text, bitmaps, graphic symbols) is drawn as the rest of
-/// Phoenix draws it, by a Drawer, and written as shapes. Tweens go in as a
-/// placement a frame. Free of Qt.
+/// Phoenix draws it, by a Drawer, and written as shapes. A graphic symbol
+/// with movie clips or buttons in it has its frames placed into the
+/// timeline it is on, frame by frame as it loops or plays once, so what is
+/// in it stays a placed clip scripts reach by name. Motion tweens go in as
+/// a placement a frame; shape tweens as morph shapes where the tween's
+/// fills and lines can be, else as a shape a frame. Sounds that play as
+/// events start on the timelines they are on, and buttons sound their
+/// states' sounds. Free of Qt.
 namespace swfmovie {
 
 /// One element of a layer's frame as the movie has it.
@@ -39,6 +46,18 @@ struct Piece
 {
     /// Its place among the frame's elements.
     int element = -1;
+    /// Where it is inside the graphics placed into the timeline (each
+    /// level's layer, bottom first, and element), empty for an element of
+    /// the layer itself. A piece in a graphic is placed by its matrix and
+    /// color, art too, and then by \a within: the graphics' colors.
+    std::vector<int> path;
+    swf::ColorTransform within;
+    /// A graphic symbol whose frames go into the timeline (see holdsClips):
+    /// the frame of its own it shows, or -1.
+    int graphicFrame = -1;
+    /// A shape tween's morph shape and how far it has run (0 to 65535).
+    int morph = 0;
+    int ratio = -1;
     /// Art: shapes in the writer, in drawing order, each drawn with an
     /// alpha and a blend mode. No shapes draws nothing.
     struct Shape
@@ -68,7 +87,8 @@ public:
     /// timeline, in drawing order, their shapes written to \a writer. Movie
     /// clips and buttons placed directly on the layer, and dynamic text
     /// fields with a name or a variable and input fields, are pieces of
-    /// their own; graphics and the rest are art.
+    /// their own, and so are graphics that hold such things (holdsClips),
+    /// with the frame they show; other graphics and the rest are art.
     virtual std::vector<Piece> layerFrame(const Layer& layer, int frame, swf::Writer& writer) = 0;
     /// Whether \a layer of \a timeline shows: on the main timeline its eye
     /// hides it, in a symbol it shows (as Phoenix's view draws them).
@@ -92,6 +112,15 @@ std::map<std::string, std::string> actionScript2Classes(const Document& document
 /// A dynamic or input text field's instance name, or empty.
 std::string fieldName(const StaticText& text);
 
+/// Whether a dynamic or input field goes in as a text field: an input
+/// field, or a dynamic one with a name or a variable.
+bool scriptedField(const StaticText& text);
+
+/// Whether graphic symbol \a symbol has movie clips, buttons or text fields
+/// scripts reach in it (in its graphics too), and no masks: its frames go
+/// into the timelines it is placed on rather than being drawn as art.
+bool holdsClips(const Symbol& symbol);
+
 struct Options
 {
     /// An ActionScript 2 class's source by its qualified name, or none: the
@@ -110,6 +139,13 @@ struct Options
     /// its components are placed as clips of their symbols. Without it, an
     /// ActionScript 3 movie goes out without its scripts.
     std::function<void(swf::Writer& writer, const std::map<const Symbol*, int>& sprites)> actionScript3;
+    /// A keyframe's sound that plays as an event (event, start or stop):
+    /// its sound's id, written to the movie the first time, and how it
+    /// plays; false when the keyframe has none, or it cannot go in. The
+    /// sounds start on the timelines their keyframes are on (StartSound),
+    /// and buttons' state frames give their sounds (DefineButtonSound).
+    /// Without it, the movie has none.
+    std::function<bool(const Frame& key, int& id, swf::SoundInfo& info)> eventSound;
 };
 
 class Movie
@@ -129,7 +165,7 @@ public:
     int sceneStart(const Timeline* scene) const;
 
     /// What did not go in as it is, a line each: scripts that do not
-    /// compile, masks in buttons, a symbol inside itself.
+    /// compile, a symbol inside itself.
     const std::vector<std::string>& problems() const;
 
     struct State;
