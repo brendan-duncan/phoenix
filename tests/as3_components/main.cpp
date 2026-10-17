@@ -68,6 +68,9 @@ void setResolver(VM& vm, const std::vector<fs::path>& roots)
 
 int failures = 0;
 
+// The program the components are first checked against.
+const char* kBunnyPaint = "D:/Backup/hulabunny/bunnyPaint";
+
 void defineHelpers(VM& vm, const std::string& script)
 {
     vm.defineFunction("trace", [](VM& vm, const Val&, Args args) {
@@ -176,6 +179,20 @@ int main(int argc, char** argv)
         // A case about skins finds the stand-in skin classes too.
         if (name.find("Skin") != std::string::npos)
             roots.insert(roots.begin(), tests / "skins");
+        // A case about bunnyPaint finds its sources (where they are), and,
+        // running its classes, stand-ins for the canvas they need.
+        if (name.find("BunnyPaint") != std::string::npos)
+        {
+            if (!fs::exists(fs::path(kBunnyPaint) / "com/hulabunny/bunnyPaint"))
+            {
+                std::cout << "  (bunnyPaint's sources not found; skipped)\n";
+                continue;
+            }
+            roots.push_back(kBunnyPaint);
+            roots.push_back(fs::path(kBunnyPaint) / "as3corelib-.93/src");
+            if (name.find("Run") != std::string::npos)
+                roots.insert(roots.begin(), tests / "bunnypaint");
+        }
         setResolver(vm, roots);
         const int before = failures;
         try
