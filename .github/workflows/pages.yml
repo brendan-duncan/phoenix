@@ -1,0 +1,42 @@
+# Publishes the GitHub Pages site, which only sends readers on to
+# phoenixanimate.com: brendan-duncan.github.io/phoenix served the guide before
+# the site did, and old links should still land on the right page. The pages
+# are written by tools/build_pages_redirect.py, one for each page in docs/, so
+# this runs again when a page is added. The repository's Pages source must be
+# set to GitHub Actions for it to take effect.
+
+name: Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/*.html"
+      - "docs/*.md"
+      - "tools/build_pages_redirect.py"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 tools/build_pages_redirect.py _site
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deployment
+        uses: actions/deploy-pages@v4
