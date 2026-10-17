@@ -692,6 +692,11 @@ public:
     /// stage at the origin, as fills and images (no stage color), masks as
     /// clips. What SWF export writes.
     std::vector<struct RecordedItem> recordFrame(int frame, const QSize& size);
+    /// What \a element draws, recorded as vectors in its own space (its own
+    /// transform taken off; a group's members keep theirs, as it draws
+    /// them), its outlines kept as strokes and its text as text where they
+    /// can be. What HTML5 publishing writes for a timeline's art.
+    std::vector<struct RecordedItem> recordElement(const fla::Element* element);
 
     /// While set, renderFrame draws nothing of the scene but \a layer (its
     /// mask still masking it), for exporting a sequence per layer.

@@ -14,6 +14,24 @@ using tinyxml2::XMLDocument;
 using tinyxml2::XMLElement;
 
 const char* const kSvgId = "BBC1F406-65F2-4219-9304-FA48C7549E44";
+/// The HTML5 Canvas format's group, and Phoenix's own HTML5 group for other
+/// documents.
+const char* const kCanvasId = "JavaScript/HTML";
+const char* const kHtml5Id = "Phoenix/HTML5";
+
+/// The profile's PublishProperties group with the id \a id, or null.
+template <typename Element>
+Element* group(Element* profile, const char* id)
+{
+    for (Element* element = profile ? profile->FirstChildElement("PublishProperties") : nullptr; element;
+         element = element->NextSiblingElement("PublishProperties"))
+    {
+        const char* value = element->Attribute("id");
+        if (value && std::strcmp(value, id) == 0)
+            return element;
+    }
+    return nullptr;
+}
 
 /// The profile in use: the one marked current, or the first.
 XMLElement* currentProfile(XMLDocument& document)
@@ -144,6 +162,7 @@ Settings read(const std::string& xml, const std::string& name)
     settings.jpegFile = name + ".jpg";
     settings.gifFile = name + ".gif";
     settings.svgFile = name + ".svg";
+    settings.html5File = name + ".html";
     XMLDocument document;
     if (xml.empty() || document.Parse(xml.c_str(), xml.size()) != tinyxml2::XML_SUCCESS)
         return settings;
@@ -220,6 +239,18 @@ Settings read(const std::string& xml, const std::string& name)
         settings.svgEmbed = propertyOf(group, "embed", "false") == "true";
         if (propertyOf(group, "default", "true") != "true")
             settings.svgFile = propertyOf(group, "filename", settings.svgFile);
+    }
+    // HTML5: the Canvas format's group, else Phoenix's own.
+    const XMLElement* canvas = group(profile, kCanvasId);
+    const XMLElement* html5 = canvas ? canvas : group(profile, kHtml5Id);
+    if (html5)
+    {
+        const char* enabled = html5->Attribute("enabled");
+        settings.html5 = canvas ? !enabled || std::strcmp(enabled, "false") != 0 : enabled && std::strcmp(enabled, "true") == 0;
+        if (propertyOf(html5, "default", "true") != "true")
+            settings.html5File = propertyOf(html5, "filename", settings.html5File);
+        settings.html5Loop = propertyOf(html5, "loop", "true") != "false";
+        settings.html5Fit = propertyOf(html5, canvas ? "phoenixScale" : "scale", "fit") != "none";
     }
     return settings;
 }
@@ -324,6 +355,20 @@ std::string write(const std::string& xml, const Settings& settings, const std::s
     setProperty(document, svg, "filename", settings.defaultNames ? name + ".svg" : settings.svgFile);
     setProperty(document, svg, "embed", settings.svgEmbed ? "true" : "false");
     setProperty(document, svg, "includeHiddenLayers", settings.svgHiddenLayers ? "true" : "false");
+    // HTML5 goes in the Canvas format's group when there is one; Phoenix's
+    // own is made only once HTML5 is asked for.
+    XMLElement* canvas = group(profile, kCanvasId);
+    XMLElement* html5 = canvas ? canvas : group(profile, kHtml5Id);
+    if (!html5 && settings.html5)
+        html5 = properties(document, profile, kHtml5Id, "HTML5");
+    if (html5)
+    {
+        html5->SetAttribute("enabled", settings.html5 ? "true" : "false");
+        setProperty(document, html5, "default", settings.defaultNames ? "true" : "false");
+        setProperty(document, html5, "filename", settings.defaultNames ? fileName(settings, "html5", name) : settings.html5File);
+        setProperty(document, html5, "loop", settings.html5Loop ? "true" : "false");
+        setProperty(document, html5, canvas ? "phoenixScale" : "scale", settings.html5Fit ? "fit" : "none");
+    }
 
     tinyxml2::XMLPrinter printer;
     document.Print(&printer);
@@ -338,6 +383,8 @@ std::string fileName(const Settings& settings, const std::string& format, const 
             return name + ".swf";
         if (format == "jpeg")
             return name + ".jpg";
+        if (format == "html5")
+            return name + (settings.html ? "_html5.html" : ".html");
         return name + "." + format;
     }
     if (format == "flash")
@@ -350,6 +397,8 @@ std::string fileName(const Settings& settings, const std::string& format, const 
         return settings.jpegFile;
     if (format == "gif")
         return settings.gifFile;
+    if (format == "html5")
+        return settings.html5File;
     return settings.svgFile;
 }
 

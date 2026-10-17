@@ -72,7 +72,7 @@ namespace {
 const char* const kHelp =
     "Phoenix commands, run with no window:\n"
     "\n"
-    "  render <file> [--range 1-240] [--out frames/|movie.mp4|anim.gif|frame.svg|movie.swf]\n"
+    "  render <file> [--range 1-240] [--out frames/|movie.mp4|anim.gif|frame.svg|movie.swf|page.html]\n"
     "         [--size WxH] [--transparent] [--no-camera] [--no-audio] [--per-layer]\n"
     "         [--layers A,B] [--passes] [--exr] [--prores|--prores4444] [--everything]\n"
     "         [--scene NAME|--all-scenes|--each-scene] [--colors N] [--dither] [--link-images]\n"
@@ -83,6 +83,8 @@ const char* const kHelp =
     "      --prores writes ProRes 422 HQ (.mov), --prores4444 keeps alpha.\n"
     "      --everything draws the pasteboard too. --colors and --dither are for GIFs.\n"
     "      --link-images writes an SVG's images once beside it, not inside it.\n"
+    "      An .html name publishes HTML5: a page that plays the movie in a browser,\n"
+    "      its runtime, content, pictures and sounds beside it.\n"
     "\n"
     "  shortcuts [--defaults]\n"
     "      Lists every command and its key: the set in use, or Phoenix's defaults.\n"

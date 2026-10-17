@@ -116,6 +116,7 @@
 #include "sprite_sheet_dialog.h"
 #include "brush_properties_dialog.h"
 #include "publish_dialog.h"
+#include "html5_publish.h"
 #include "render_queue.h"
 #include "paint_recorder.h"
 #include "../util/swf_sound.h"
@@ -8382,6 +8383,10 @@ void MainWindow::compareWith()
     dialog.exec();
 }
 
+namespace {
+std::string publishXml(const fla::Document& document);
+}
+
 int MainWindow::renderCommand(const QString& source, const QStringList& options)
 {
     // Phoenix render <document> [--range 1-240] [--out frames/|movie.mp4|anim.gif]
@@ -8539,6 +8544,28 @@ int MainWindow::renderCommand(const QString& source, const QStringList& options)
     {
         settings.format = MovieExportSettings::Format::SvgSequence;
         QDir().mkpath(QFileInfo(out).absolutePath());
+    }
+    else if (suffix == "html" || suffix == "htm")
+    {
+        // A page that plays the movie with Phoenix's JavaScript runtime,
+        // its files beside it, as Publish's HTML5 format writes it.
+        const fla::publish::Settings publish = fla::publish::read(publishXml(*document), base.toStdString());
+        Html5Publish::Settings html5;
+        html5.page = QFileInfo(out).absoluteFilePath();
+        html5.fit = publish.html5Fit;
+        html5.loop = publish.html5Loop;
+        QStringList files, notes;
+        QString error;
+        if (!Html5Publish::run(html5, *_phoenixView, _timelineAudio, *document, files, notes, error))
+        {
+            std::fprintf(stderr, "%s\n", qPrintable(error));
+            return 1;
+        }
+        for (const QString& note : notes)
+            std::fprintf(stderr, "%s\n", qPrintable(note));
+        std::printf("Published %s as %s (%d files)\n", qPrintable(source), qPrintable(html5.page),
+            static_cast<int>(files.size()));
+        return 0;
     }
     else if (suffix == "swf")
     {
@@ -9103,6 +9130,22 @@ bool MainWindow::publishFiles(QStringList& written, QStringList& problems)
             else
                 problems << QString("%1 could not be written.").arg(QFileInfo(path).fileName());
         }
+    }
+    if (settings.html5)
+    {
+        // A page that plays the movie with Phoenix's JavaScript runtime.
+        Html5Publish::Settings html5;
+        html5.page = pathOf("html5");
+        html5.fit = settings.html5Fit;
+        html5.loop = settings.html5Loop;
+        QStringList files, notes;
+        QString error;
+        if (Html5Publish::run(html5, *_phoenixView, _timelineAudio, *document, files, notes, error))
+            written << QFileInfo(html5.page).fileName();
+        else
+            problems << QString("%1: %2").arg(QFileInfo(html5.page).fileName(), error);
+        for (const QString& note : notes)
+            statusBar()->showMessage(note, 6000);
     }
     _phoenixView->update();
     return problems.isEmpty();

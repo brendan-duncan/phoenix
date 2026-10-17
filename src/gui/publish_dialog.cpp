@@ -53,9 +53,14 @@ PublishSettingsDialog::PublishSettingsDialog(const fla::publish::Settings& setti
     row(3, "JPEG image", settings.jpeg, settings.jpegFile, _jpeg, _jpegFile);
     row(4, "GIF image", settings.gif, settings.gifFile, _gif, _gifFile);
     row(5, "SVG image", settings.svg, settings.svgFile, _svg, _svgFile);
+    row(6, "HTML5 page", settings.html5, settings.html5File, _html5, _html5File);
+    _html5->setToolTip("A page that plays the movie in the browser, without the SWF: its symbols, timelines, "
+                       "sounds and, for an HTML5 Canvas document, its scripts");
     _defaultNames = new QCheckBox("Name each after the document", formats);
     _defaultNames->setChecked(settings.defaultNames);
-    grid->addWidget(_defaultNames, 6, 0, 1, 2);
+    grid->addWidget(_defaultNames, 7, 0, 1, 2);
+    // The HTML5 page's name moves aside while the HTML page has the plain one.
+    connect(_html, &QCheckBox::toggled, this, &PublishSettingsDialog::namesChanged);
     grid->setColumnStretch(1, 1);
     layout->addWidget(formats);
     connect(_defaultNames, &QCheckBox::toggled, this, &PublishSettingsDialog::namesChanged);
@@ -132,6 +137,18 @@ PublishSettingsDialog::PublishSettingsDialog(const fla::publish::Settings& setti
     svgRow->addWidget(_svgEmbed);
     svgRow->addStretch(1);
     form->addRow("SVG", svgRow);
+    _html5Fit = new QCheckBox("Fit to the window", options);
+    _html5Fit->setChecked(settings.html5Fit);
+    _html5Fit->setToolTip("Scale the stage to fill the browser window, keeping its shape; otherwise it shows at "
+                          "its own size");
+    _html5Loop = new QCheckBox("Loop", options);
+    _html5Loop->setChecked(settings.html5Loop);
+    _html5Loop->setToolTip("The main timeline starts again after its last frame");
+    QHBoxLayout* html5Row = new QHBoxLayout;
+    html5Row->addWidget(_html5Fit);
+    html5Row->addWidget(_html5Loop);
+    html5Row->addStretch(1);
+    form->addRow("HTML5", html5Row);
 
     // The SWF's soundtrack: compression, then its bit rate or bits.
     _soundCompression = new QComboBox(options);
@@ -206,6 +223,9 @@ void PublishSettingsDialog::namesChanged()
         if (!own)
             edit->setText(_name + extension);
     }
+    _html5File->setEnabled(own);
+    if (!own)
+        _html5File->setText(_name + (_html->isChecked() ? "_html5.html" : ".html"));
 }
 
 fla::publish::Settings PublishSettingsDialog::settings() const
@@ -217,6 +237,10 @@ fla::publish::Settings PublishSettingsDialog::settings() const
     out.jpeg = _jpeg->isChecked();
     out.gif = _gif->isChecked();
     out.svg = _svg->isChecked();
+    out.html5 = _html5->isChecked();
+    out.html5File = _html5File->text().toStdString();
+    out.html5Fit = _html5Fit->isChecked();
+    out.html5Loop = _html5Loop->isChecked();
     out.defaultNames = _defaultNames->isChecked();
     out.flashFile = _flashFile->text().toStdString();
     out.htmlFile = _htmlFile->text().toStdString();

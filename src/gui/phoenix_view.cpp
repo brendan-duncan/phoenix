@@ -666,6 +666,42 @@ std::vector<RecordedItem> PhoenixView::recordFrame(int frame, const QSize& size)
     return recorder.items;
 }
 
+std::vector<RecordedItem> PhoenixView::recordElement(const fla::Element* element)
+{
+    // Big enough that nothing is culled for falling off it.
+    PaintRecorder recorder(QSize(1 << 24, 1 << 24));
+    recorder.keepStrokes = true;
+    recorder.keepText = true;
+    if (!element)
+        return recorder.items;
+    QTransform own;
+    if (element->elementType() != fla::Element::Type::Group)
+    {
+        const fla::Transform& t = element->transform;
+        bool invertible = false;
+        own = QTransform(t.m11, t.m12, t.m21, t.m22, t.tx, t.ty).inverted(&invertible);
+        if (!invertible)
+            return recorder.items;
+    }
+    QPainter painter(&recorder);
+    painter.setTransform(own);
+    const QTransform savedView = viewTransform;
+    const QRectF savedVisible = _visibleRect;
+    const bool wasExporting = _exporting;
+    const bool wasVector = _vectorMasks;
+    viewTransform = QTransform();
+    _visibleRect = QRectF(-1.0e7, -1.0e7, 2.0e7, 2.0e7);
+    _exporting = true;
+    _vectorMasks = true;
+    drawElement(painter, element, nullptr, 0.0);
+    _vectorMasks = wasVector;
+    _exporting = wasExporting;
+    viewTransform = savedView;
+    _visibleRect = savedVisible;
+    painter.end();
+    return recorder.items;
+}
+
 QImage PhoenixView::renderElements(const std::vector<const fla::Element*>& elements, double scale)
 {
     QRectF bounds;

@@ -233,6 +233,9 @@ set(PHOENIX_CORE_PLAY_SOURCES
     play/script/bindings.cpp
     play/script/class_path.cpp
     play/script/png_reader.cpp
+    # Publishing to HTML5, for the JavaScript runtime in resources/html5;
+    # it shares the filters' color math with the display list.
+    edit/html5_export.cpp
 )
 
 # phoenix_add_core(<target> <src dir> [FILES] [JSFL] [PYTHON] [PLAY]): the core

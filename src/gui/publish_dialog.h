@@ -53,6 +53,10 @@ private:
     HotSpinBox* _gifColors = nullptr;
     QCheckBox* _svgHidden = nullptr;
     QCheckBox* _svgEmbed = nullptr;
+    QCheckBox* _html5 = nullptr;
+    QLineEdit* _html5File = nullptr;
+    QCheckBox* _html5Fit = nullptr;
+    QCheckBox* _html5Loop = nullptr;
     QComboBox* _soundCompression = nullptr;
     QComboBox* _soundQuality = nullptr;
     QComboBox* _soundRate = nullptr;
