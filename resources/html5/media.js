@@ -290,8 +290,7 @@ phoenix._.playLibrarySound = function (index, loops, offset) {
     var channel = new SoundChannel();
     if (!entry)
         return channel;
-    var sound = Object.create(Sound.prototype);
-    EventDispatcher.call(sound);
+    var sound = new Sound();
     sound._index = index;
     channel._sound = sound;
     start(entry, channel, offset || 0, Math.max(1, loops | 0));

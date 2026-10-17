@@ -1,9 +1,11 @@
 #include "html5_export.h"
 
+#include "deformers.h"
 #include "frame_bake.h"
 #include "frame_sound.h"
 #include "graphic_loop.h"
 #include "layer_commands.h"
+#include "three_d.h"
 
 #include "../data/bitmap.h"
 #include "../data/bitmap_instance.h"
@@ -664,6 +666,13 @@ private:
             const auto& instance = static_cast<const SymbolInstance&>(element);
             if (!instance.symbol)
                 return std::string();
+            // Bent or turned out of the plane (an Asset Warp puppet, a
+            // deformer, a 3D turn): no display object does that, so it goes
+            // as art, drawn as the stage draws it.
+            const std::optional<deform::Deformer> deformer = deform::of(instance);
+            if (instance.otherSymbolType == "puppet" || (deformer && !deform::atRest(*deformer)) ||
+                !threed::of(instance).flat())
+                break;
             const Symbol& symbol = *instance.symbol;
             out += ",\"t\":\"s\",\"id\":" + std::to_string(indexOf(&symbol));
             const SymbolType type = instance.otherSymbolType.empty() ? instance.symbolType : SymbolType::Graphic;
@@ -700,8 +709,11 @@ private:
             {
                 out += ",\"t\":\"x\",\"id\":" + std::to_string(textIndex(text));
                 out += placed(text.transform);
-                if (!text.instanceName.empty())
-                    out += ",\"n\":" + quoted(text.instanceName);
+                // Its instance name, which the file may keep as name.
+                const std::string name =
+                    text.instanceName.empty() ? attributeOf(text.extraAttributes, "name") : text.instanceName;
+                if (!name.empty())
+                    out += ",\"n\":" + quoted(name);
                 return out + masks() + "}";
             }
             break;

@@ -423,6 +423,11 @@ function updateCursor() {
                 cursor = "pointer";
                 break;
             }
+            // A CSS cursor of its own (CreateJS's cursor).
+            if (at._cssCursor) {
+                cursor = at._cssCursor;
+                break;
+            }
             if (at instanceof flash.text.TextField && (at._type === "input" || at._selectable)) {
                 cursor = at._type === "input" ? "text" : "default";
                 break;
@@ -869,6 +874,17 @@ phoenix.start = function (settings) {
     }
     if (traceOut) {
         phoenix.traceListeners.push(function (line) { traceOut.textContent += line + "\n"; });
+        // What scripts write to the console comes too (trace writes there
+        // already).
+        if (typeof console !== "undefined")
+            ["log", "info", "warn", "error"].forEach(function (level) {
+                var original = console[level];
+                console[level] = function () {
+                    original.apply(console, arguments);
+                    if (!phoenix._.tracing)
+                        traceOut.textContent += Array.prototype.map.call(arguments, phoenix.show).join(" ") + "\n";
+                };
+            });
         var report = phoenix._.reportError;
         phoenix._.reportError = function (error, where) {
             report(error, where);
@@ -957,6 +973,15 @@ function begin(movie, settings) {
     rootClip = made;
     phoenix._.rootClip = made;
     phoenix._.loaderInfo._content = made;
+    // What layers over the runtime (CreateJS) set up before the first
+    // frame's scripts run.
+    (phoenix._.onRoot || []).forEach(function (hook) {
+        try {
+            hook(stage, made);
+        } catch (error) {
+            phoenix._.reportError(error, "starting");
+        }
+    });
     inFrame = true;
     try {
         sendBroadcast("frameConstructed");
@@ -965,7 +990,11 @@ function begin(movie, settings) {
     } finally {
         inFrame = false;
     }
-    phoenix._.frameEntered(made, undefined, 0);
+    try {
+        phoenix._.frameEntered(made, undefined, 0);
+    } catch (error) {
+        phoenix._.reportError(error, "the first frame's sounds");
+    }
     requestDraw();
 }
 /// The root is on the stage while it is made: its children see the stage

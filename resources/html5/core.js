@@ -90,8 +90,14 @@ function show(value) {
 }
 function trace() {
     var line = Array.prototype.map.call(arguments, show).join(" ");
-    if (global.console && global.console.log)
-        global.console.log(line);
+    if (global.console && global.console.log) {
+        phoenix._.tracing = true;
+        try {
+            global.console.log(line);
+        } finally {
+            phoenix._.tracing = false;
+        }
+    }
     for (var i = 0; i < traceListeners.length; ++i)
         traceListeners[i](line);
 }
