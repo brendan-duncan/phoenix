@@ -23,6 +23,7 @@
 #include <cctype>
 #include <cstdlib>
 #include <cstring>
+#include <regex>
 #include <set>
 #include <sstream>
 
@@ -427,7 +428,10 @@ public:
         std::string documentClass = publishSetting(_document, "DocumentClass");
         documentClass.erase(0, documentClass.find_first_not_of(" \t\r\n"));
         documentClass.erase(documentClass.find_last_not_of(" \t\r\n") + 1);
-        const bool staged = !named(main).empty() && _autoDeclare;
+        // Its named instances want declaring once the movie has any
+        // ActionScript; a movie without has no classes at all.
+        const bool scripted = !main.frames.empty() || !_classes.empty() || !documentClass.empty();
+        const bool staged = scripted && _autoDeclare && !named(main).empty();
         if (!documentClass.empty() && (playerClass(documentClass) || find(documentClass)))
         {
             if (!main.frames.empty() || staged)
@@ -838,12 +842,17 @@ private:
     std::string describe(const as3::abc::Diagnostic& diagnostic) const
     {
         const std::string kind = diagnostic.isError ? std::string() : std::string("warning: ");
-        // The parser's own messages say where again: "Warning in X at line
-        // 50, column 33: ...".
+        // The parser's own messages say where again ("Parse error in X at
+        // line 2, column 6: ..."): the column is kept.
         std::string message = diagnostic.message;
-        for (const char* lead : {"Warning in ", "Error in "})
-            if (message.rfind(lead, 0) == 0 && message.find(": ") != std::string::npos)
-                message = message.substr(message.find(": ") + 2);
+        static const std::regex where("^[A-Za-z ]+ in .*? at line [0-9]+(, column ([0-9]+))?: ");
+        std::smatch said;
+        std::string column;
+        if (std::regex_search(message, said, where))
+        {
+            column = said[2].matched ? ", column " + said[2].str() : std::string();
+            message = said.suffix().str();
+        }
         for (const TimelineClass& made : _timelines)
         {
             const std::string prefix = made.timeline.className + ", frame ";
@@ -859,11 +868,11 @@ private:
                 if (diagnostic.line >= starts->second[i])
                     which = i;
             const int line = diagnostic.line > 0 ? diagnostic.line - starts->second[which] + 1 : 0;
-            return parts->second[which].where + (line > 0 ? ", line " + std::to_string(line) : std::string()) + ": " +
-                kind + message;
+            return parts->second[which].where + (line > 0 ? ", line " + std::to_string(line) + column : std::string()) +
+                ": " + kind + message;
         }
         return (diagnostic.fileName.empty() ? std::string("ActionScript") : diagnostic.fileName) +
-            (diagnostic.line > 0 ? ", line " + std::to_string(diagnostic.line) : std::string()) + ": " + kind +
+            (diagnostic.line > 0 ? ", line " + std::to_string(diagnostic.line) + column : std::string()) + ": " + kind +
             message;
     }
 };
