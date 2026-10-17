@@ -58,7 +58,8 @@ package fl.controls {
         private static var defaultStyles:Object = {
             skin: "List_skin",
             cellRenderer: CellRenderer,
-            contentPadding: null,
+            // The rows inside the skin's one pixel border.
+            contentPadding: 1,
             disabledAlpha: null
         };
 

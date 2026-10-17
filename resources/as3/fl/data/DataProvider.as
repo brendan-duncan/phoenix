@@ -48,7 +48,7 @@ package fl.data {
         }
 
         public function addItem(item:Object):void {
-            dispatchPreChangeEvent(DataChangeType.ADD, [item], data.length - 1, data.length - 1);
+            dispatchPreChangeEvent(DataChangeType.ADD, [item], data.length, data.length);
             data.push(item);
             dispatchChangeEvent(DataChangeType.ADD, [item], data.length - 1, data.length - 1);
         }

@@ -2,7 +2,12 @@ package flash.events {
     // Stand-in: listeners by type and priority; target and bubble phases
     // along the display list (capture listeners run in the bubble order).
     public class EventDispatcher {
-        private var _listeners:Object = {};
+        // Made on first use: a subclass may be used before its super() runs.
+        private var _listenerTable:Object;
+        private function get _listeners():Object {
+            if (_listenerTable == null) _listenerTable = {};
+            return _listenerTable;
+        }
         private var _dispatchTarget:Object;
 
         public function EventDispatcher(target:Object = null) {

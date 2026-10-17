@@ -129,13 +129,13 @@ package fl.controls {
 
         /** The value one step up (or the maximum). */
         public function get nextValue():Number {
-            var next:Number = _value + _stepSize;
+            var next:Number = Number((_value + _stepSize).toFixed(_precision));
             return inRange(next) ? next : _value;
         }
 
         /** The value one step down (or the minimum). */
         public function get previousValue():Number {
-            var previous:Number = _value - _stepSize;
+            var previous:Number = Number((_value - _stepSize).toFixed(_precision));
             return inRange(previous) ? previous : _value;
         }
 
@@ -206,6 +206,8 @@ package fl.controls {
             if (value == _value) return;
             var old:Number = _value;
             _value = getValidValue(value);
+            // The field shows the value at once: the arrows read it.
+            updateText();
             if (old != _value && fireEvent) {
                 dispatchEvent(new Event(Event.CHANGE));
             }

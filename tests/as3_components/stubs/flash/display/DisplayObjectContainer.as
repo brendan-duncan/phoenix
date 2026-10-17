@@ -3,7 +3,12 @@ package flash.display {
     import flash.geom.Rectangle;
 
     public class DisplayObjectContainer extends InteractiveObject {
-        private var _children:Array = [];
+        // Made on first use: a subclass may add children before its super() runs.
+        private var _childList:Array;
+        private function get _children():Array {
+            if (_childList == null) _childList = [];
+            return _childList;
+        }
         public var mouseChildren:Boolean = true;
         public var tabChildren:Boolean = true;
 
