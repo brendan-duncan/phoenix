@@ -253,6 +253,7 @@ std::vector<fla::swfmovie::Piece> SwfViewDrawer::layerFrame(const fla::Layer& la
             piece.matrix = swfMatrix(captured.matrix);
             piece.color = captured.color;
             piece.filters = captured.filters;
+            piece.graphicFrame = captured.graphicFrame;
             if (captured.instance)
                 piece.blendMode = captured.instance->blendMode;
         }

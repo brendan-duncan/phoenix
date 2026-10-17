@@ -5377,8 +5377,19 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
             }
 
             // Captured for an SWF: a movie clip or button on the layer itself
-            // is left for the movie to draw, where it is and as it shows now.
-            if (_capture && _frameDepth == 1 && !_maskPass && instance->symbolType != fla::SymbolType::Graphic)
+            // is left for the movie to draw, where it is and as it shows now,
+            // and so is a graphic with clips in it, with the frame it shows,
+            // for the movie to open into the timeline.
+            const auto holdsClips = [this](const fla::Symbol* symbol) {
+                if (!symbol)
+                    return false;
+                const auto known = _capture->holdsClips.find(symbol);
+                if (known != _capture->holdsClips.end())
+                    return known->second;
+                return _capture->holdsClips[symbol] = fla::swfmovie::holdsClips(*symbol);
+            };
+            if (_capture && _frameDepth == 1 && !_maskPass &&
+                (instance->symbolType != fla::SymbolType::Graphic || holdsClips(instance->symbol)))
             {
                 takeCapturedArt();
                 CapturedPiece piece;
@@ -5387,6 +5398,8 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
                 piece.matrix = painter.transform();
                 piece.color = color;
                 piece.filters = filters;
+                if (instance->symbolType == fla::SymbolType::Graphic)
+                    piece.graphicFrame = symbolFrame(*instance);
                 _capture->pieces.push_back(std::move(piece));
                 painter.restore();
                 return;

@@ -441,6 +441,16 @@ void SwfEventSounds::define(swf::Writer& writer, int frames)
                 soundOf(frame_sound::read(*action.key).name);
 }
 
+bool SwfEventSounds::keySound(swf::Writer& writer, const Frame& key, int& id, swf::SoundInfo& info)
+{
+    _writer = &writer;
+    id = 0;
+    if (!eventSound(key))
+        return false;
+    id = soundOf(frame_sound::read(key).name);
+    return id && soundInfo(key, info);
+}
+
 void SwfEventSounds::frame(swf::Writer& writer, int frame)
 {
     const auto here = _scene.find(frame);

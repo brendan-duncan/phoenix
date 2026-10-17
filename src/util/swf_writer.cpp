@@ -757,6 +757,183 @@ int Writer::defineSprite(const Sprite& sprite)
     return id;
 }
 
+int Writer::defineMorphShape(const std::vector<MorphFill>& fills, const std::vector<MorphLine>& lines,
+    const std::vector<MorphPath>& paths)
+{
+    // Every outline a Move and pieces, as many at the end as at the start.
+    bool any = false;
+    for (const MorphPath& path : paths)
+    {
+        if (path.start.size() != path.end.size() || path.start.empty() ||
+            path.start.front().kind != Segment::Kind::Move || path.end.front().kind != Segment::Kind::Move)
+            return 0;
+        for (size_t i = 1; i < path.start.size(); ++i)
+            if (path.start[i].kind == Segment::Kind::Move || path.end[i].kind == Segment::Kind::Move)
+                return 0;
+        any = any || path.start.size() > 1;
+    }
+    if (!any)
+        return 0;
+    // Bounds of each, from the points and controls, a line's half width
+    // further out.
+    const auto bounds = [&](bool end, int32_t& left, int32_t& right, int32_t& top, int32_t& bottom) {
+        double l = 1.0e300, t = 1.0e300, r = -1.0e300, b = -1.0e300;
+        double reach = 0.0;
+        for (const MorphLine& line : lines)
+            reach = std::max(reach, (end ? line.endWidth : line.startWidth) / 2.0);
+        for (const MorphPath& path : paths)
+            for (const Segment& s : end ? path.end : path.start)
+            {
+                l = std::min({l, s.x, s.kind == Segment::Kind::Quad ? s.cx : s.x});
+                r = std::max({r, s.x, s.kind == Segment::Kind::Quad ? s.cx : s.x});
+                t = std::min({t, s.y, s.kind == Segment::Kind::Quad ? s.cy : s.y});
+                b = std::max({b, s.y, s.kind == Segment::Kind::Quad ? s.cy : s.y});
+            }
+        left = twips(l - reach);
+        right = twips(r + reach);
+        top = twips(t - reach);
+        bottom = twips(b + reach);
+    };
+    const int id = _nextId++;
+    Bits body;
+    body.u16(id);
+    int32_t l, r, t, b;
+    bounds(false, l, r, t, b);
+    rect(body, l, r, t, b);
+    bounds(true, l, r, t, b);
+    rect(body, l, r, t, b);
+    const size_t offsetAt = body.bytes.size();
+    body.u32(0); // to the end edges, filled in below
+
+    const auto count = [&](size_t n) {
+        if (n >= 0xFF)
+        {
+            body.u8(0xFF);
+            body.u16(static_cast<int>(n));
+        }
+        else
+            body.u8(static_cast<int>(n));
+    };
+    count(fills.size());
+    for (const MorphFill& fill : fills)
+    {
+        const bool gradient = fill.start.type == Fill::Type::Linear || fill.start.type == Fill::Type::Radial;
+        body.u8(!gradient ? 0x00 : fill.start.type == Fill::Type::Linear ? 0x10 : 0x12);
+        if (!gradient)
+        {
+            rgba(body, fill.start.color);
+            rgba(body, fill.end.color);
+            continue;
+        }
+        matrix(body, fill.start.matrix, 20.0);
+        matrix(body, fill.end.matrix, 20.0);
+        const size_t stops = std::min<size_t>({fill.start.stops.size(), fill.end.stops.size(), 15});
+        body.u8(static_cast<int>(stops));
+        for (size_t i = 0; i < stops; ++i)
+        {
+            body.u8(static_cast<int>(std::lround(std::clamp(fill.start.stops[i].offset, 0.0, 1.0) * 255.0)));
+            rgba(body, fill.start.stops[i].color);
+            body.u8(static_cast<int>(std::lround(std::clamp(fill.end.stops[i].offset, 0.0, 1.0) * 255.0)));
+            rgba(body, fill.end.stops[i].color);
+        }
+    }
+    count(lines.size());
+    for (const MorphLine& line : lines)
+    {
+        body.u16(std::clamp(twips(line.startWidth), 0, 0xFFFF));
+        body.u16(std::clamp(twips(line.endWidth), 0, 0xFFFF));
+        rgba(body, line.startColor);
+        rgba(body, line.endColor);
+    }
+
+    const auto bitsFor = [](size_t n) {
+        int bits = 0;
+        while ((size_t(1) << bits) <= n)
+            ++bits;
+        return bits;
+    };
+    const int fillBits = bitsFor(fills.size());
+    const int lineBits = bitsFor(lines.size());
+    // The edges, the start's with their styles and the end's alike but for
+    // the styles; every piece a curve, so the two always match.
+    const auto edges = [&](bool end) {
+        body.align();
+        body.put(end ? 0u : static_cast<uint32_t>(fillBits), 4);
+        body.put(end ? 0u : static_cast<uint32_t>(lineBits), 4);
+        int32_t x = 0, y = 0;
+        for (const MorphPath& path : paths)
+        {
+            const std::vector<Segment>& segments = end ? path.end : path.start;
+            for (size_t i = 0; i < segments.size(); ++i)
+            {
+                const Segment& s = segments[i];
+                const int32_t tx = twips(s.x);
+                const int32_t ty = twips(s.y);
+                if (i == 0)
+                {
+                    body.put(0, 1); // a style change
+                    body.put(0, 1); // new styles
+                    body.put(end ? 0u : 1u, 1); // line style
+                    body.put(end ? 0u : 1u, 1); // fill style 1
+                    body.put(end ? 0u : 1u, 1); // fill style 0
+                    body.put(1, 1); // move to
+                    const int bits = signedBits({tx, ty});
+                    body.put(static_cast<uint32_t>(bits), 5);
+                    body.putSigned(tx, bits);
+                    body.putSigned(ty, bits);
+                    if (!end)
+                    {
+                        body.put(static_cast<uint32_t>(path.fill0), fillBits);
+                        body.put(static_cast<uint32_t>(path.fill1), fillBits);
+                        body.put(static_cast<uint32_t>(path.line), lineBits);
+                    }
+                }
+                else
+                {
+                    const bool quad = s.kind == Segment::Kind::Quad;
+                    const int32_t cx = quad ? twips(s.cx) : (x + tx) / 2;
+                    const int32_t cy = quad ? twips(s.cy) : (y + ty) / 2;
+                    const int32_t cdx = cx - x, cdy = cy - y, adx = tx - cx, ady = ty - cy;
+                    body.put(1, 1); // an edge
+                    body.put(0, 1); // curved
+                    const int bits = std::max(2, signedBits({cdx, cdy, adx, ady}));
+                    body.put(static_cast<uint32_t>(bits - 2), 4);
+                    body.putSigned(cdx, bits);
+                    body.putSigned(cdy, bits);
+                    body.putSigned(adx, bits);
+                    body.putSigned(ady, bits);
+                }
+                x = tx;
+                y = ty;
+            }
+        }
+        body.put(0, 6); // the end
+        body.align();
+    };
+    edges(false);
+    const size_t endAt = body.bytes.size();
+    const uint32_t offset = static_cast<uint32_t>(endAt - (offsetAt + 4));
+    for (int k = 0; k < 4; ++k)
+        body.bytes[offsetAt + static_cast<size_t>(k)] = static_cast<uint8_t>((offset >> (8 * k)) & 0xFF);
+    edges(true);
+    tag(46, body.bytes); // DefineMorphShape
+    return id;
+}
+
+void Writer::defineButtonSound(int button, const std::vector<std::pair<int, SoundInfo>>& transitions)
+{
+    Bits body;
+    body.u16(button);
+    for (size_t i = 0; i < 4; ++i)
+    {
+        if (i < transitions.size() && transitions[i].first > 0)
+            body.append(startSoundBody(transitions[i].first, transitions[i].second));
+        else
+            body.u16(0);
+    }
+    tag(17, body.bytes); // DefineButtonSound
+}
+
 int Writer::defineButton(const std::vector<ButtonRecord>& records, const std::vector<ButtonAction>& actions, bool menu)
 {
     const int id = _nextId++;

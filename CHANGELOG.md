@@ -2,6 +2,14 @@
 
 What changed in each release of Phoenix, newest first.
 
+## Unreleased
+
+- SWF movies keep the movie clips, buttons and text fields inside graphic symbols as real clips scripts reach by name, the graphic's frames placed into the timeline as it loops, plays once or holds a frame
+- SWF movies: shape tweens go in as morph shapes the player blends, buttons keep their masks, and buttons play the sounds on their Up, Over, Down and Hit frames
+- SWF movies: the soundtrack covers every scene, played in a row, and event sounds start on the timeline they are on, so a movie clip a script stops starts no more of its sounds
+- ActionScript 1 and 2 compiled into SWF movies runs a `finally` block when `break`, `continue` or `return` leaves its `try`
+- Test Movie runs a movie clip's `on()` handlers, and runs them and its `onClipEvent()` handlers on the clip itself, as players do
+
 ## 0.17.1
 
 - Publish Settings is laid out in two columns, where and what to publish beside the formats' options, so it fits a laptop's screen
