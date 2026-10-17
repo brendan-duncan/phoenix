@@ -1092,6 +1092,14 @@ int captureDialog(const QStringList& args)
                     look.paintBrushGuid = definition.guid();
                     break;
                 }
+        // Else one of Phoenix's own, from the brush library.
+        if (look.kind != fla::StrokeStyle::Style::PaintBrush && !brushName.isEmpty())
+            for (const fla::BrushLibraryEntry& entry : fla::phoenixBrushes())
+                if (QString::fromStdString(entry.definition.name) == brushName)
+                {
+                    look.kind = fla::StrokeStyle::Style::PaintBrush;
+                    look.paintBrushGuid = entry.definition.guid();
+                }
         const QString kind = option(args, "--kind");
         const std::map<QString, fla::StrokeStyle::Style> kinds{{"solid", fla::StrokeStyle::Style::Solid},
             {"hairline", fla::StrokeStyle::Style::Solid}, {"dashed", fla::StrokeStyle::Style::Dashed},
