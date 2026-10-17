@@ -20,7 +20,7 @@
     },
     {
       "title": "Choose a color",
-      "text": "<p>Click the <b>fill swatch</b>, the solid square at the bottom of the toolbox, and pick a bright color for the ball.</p><p>The outlined square beside it is the stroke color. To draw the ball without an outline, uncheck <b>Stroke</b> on the Properties panel's Tool tab.</p>",
+      "text": "<p>Click the <b>fill swatch</b>, the solid square at the bottom of the toolbox, and pick a bright color for the ball.</p><p>The outlined square overlapping it is the stroke color; whichever you click comes to the front. To draw the ball without an outline, uncheck <b>Stroke</b> on the Properties panel's Tool tab.</p>",
       "target": "widget:toolboxFill"
     },
     {

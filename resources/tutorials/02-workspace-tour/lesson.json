@@ -28,7 +28,7 @@
     },
     {
       "title": "Fill color",
-      "text": "<p>The solid square is the <b>fill</b> color. The small buttons beside them set black and white, or swap stroke and fill.</p><p>Below them is the <b>Object Drawing</b> button, <kbd>J</kbd>, which the lesson <i>Merge and object drawing</i> explains.</p>",
+      "text": "<p>The solid square is the <b>fill</b> color. The two small buttons with them set black and white, or swap stroke and fill.</p><p>Below them is the <b>Object Drawing</b> button, <kbd>J</kbd>, which the lesson <i>Merge and object drawing</i> explains.</p>",
       "target": "widget:toolboxFill"
     },
     {
