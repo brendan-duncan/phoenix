@@ -112,8 +112,6 @@ const ICONS = {
 const REPO = "https://github.com/brendan-duncan/phoenix";
 const CONTACT = {
   email: "brendan.duncan@gmail.com",
-  linkedin: "https://www.linkedin.com/in/brendanduncan",
-  mastodon: "https://mastodon.gamedev.place/@brendan",
 };
 
 function storageGet(key) { try { return localStorage.getItem(key); } catch { return null; } }
