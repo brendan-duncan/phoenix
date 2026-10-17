@@ -41,6 +41,33 @@ public:
     virtual std::string sounds() = 0;
 };
 
+/// A movie's ActionScript 1 and 2, gathered while its content is made, for
+/// translating to JavaScript (fla::html5as2): each keyframe's script, and
+/// each instance's on() and onClipEvent() handlers, which the content's
+/// entry for the instance names by its id ("h").
+struct ActionScript2
+{
+    struct FrameScript
+    {
+        /// "" for the main timeline, else the symbol's library name.
+        std::string timeline;
+        /// From 0; on the main timeline counted through its scenes.
+        int frame = 0;
+        std::string code;
+        /// The main timeline's scene the frame is in.
+        std::string scene;
+        std::string where;
+    };
+    struct InstanceScript
+    {
+        int id = 0;
+        std::string code;
+        std::string where;
+    };
+    std::vector<FrameScript> frames;
+    std::vector<InstanceScript> instances;
+};
+
 struct Options
 {
     /// The movie's scripts are JavaScript (an HTML5 Canvas document): its
@@ -51,6 +78,9 @@ struct Options
     /// Every symbol, not only those the scenes show and those exported for
     /// ActionScript.
     bool allSymbols = false;
+    /// Where the movie's ActionScript 1 and 2 goes, for a movie whose
+    /// scripts are; null leaves them out (with a note).
+    ActionScript2* actionScript2 = nullptr;
 };
 
 /// The content of \a document as JSON. \a notes gets what could not be

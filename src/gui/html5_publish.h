@@ -27,6 +27,9 @@ struct Settings
     bool fit = true;
     /// The main timeline starts again after its last frame.
     bool loop = true;
+    /// The document's file, for the ActionScript 2 classes beside it (its
+    /// class path); empty for one not saved.
+    QString documentPath;
 };
 
 /// Writes the page for \a document as \a view draws it (the view showing
@@ -41,5 +44,8 @@ bool run(const Settings& settings, PhoenixView& view, TimelineAudio* audio, cons
 QByteArray runtime();
 /// The CreateJS layer HTML5 Canvas documents' scripts run on.
 QByteArray createJs();
+/// What ActionScript 1 and 2 translated to JavaScript runs on: libas3's
+/// avm1.js, then the runtime's as2.js (phoenix-as2.js beside the page).
+QByteArray actionScript2Runtime();
 
 } // namespace Html5Publish

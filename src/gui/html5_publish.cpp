@@ -9,7 +9,10 @@
 #include "../data/bitmap.h"
 #include "../data/document.h"
 #include "../edit/canvas_document.h"
+#include "../edit/html5_actionscript2.h"
 #include "../edit/html5_export.h"
+#include "../play/script/class_path.h"
+#include "movie_hooks.h"
 
 #include "tinyxml2.h"
 
@@ -515,7 +518,7 @@ private:
 };
 
 QString pageHtml(const QString& title, const QString& name, const QColor& background, bool fit, bool javaScript,
-    int width, int height)
+    bool actionScript2, int width, int height)
 {
     const QString style = fit
         ? QString("html, body { margin: 0; height: 100%; overflow: hidden; background: %1; }\n"
@@ -527,6 +530,8 @@ QString pageHtml(const QString& title, const QString& name, const QColor& backgr
     QString scripts = "<script src=\"phoenix.js\"></script>\n";
     if (javaScript)
         scripts += "<script src=\"phoenix-createjs.js\"></script>\n";
+    if (actionScript2)
+        scripts += "<script src=\"phoenix-as2.js\"></script>\n";
     scripts += QString("<script src=\"%1.content.js\"></script>\n").arg(name.toHtmlEscaped());
     return QString("<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n"
                    "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>%1</title>\n"
@@ -556,6 +561,12 @@ QByteArray createJs()
     return resource("createjs.js");
 }
 
+QByteArray actionScript2Runtime()
+{
+    return "// avm1.js (libas3): ActionScript 1 and 2's semantics for translated scripts.\n" +
+        QByteArray::fromStdString(fla::html5as2::avm1Runtime()) + "\n// as2.js\n" + resource("as2.js");
+}
+
 bool run(const Settings& settings, PhoenixView& view, TimelineAudio* audio, const fla::Document& document,
     QStringList& written, QStringList& notes, QString& error)
 {
@@ -573,6 +584,12 @@ bool run(const Settings& settings, PhoenixView& view, TimelineAudio* audio, cons
     fla::html5::Options options;
     options.javaScript = javaScript;
     options.loop = settings.loop;
+    // ActionScript 1 and 2 are translated to JavaScript (html5as2), the
+    // scripts gathered as the content is made.
+    fla::html5::ActionScript2 actionScript2;
+    const bool as2 = !javaScript && fla::html5as2::usesActionScript2(document);
+    if (as2)
+        options.actionScript2 = &actionScript2;
     std::vector<std::string> found;
     const std::string content = fla::html5::content(document, art, options, &found);
     for (const std::string& note : found)
@@ -602,8 +619,24 @@ bool run(const Settings& settings, PhoenixView& view, TimelineAudio* audio, cons
         return false;
     if (!save(name + ".content.js", "phoenix.content(" + QByteArray::fromStdString(content) + ");\n"))
         return false;
+    if (as2)
+    {
+        const fla::play::ClassPath classPath = movieClassPath(document, settings.documentPath);
+        std::vector<std::string> left;
+        const fla::html5as2::Result translated = fla::html5as2::translate(document, actionScript2,
+            [&classPath](const std::string& qualified) -> std::optional<std::string> {
+                const std::optional<fla::play::ClassFile> found = classPath.find(qualified);
+                return found ? std::optional<std::string>(found->source) : std::nullopt;
+            },
+            &left);
+        for (const std::string& note : left)
+            notes << QString::fromStdString(note);
+        if (!save("phoenix-as2.js", actionScript2Runtime()) ||
+            !save(name + ".as.js", QByteArray::fromStdString(translated.code)))
+            return false;
+    }
     const QColor background(document.backgroundColor[0], document.backgroundColor[1], document.backgroundColor[2]);
-    const QString html = pageHtml(name, name, background, settings.fit, javaScript, std::max(1, document.width),
+    const QString html = pageHtml(name, name, background, settings.fit, javaScript, as2, std::max(1, document.width),
         std::max(1, document.height));
     return save(page.fileName(), html.toUtf8());
 }

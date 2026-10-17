@@ -199,6 +199,98 @@ std::string unstructured(const Document& document)
     return std::string();
 }
 
+std::map<std::string, std::string> actionScript2Classes(const Document& document,
+    const std::function<std::optional<std::string>(const std::string& qualifiedName)>& findClass)
+{
+    if (!findClass)
+        return {};
+    // The names the scripts mention that are classes on the class path:
+    // dotted paths and capitalized names, imports among them.
+    std::map<std::string, std::string> sources;
+    std::vector<std::string> pending;
+    std::set<std::string> tried;
+    const auto look = [&](const std::string& text) {
+        size_t i = 0;
+        while (i < text.size())
+        {
+            const unsigned char c = static_cast<unsigned char>(text[i]);
+            if (std::isalpha(c) || c == '_' || c == '$')
+            {
+                size_t j = i;
+                while (j < text.size() && (std::isalnum(static_cast<unsigned char>(text[j])) || text[j] == '_' ||
+                                              text[j] == '$' || text[j] == '.'))
+                    ++j;
+                std::string word = text.substr(i, j - i);
+                while (!word.empty() && word.back() == '.')
+                    word.pop_back();
+                // Each prefix of a dotted path: com.studio.Hat.make
+                // names com.studio.Hat.
+                for (size_t end = word.size(); end != std::string::npos && end > 0;)
+                {
+                    const std::string candidate = word.substr(0, end);
+                    if (tried.insert(candidate).second)
+                        pending.push_back(candidate);
+                    end = word.rfind('.', end - 1);
+                }
+                i = j;
+            }
+            else if (c == '"' || c == '\'')
+            {
+                // Strings name no classes.
+                size_t j = i + 1;
+                while (j < text.size() && text[j] != text[i])
+                    j += text[j] == '\\' ? 2 : 1;
+                i = j + 1;
+            }
+            else
+                ++i;
+        }
+    };
+    const auto scriptsOf = [&](const Timeline* timeline) {
+        for (const Layer* layer : timeline ? timeline->layers : std::vector<Layer*>())
+            for (const Frame* frame : layer ? layer->frames : std::vector<Frame*>())
+            {
+                if (!frame)
+                    continue;
+                if (frame->actionScript)
+                    look(frame->actionScript->code);
+                for (const Element* element : frame->elements)
+                    if (element && element->elementType() == Element::Type::SymbolInstance)
+                        look(scripts::instanceScript(*element));
+            }
+    };
+    for (const Timeline* scene : document.timelines)
+        if (scene)
+            scriptsOf(scene);
+    if (document.symbolList)
+        for (const auto& [name, symbol] : document.symbolList->symbolMap)
+        {
+            if (!symbol)
+                continue;
+            for (const Timeline* timeline : symbol->timelines)
+                scriptsOf(timeline);
+            const std::string linked = attributeOf(symbol->extraAttributes, "linkageClassName");
+            if (!linked.empty() && tried.insert(linked).second)
+                pending.push_back(linked);
+        }
+    while (!pending.empty())
+    {
+        const std::string name = pending.back();
+        pending.pop_back();
+        // Classes are named by words that start upper case, or paths.
+        const size_t dot = name.find_last_of('.');
+        const char first = name[dot == std::string::npos ? 0 : dot + 1];
+        if (!std::isupper(static_cast<unsigned char>(first)) || sources.count(name))
+            continue;
+        const std::optional<std::string> source = findClass(name);
+        if (!source)
+            continue;
+        sources[name] = *source;
+        look(*source);
+    }
+    return sources;
+}
+
 bool hasScripts(const Document& document)
 {
     std::vector<const Timeline*> timelines(document.timelines.begin(), document.timelines.end());
@@ -481,89 +573,7 @@ struct Movie::State
     {
         if (!options.findClass)
             return;
-        // The names the scripts mention that are classes on the class path:
-        // dotted paths and capitalized names, imports among them.
-        std::map<std::string, std::string> sources;
-        std::vector<std::string> pending;
-        std::set<std::string> tried;
-        const auto look = [&](const std::string& text) {
-            size_t i = 0;
-            while (i < text.size())
-            {
-                const unsigned char c = static_cast<unsigned char>(text[i]);
-                if (std::isalpha(c) || c == '_' || c == '$')
-                {
-                    size_t j = i;
-                    while (j < text.size() && (std::isalnum(static_cast<unsigned char>(text[j])) || text[j] == '_' ||
-                                                  text[j] == '$' || text[j] == '.'))
-                        ++j;
-                    std::string word = text.substr(i, j - i);
-                    while (!word.empty() && word.back() == '.')
-                        word.pop_back();
-                    // Each prefix of a dotted path: com.studio.Hat.make
-                    // names com.studio.Hat.
-                    for (size_t end = word.size(); end != std::string::npos && end > 0;)
-                    {
-                        const std::string candidate = word.substr(0, end);
-                        if (tried.insert(candidate).second)
-                            pending.push_back(candidate);
-                        end = word.rfind('.', end - 1);
-                    }
-                    i = j;
-                }
-                else if (c == '"' || c == '\'')
-                {
-                    // Strings name no classes.
-                    size_t j = i + 1;
-                    while (j < text.size() && text[j] != text[i])
-                        j += text[j] == '\\' ? 2 : 1;
-                    i = j + 1;
-                }
-                else
-                    ++i;
-            }
-        };
-        const auto scriptsOf = [&](const Timeline* timeline) {
-            for (const Layer* layer : timeline ? timeline->layers : std::vector<Layer*>())
-                for (const Frame* frame : layer ? layer->frames : std::vector<Frame*>())
-                {
-                    if (!frame)
-                        continue;
-                    if (frame->actionScript)
-                        look(frame->actionScript->code);
-                    for (const Element* element : frame->elements)
-                        if (element && element->elementType() == Element::Type::SymbolInstance)
-                            look(scripts::instanceScript(*element));
-                }
-        };
-        for (const Timeline* scene : scenes)
-            scriptsOf(scene);
-        if (document.symbolList)
-            for (const auto& [name, symbol] : document.symbolList->symbolMap)
-            {
-                if (!symbol)
-                    continue;
-                for (const Timeline* timeline : symbol->timelines)
-                    scriptsOf(timeline);
-                const std::string linked = attributeOf(symbol->extraAttributes, "linkageClassName");
-                if (!linked.empty() && tried.insert(linked).second)
-                    pending.push_back(linked);
-            }
-        while (!pending.empty())
-        {
-            const std::string name = pending.back();
-            pending.pop_back();
-            // Classes are named by words that start upper case, or paths.
-            const size_t dot = name.find_last_of('.');
-            const char first = name[dot == std::string::npos ? 0 : dot + 1];
-            if (!std::isupper(static_cast<unsigned char>(first)) || sources.count(name))
-                continue;
-            const std::optional<std::string> source = options.findClass(name);
-            if (!source)
-                continue;
-            sources[name] = *source;
-            look(*source);
-        }
+        const std::map<std::string, std::string> sources = actionScript2Classes(document, options.findClass);
         if (sources.empty())
             return;
 
