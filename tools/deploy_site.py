@@ -19,6 +19,9 @@ added and overwritten; --mirror also removes those no longer in docs/. Either
 way the folders the server keeps for itself (updates/, download/) are left
 alone.
 
+The guide's What's New page, docs/changelog.html, is made again from
+CHANGELOG.md first (tools/build_changelog.py), so the site has every release.
+
 The site analytics client, analytics/phoenix_analytics.js, goes up with it as
 assets/analytics.js, stamped with the commit it was deployed from. The
 collector it reports to is deployed separately by tools/deploy_analytics.py.
@@ -148,6 +151,8 @@ def main():
     args = parser.parse_args()
 
     config = load_config()
+    # What's New, made from CHANGELOG.md, so it is never behind.
+    subprocess.run([sys.executable, str(ROOT / "tools" / "build_changelog.py")], check=True)
     files = list(site_files())
     if not files:
         sys.exit(f"Nothing in {SITE}")

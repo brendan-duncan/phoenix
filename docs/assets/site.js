@@ -88,6 +88,7 @@ const NAV = [
     { href: "preferences.html", title: "Settings and preferences" },
     { href: "animate.html", title: "Coming from Animate" },
     { href: "harmony.html", title: "Coming from Harmony" },
+    { href: "changelog.html", title: "What's new" },
   ] },
 ];
 
@@ -227,7 +228,7 @@ function buildFooter(content) {
   const footer = document.createElement("footer");
   footer.className = "site-footer";
   footer.innerHTML =
-    `<p>Phoenix ${VERSION} (<a href="${REPO}/blob/main/CHANGELOG.md">what's new</a>). Found a mistake in this guide? <a href="${REPO}/issues">Open an issue</a>.</p>` +
+    `<p>Phoenix ${VERSION} (<a href="changelog.html">what's new</a>). Found a mistake in this guide? <a href="${REPO}/issues">Open an issue</a>.</p>` +
     `<p class="contact">` +
     `<a href="mailto:${CONTACT.email}">${ICONS.mail}<span>${CONTACT.email}</span></a>` +
     `<a href="${CONTACT.linkedin}" rel="me">${ICONS.linkedin}<span>LinkedIn</span></a>` +
