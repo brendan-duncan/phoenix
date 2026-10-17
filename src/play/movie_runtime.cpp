@@ -1,6 +1,7 @@
 #include "movie_runtime.h"
 
 #include "../data/action_script.h"
+#include "../data/bitmap.h"
 #include "../data/document.h"
 #include "../data/frame.h"
 #include "../data/layer.h"
@@ -15,6 +16,7 @@
 #include "display/display_object.h"
 #include "display/stage.h"
 #include "display/text_field.h"
+#include "script/bindings.h"
 
 #include "bytecode/compiler.h"
 #include "bytecode/vm.h"
@@ -263,6 +265,54 @@ std::vector<display::BitmapFilter> toFilters(const std::vector<Filter>& filters)
     return out;
 }
 
+/// \a source with an empty statement after each import outside a package:
+/// libas3 keeps only the first of a run of imports that open a script, so
+/// each is ended on its own (the lines stay where they were).
+std::string separateImports(const std::string& source)
+{
+    std::string out;
+    out.reserve(source.size() + 64);
+    size_t i = 0;
+    const auto nameChar = [](char c) { return std::isalnum(static_cast<unsigned char>(c)) || c == '_' || c == '$'; };
+    while (i < source.size())
+    {
+        const bool atWord = source.compare(i, 6, "import") == 0 && (i == 0 || !nameChar(source[i - 1])) &&
+            i + 6 < source.size() && std::isspace(static_cast<unsigned char>(source[i + 6]));
+        if (!atWord)
+        {
+            out += source[i++];
+            continue;
+        }
+        // import a.b.C; or import a.b.*; as written.
+        size_t end = i + 6;
+        while (end < source.size() && (source[end] == ' ' || source[end] == '\t'))
+            ++end;
+        const size_t nameStart = end;
+        while (end < source.size() && (nameChar(source[end]) || source[end] == '.' || source[end] == '*'))
+            ++end;
+        if (end == nameStart)
+        {
+            out += source[i++];
+            continue;
+        }
+        size_t after = end;
+        while (after < source.size() && (source[after] == ' ' || source[after] == '\t'))
+            ++after;
+        out.append(source, i, after - i);
+        if (after < source.size() && source[after] == ';')
+        {
+            out += "; ;";
+            i = after + 1;
+        }
+        else
+        {
+            out += ";;";
+            i = after;
+        }
+    }
+    return out;
+}
+
 bool isMouseEvent(const std::string& type)
 {
     return type == "click" || type == "mouseDown" || type == "mouseUp" || type == "mouseOver" ||
@@ -298,6 +348,11 @@ bool Clip::wantsMouse() const
     for (const auto& [type, list] : listeners)
         if (!list.empty() && isMouseEvent(type))
             return true;
+    if (display)
+        for (const char* type : {"click", "mouseDown", "mouseUp", "mouseOver", "mouseOut", "rollOver", "rollOut",
+                 "doubleClick"})
+            if (display->hasEventListener(type))
+                return true;
     return false;
 }
 
@@ -502,7 +557,44 @@ MovieRuntime::MovieRuntime(const std::vector<const Timeline*>& scenes, double fr
     start();
 }
 
-MovieRuntime::~MovieRuntime() = default;
+MovieRuntime::~MovieRuntime()
+{
+    // The script objects first, while the VM they belong to is about.
+    _bindings.reset();
+}
+
+bool MovieRuntime::mouseHidden() const
+{
+    return _bindings && _bindings->mouseHidden;
+}
+
+std::string MovieRuntime::mouseCursor() const
+{
+    return _bindings ? _bindings->mouseCursor : std::string("auto");
+}
+
+bool MovieRuntime::scriptsLookLikeActionScript3() const
+{
+    // What only ActionScript 3 writes.
+    static const char* marks[] = {"import flash.", "import fl.", "addEventListener", ":void", "package ",
+        "MouseEvent.", "Event.ENTER_FRAME", "new Sprite(", "new MovieClip("};
+    const auto marked = [](const std::string& code) {
+        for (const char* mark : marks)
+            if (code.find(mark) != std::string::npos)
+                return true;
+        return false;
+    };
+    std::vector<const Timeline*> timelines(_scenes.begin(), _scenes.end());
+    for (const Symbol* symbol : _library)
+        if (symbol)
+            timelines.insert(timelines.end(), symbol->timelines.begin(), symbol->timelines.end());
+    for (const Timeline* timeline : timelines)
+        for (const Layer* layer : timeline ? timeline->layers : std::vector<Layer*>())
+            for (const Frame* frame : layer ? layer->frames : std::vector<Frame*>())
+                if (frame && frame->actionScript && marked(frame->actionScript->code))
+                    return true;
+    return false;
+}
 
 void MovieRuntime::start()
 {
@@ -522,8 +614,12 @@ void MovieRuntime::start()
     _gone.clear();
     _madeCount = 0;
     _started = std::chrono::steady_clock::now();
+    _pointerOver.reset();
+    _pointerPressed.reset();
     if (stopAllSounds)
         stopAllSounds();
+    // The last run's script objects go before the VM they belong to.
+    _bindings.reset();
     _vm = std::make_unique<as3::VM>();
     if (!_stage)
         _stage = std::make_shared<display::Stage>();
@@ -531,6 +627,8 @@ void MovieRuntime::start()
     _stage->stopDrag();
     _stage->setFocus(nullptr);
     _stage->removeChildren();
+    _stage->removeAllEventListeners();
+    _stage->script.reset();
     _root = std::make_unique<Clip>();
     _root->timeline = _scenes.empty() ? nullptr : _scenes.front();
     _root->length = lengthOf(_root->timeline);
@@ -538,9 +636,24 @@ void MovieRuntime::start()
     attachDisplay(*_root);
     _stage->addChildAt(_root->display, 0);
     _stage->setRootObject(_root->display.get());
+    _as3 = _version == 3 ||
+        (_version == 0 && (!_classSources.empty() || !_documentClass.empty() || scriptsLookLikeActionScript3()));
+    std::vector<Clip*> entered{_root.get()};
+    if (_as3)
+    {
+        // ActionScript 3: the flash.* classes over the display list, and
+        // the main timeline an instance of the document class (or of
+        // MovieClip), made with what the first frame places.
+        _bindings = std::make_unique<script::Bindings>(*this, *_vm);
+        setupActionScript3();
+        _bindings->install();
+        syncChildren(*_root, entered);
+        runClass(*_root);
+        enter(entered);
+        return;
+    }
     setupGlobals();
     loadClasses();
-    std::vector<Clip*> entered{_root.get()};
     // The document class runs before the first frame's scripts, with what
     // the first frame has placed.
     if (_classes.count(_documentClass))
@@ -607,6 +720,12 @@ void MovieRuntime::loadClasses()
 
 void MovieRuntime::runClass(Clip& clip)
 {
+    if (_as3)
+    {
+        if (!clip.object && clip.display)
+            _bindings->clipObject(clip);
+        return;
+    }
     if (clip.classed)
         return;
     std::string name;
@@ -635,9 +754,24 @@ void MovieRuntime::runClass(Clip& clip)
 
 as3::ValuePtr MovieRuntime::objectFor(Clip& clip)
 {
+    if (_as3 && !clip.object && clip.display)
+        return _bindings->clipObject(clip);
     if (!clip.object)
         clip.object = as3::Value::makeHostObject(std::make_shared<ClipObject>(*this, clip));
     return clip.object;
+}
+
+void MovieRuntime::setupActionScript3()
+{
+    // What the scripts trace, each value as its toString gives it.
+    _vm->defineFunction("trace", [this](as3::VM& vm, const as3::Val&, as3::Args args) {
+        std::string line;
+        for (size_t i = 0; i < args.size(); ++i)
+            line += (i ? " " : "") + vm.toString(args[i]);
+        if (trace)
+            trace(line);
+        return as3::Val();
+    });
 }
 
 void MovieRuntime::setupGlobals()
@@ -1515,6 +1649,13 @@ void MovieRuntime::report(const std::string& where)
     if (_vm->getErrorLine() >= 0)
         message += ", line " + std::to_string(_vm->getErrorLine());
     message += ": " + _vm->getError();
+    // ActionScript 3's errors carry where they were thrown, as the debug
+    // player shows them.
+    std::string stack = _as3 ? _vm->getErrorStack() : std::string();
+    while (!stack.empty() && (stack.back() == '\n' || stack.back() == '\r'))
+        stack.pop_back();
+    if (!stack.empty())
+        message += "\n" + stack;
     tell(message, _source, std::max(0, _vm->getErrorLine()));
 }
 
@@ -1525,7 +1666,8 @@ std::shared_ptr<as3::BytecodeFunction> MovieRuntime::compiled(const DOMElement* 
     if (found != _compiled.end())
         return found->second;
     std::shared_ptr<as3::BytecodeFunction> code;
-    as3::Parser parser(source);
+    const std::string text = _as3 ? separateImports(source) : source;
+    as3::Parser parser(text, where);
     std::unique_ptr<as3::Program> program = parser.parse();
     if (parser.hasErrors())
     {
@@ -1536,8 +1678,21 @@ std::shared_ptr<as3::BytecodeFunction> MovieRuntime::compiled(const DOMElement* 
     }
     else if (program)
     {
-        as3::Compiler compiler;
-        code = compiler.compile(program.get());
+        // What does not compile is told, and the script left out.
+        try
+        {
+            as3::Compiler compiler;
+            code = compiler.compile(program.get());
+        }
+        catch (const std::exception& failed)
+        {
+            std::string message = failed.what();
+            while (!message.empty() && message.back() == '\n')
+                message.pop_back();
+            const std::size_t at = message.find("line ");
+            tell(where + ": " + message, key, at == std::string::npos ? 0 : std::atoi(message.c_str() + at + 5));
+            code = nullptr;
+        }
     }
     _compiled[key] = code;
     return code;
@@ -1563,6 +1718,25 @@ void MovieRuntime::runFrameScripts(Clip& clip)
 {
     if (!clip.timeline)
         return;
+    // A frame addFrameScript gave a function: it runs, as the frame's script.
+    const auto given = clip.frameScripts.find(clip.frame);
+    if (_as3 && given != clip.frameScripts.end())
+    {
+        for (const Layer* layer : clip.timeline->layers)
+        {
+            const Frame* frame = layer && plays(*layer) ? keyframeAt(*layer, clip.frame) : nullptr;
+            if (frame && frame->index == clip.frame && frameSound && !attributeOf(frame->extraAttributes, "soundName").empty())
+                frameSound(*frame);
+        }
+        ++_scriptRuns;
+        Clip* was = _current;
+        _current = &clip;
+        const as3::Val function = given->second;
+        _bindings->callSafely(function, objectFor(clip), {},
+            (clip.symbol ? clip.symbol->name : clip.timeline->name) + ", frame " + std::to_string(clip.frame + 1));
+        _current = was;
+        return;
+    }
     // Every layer's script that starts on this frame, top layer first, and
     // the sounds of its keyframes.
     for (const Layer* layer : clip.timeline->layers)
@@ -1791,6 +1965,9 @@ void MovieRuntime::syncDisplay(Clip& clip)
         if (!object->parent() && std::find(before.begin(), before.end(), object) == before.end())
             container->placeTimelineChild(object);
     }
+    // The variables the clip's class declares for its instances.
+    if (_as3 && clip.object)
+        _bindings->declareInstances(clip);
 }
 
 display::TextField* MovieRuntime::displayField(const Clip& clip, const StaticText& field) const
@@ -1876,6 +2053,23 @@ void MovieRuntime::freeGone()
 
 void MovieRuntime::enter(std::vector<Clip*>& entered)
 {
+    if (_as3)
+    {
+        // Each clip's children placed and its object made (its class's
+        // constructor run) before any of their frame scripts run.
+        for (size_t i = 0; i < entered.size(); ++i)
+        {
+            if (entered[i]->gone)
+                continue;
+            syncChildren(*entered[i], entered);
+            runClass(*entered[i]);
+        }
+        for (size_t i = 0; i < entered.size(); ++i)
+            if (!entered[i]->gone && !entered[i]->button)
+                runFrameScripts(*entered[i]);
+        settle();
+        return;
+    }
     // A clip entered for the first time: its onClipEvent handlers taken,
     // load run, its first frame's scripts run, and its own children made.
     for (size_t i = 0; i < entered.size(); ++i)
@@ -1963,6 +2157,8 @@ int MovieRuntime::sceneNamed(const std::string& name) const
 
 void MovieRuntime::settle()
 {
+    if (_as3)
+        placeMadeClips();
     // A script sent clips to other frames: their scripts run there, which
     // may send them on again; a chain is cut short at a few.
     for (int round = 0; round < 8 && (!_sent.empty() || _sceneMove.scene >= 0 || !_madeToEnter.empty()); ++round)
@@ -2008,9 +2204,12 @@ void MovieRuntime::settle()
                 continue;
             Clip& clip = *entered[i];
             syncChildren(clip, entered);
+            runClass(clip);
             if (!clip.button)
                 runFrameScripts(clip);
         }
+        if (_as3)
+            placeMadeClips();
     }
     freeGone();
     if (changed)
@@ -2076,6 +2275,12 @@ void MovieRuntime::seek(int frame)
 
 void MovieRuntime::step()
 {
+    // Timers due and loads finished are told of as the frame starts.
+    if (_as3)
+    {
+        _bindings->frameStarted();
+        placeMadeClips();
+    }
     // Every playhead on a frame, what the frames place on the display list.
     std::vector<Clip*> entered;
     std::vector<Clip*> scripts;
@@ -2083,6 +2288,11 @@ void MovieRuntime::step()
     // enterFrame for every clip about, AS2's handlers and AS3's listeners,
     // before the frames' scripts.
     _stage->enterFrame();
+    // The objects of the clips the frames placed, made before their scripts.
+    if (_as3)
+        for (size_t i = 0; i < entered.size(); ++i)
+            if (!entered[i]->gone)
+                runClass(*entered[i]);
     eachClip([this](Clip& clip) {
         if (!clip.clipEvents.empty())
             runClipEvent(clip, "enterFrame");
@@ -2223,6 +2433,23 @@ void MovieRuntime::pointerOver(Clip* button)
         return;
     Clip* left = _hovered;
     _hovered = button;
+    if (_as3 && !_stagePointer)
+    {
+        // The display list's events, to the clips named.
+        const std::shared_ptr<display::DisplayObject> from = left && left->display ? left->display : nullptr;
+        const std::shared_ptr<display::DisplayObject> to = button && button->display ? button->display : nullptr;
+        _pointerOver = to;
+        if (from)
+        {
+            sendPointer("mouseOut", from.get(), true, to.get());
+            sendPointer("rollOut", from.get(), false, to.get());
+        }
+        if (to)
+        {
+            sendPointer("mouseOver", to.get(), true, from.get());
+            sendPointer("rollOver", to.get(), false, from.get());
+        }
+    }
     if (left)
     {
         dispatch(*left, "mouseOut", true);
@@ -2257,6 +2484,13 @@ void MovieRuntime::pointerDown()
             runClipEvent(clip, "mouseDown");
     });
     _pressed = _hovered;
+    if (_as3 && !_stagePointer)
+    {
+        const std::shared_ptr<display::DisplayObject> over = _pointerOver.lock();
+        _pointerPressed = over;
+        if (over)
+            sendPointer("mouseDown", over.get(), true);
+    }
     if (_pressed)
     {
         Clip& pressed = *_pressed;
@@ -2278,6 +2512,19 @@ void MovieRuntime::pointerUp()
     });
     Clip* pressed = _pressed;
     _pressed = nullptr;
+    if (_as3 && !_stagePointer)
+    {
+        const std::shared_ptr<display::DisplayObject> over = _pointerOver.lock();
+        const std::shared_ptr<display::DisplayObject> down = _pointerPressed.lock();
+        _pointerPressed.reset();
+        if (over)
+        {
+            sendPointer("mouseUp", over.get(), true);
+            // A click is a press and a release on the same one.
+            if (down == over)
+                sendPointer("click", over.get(), true);
+        }
+    }
     Clip* hovered = _hovered;
     if (hovered)
     {
@@ -2309,6 +2556,71 @@ void MovieRuntime::buttonSound(const Clip& button, int state)
         const Frame* frame = keyframeAt(*layer, state);
         if (frame && frame->index == state && !attributeOf(frame->extraAttributes, "soundName").empty())
             frameSound(*frame);
+    }
+}
+
+void MovieRuntime::sendPointer(const char* type, display::DisplayObject* target, bool bubbles,
+    display::DisplayObject* related)
+{
+    if (!target)
+        return;
+    std::shared_ptr<display::DisplayObject> keep = target->shared();
+    display::MouseEvent event(type, bubbles);
+    event.stageX = _mouseX;
+    event.stageY = _mouseY;
+    const display::Point local = target->globalToLocal(display::Point{_mouseX, _mouseY});
+    event.localX = local.x;
+    event.localY = local.y;
+    event.buttonDown = _pressed != nullptr || !_pointerPressed.expired();
+    event.relatedObject = related;
+    target->dispatchEvent(event);
+}
+
+void MovieRuntime::placeMadeClips()
+{
+    // Every clip a script made, and where it is kept now.
+    struct Made
+    {
+        Clip* clip;
+        std::vector<std::unique_ptr<Clip>>* in;
+    };
+    std::vector<Made> made;
+    std::function<void(std::vector<std::unique_ptr<Clip>>&)> gather = [&](std::vector<std::unique_ptr<Clip>>& list) {
+        for (const auto& clip : list)
+        {
+            if (!clip)
+                continue;
+            if (clip->made && !clip->gone)
+                made.push_back({clip.get(), &list});
+            gather(clip->children);
+        }
+    };
+    gather(_root->children);
+    gather(_offStage);
+    for (const Made& each : made)
+    {
+        Clip& clip = *each.clip;
+        // The clip whose display object holds this one's.
+        Clip* holder = nullptr;
+        for (display::DisplayObject* at = clip.display ? clip.display->parent() : nullptr; at && !holder; at = at->parent())
+            if (at->clip && at->clip != &clip &&
+                (at->kind() == display::ObjectKind::MovieClip || at->kind() == display::ObjectKind::SimpleButton))
+                holder = at->clip;
+        // Not into what it holds itself.
+        for (Clip* at = holder; at; at = at->parent)
+            if (at == &clip)
+                holder = nullptr;
+        if (holder == clip.parent && (holder || each.in == &_offStage))
+            continue;
+        auto found = std::find_if(each.in->begin(), each.in->end(),
+            [&clip](const std::unique_ptr<Clip>& c) { return c.get() == &clip; });
+        if (found == each.in->end())
+            continue;
+        std::unique_ptr<Clip> owned = std::move(*found);
+        each.in->erase(found);
+        clip.parent = holder;
+        clip.placement.known = false;
+        (holder ? holder->children : _offStage).push_back(std::move(owned));
     }
 }
 

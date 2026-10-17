@@ -217,6 +217,18 @@ set(PHOENIX_CORE_PLAY_SOURCES
     play/display/graphics.cpp
     play/display/stage.cpp
     play/display/text_field.cpp
+    play/script/bind_bitmap.cpp
+    play/script/bind_display.cpp
+    play/script/bind_events.cpp
+    play/script/bind_filters.cpp
+    play/script/bind_geom.cpp
+    play/script/bind_net.cpp
+    play/script/bind_system.cpp
+    play/script/bind_text.cpp
+    play/script/bind_utils.cpp
+    play/script/bindings.cpp
+    play/script/class_path.cpp
+    play/script/png_reader.cpp
 )
 
 # phoenix_add_core(<target> <src dir> [FILES] [JSFL] [PYTHON] [PLAY]): the core

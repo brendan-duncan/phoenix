@@ -1,10 +1,12 @@
 #include "test_movie_window.h"
 
 #include "audio_engine.h"
+#include "movie_hooks.h"
 #include "phoenix_view.h"
 #include "player.h"
 #include "timeline_audio.h"
 
+#include "../data/bitmap.h"
 #include "../data/document.h"
 #include "../data/fla_document.h"
 #include "../data/symbol.h"
@@ -149,7 +151,7 @@ QIcon glyph(Glyph which, const QColor& color)
 
 TestMovieWindow::TestMovieWindow(const fla::FLADocument& document, const QString& name,
     std::function<void(const QString&)> print, std::function<void(const QString&, const fla::DOMElement*, int)> printError,
-    QWidget* parent, const QString& folder)
+    QWidget* parent, const QString& file)
     : QDialog(parent)
 {
     const fla::Document& data = *document.document;
@@ -282,12 +284,21 @@ TestMovieWindow::TestMovieWindow(const fla::FLADocument& document, const QString
             }
         }
         _movie->setLibrary(symbols, soundIdentifiers, soundClasses);
-        if (!folder.isEmpty())
-        {
-            std::string documentClass;
-            const std::map<std::string, std::string> classes = fla::play::classFiles(data, folder.toStdString(), documentClass);
-            _movie->setClasses(classes, documentClass);
-        }
+        std::vector<const fla::Bitmap*> bitmaps;
+        for (const fla::Resource* resource : data.resources)
+            if (resource && resource->resourceType() == fla::Resource::Type::Bitmap)
+                bitmaps.push_back(static_cast<const fla::Bitmap*>(resource));
+        _movie->setLibraryBitmaps(bitmaps);
+        // Its classes, images, the web and SharedObjects; what it sends to
+        // the web is told in the Output panel.
+        connectMovie(*_movie, document, file, this, print);
+        // A script that sets stage.frameRate sets the window's pace.
+        _movie->frameRateChanged = [this](double rate) {
+            _frameRate = rate;
+            if (_timer)
+                _timer->setInterval(std::max(1, static_cast<int>(1000.0 / _frameRate / 2.0)));
+            startClock();
+        };
         _audio = new TimelineAudio(_player, this);
         _audio->setDocument(&document);
         _movie->playSound = [this](const std::string& linkage, double offset, int loops, double volume) {

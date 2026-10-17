@@ -18,8 +18,11 @@ class VM;
 using ValuePtr = std::shared_ptr<Value>;
 }
 
+#include "script/class_path.h"
+
 namespace fla {
 
+class Bitmap;
 class DOMElement;
 class Document;
 class Frame;
@@ -38,6 +41,11 @@ class TextField;
 /// A movie played as Flash Player plays it, scripts and all: Control > Test
 /// Movie. Free of Qt.
 namespace play {
+
+namespace script {
+class Bindings;
+struct DisplayHost;
+}
 
 /// The root timeline, or a movie clip or button on it as it plays: which
 /// frame it is on, whether it plays on, and what scripts have set on it.
@@ -128,11 +136,14 @@ struct Clip
     /// Whether its ActionScript 3 class (its symbol's, or the document
     /// class for the root) has been run on it.
     bool classed = false;
+    /// What addFrameScript gave its frames (from 0), run in place of the
+    /// frame's own script.
+    std::map<int, as3::ValuePtr> frameScripts;
 
     /// Whether ActionScript 3 listens on it for \a type.
     bool listensFor(const std::string& type) const;
     /// Whether the pointer finds it: a button, or a clip listening for the
-    /// mouse.
+    /// mouse (on its display object, in ActionScript 3).
     bool wantsMouse() const;
 
     /// The child with this key, or null.
@@ -225,6 +236,66 @@ public:
     /// on the main timeline before its first frame's scripts, and a
     /// symbol's class (its linkage) on each clip of it. Set before start().
     void setClasses(const std::map<std::string, std::string>& sources, const std::string& documentClass);
+    /// The ActionScript version the movie's publish settings give (see
+    /// actionScriptVersion); 0, unknown, has the scripts tell. Version 3
+    /// plays the scripts with the flash.* classes over the display list;
+    /// 1 and 2 with the timeline's own objects. Set before start().
+    void setActionScriptVersion(int version) { _version = version; }
+    /// Whether the movie plays as ActionScript 3 (once started).
+    bool actionScript3() const { return _as3; }
+    /// The library bitmaps scripts reach by their linkage (BitmapData
+    /// classes). Set before start().
+    void setLibraryBitmaps(const std::vector<const Bitmap*>& bitmaps) { _bitmaps = bitmaps; }
+    /// Finds an ActionScript 3 class's source by its qualified name: the
+    /// movie's class path (see ClassPath). The classes setClasses gave are
+    /// looked in first.
+    std::function<std::optional<ClassFile>(const std::string& qualifiedName)> findClass;
+    /// The folder the movie's file is in (UTF-8), what the paths scripts
+    /// load (URLLoader, Loader) start from.
+    std::string folder;
+    /// The movie's address, as loaderInfo.url gives it (file:///...swf).
+    std::string url;
+    /// Where SharedObject.getLocal keeps what it saves; nothing is saved
+    /// when empty.
+    std::string sharedObjectFolder;
+
+    /// What scripts ask of the web (URLLoader, Loader, sendToURL): \a done
+    /// is called with what came, later, as the host's network answers.
+    /// Without it, only files load.
+    struct Request
+    {
+        std::string url;
+        std::string method = "GET";
+        std::vector<std::pair<std::string, std::string>> headers;
+        std::vector<uint8_t> body;
+        std::string contentType;
+    };
+    struct Response
+    {
+        bool ok = false;
+        /// The HTTP status, 0 for a file or none.
+        int status = 0;
+        std::vector<uint8_t> bytes;
+        std::string error;
+    };
+    std::function<void(const Request& request, std::function<void(const Response&)> done)> fetch;
+    /// An image file's pixels (premultiplied ARGB, a row after another):
+    /// false when it cannot be read. PNG is read without it.
+    std::function<bool(const std::vector<uint8_t>& bytes, int& width, int& height, std::vector<uint32_t>& pixels)>
+        decodeImage;
+    /// What the movie did that the person playing it should know of (a
+    /// form sent to the web, say): shown with what it traces.
+    std::function<void(const std::string&)> notice;
+    /// The pointer, as Mouse.hide and Mouse.cursor leave it: whether it is
+    /// hidden, and the cursor ("auto", "arrow", "button", "hand", "ibeam").
+    bool mouseHidden() const;
+    std::string mouseCursor() const;
+    /// The pointer comes to the display list from the stage (Stage's
+    /// pointerMove and the rest, as the window sends them): pointerOver,
+    /// pointerDown and pointerUp then work only buttons' ActionScript 2
+    /// handlers. Without it they send the display list's mouse events too,
+    /// to the clip they name.
+    void setStagePointer(bool fromStage) { _stagePointer = fromStage; }
 
     /// The frame (from 0) \a clip is held on rather than playing on by
     /// itself, as a Time Remap behavior on its instance says for its
@@ -273,6 +344,9 @@ public:
     /// The frame a button shows: down, over or up.
     int buttonFrame(const Clip& button) const;
 
+    /// The movie's frame rate was set by a script (stage.frameRate).
+    std::function<void(double)> frameRateChanged;
+
     /// What the scripts trace, and the errors they stop on.
     std::function<void(const std::string&)> trace;
     std::function<void(const std::string&)> error;
@@ -295,8 +369,12 @@ public:
 
 private:
     friend class ClipObject;
+    friend class script::Bindings;
+    friend struct script::DisplayHost;
 
     void setupGlobals();
+    /// ActionScript 3's own globals (the rest are the flash.* classes).
+    void setupActionScript3();
     /// Brings \a clip's children up to its current frame: new ones made
     /// (their first frame entered), gone ones dropped.
     void syncChildren(Clip& clip, std::vector<Clip*>& entered);
@@ -472,6 +550,28 @@ private:
     /// holding freed memory.
     std::vector<std::unique_ptr<Clip>> _gone;
     int _madeCount = 0;
+
+    // ActionScript 3.
+    int _version = 0;
+    bool _as3 = false;
+    bool _stagePointer = false;
+    std::vector<const Bitmap*> _bitmaps;
+    std::unique_ptr<script::Bindings> _bindings;
+    /// The clip the pointer was last sent over (pointerOver) and pressed
+    /// on, for the display list's events when the stage does not send them.
+    std::weak_ptr<display::DisplayObject> _pointerOver;
+    std::weak_ptr<display::DisplayObject> _pointerPressed;
+    /// Whether the scripts look like ActionScript 3 (for a movie whose
+    /// version is not known).
+    bool scriptsLookLikeActionScript3() const;
+    /// Moves the clips scripts made to where the display list has them:
+    /// into the clip whose display object holds theirs, or off the stage.
+    void placeMadeClips();
+    /// The display list's mouse event \a type to \a target, for
+    /// pointerOver, pointerDown and pointerUp when the stage does not send
+    /// them.
+    void sendPointer(const char* type, display::DisplayObject* target, bool bubbles,
+        display::DisplayObject* related = nullptr);
 };
 
 /// The ActionScript 3 class files a document uses, by class name: its

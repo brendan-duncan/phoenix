@@ -139,6 +139,7 @@ set(HEADERS
     src/gui/html_view.h
     src/gui/trace_bitmap_dialog.h
     src/gui/test_movie_window.h
+    src/gui/movie_hooks.h
     src/gui/command_line.h
     src/gui/notes_panel.h
     src/gui/controllers_panel.h
@@ -429,6 +430,7 @@ set(SOURCES
     src/gui/html_view.cpp
     src/gui/trace_bitmap_dialog.cpp
     src/gui/test_movie_window.cpp
+    src/gui/movie_hooks.cpp
     src/gui/command_line.cpp
     src/gui/notes_panel.cpp
     src/gui/controllers_panel.cpp
@@ -574,6 +576,13 @@ if(APPLE)
 endif()
 
 target_link_libraries(Phoenix PRIVATE phoenix_core Qt6::Widgets Qt6::Svg zlibstatic tinyxml2 libas3 vterm)
+# The web for the movies Test Movie plays (URLLoader, Loader), when the Qt
+# found has its network module.
+find_package(Qt6 QUIET OPTIONAL_COMPONENTS Network)
+if(TARGET Qt6::Network)
+    target_link_libraries(Phoenix PRIVATE Qt6::Network)
+    target_compile_definitions(Phoenix PRIVATE PHOENIX_NETWORK)
+endif()
 target_link_libraries(Phoenix PRIVATE qjs)
 if(PHOENIX_PYTHON)
     target_compile_definitions(Phoenix PRIVATE PHOENIX_PYTHON)
@@ -603,6 +612,13 @@ file(GLOB_RECURSE PHOENIX_TUTORIAL_FILES CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/
 if(PHOENIX_TUTORIAL_FILES)
     qt_add_resources(Phoenix "tutorials" PREFIX "/" BASE "${CMAKE_SOURCE_DIR}/resources"
         FILES ${PHOENIX_TUTORIAL_FILES})
+endif()
+# Phoenix's own ActionScript 3 classes (resources/as3), in the app as
+# :/as3: what a movie's class path does not have is looked for there last.
+file(GLOB_RECURSE PHOENIX_AS3_FILES CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/resources/as3/*.as")
+if(PHOENIX_AS3_FILES)
+    qt_add_resources(Phoenix "as3" PREFIX "/" BASE "${CMAKE_SOURCE_DIR}/resources"
+        FILES ${PHOENIX_AS3_FILES})
 endif()
 # The CSInterface shim HTML extension panels start with (cep_panel.cpp).
 qt_add_resources(Phoenix "cep" PREFIX "/" BASE "${CMAKE_SOURCE_DIR}/resources"
@@ -659,11 +675,13 @@ install(TARGETS Phoenix
 set(PHOENIX_DEPLOY_OPTIONS)
 if(WIN32)
     # Phoenix draws with QPainter, so neither the software OpenGL nor the
-    # shader compilers are needed, and it does no networking of Qt's (the
-    # updater has its own).
+    # shader compilers are needed. Qt's networking ships when Test Movie's
+    # movies load from the web with it.
     set(PHOENIX_DEPLOY_OPTIONS DEPLOY_TOOL_OPTIONS
-        --no-opengl-sw --no-system-d3d-compiler --no-system-dxc-compiler
-        --no-network)
+        --no-opengl-sw --no-system-d3d-compiler --no-system-dxc-compiler)
+    if(NOT TARGET Qt6::Network)
+        list(APPEND PHOENIX_DEPLOY_OPTIONS --no-network)
+    endif()
 endif()
 qt_generate_deploy_app_script(
     TARGET Phoenix

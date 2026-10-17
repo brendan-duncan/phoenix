@@ -1,6 +1,7 @@
 #include "command_line.h"
 #include "display_check.h"
 #include "display_painter.h"
+#include "movie_hooks.h"
 
 #include "main_window.h"
 #include "script_runner.h"
@@ -12,6 +13,7 @@
 #include "../jsfl/native_extensions.h"
 
 #include "../data/action_script.h"
+#include "../data/bitmap.h"
 #include "../data/document.h"
 #include "../data/frame.h"
 #include "../data/layer.h"
@@ -34,6 +36,7 @@
 #include "../writer/xfl_content.h"
 #include "../writer/xfl_folder_writer.h"
 #include "../play/movie_runtime.h"
+#include "../play/display/stage.h"
 
 #include <QDir>
 #include <QDirIterator>
@@ -131,13 +134,18 @@ const char* const kHelp =
     "      them out, here and in batch.\n"
     "\n"
     "  play <file> [--frames N] [--tree] [--click-all] [--image <out.png>]\n"
+    "       [--click F:X,Y] [--drag F:X,Y:X,Y] [--move F:X,Y] [--key F:CODE]\n"
     "      Plays the movie as Control > Test Movie does, scripts and all, for N\n"
     "      frames (120 unless given), printing what its scripts trace and the\n"
     "      errors they stop on. --tree lists the clips playing then, with\n"
     "      their scripts. --click-all then clicks each button it finds,\n"
     "      one after another, playing a few frames after each. --image draws\n"
-    "      the frame it is then on, as Test Movie shows it. Exits 1 when a\n"
-    "      script stopped on an error.\n"
+    "      the frame it is then on, as Test Movie shows it. --click, --drag,\n"
+    "      --move and --key (each may be given more than once) send the\n"
+    "      pointer or a key (its code, as Keyboard numbers them) to the stage\n"
+    "      before frame F plays: a click at X,Y, a press at one point, moves\n"
+    "      and a release at the other, or a move. Exits 1 when a script\n"
+    "      stopped on an error.\n"
     "\n"
     "  display-check <folder> [--fla <file> [--frames N]]\n"
     "      Draws display lists built in code (shapes, gradients, bitmaps,\n"
@@ -779,32 +787,101 @@ int play(const QStringList& args)
         std::printf("sound %s x%d\n", linkage.c_str(), loops);
         return -1;
     };
-    // Clips scripts make from the library, by linkage.
+    // Clips scripts make from the library, by linkage, and bitmaps.
     std::vector<const fla::Symbol*> symbols;
     if (document->document->symbolList)
         symbols.assign(document->document->symbolList->symbols.begin(), document->document->symbolList->symbols.end());
     movie.setLibrary(symbols, {}, {});
-    // ActionScript 3 class files beside the document.
-    std::string documentClass;
-    const auto classes = fla::play::classFiles(*document->document,
-        QFileInfo(args.at(0)).absolutePath().toStdString(), documentClass);
-    movie.setClasses(classes, documentClass);
-    // What scripts draw into bitmaps (BitmapData.draw) is drawn by the
-    // display painter, with no window as with one.
-    DisplayPainter painter;
-    fla::display::setBackend(&painter);
-    struct Unset
+    std::vector<const fla::Bitmap*> bitmaps;
+    for (const fla::Resource* resource : document->document->resources)
+        if (resource && resource->resourceType() == fla::Resource::Type::Bitmap)
+            bitmaps.push_back(static_cast<const fla::Bitmap*>(resource));
+    movie.setLibraryBitmaps(bitmaps);
+    // Its classes, images, the web and SharedObjects, as Test Movie has them.
+    QObject network;
+    connectMovie(movie, *document, QFileInfo(args.at(0)).absoluteFilePath(), &network,
+        [](const QString& text) { std::printf("%s\n", text.toUtf8().constData()); });
+    // What the timelines place is measured and drawn (BitmapData.draw) by a
+    // view of the document, with no window as with one.
+    Player player;
+    PhoenixView view(&player);
+    view.setDocument(document.get());
+    view.setShowPasteboard(false);
+    view.setClipOutsideStage(true);
+    view.setMovie(&movie);
+
+    // The pointer and keys sent before a frame: --click F:X,Y and the rest.
+    struct Input
     {
-        DisplayPainter& painter;
-        ~Unset()
+        int frame = 0;
+        QString kind;
+        double x = 0.0, y = 0.0, toX = 0.0, toY = 0.0;
+        int key = 0;
+    };
+    std::vector<Input> inputs;
+    for (int i = 1; i + 1 < args.size(); ++i)
+    {
+        const QString& kind = args.at(i);
+        if (kind != "--click" && kind != "--drag" && kind != "--move" && kind != "--key")
+            continue;
+        const QStringList parts = args.at(i + 1).split(':');
+        Input input;
+        input.kind = kind.mid(2);
+        input.frame = parts.value(0).toInt();
+        const QStringList at = parts.value(1).split(',');
+        if (kind == "--key")
+            input.key = parts.value(1).toInt();
+        else
         {
-            if (fla::display::backend() == &painter)
-                fla::display::setBackend(nullptr);
+            input.x = at.value(0).toDouble();
+            input.y = at.value(1).toDouble();
+            const QStringList to = parts.value(2).split(',');
+            input.toX = to.value(0).toDouble();
+            input.toY = to.value(1).toDouble();
         }
-    } unset{painter};
+        inputs.push_back(input);
+    }
+    const auto send = [&movie](const Input& input) {
+        fla::display::Stage& stage = movie.stage();
+        if (input.kind == "key")
+        {
+            const int character = input.key >= 32 && input.key < 127 ? input.key : 0;
+            movie.keyDown(input.key, character);
+            movie.keyUp(input.key, character);
+            return;
+        }
+        movie.pointerAt(input.x, input.y);
+        stage.pointerMove(input.x, input.y);
+        if (input.kind == "click" || input.kind == "drag")
+        {
+            stage.pointerDown(input.x, input.y);
+            movie.afterEvents();
+            if (input.kind == "drag")
+                for (int step = 1; step <= 8; ++step)
+                {
+                    const double x = input.x + (input.toX - input.x) * step / 8.0;
+                    const double y = input.y + (input.toY - input.y) * step / 8.0;
+                    movie.pointerAt(x, y);
+                    stage.pointerMove(x, y);
+                    movie.afterEvents();
+                }
+            const double x = input.kind == "drag" ? input.toX : input.x;
+            const double y = input.kind == "drag" ? input.toY : input.y;
+            stage.pointerUp(x, y);
+        }
+        movie.afterEvents();
+    };
+
     movie.start();
     for (int i = 0; i < frames; ++i)
+    {
+        for (const Input& input : inputs)
+            if (input.frame == i)
+                send(input);
         movie.step();
+        // What the web has sent comes in between frames.
+        QCoreApplication::processEvents();
+    }
     std::printf("after %d frames: scene %d of %d, frame %d, %s\n", frames, movie.scene() + 1, movie.sceneCount(),
         movie.root().frame + 1, movie.root().playing ? "playing" : "stopped");
     if (args.contains("--tree"))
@@ -869,6 +946,18 @@ int play(const QStringList& args)
             movie.pointerDown();
             movie.pointerUp();
             movie.pointerOver(nullptr);
+            // ActionScript 3's listeners hear it from the stage, at the
+            // middle of the button.
+            if (movie.actionScript3() && clip->display && clip->display->stage())
+            {
+                const fla::display::Rect box = clip->display->getBounds(&movie.stage());
+                const double x = box.x + box.width / 2.0;
+                const double y = box.y + box.height / 2.0;
+                movie.stage().pointerMove(x, y);
+                movie.stage().pointerDown(x, y);
+                movie.stage().pointerUp(x, y);
+                movie.afterEvents();
+            }
             for (int i = 0; i < 4; ++i)
                 movie.step();
         }
@@ -880,12 +969,6 @@ int play(const QStringList& args)
     const QString imagePath = option(args, "--image");
     if (!imagePath.isEmpty())
     {
-        Player player;
-        PhoenixView view(&player);
-        view.setDocument(document.get());
-        view.setShowPasteboard(false);
-        view.setClipOutsideStage(true);
-        view.setMovie(&movie);
         // Behaviors that follow layer parents (Jiggle) see them through
         // this view, as they do through the window's.
         fla::behaviors::setRigging([&view](const fla::Layer& layer, int frame, double matrix[6]) {

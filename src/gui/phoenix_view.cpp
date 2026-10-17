@@ -8153,6 +8153,8 @@ void PhoenixView::setMovie(fla::play::MovieRuntime* movie)
     _displayDraws.clear();
     if (_movie)
     {
+        // The pointer reaches the display list from the stage (movieMouse).
+        _movie->setStagePointer(true);
         fla::display::setBackend(_displayPainter.get());
         if (_flaDocument && _flaDocument->document)
         {
@@ -8462,7 +8464,20 @@ void PhoenixView::movieMouse(QMouseEvent* event)
     const fla::display::InteractiveObject* over = stage.hovered();
     const bool typing = over && over->kind() == fla::display::ObjectKind::TextField &&
         static_cast<const fla::display::TextField*>(over)->type() == fla::display::TextField::Type::Input;
-    setCursor(button || stage.handCursor() ? Qt::PointingHandCursor : field || typing ? Qt::IBeamCursor : Qt::ArrowCursor);
+    // ActionScript 3 shows a hand over a button or a sprite in button mode,
+    // or the cursor Mouse.cursor asks for; Mouse.hide hides it.
+    const bool hand = stage.handCursor() || (button && (button->button || !_movie->actionScript3()));
+    const std::string wanted = _movie->mouseCursor();
+    if (_movie->mouseHidden())
+        setCursor(Qt::BlankCursor);
+    else if (wanted == "hand" || wanted == "button")
+        setCursor(Qt::PointingHandCursor);
+    else if (wanted == "ibeam")
+        setCursor(Qt::IBeamCursor);
+    else if (wanted == "arrow")
+        setCursor(Qt::ArrowCursor);
+    else
+        setCursor(hand ? Qt::PointingHandCursor : field || typing ? Qt::IBeamCursor : Qt::ArrowCursor);
     update();
     event->accept();
 }

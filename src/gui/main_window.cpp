@@ -8696,7 +8696,7 @@ int MainWindow::viewFromCommandLine(const QString& path)
     // print goes to standard error, not to the person looking.
     const auto print = [](const QString& line) { std::fprintf(stderr, "%s\n", qPrintable(line)); };
     TestMovieWindow viewer(*_flaDocument, info.fileName(), print,
-        [print](const QString& line, const fla::DOMElement*, int) { print(line); }, nullptr, info.absolutePath());
+        [print](const QString& line, const fla::DOMElement*, int) { print(line); }, nullptr, info.absoluteFilePath());
     viewer.setWindowTitle(QString("%1 - Phoenix Viewer").arg(info.fileName()));
     viewer.setWindowFlag(Qt::WindowMinMaxButtonsHint, true);
     viewer.exec();
@@ -14206,7 +14206,7 @@ void MainWindow::testMovie()
             output->appendError(line, open);
             showOutput();
         },
-        this, _documentPath.isEmpty() ? QString() : QFileInfo(_documentPath).absolutePath());
+        this, _documentPath);
     window.exec();
 }
 

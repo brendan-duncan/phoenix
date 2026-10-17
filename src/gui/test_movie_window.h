@@ -37,11 +37,12 @@ public:
     /// \a name is the document's, for the title; \a print and \a printError
     /// get what the scripts trace and the errors they stop on, with the
     /// script an error is in (a keyframe or an instance, or null) and its
-    /// line (0 when not known). ActionScript 3 class files (the document
-    /// class, symbols' classes) are looked for in \a folder, the document's.
+    /// line (0 when not known). ActionScript 3 classes (the document
+    /// class, symbols' classes, the rest) are looked for beside \a file, the
+    /// document's path, and on its class path.
     TestMovieWindow(const fla::FLADocument& document, const QString& name, std::function<void(const QString&)> print,
         std::function<void(const QString&, const fla::DOMElement*, int)> printError, QWidget* parent = nullptr,
-        const QString& folder = QString());
+        const QString& file = QString());
     ~TestMovieWindow() override;
 
 protected:
