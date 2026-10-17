@@ -16,8 +16,13 @@ var composites = {
     darken: "darken", difference: "difference", add: "lighter", subtract: "difference", invert: "difference",
     alpha: "destination-in", erase: "destination-out", overlay: "overlay", hardlight: "hard-light", shader: "source-over"
 };
+// The canvas's own operations, which CreateJS's compositeOperation names.
+var canvasOperations = ["source-over", "source-in", "source-out", "source-atop", "destination-over", "destination-in",
+    "destination-out", "destination-atop", "lighter", "copy", "xor", "multiply", "screen", "overlay", "darken", "lighten",
+    "color-dodge", "color-burn", "hard-light", "soft-light", "difference", "exclusion", "hue", "saturation", "color",
+    "luminosity"];
 function compositeOf(blend) {
-    return composites[blend] || "source-over";
+    return composites[blend] || (canvasOperations.indexOf(blend) >= 0 ? blend : "source-over");
 }
 phoenix._.compositeOf = compositeOf;
 
@@ -246,7 +251,10 @@ function drawLayered(ctx, object, parentM, m, c, blend, r) {
         var mask = object._mask;
         var maskLayer = phoenix.makeCanvas(w, h);
         var mctx = maskLayer.getContext("2d");
-        var maskParent = mask._parent ? M.multiply(mask._parent._concatenatedMatrix(), r.stageToDevice) : r.stageToDevice;
+        // A mask off the display list is in the stage's space, or (CreateJS's
+        // way) in the space of what it masks.
+        var maskSpace = mask._parent || (mask._maskInOwnerSpace && object._parent);
+        var maskParent = maskSpace ? M.multiply(maskSpace._concatenatedMatrix(), r.stageToDevice) : r.stageToDevice;
         renderObject(mctx, mask, M.multiply(maskParent, shift), C.identity,
             Object.assign({}, inner, {maskPass: true, drawingMask: true}));
         lctx.globalCompositeOperation = "destination-in";
