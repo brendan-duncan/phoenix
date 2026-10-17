@@ -587,6 +587,33 @@ std::string MovieRuntime::mouseCursor() const
     return _bindings ? _bindings->mouseCursor : std::string("auto");
 }
 
+bool MovieRuntime::scriptsLookLikeActionScript2() const
+{
+    // Scripts on instances, and what only ActionScript 1 and 2 write.
+    static const char* marks[] = {"setProperty(", "getProperty(", "tellTarget", "ifFrameLoaded", "onClipEvent",
+        "_root.", "_parent.", "._visible", "._x", "attachMovie("};
+    std::vector<const Timeline*> timelines(_scenes.begin(), _scenes.end());
+    for (const Symbol* symbol : _library)
+        if (symbol)
+            timelines.insert(timelines.end(), symbol->timelines.begin(), symbol->timelines.end());
+    for (const Timeline* timeline : timelines)
+        for (const Layer* layer : timeline ? timeline->layers : std::vector<Layer*>())
+            for (const Frame* frame : layer ? layer->frames : std::vector<Frame*>())
+            {
+                if (!frame)
+                    continue;
+                for (const Element* element : frame->elements)
+                    if (const auto* instance = dynamic_cast<const SymbolInstance*>(element))
+                        if (!instanceScript(*instance).empty())
+                            return true;
+                if (frame->actionScript)
+                    for (const char* mark : marks)
+                        if (frame->actionScript->code.find(mark) != std::string::npos)
+                            return true;
+            }
+    return false;
+}
+
 bool MovieRuntime::scriptsLookLikeActionScript3() const
 {
     // What only ActionScript 3 writes.
@@ -650,8 +677,11 @@ void MovieRuntime::start()
     attachDisplay(*_root);
     _stage->addChildAt(_root->display, 0);
     _stage->setRootObject(_root->display.get());
-    _as3 = _version == 3 ||
-        (_version == 0 && (!_classSources.empty() || !_documentClass.empty() || scriptsLookLikeActionScript3()));
+    // A movie whose settings say ActionScript 3 but whose scripts are older
+    // (a file saved again with new settings) plays as its scripts are.
+    _as3 = _version == 3 ? !scriptsLookLikeActionScript2() || scriptsLookLikeActionScript3()
+                         : _version == 0 && (!_classSources.empty() || !_documentClass.empty() ||
+                                                scriptsLookLikeActionScript3());
     std::vector<Clip*> entered{_root.get()};
     if (_as3)
     {

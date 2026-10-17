@@ -581,6 +581,8 @@ private:
     /// Whether the scripts look like ActionScript 3 (for a movie whose
     /// version is not known).
     bool scriptsLookLikeActionScript3() const;
+    /// Whether they look like ActionScript 1 or 2 (scripts on instances...).
+    bool scriptsLookLikeActionScript2() const;
     /// Moves the clips scripts made to where the display list has them:
     /// into the clip whose display object holds theirs, or off the stage.
     void placeMadeClips();
