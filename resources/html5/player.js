@@ -728,6 +728,7 @@ function buildLibrary(movie) {
     var symbols = (movie.symbols || []).map(function (symbol, index) {
         return Object.assign({index: index}, symbol);
     });
+    var placeholders = phoenix._.placeholders = new Set();
     phoenix._.library = {symbols: symbols, art: movie.art || [], texts: movie.texts || [], movie: movie};
     phoenix._.rootDef = {index: -1, name: "", type: "mc", timeline: movie.root || {n: 1, states: [[]], map: [0]}};
     symbols.forEach(function (def) {
@@ -737,6 +738,7 @@ function buildLibrary(movie) {
         if (!Base)
             Base = def.type === "button" ? display.SimpleButton : display.MovieClip;
         var made = {[def.linkage.split(".").pop()]: class extends Base {}}[def.linkage.split(".").pop()];
+        placeholders.add(made);
         phoenix.defineClass(def.linkage, made);
         linkClass(def, made);
     });
@@ -744,6 +746,7 @@ function buildLibrary(movie) {
         if (!sound.linkage || phoenix.classByName(sound.linkage))
             return;
         var made = class extends flash.media.Sound {};
+        placeholders.add(made);
         phoenix.defineClass(sound.linkage, made);
         phoenix._.soundForClass.set(made, index);
     });
@@ -751,6 +754,7 @@ function buildLibrary(movie) {
         if (!image.linkage || phoenix.classByName(image.linkage))
             return;
         var made = class extends display.BitmapData {};
+        placeholders.add(made);
         phoenix.defineClass(image.linkage, made);
         phoenix._.bitmapForClass.set(made, index);
     });
@@ -777,7 +781,11 @@ var as3 = {
             library.symbols.filter(function (s) { return s.name === name; })[0];
         if (def) {
             linkClass(def, cls);
-            if (def.linkage && phoenix.classByName(def.linkage) !== cls)
+            // The linkage name is the class's, unless it names a class of
+            // its own (cls being one under it, for the symbol's frame
+            // scripts).
+            var named = def.linkage ? phoenix.classByName(def.linkage) : null;
+            if (def.linkage && named !== cls && (!named || phoenix._.placeholders.has(named)))
                 phoenix.defineClass(def.linkage, cls);
             return true;
         }
@@ -820,7 +828,43 @@ var as3 = {
         return phoenix._.library.symbols.map(function (s) { return {name: s.name, linkage: s.linkage || null, type: s.type}; });
     }
 };
+// The modules' as3 is as3.js's too: translated code inside a module that
+// names its parameter as3 still finds as3.define and as3.use.
+if (typeof globalThis !== "undefined" && globalThis.as3)
+    Object.setPrototypeOf(as3, globalThis.as3);
 phoenix.as3 = as3;
+/// Every library item whose linkage class translated ActionScript defines
+/// is made as that class (a symbol's instances, a sound, a bitmap).
+function linkTranslated() {
+    var global = typeof globalThis !== "undefined" ? globalThis : null;
+    var lib = global && global.as3;
+    if (!lib)
+        return;
+    var movie = phoenix._.library.movie;
+    var names = [];
+    phoenix._.library.symbols.forEach(function (s) { if (s.linkage) names.push(s.linkage); });
+    (movie.sounds || []).concat(movie.images || []).forEach(function (item) { if (item.linkage) names.push(item.linkage); });
+    names.forEach(function (name) {
+        if (!lib.isDefined(name))
+            return;
+        var cls;
+        try {
+            cls = lib.use(name);
+        } catch (error) {
+            phoenix._.reportError(error, "the class " + name);
+            return;
+        }
+        if (typeof cls !== "function" || phoenix._.placeholders.has(cls))
+            return;
+        var def = phoenix._.library.symbols.filter(function (s) { return s.linkage === name; })[0];
+        // A symbol already bound to a class under it (for its frame
+        // scripts) keeps that one.
+        var bound = def ? phoenix._.classForSymbol.get(def.index) : null;
+        if (bound && bound !== cls && bound.prototype instanceof cls)
+            return;
+        as3.linkClass(name, cls);
+    });
+}
 phoenix._.runModule = function (module) {
     try {
         module(as3);
@@ -897,6 +941,7 @@ phoenix.start = function (settings) {
     return Promise.all([loadImages(movie.images, settings.base), loadScript(scriptUrl)]).then(function () {
         phoenix._.started = true;
         phoenix._.modules.forEach(phoenix._.runModule);
+        linkTranslated();
         if (settings.prepare)
             settings.prepare(movie);
         begin(movie, settings);

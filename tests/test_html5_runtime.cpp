@@ -5,6 +5,8 @@
 
 #include <quickjs.h>
 
+#include "js/js.h"
+
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -51,6 +53,8 @@ public:
         _rt = JS_NewRuntime();
         _ctx = JS_NewContext(_rt);
         ok = eval(kHost, "<host>");
+        // as3.js first, as phoenix.js has it.
+        ok = ok && eval(as3::js::runtime(), "as3");
         for (const char* file : kFiles)
             ok = ok && eval(readFile(kRuntime / (std::string(file) + ".js")), file);
         if (createJs)

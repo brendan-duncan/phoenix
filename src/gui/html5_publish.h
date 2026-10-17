@@ -27,6 +27,10 @@ struct Settings
     bool fit = true;
     /// The main timeline starts again after its last frame.
     bool loop = true;
+    /// The document's file, where its ActionScript 3 classes are looked
+    /// for (with its publish settings' source paths and Phoenix's own);
+    /// empty for a document not saved.
+    QString source;
 };
 
 /// Writes the page for \a document as \a view draws it (the view showing
@@ -37,8 +41,18 @@ struct Settings
 bool run(const Settings& settings, PhoenixView& view, TimelineAudio* audio, const fla::Document& document,
     QStringList& written, QStringList& notes, QString& error);
 
-/// The runtime as one script: resources/html5's files in order.
+/// The runtime as one script: as3.js (libas3's runtime for translated
+/// ActionScript), then resources/html5's files in order.
 QByteArray runtime();
+
+/// \a document's ActionScript 3 translated to JavaScript, as the page
+/// loads it (<name>.as.js, \a name being the page's): the classes, then
+/// what binds them to the movie (its document class, its symbols' classes).
+/// Empty when the movie has no ActionScript 3, or it could not be
+/// translated; \a map gets the source map, \a notes the errors and
+/// warnings, with where they are.
+QByteArray actionScript(const fla::Document& document, const QString& source, const QString& name, QByteArray& map,
+    QStringList& notes);
 /// The CreateJS layer HTML5 Canvas documents' scripts run on.
 QByteArray createJs();
 

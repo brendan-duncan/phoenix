@@ -10,6 +10,11 @@
 #include "../data/document.h"
 #include "../edit/canvas_document.h"
 #include "../edit/html5_export.h"
+#include "../edit/swf_actionscript3.h"
+#include "../play/script/class_path.h"
+#include "movie_hooks.h"
+
+#include "js/js.h"
 
 #include "tinyxml2.h"
 
@@ -515,7 +520,7 @@ private:
 };
 
 QString pageHtml(const QString& title, const QString& name, const QColor& background, bool fit, bool javaScript,
-    int width, int height)
+    bool actionScript, int width, int height)
 {
     const QString style = fit
         ? QString("html, body { margin: 0; height: 100%; overflow: hidden; background: %1; }\n"
@@ -528,14 +533,19 @@ QString pageHtml(const QString& title, const QString& name, const QColor& backgr
     if (javaScript)
         scripts += "<script src=\"phoenix-createjs.js\"></script>\n";
     scripts += QString("<script src=\"%1.content.js\"></script>\n").arg(name.toHtmlEscaped());
+    // The movie's ActionScript as JavaScript, which the runtime loads
+    // before the movie starts (see the runtime's README).
+    const QString start = actionScript
+        ? QString("// %1.as.js is the movie's ActionScript as JavaScript: the runtime loads it before the movie\n"
+                  "// starts (see the runtime's README).\n"
+                  "phoenix.start({container: \"phoenix-stage\", scale: \"%2\", actionscript: \"%1.as.js\"});\n")
+              .arg(name, fit ? "fit" : "none")
+        : QString("phoenix.start({container: \"phoenix-stage\", scale: \"%1\"});\n").arg(fit ? "fit" : "none");
     return QString("<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n"
                    "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>%1</title>\n"
-                   "<style>\n%2</style>\n%3</head>\n<body>\n<div id=\"phoenix-stage\"></div>\n<script>\n"
-                   "// %4.as.js, when it is there, is the movie's ActionScript as JavaScript: the runtime loads it\n"
-                   "// before the movie starts (see the runtime's README).\n"
-                   "phoenix.start({container: \"phoenix-stage\", scale: \"%5\", actionscript: \"%6.as.js\"});\n"
+                   "<style>\n%2</style>\n%3</head>\n<body>\n<div id=\"phoenix-stage\"></div>\n<script>\n%4"
                    "</script>\n</body>\n</html>\n")
-        .arg(title.toHtmlEscaped(), style, scripts, name, fit ? "fit" : "none", name);
+        .arg(title.toHtmlEscaped(), style, scripts, start);
 }
 
 } // namespace
@@ -543,6 +553,8 @@ QString pageHtml(const QString& title, const QString& name, const QColor& backgr
 QByteArray runtime()
 {
     QByteArray out = "// Phoenix HTML5 runtime: the flash.* display list, events and timelines over a canvas.\n";
+    out += "\n// as3.js (libas3): what ActionScript translated to JavaScript runs on.\n";
+    out += QByteArray::fromStdString(as3::js::runtime());
     for (const char* file : kRuntimeFiles)
     {
         out += "\n// " + QByteArray(file) + ".js\n";
@@ -554,6 +566,55 @@ QByteArray runtime()
 QByteArray createJs()
 {
     return resource("createjs.js");
+}
+
+QByteArray actionScript(const fla::Document& document, const QString& source, const QString& name, QByteArray& map,
+    QStringList& notes)
+{
+    // The classes as Test Movie and SWF publishing find them: the class
+    // path, then Phoenix's own (the fl.* components, translated too).
+    const fla::play::ClassPath classPath = movieClassPath(document, source);
+    fla::swfmovie::ActionScript3Options options;
+    options.findClass = [classPath](const std::string& qualified) -> std::optional<std::string> {
+        const std::optional<fla::play::ClassFile> found = classPath.find(qualified);
+        return found ? std::optional<std::string>(found->source) : std::nullopt;
+    };
+    const QString folder = source.isEmpty() ? QString() : QFileInfo(source).absolutePath();
+    options.readFile = [folder](const std::string& path) -> std::optional<std::string> {
+        QFile file(QDir(folder).filePath(QString::fromStdString(path)));
+        if (folder.isEmpty() || !file.open(QIODevice::ReadOnly))
+            return std::nullopt;
+        return file.readAll().toStdString();
+    };
+    options.documentName = source.isEmpty() ? std::string("Untitled") : QFileInfo(source).completeBaseName().toStdString();
+    const fla::swfmovie::JavaScript3 translated = fla::swfmovie::translateActionScript3(document, options);
+    for (const std::string& note : translated.notes)
+        notes << QString::fromStdString(note);
+    if (translated.bundle.empty())
+        return QByteArray();
+    std::string bundle = translated.bundle;
+    // The bundle's own source map comment names libas3's file; the page's
+    // is beside it.
+    const size_t comment = bundle.rfind("//# sourceMappingURL=");
+    if (comment != std::string::npos)
+        bundle.erase(comment);
+    if (!bundle.empty() && bundle.back() != '\n')
+        bundle += '\n';
+    // What binds the classes to the movie: the main timeline's class, and
+    // each symbol's (by its library name; linkage classes the runtime binds
+    // by itself).
+    std::string link = "\n// The movie's classes: its main timeline's, and its symbols'.\n"
+                       "phoenix.actionscript(function (movie) {\n";
+    if (!translated.mainClass.empty())
+        link += "    movie.documentClass(as3.use(" + fla::html5::quoted(translated.mainClass) + "));\n";
+    for (const auto& [symbol, cls] : translated.classes)
+        if (symbol)
+            link += "    movie.linkClass(" + fla::html5::quoted(symbol->name) + ", as3.use(" + fla::html5::quoted(cls) +
+                "));\n";
+    link += "});\n";
+    map = QByteArray::fromStdString(translated.sourceMap);
+    return QByteArray::fromStdString(bundle + link) +
+        (map.isEmpty() ? QByteArray() : "//# sourceMappingURL=" + name.toUtf8() + ".as.js.map\n");
 }
 
 bool run(const Settings& settings, PhoenixView& view, TimelineAudio* audio, const fla::Document& document,
@@ -573,6 +634,11 @@ bool run(const Settings& settings, PhoenixView& view, TimelineAudio* audio, cons
     fla::html5::Options options;
     options.javaScript = javaScript;
     options.loop = settings.loop;
+    // ActionScript 3 is translated to JavaScript (an HTML5 Canvas
+    // document's scripts are JavaScript already, in its content).
+    const int version = fla::play::actionScriptVersion(document);
+    const bool translate = !javaScript && (version == 0 || version == 3);
+    options.actionScriptTranslated = translate;
     std::vector<std::string> found;
     const std::string content = fla::html5::content(document, art, options, &found);
     for (const std::string& note : found)
@@ -602,8 +668,22 @@ bool run(const Settings& settings, PhoenixView& view, TimelineAudio* audio, cons
         return false;
     if (!save(name + ".content.js", "phoenix.content(" + QByteArray::fromStdString(content) + ");\n"))
         return false;
+    bool scripted = false;
+    if (translate)
+    {
+        QByteArray map;
+        const QByteArray script = actionScript(document, settings.source, name, map, notes);
+        if (!script.isEmpty())
+        {
+            if (!save(name + ".as.js", script))
+                return false;
+            if (!map.isEmpty() && !save(name + ".as.js.map", map))
+                return false;
+            scripted = true;
+        }
+    }
     const QColor background(document.backgroundColor[0], document.backgroundColor[1], document.backgroundColor[2]);
-    const QString html = pageHtml(name, name, background, settings.fit, javaScript, std::max(1, document.width),
+    const QString html = pageHtml(name, name, background, settings.fit, javaScript, scripted, std::max(1, document.width),
         std::max(1, document.height));
     return save(page.fileName(), html.toUtf8());
 }

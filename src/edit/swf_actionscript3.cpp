@@ -16,6 +16,7 @@
 
 #include "abc/abc.h"
 #include "abc/abc_player.h"
+#include "js/js.h"
 
 #include <tinyxml2.h>
 
@@ -358,9 +359,84 @@ public:
         , _components(components(document))
     {}
 
+    /// What the document's ActionScript 3 is made of, for the compiler or
+    /// the translator: the class files it reaches, its timelines' classes,
+    /// its constants, and its main timeline's class.
+    struct Gathered
+    {
+        std::vector<as3::abc::Source> sources;
+        std::vector<as3::abc::Timeline> timelines;
+        std::map<std::string, std::string> constants;
+        std::string mainClass;
+    };
+
     ActionScript3 run()
     {
         ActionScript3 out;
+        const Gathered gathered = gatherAll();
+        out.mainClass = gathered.mainClass;
+        if (gathered.sources.empty() && gathered.timelines.empty())
+        {
+            out.notes = _notes;
+            return out;
+        }
+        as3::abc::Options compile;
+        compile.includeHandler = _options.readFile;
+        compile.constants = gathered.constants;
+        const as3::abc::Output compiled = as3::abc::compile(gathered.sources, gathered.timelines, compile);
+        for (const as3::abc::Diagnostic& diagnostic : compiled.diagnostics)
+            _notes.push_back(describe(diagnostic));
+        if (!compiled.ok)
+            _notes.push_back("The ActionScript 3 did not compile: the movie goes out without its scripts");
+        else
+        {
+            out.abc = compiled.abc;
+            out.defined = compiled.classes;
+            out.classes = _classes;
+        }
+        if (!compiled.ok)
+            out.mainClass.clear();
+        out.notes = _notes;
+        return out;
+    }
+
+    JavaScript3 translate()
+    {
+        JavaScript3 out;
+        const Gathered gathered = gatherAll();
+        out.mainClass = gathered.mainClass;
+        if (gathered.sources.empty() && gathered.timelines.empty())
+        {
+            out.notes = _notes;
+            return out;
+        }
+        as3::js::Options options;
+        options.includeHandler = _options.readFile;
+        options.constants = gathered.constants;
+        const as3::js::Output translated = as3::js::translate(gathered.sources, gathered.timelines, options);
+        for (const as3::js::Diagnostic& diagnostic : translated.diagnostics)
+            _notes.push_back(describe(diagnostic));
+        if (!translated.ok)
+        {
+            _notes.push_back("The ActionScript 3 could not be translated to JavaScript: the page goes out without its scripts");
+            out.mainClass.clear();
+        }
+        else
+        {
+            out.bundle = translated.bundle;
+            const auto map = translated.sourceMaps.find("bundle.js.map");
+            if (map != translated.sourceMaps.end())
+                out.sourceMap = map->second;
+            out.defined = translated.classes;
+            out.classes = _classes;
+        }
+        out.notes = _notes;
+        return out;
+    }
+
+    Gathered gatherAll()
+    {
+        Gathered out;
         bool known = false;
         const std::string declare = publishSetting(_document, "AS3AutoDeclare", &known);
         _autoDeclare = !known || std::atoi(declare.c_str()) != 0;
@@ -517,14 +593,11 @@ public:
         for (const TimelineClass& made : _timelines)
             timelines.push_back(made.timeline);
         missingSkins();
-        if (sources.empty() && timelines.empty())
-        {
-            out.notes = _notes;
+        out.sources = std::move(sources);
+        out.timelines = std::move(timelines);
+        if (out.sources.empty() && out.timelines.empty())
             return out;
-        }
 
-        as3::abc::Options compile;
-        compile.includeHandler = _options.readFile;
         // Conditional compilation constants: CONFIG::debug="true";...
         std::stringstream constants(publishSetting(_document, "AS3ConfigConst"));
         std::string constant;
@@ -540,22 +613,8 @@ public:
             if (value.size() >= 2 && value.front() == '"' && value.back() == '"')
                 value = value.substr(1, value.size() - 2);
             if (!name.empty())
-                compile.constants[name] = value;
+                out.constants[name] = value;
         }
-        const as3::abc::Output compiled = as3::abc::compile(sources, timelines, compile);
-        for (const as3::abc::Diagnostic& diagnostic : compiled.diagnostics)
-            _notes.push_back(describe(diagnostic));
-        if (!compiled.ok)
-            _notes.push_back("The ActionScript 3 did not compile: the movie goes out without its scripts");
-        else
-        {
-            out.abc = compiled.abc;
-            out.defined = compiled.classes;
-            out.classes = _classes;
-        }
-        if (!compiled.ok)
-            out.mainClass.clear();
-        out.notes = _notes;
         return out;
     }
 
@@ -932,6 +991,11 @@ std::map<const RawElement*, Component> components(const Document& document)
 ActionScript3 compileActionScript3(const Document& document, const ActionScript3Options& options)
 {
     return Compiler(document, options).run();
+}
+
+JavaScript3 translateActionScript3(const Document& document, const ActionScript3Options& options)
+{
+    return Compiler(document, options).translate();
 }
 
 std::vector<std::string> writeActionScript3(const Document& document, swf::Writer& writer,

@@ -155,6 +155,11 @@ class Sound extends EventDispatcher {
         if (stream)
             this.load(stream, context);
     }
+    $construct(stream, context) {
+        super.$construct();
+        if (stream)
+            this.load(stream, context);
+    }
     _entry() { return this._index >= 0 ? library[this._index] : this._loading || null; }
     _buffer() {
         var entry = this._entry();

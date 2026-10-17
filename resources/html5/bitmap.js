@@ -458,6 +458,15 @@ class Bitmap extends flash.display.DisplayObject {
         this.pixelSnapping = pixelSnapping || "auto";
         this._smoothing = !!smoothing;
     }
+    $construct(bitmapData, pixelSnapping, smoothing) {
+        super.$construct();
+        if (bitmapData)
+            this._bitmapData = bitmapData;
+        if (pixelSnapping)
+            this.pixelSnapping = pixelSnapping;
+        if (smoothing !== undefined)
+            this._smoothing = !!smoothing;
+    }
     get bitmapData() { return this._bitmapData; }
     set bitmapData(value) { this._bitmapData = value || null; this._changed(); }
     get smoothing() { return this._smoothing; }

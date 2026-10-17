@@ -51,6 +51,9 @@ struct Options
     /// Every symbol, not only those the scenes show and those exported for
     /// ActionScript.
     bool allSymbols = false;
+    /// The movie's ActionScript goes out translated to JavaScript beside the
+    /// content (Html5Publish), so its frame scripts are not left out.
+    bool actionScriptTranslated = false;
 };
 
 /// The content of \a document as JSON. \a notes gets what could not be

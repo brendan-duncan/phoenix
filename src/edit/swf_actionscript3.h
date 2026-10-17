@@ -72,6 +72,28 @@ struct ActionScript3
 /// Compiles \a document's ActionScript 3.
 ActionScript3 compileActionScript3(const Document& document, const ActionScript3Options& options);
 
+/// What translating a document's ActionScript 3 to JavaScript made, for an
+/// HTML5 page: the same classes and timelines compiling it reaches.
+struct JavaScript3
+{
+    /// Every class's JavaScript in one script (libas3's bundle), empty when
+    /// there is nothing to translate or it could not be translated.
+    std::string bundle;
+    /// The bundle's source map (v3), back to the .as lines.
+    std::string sourceMap;
+    /// The main timeline's class, empty for none.
+    std::string mainClass;
+    /// Each symbol's class, by symbol.
+    std::map<const Symbol*, std::string> classes;
+    /// Every class translated, in the order defined.
+    std::vector<std::string> defined;
+    /// Errors and warnings, a line each, with where they are.
+    std::vector<std::string> notes;
+};
+
+/// Translates \a document's ActionScript 3 to JavaScript.
+JavaScript3 translateActionScript3(const Document& document, const ActionScript3Options& options);
+
 /// Compiles \a document's ActionScript 3 and writes it to \a writer as
 /// DoABC and SymbolClass, the classes of the characters \a sprites gives
 /// (see Options::actionScript3). What did not go in as it is, a line each.

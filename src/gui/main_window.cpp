@@ -8561,6 +8561,7 @@ int MainWindow::renderCommand(const QString& source, const QStringList& options)
         html5.page = QFileInfo(out).absoluteFilePath();
         html5.fit = publish.html5Fit;
         html5.loop = publish.html5Loop;
+        html5.source = _documentPath;
         QStringList files, notes;
         QString error;
         if (!Html5Publish::run(html5, *_phoenixView, _timelineAudio, *document, files, notes, error))
@@ -9148,6 +9149,7 @@ bool MainWindow::publishFiles(QStringList& written, QStringList& problems)
         html5.page = pathOf("html5");
         html5.fit = settings.html5Fit;
         html5.loop = settings.html5Loop;
+        html5.source = _documentPath;
         QStringList files, notes;
         QString error;
         if (Html5Publish::run(html5, *_phoenixView, _timelineAudio, *document, files, notes, error))

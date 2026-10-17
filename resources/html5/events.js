@@ -197,6 +197,12 @@ class EventDispatcher {
         Object.defineProperty(this, "_listeners", {value: null, writable: true});
         Object.defineProperty(this, "_eventTarget", {value: target || null, writable: true});
     }
+    /// The ActionScript constructor, for translated subclasses (core.js,
+    /// adoptClass): the root of the display classes' chain.
+    $construct(target) {
+        if (target)
+            this._eventTarget = target;
+    }
     _listenersOf(useCapture, make) {
         if (!this._listeners) {
             if (!make)

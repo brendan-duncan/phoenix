@@ -501,6 +501,18 @@ class SimpleButton extends display.InteractiveObject {
         }
         this._adopt();
     }
+    $construct(upState, overState, downState, hitTestState) {
+        super.$construct();
+        if (upState)
+            this._upState = upState;
+        if (overState)
+            this._overState = overState;
+        if (downState)
+            this._downState = downState;
+        if (hitTestState)
+            this._hitTestState = hitTestState;
+        this._adopt();
+    }
     /// The states draw in the button's space and see its stage.
     _adopt() {
         var self = this;

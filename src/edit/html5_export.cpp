@@ -6,6 +6,7 @@
 #include "graphic_loop.h"
 #include "layer_commands.h"
 #include "motion_object.h"
+#include "swf_actionscript3.h"
 #include "three_d.h"
 #include "timeline_edit.h"
 
@@ -14,6 +15,7 @@
 #include "../data/document.h"
 #include "../data/frame.h"
 #include "../data/layer.h"
+#include "../data/raw_element.h"
 #include "../data/static_text.h"
 #include "../data/symbol.h"
 #include "../data/symbol_instance.h"
@@ -366,7 +368,12 @@ public:
         , _options(options)
         , _notes(notes)
         , _rate(document.frameRate > 0.0 ? document.frameRate : 24.0)
-    {}
+    {
+        // An ActionScript 3 movie's components: instances of their
+        // symbols, which their translated classes make.
+        if (!options.javaScript)
+            _components = swfmovie::components(document);
+    }
 
     std::string run()
     {
@@ -582,7 +589,7 @@ private:
         }
         for (const auto& [frame, source] : code)
             scripts.emplace_back(frame, source);
-        if (actionScript)
+        if (actionScript && !_options.actionScriptTranslated)
             note("ActionScript is not published yet: the movie plays its timelines without their scripts.");
         (void)scene;
     }
@@ -735,8 +742,37 @@ private:
             break;
         }
         case Element::Type::Raw:
-            note("Components and videos placed on the stage are not published.");
-            return std::string();
+        {
+            const auto* raw = static_cast<const RawElement*>(original ? original : &element);
+            const auto component = _components.find(raw);
+            const Symbol* symbol = nullptr;
+            if (component != _components.end() && _document.symbolList)
+            {
+                const auto found = _document.symbolList->symbolMap.find(component->second.symbol);
+                symbol = found == _document.symbolList->symbolMap.end() ? nullptr : found->second;
+            }
+            if (!symbol)
+            {
+                note("Videos placed on the stage are not published.");
+                return std::string();
+            }
+            // Its name (one made for it when it has none) is what the
+            // code setting its parameters calls it.
+            const swf::Matrix& m = component->second.matrix;
+            Transform own;
+            own.m11 = m.a;
+            own.m12 = m.b;
+            own.m21 = m.c;
+            own.m22 = m.d;
+            own.tx = m.tx;
+            own.ty = m.ty;
+            out += ",\"t\":\"s\",\"id\":" + std::to_string(indexOf(symbol));
+            if (symbol->symbolType != SymbolType::MovieClip)
+                out += ",\"it\":\"mc\"";
+            out += placed(own);
+            out += ",\"n\":" + quoted(component->second.name);
+            return out + masks() + "}";
+        }
         default:
             break;
         }
@@ -854,6 +890,7 @@ private:
     std::map<const Element*, int> _artByElement;
     std::vector<std::string> _texts;
     std::map<std::string, int> _textIndex;
+    std::map<const RawElement*, swfmovie::Component> _components;
 };
 
 } // namespace

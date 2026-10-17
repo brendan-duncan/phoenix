@@ -14,14 +14,21 @@ var TimerEvent = flash.events.TimerEvent;
 // flash.utils.
 
 class Timer extends EventDispatcher {
-    constructor(delay, repeatCount) {
+    constructor(...args) {
         super();
+        this._delay = 0;
+        this._repeatCount = 0;
+        this._currentCount = 0;
+        this._handle = null;
+        if (new.target === Timer)
+            this.$construct(...args);
+    }
+    $construct(delay, repeatCount) {
+        super.$construct();
         if (!(delay >= 0) || !isFinite(delay))
             throw phoenix.as3Error("RangeError", 2066, "The Timer delay specified is out of range.");
         this._delay = +delay;
         this._repeatCount = repeatCount | 0;
-        this._currentCount = 0;
-        this._handle = null;
     }
     get delay() { return this._delay; }
     set delay(value) {
@@ -80,33 +87,36 @@ function wrapped(closure, args) {
         phoenix._.afterEvents && phoenix._.afterEvents();
     };
 }
-var utils = phoenix.ns("flash.utils");
-utils.getTimer = phoenix.getTimer;
-utils.setTimeout = function (closure, delay) {
+phoenix.define("flash.utils.getTimer", phoenix.getTimer);
+phoenix.define("flash.utils.setTimeout", function (closure, delay) {
     return setTimeout(wrapped(closure, Array.prototype.slice.call(arguments, 2)), +delay || 0);
-};
-utils.clearTimeout = function (id) { clearTimeout(id); };
-utils.setInterval = function (closure, delay) {
+});
+phoenix.define("flash.utils.clearTimeout", function (id) { clearTimeout(id); });
+phoenix.define("flash.utils.setInterval", function (closure, delay) {
     return setInterval(wrapped(closure, Array.prototype.slice.call(arguments, 2)), Math.max(1, +delay || 0));
-};
-utils.clearInterval = function (id) { clearInterval(id); };
-utils.getDefinitionByName = function (name) {
-    var found = phoenix.classByName(name);
-    if (!found)
-        throw phoenix.as3Error("ReferenceError", 1065, "Variable " + name + " is not defined.");
-    return found;
-};
-utils.getQualifiedClassName = phoenix.qualifiedNameOf;
-utils.getQualifiedSuperclassName = function (value) {
-    var cls = typeof value === "function" ? value : value && value.constructor;
-    var parent = cls ? Object.getPrototypeOf(cls) : null;
-    return parent && parent !== Function.prototype ? phoenix.qualifiedNameOf(parent) : null;
-};
-utils.describeType = function (value) {
-    return "<type name=\"" + phoenix.qualifiedNameOf(value) + "\"/>";
-};
-utils.escapeMultiByte = function (value) { return encodeURIComponent(String(value)); };
-utils.unescapeMultiByte = function (value) { return decodeURIComponent(String(value)); };
+});
+phoenix.define("flash.utils.clearInterval", function (id) { clearInterval(id); });
+// Class lookup and the rest are as3.js's when it is there (getQualifiedClassName,
+// describeType and the others know translated classes as well as these).
+if (!phoenix.as3Runtime) {
+    phoenix.define("flash.utils.getDefinitionByName", function (name) {
+        var found = phoenix.classByName(name);
+        if (!found)
+            throw phoenix.as3Error("ReferenceError", 1065, "Variable " + name + " is not defined.");
+        return found;
+    });
+    phoenix.define("flash.utils.getQualifiedClassName", phoenix.qualifiedNameOf);
+    phoenix.define("flash.utils.getQualifiedSuperclassName", function (value) {
+        var cls = typeof value === "function" ? value : value && value.constructor;
+        var parent = cls ? Object.getPrototypeOf(cls) : null;
+        return parent && parent !== Function.prototype ? phoenix.qualifiedNameOf(parent) : null;
+    });
+    phoenix.define("flash.utils.describeType", function (value) {
+        return "<type name=\"" + phoenix.qualifiedNameOf(value) + "\"/>";
+    });
+    phoenix.define("flash.utils.escapeMultiByte", function (value) { return encodeURIComponent(String(value)); });
+    phoenix.define("flash.utils.unescapeMultiByte", function (value) { return decodeURIComponent(String(value)); });
+}
 phoenix.defineClass("flash.utils.Timer", Timer);
 
 // flash.ui.
@@ -213,12 +223,17 @@ function requestUrl(request) {
     return url;
 }
 class URLLoader extends EventDispatcher {
-    constructor(request) {
+    constructor(...args) {
         super();
         this.data = null;
         this.dataFormat = "text";
         this.bytesLoaded = 0;
         this.bytesTotal = 0;
+        if (new.target === URLLoader)
+            this.$construct(...args);
+    }
+    $construct(request) {
+        super.$construct();
         if (request)
             this.load(request);
     }
@@ -249,15 +264,14 @@ class URLLoader extends EventDispatcher {
     }
     close() {}
 }
-var net = phoenix.ns("flash.net");
-net.navigateToURL = function (request, window) {
+phoenix.define("flash.net.navigateToURL", function (request, window) {
     if (typeof open !== "undefined")
         open(requestUrl(request), window || "_blank");
-};
-net.sendToURL = function (request) {
+});
+phoenix.define("flash.net.sendToURL", function (request) {
     if (typeof fetch !== "undefined")
         fetch(requestUrl(request), {method: request.method || "GET", mode: "no-cors"}).catch(function () {});
-};
+});
 /// SharedObject.getLocal: what a movie saves, kept in the browser's local
 /// storage by name.
 class SharedObject extends EventDispatcher {

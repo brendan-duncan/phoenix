@@ -6,12 +6,21 @@
 (function (global) {
 "use strict";
 
+/// as3.js (libas3's runtime for translated ActionScript) comes first in
+/// phoenix.js: its registry of definitions is the one the runtime's classes
+/// and the movie's share, and it has the language's own classes (int and
+/// uint, Vector, Dictionary, ByteArray, XML, the errors).
+var as3 = global.as3 || null;
+
 /// The package tree. ns("flash.display") is the object holding that
 /// package's classes, made the first time it is asked for; user packages
 /// ("com.studio") live in the same tree, so a qualified class name always
-/// resolves by walking it.
-var root = {};
+/// resolves by walking it. With as3.js the packages are its (the global
+/// flash, com...), and the top level its as3.toplevel.
+var root = as3 ? as3.toplevel : {};
 function ns(name) {
+    if (as3)
+        return as3.package(name ? String(name) : "");
     var at = root;
     if (!name)
         return at;
@@ -25,6 +34,31 @@ function ns(name) {
     return at;
 }
 
+/// A runtime class's ActionScript constructor for translated subclasses
+/// (libas3's construction protocol): a subclass's JavaScript constructor
+/// calls super() with no arguments, then $construct(...args) runs, and
+/// super(...) in ActionScript is super.$construct(...). Classes whose
+/// state is their own properties get one that makes an object with the
+/// arguments and takes its properties; those that do more (an
+/// EventDispatcher's) define their own.
+function adoptClass(cls) {
+    if (typeof cls !== "function" || !cls.prototype || Object.prototype.hasOwnProperty.call(cls.prototype, "$construct"))
+        return;
+    if (!/^class\b/.test(Function.prototype.toString.call(cls)))
+        return;
+    Object.defineProperty(cls.prototype, "$construct", {
+        value: function $construct() {
+            if (!arguments.length)
+                return;
+            var made = Reflect.construct(cls, Array.prototype.slice.call(arguments));
+            var self = this;
+            Object.keys(made).forEach(function (key) { self[key] = made[key]; });
+        },
+        writable: true,
+        configurable: true
+    });
+}
+
 /// Classes by qualified name ("flash.display.MovieClip", "com.studio.Hat",
 /// "Main" for the top-level package), and their names by class.
 var classes = new Map();
@@ -33,13 +67,30 @@ function defineClass(qualifiedName, cls) {
     var dot = qualifiedName.lastIndexOf(".");
     var pkg = dot < 0 ? "" : qualifiedName.slice(0, dot);
     var name = dot < 0 ? qualifiedName : qualifiedName.slice(dot + 1);
-    ns(pkg)[name] = cls;
+    adoptClass(cls);
+    if (as3)
+        as3.register(qualifiedName, cls);
+    else
+        ns(pkg)[name] = cls;
     classes.set(qualifiedName, cls);
     classNames.set(cls, qualifiedName);
     return cls;
 }
+/// A function or value of a package (flash.net.navigateToURL), as
+/// defineClass for a class.
+function define(qualifiedName, value) {
+    if (as3)
+        return as3.register(qualifiedName, value);
+    var dot = qualifiedName.lastIndexOf(".");
+    ns(dot < 0 ? "" : qualifiedName.slice(0, dot))[dot < 0 ? qualifiedName : qualifiedName.slice(dot + 1)] = value;
+    return value;
+}
 function classByName(qualifiedName) {
     var name = String(qualifiedName).replace("::", ".");
+    if (as3 && as3.isDefined(name)) {
+        var defined = as3.use(name);
+        return typeof defined === "function" ? defined : null;
+    }
     if (classes.has(name))
         return classes.get(name);
     var dot = name.lastIndexOf(".");
@@ -54,6 +105,8 @@ function qualifiedNameOf(value) {
     if (value === undefined)
         return "void";
     var cls = typeof value === "function" ? value : value.constructor;
+    if (as3 && cls && Object.prototype.hasOwnProperty.call(cls, as3.INFO))
+        return as3.qualifiedName(cls);
     for (var at = cls; at; at = Object.getPrototypeOf(at)) {
         var name = classNames.get(at);
         if (name) {
@@ -102,9 +155,12 @@ function trace() {
         traceListeners[i](line);
 }
 
-/// An ActionScript error object of a class from the top-level package.
+/// An ActionScript error object of a class from the top-level package (or
+/// flash.errors), as3.js's when it is there so that translated code's
+/// catch clauses know it.
 function as3Error(type, id, message) {
-    var Ctor = global[type] || Error;
+    var Ctor = as3 ? as3[type] || (as3.isDefined("flash.errors." + type) ? as3.use("flash.errors." + type) : as3.Error)
+        : global[type] || Error;
     var error = new Ctor("Error #" + id + ": " + message);
     error.errorID = id;
     return error;
@@ -150,8 +206,13 @@ function getTimer() {
 
 var phoenix = global.phoenix || {};
 phoenix.ns = ns;
-phoenix.root = root;
+/// Where the packages start: phoenix.root.flash is flash.
+phoenix.root = as3 ? global : root;
 phoenix.defineClass = defineClass;
+phoenix.define = define;
+phoenix.adoptClass = adoptClass;
+/// Whether as3.js is there, with the language's classes.
+phoenix.as3Runtime = !!as3;
 phoenix.classByName = classByName;
 phoenix.qualifiedNameOf = qualifiedNameOf;
 phoenix.trace = trace;
@@ -171,4 +232,10 @@ phoenix._ = phoenix._ || {};
 global.phoenix = phoenix;
 global.flash = ns("flash");
 global.trace = trace;
+if (as3) {
+    // Translated code's trace goes where the runtime's does, and its clock
+    // is the movie's.
+    as3.output = function (text) { trace(text); };
+    as3.clock = function () { return now() - started; };
+}
 })(typeof globalThis !== "undefined" ? globalThis : this);
