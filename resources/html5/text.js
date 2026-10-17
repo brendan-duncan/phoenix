@@ -287,13 +287,13 @@ class TextField extends flash.display.InteractiveObject {
     }
 
     // The box.
-    get width() { this._fit(); return this._box[2] * Math.abs(this.scaleX); }
+    get width() { this._lines(); return this._box[2] * Math.abs(this.scaleX); }
     set width(value) {
         this._box[2] = Math.max(0, +value);
         this._layout = null;
         this._changed();
     }
-    get height() { this._fit(); return this._box[3] * Math.abs(this.scaleY); }
+    get height() { this._lines(); return this._box[3] * Math.abs(this.scaleY); }
     set height(value) {
         this._box[3] = Math.max(0, +value);
         this._layout = null;
