@@ -110,6 +110,7 @@
 </figure>
 
 <p>Still images show the frame labeled <code>#Static</code>, or else the first frame. The HTML page shows the SWF movie, or else the first image published. The settings are kept in the FLA file's own publish settings, so a file that was set up to publish elsewhere publishes the same from Phoenix, and every setting Phoenix does not use is kept unchanged.</p>
+<p>Browsers no longer play SWF movies themselves, so an HTML page with an SWF movie loads <a href="https://ruffle.rs/">Ruffle</a>, a free, open source SWF player that runs in the browser, from the web (a fixed release, from unpkg.com). Ruffle finds the movie on the page and plays it; viewers need nothing installed. Ruffle plays ActionScript 1 and 2 well; its ActionScript 3 support is still growing, so check a scripted ActionScript 3 movie in a browser before you share it. The page needs an internet connection to load Ruffle, and a page opened straight from your disk may not play: put it on a web server, or open it through a local one (for example <code>python -m http.server</code> in its folder). To show the movie with a player of your own, keep the SWF and leave the HTML page out.</p>
 
 <h2 id="sprite-sheets">Sprite sheets</h2>
 

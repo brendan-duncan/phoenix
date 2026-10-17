@@ -9061,13 +9061,21 @@ bool MainWindow::publishFiles(QStringList& written, QStringList& problems)
         // A page showing what was published: the movie, or else an image.
         const QString path = pathOf("html");
         QString body;
+        QString scripts;
         const QString title = name.toHtmlEscaped();
         if (settings.flash && written.contains(QFileInfo(pathOf("flash")).fileName()))
+        {
+            // Browsers no longer play SWF themselves: Ruffle, an SWF player
+            // in JavaScript and WebAssembly (MIT or Apache-2.0), loaded from
+            // a CDN at a fixed release, finds the object and plays it.
+            scripts = "<script src=\"https://unpkg.com/@ruffle-rs/ruffle@0.7.1/ruffle.js\"></script>\n";
             body = QString("<object data=\"%1\" type=\"application/x-shockwave-flash\" width=\"%2\" height=\"%3\">"
-                           "<p>This page shows an SWF movie, which needs a player that plays SWF.</p></object>")
+                           "<p>This page plays an SWF movie with Ruffle, which needs JavaScript and an internet "
+                           "connection.</p></object>")
                        .arg(QFileInfo(pathOf("flash")).fileName().toHtmlEscaped())
                        .arg(size.width())
                        .arg(size.height());
+        }
         for (const char* key : {"gif", "svg", "png", "jpeg"})
         {
             if (!body.isEmpty())
@@ -9088,8 +9096,8 @@ bool MainWindow::publishFiles(QStringList& written, QStringList& problems)
             const QColor stage(document->backgroundColor[0], document->backgroundColor[1], document->backgroundColor[2]);
             const QString html = QString("<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n"
                                          "<title>%1</title>\n<style>body { margin: 0; background: %2; }</style>\n"
-                                         "</head>\n<body>\n%3\n</body>\n</html>\n")
-                                     .arg(title, stage.name(), body);
+                                         "%3</head>\n<body>\n%4\n</body>\n</html>\n")
+                                     .arg(title, stage.name(), scripts, body);
             if (page.open(QIODevice::WriteOnly | QIODevice::Text) && page.write(html.toUtf8()) > 0)
                 written << QFileInfo(path).fileName();
             else
