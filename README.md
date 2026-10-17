@@ -14,11 +14,11 @@ Phoenix is an open source vector animation app for Windows and macOS. It has the
 
 ## Download
 
-Installers for Windows and macOS (Apple silicon) are on the [releases page](https://github.com/brendan-duncan/phoenix/releases/latest). Installed copies update themselves.
+Installers for Windows, macOS (Apple silicon) and Linux are on [phoenixanimate.com](https://phoenixanimate.com/get-started.html). Earlier versions and the notes for each release are on the [releases page](https://github.com/brendan-duncan/phoenix/releases). Installed copies update themselves.
 
 ## Documentation
 
-- [User Guide](https://brendan-duncan.github.io/phoenix/): installing, drawing, animating and exporting
+- [User Guide](https://phoenixanimate.com/): installing, drawing, animating and exporting
 - [Changelog](CHANGELOG.md): what changed in each release
 - [Building](docs/BUILDING.md): building from source and running the tests
 - [Phoenix document format](docs/PHOENIX_FORMAT.md)

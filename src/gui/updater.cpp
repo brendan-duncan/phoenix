@@ -18,9 +18,10 @@
 
 namespace {
 
-/// Where releases are published; the release workflow uploads each
-/// version's installer, packages and feed there.
-const char* RepositoryUrl = "https://github.com/brendan-duncan/phoenix";
+/// Where updates come from: Phoenix's site serves the feed of releases
+/// and their packages (for now by sending each request on to where the
+/// release workflow uploaded them).
+const char* UpdatesUrl = "https://phoenixanimate.com/updates";
 
 /// Whether the updater, and so the application, is still there: the
 /// network thread posts only while it is. Checked and cleared under the
@@ -136,7 +137,7 @@ void Updater::checkForUpdates(bool userAsked)
                     state->manager = std::make_unique<Velopack::UpdateManager>(source.toStdString());
                 else
                     state->manager = std::make_unique<Velopack::UpdateManager>(
-                        std::make_unique<Velopack::GithubSource>(RepositoryUrl));
+                        std::make_unique<Velopack::HttpSource>(UpdatesUrl));
             }
             catch (const std::exception& e)
             {

@@ -7691,7 +7691,7 @@ void MainWindow::setupMenus()
     guideAction->setShortcut(QKeySequence(Qt::Key_F1));
     guideAction->setStatusTip("Open Phoenix's user guide in your browser");
     connect(guideAction, &QAction::triggered, this,
-        []() { QDesktopServices::openUrl(QUrl("https://brendan-duncan.github.io/phoenix/")); });
+        []() { QDesktopServices::openUrl(QUrl("https://phoenixanimate.com/")); });
     helpMenu->addSeparator();
     QAction* startAction = new QAction("&Start Screen...", this);
     startAction->setStatusTip("New from a preset, or open a recent file");
