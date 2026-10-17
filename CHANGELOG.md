@@ -4,6 +4,8 @@ What changed in each release of Phoenix, newest first.
 
 ## Unreleased
 
+- Old binary FLA files whose buttons carry scripts saved by Flash 8 open in full; six of the 1,603 such files on hand read where they stopped before
+- ActionScript 2's `_global` works in Test Movie: what a script sets there every script sees
 - The Tools panel's colors are one unit: overlapping fill and stroke squares, the one last clicked on top, with Black and White and Swap beside them, growing to fit a wider panel; a red line shows no fill or no stroke
 - The Tools panel adds columns when the window is too short to show every tool, and goes back to the columns you chose when there is room; along the top or bottom it adds rows
 

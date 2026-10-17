@@ -201,6 +201,29 @@ TEST(movie_runtime_reports_script_errors_and_goes_on)
     CHECK(traced.size() == 1);
 }
 
+TEST(movie_runtime_scripts_share_globals_through_global)
+{
+    // ActionScript 2's _global: what one frame sets there, a later frame
+    // reads by its bare name, and _global reads the built-ins too.
+    Movie movie;
+    fla::Layer* actions = movie.layer(*movie.root, "actions");
+    movie.frame(*actions, 0, 1, "_global.outfit = 3;\n_global.pick = function (n) { return n * 2; };");
+    movie.frame(*actions, 1, 1, "trace(outfit, pick(outfit), _global.outfit, typeof _global.Math);\nstop();");
+    fla::play::MovieRuntime runtime(*movie.root, 24.0);
+    std::vector<std::string> traced;
+    std::vector<std::string> errors;
+    runtime.trace = [&traced](const std::string& line) { traced.push_back(line); };
+    runtime.error = [&errors](const std::string& line) { errors.push_back(line); };
+    runtime.start();
+    runtime.step();
+    CHECK(traced.size() == 1 && traced[0] == "3 6 3 object");
+    CHECK(errors.empty());
+    for (const std::string& line : traced)
+        std::printf("    %s\n", line.c_str());
+    for (const std::string& error : errors)
+        std::printf("    %s\n", error.c_str());
+}
+
 TEST(movie_runtime_scripts_find_clips_by_path_and_dot)
 {
     Movie movie;

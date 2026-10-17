@@ -15,6 +15,8 @@
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <memory>
 #include <string>
 #include <vector>
@@ -713,4 +715,48 @@ TEST(binary_fla_reads_mx_normal_mode_actions)
     std::string error;
     std::string warning;
     CHECK(BinaryFla::convert(streams, files, error, &warning) && warning.empty());
+}
+
+TEST(binary_fla_sweep)
+{
+    // Opt-in: PHOENIX_BINARY_FLA_LIST names a file listing binary FLAs, one
+    // a line, and PHOENIX_BINARY_FLA_REPORT where to write what each read
+    // gave: a line per document, "ok", the warning, or the error. For
+    // comparing the reader's results across many files before and after a
+    // change.
+    const char* list = std::getenv("PHOENIX_BINARY_FLA_LIST");
+    const char* report = std::getenv("PHOENIX_BINARY_FLA_REPORT");
+    if (!list || !report)
+    {
+        std::printf("    skipped: set PHOENIX_BINARY_FLA_LIST and PHOENIX_BINARY_FLA_REPORT\n");
+        return;
+    }
+    std::ifstream in(list);
+    std::ofstream out(report);
+    std::string path;
+    while (std::getline(in, path))
+    {
+        if (path.empty())
+            continue;
+        std::ifstream file(std::filesystem::u8path(path), std::ios::binary);
+        const std::vector<uint8_t> data((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+        CompoundFile compound;
+        std::string result;
+        if (!compound.read(data))
+            result = "not a compound file";
+        else
+        {
+            std::map<std::string, std::vector<uint8_t>> files;
+            std::string error;
+            std::string warning;
+            if (!BinaryFla::convert(compound.streams(), files, error, &warning))
+                result = "error: " + error;
+            else
+                result = warning.empty() ? "ok" : "warning: " + warning;
+        }
+        for (char& c : result)
+            if (c == '\n' || c == '\r')
+                c = ' ';
+        out << path << '\t' << result << '\n';
+    }
 }

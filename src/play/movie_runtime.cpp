@@ -532,6 +532,27 @@ std::optional<double> Clip::scriptedY() const
     return display ? display->scriptedY() : std::nullopt;
 }
 
+/// ActionScript 2's _global: what a script sets on it is a global every
+/// script sees by its bare name, and what it reads is the VM's globals and
+/// definitions (Math, Array...).
+class GlobalObject : public as3::HostObject
+{
+public:
+    explicit GlobalObject(as3::VM& vm)
+        : _vm(vm)
+    {}
+
+    as3::ValuePtr get(const std::string& name) override { return _vm.getGlobal(name); }
+    bool set(const std::string& name, as3::ValuePtr value) override
+    {
+        _vm.setGlobal(name, std::move(value));
+        return true;
+    }
+
+private:
+    as3::VM& _vm;
+};
+
 /// A clip as scripts see it: its properties worked out from the clip, its
 /// methods bound to it, its children by name.
 class ClipObject : public as3::HostObject
@@ -1000,6 +1021,8 @@ void MovieRuntime::setupGlobals()
     });
     vm.setGlobal("_root", objectFor(*_root));
     vm.setGlobal("_level0", objectFor(*_root));
+    if (!_as3)
+        vm.setGlobal("_global", as3::Value::makeHostObject(std::make_shared<GlobalObject>(vm)));
     // ActionScript 3 sees the main timeline as the stage too.
     vm.setGlobal("stage", objectFor(*_root));
 

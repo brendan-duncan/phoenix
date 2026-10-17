@@ -744,6 +744,14 @@ std::string readActions(Reader& r)
         r.skip(4 * static_cast<size_t>(extra));
         r.u32();
     }
+    else if (extra > 0)
+    {
+        // Before that the fourth u32 is 0 too, but a Flash 8 button's can be
+        // 1 with one more u32 before its script, as in version 5. [G]
+        if (extra > 1000)
+            r.fail("a bad action block");
+        r.skip(4 * static_cast<size_t>(extra));
+    }
     // Version 4 (Flash 8) has the script without the u32 before it; in
     // version 1 (MX 2004) the second u32 says whether there is one (1) or
     // not (2), and 0 adds two u32s (0). [S]
