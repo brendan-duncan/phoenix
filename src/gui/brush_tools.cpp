@@ -256,8 +256,11 @@ fla::Shape* outlineShape(const QPainterPath& outline, double tolerance, fla::Fra
     fla::Shape* shape = new fla::Shape(parent);
 
     // The eraser's cutter needs a fill too: only a filled area takes anything
-    // away. Its color never shows.
-    fla::FillStyle* fill = asFill ? style.createFill(shape) : new fla::SolidColor(shape);
+    // away. Its color never shows. A brush paints in the fill color whether
+    // or not new shapes are set to get a fill (Fill in the Tool tab).
+    fla::DrawingStyle painted = style;
+    painted.hasFill = true;
+    fla::FillStyle* fill = asFill ? painted.createFill(shape) : new fla::SolidColor(shape);
     if (!fill)
     {
         delete shape;
@@ -518,7 +521,7 @@ fla::BrushSettings BrushTool::effective(PhoenixView& view) const
 
 bool BrushTool::mousePress(PhoenixView& view, QMouseEvent* event, const QPointF& documentPos)
 {
-    if (event->button() != Qt::LeftButton || !view.activeFrame() || !_style.hasFill)
+    if (event->button() != Qt::LeftButton || !view.activeFrame())
         return false;
 
     // Paint Inside keeps to the region the stroke begins in, so that is
