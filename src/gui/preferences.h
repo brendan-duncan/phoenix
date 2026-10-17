@@ -6,6 +6,7 @@
 class QCheckBox;
 class QComboBox;
 class HotSpinBox;
+class QLineEdit;
 class QToolButton;
 
 /// Edit > Preferences: what Phoenix keeps between runs that is not set
@@ -56,4 +57,5 @@ private:
     QCheckBox* _solidPoints;
     QCheckBox* _mcp;
     HotSpinBox* _mcpPort;
+    QLineEdit* _classPaths;
 };

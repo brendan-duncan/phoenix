@@ -1,6 +1,7 @@
 #include "preferences.h"
 
 #include "autosave.h"
+#include "movie_hooks.h"
 
 #include <QCheckBox>
 #include "mcp_server.h"
@@ -10,6 +11,7 @@
 #include <QFormLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
+#include <QLineEdit>
 #include <QPainter>
 #include <QPixmap>
 #include <QSettings>
@@ -183,6 +185,17 @@ PreferencesDialog::PreferencesDialog(QWidget* parent)
     assistantsForm->addRow("Port", _mcpPort);
     layout->addWidget(assistants);
 
+    // Where Test Movie looks for ActionScript 3 classes besides the movie's
+    // own folder and class path.
+    QGroupBox* actionScript = new QGroupBox("ActionScript", this);
+    QFormLayout* actionScriptForm = new QFormLayout(actionScript);
+    _classPaths = new QLineEdit(actionScriptClassPaths().join(';'), actionScript);
+    _classPaths->setPlaceholderText("Folders, separated by ;");
+    _classPaths->setToolTip("Folders of ActionScript 3 class files (by package: com/studio/Hat.as) that every "
+                            "movie played in Test Movie can use, looked in after the movie's own");
+    actionScriptForm->addRow("Class paths", _classPaths);
+    layout->addWidget(actionScript);
+
     QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
     connect(buttons, &QDialogButtonBox::accepted, this, &QDialog::accept);
     connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
@@ -203,5 +216,10 @@ void PreferencesDialog::save()
     settings.setValue("preferences/penPreview", _penPreview->isChecked());
     settings.setValue("preferences/solidPoints", _solidPoints->isChecked());
     McpServer::setEnabled(_mcp->isChecked(), _mcpPort->value());
+    QStringList paths;
+    for (const QString& path : _classPaths->text().split(';', Qt::SkipEmptyParts))
+        if (!path.trimmed().isEmpty())
+            paths << path.trimmed();
+    setActionScriptClassPaths(paths);
     Preferences::reload();
 }

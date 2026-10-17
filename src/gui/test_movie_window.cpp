@@ -36,14 +36,28 @@
 namespace {
 
 /// A key as Flash numbers it (Key.LEFT is 37, "A" 65), or 0 for one it
-/// does not.
-int flashKeyCode(int key)
+/// does not. \a keypad: on the number pad (Keyboard.NUMPAD_1 is 97).
+int flashKeyCode(int key, bool keypad = false)
 {
+    if (keypad)
+    {
+        if (key >= Qt::Key_0 && key <= Qt::Key_9)
+            return 96 + (key - Qt::Key_0);
+        switch (key)
+        {
+        case Qt::Key_Asterisk: return 106;
+        case Qt::Key_Plus: return 107;
+        case Qt::Key_Minus: return 109;
+        case Qt::Key_Period: return 110;
+        case Qt::Key_Slash: return 111;
+        default: break;
+        }
+    }
     if (key >= Qt::Key_A && key <= Qt::Key_Z)
         return 65 + (key - Qt::Key_A);
     if (key >= Qt::Key_0 && key <= Qt::Key_9)
         return 48 + (key - Qt::Key_0);
-    if (key >= Qt::Key_F1 && key <= Qt::Key_F12)
+    if (key >= Qt::Key_F1 && key <= Qt::Key_F15)
         return 112 + (key - Qt::Key_F1);
     switch (key)
     {
@@ -66,6 +80,18 @@ int flashKeyCode(int key)
     case Qt::Key_Down: return 40;
     case Qt::Key_Insert: return 45;
     case Qt::Key_Delete: return 46;
+    case Qt::Key_CapsLock: return 20;
+    case Qt::Key_Semicolon: return 186;
+    case Qt::Key_Equal: return 187;
+    case Qt::Key_Comma: return 188;
+    case Qt::Key_Minus: return 189;
+    case Qt::Key_Period: return 190;
+    case Qt::Key_Slash: return 191;
+    case Qt::Key_QuoteLeft: return 192;
+    case Qt::Key_BracketLeft: return 219;
+    case Qt::Key_Backslash: return 220;
+    case Qt::Key_BracketRight: return 221;
+    case Qt::Key_Apostrophe: return 222;
     default: return 0;
     }
 }
@@ -374,7 +400,7 @@ bool TestMovieWindow::eventFilter(QObject* watched, QEvent* event)
         auto* key = static_cast<QKeyEvent*>(event);
         if (key->key() == Qt::Key_Escape)
             return QDialog::eventFilter(watched, event);
-        const int code = flashKeyCode(key->key());
+        const int code = flashKeyCode(key->key(), (key->modifiers() & Qt::KeypadModifier) != 0);
         const QString text = key->text();
         const int character = text.size() == 1 && text.at(0).unicode() >= 32 ? text.at(0).unicode() : 0;
         if (code != 0 || character != 0)
