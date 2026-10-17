@@ -861,7 +861,9 @@ TEST(swf_movie_compiles_actionscript_3_to_abc)
     // The library has none of the components' skins: they are drawn plain.
     for (const std::string& note : published.notes)
         CHECK(note.find("fl.skins.DefaultSkin") != std::string::npos);
-    CHECK(!published.notes.empty() && published.notes[0].find("CheckBox_upIcon") != std::string::npos);
+    CHECK(published.notes.size() == 1);
+    CHECK(!published.notes.empty() && published.notes[0].find("CheckBox_upIcon") != std::string::npos &&
+        published.notes[0].find("Button_upSkin") == std::string::npos);
 
     const std::vector<Tag> tags = tagsOf(published.swf);
     // The ABC first, then the classes of the characters.
@@ -941,7 +943,7 @@ TEST(swf_movie_tells_where_actionscript_3_does_not_compile)
     const Published published = publishActionScript3(*game.document);
     bool told = false;
     for (const std::string& note : published.notes)
-        told = told || note.rfind("Scene 1, layer actions, frame 1, line 2: ", 0) == 0;
+        told = told || note.rfind("Scene 1, layer actions, frame 1, line 2, column 5: ", 0) == 0;
     CHECK(told);
     if (!told)
         std::printf("    notes: %s\n", text(published.notes).c_str());

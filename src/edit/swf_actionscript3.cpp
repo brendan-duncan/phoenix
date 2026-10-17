@@ -461,12 +461,12 @@ public:
         for (const TimelineClass& made : _timelines)
             for (const auto& [frame, parts] : made.frames)
                 for (const Part& part : parts)
-                    reach(part.code);
+                    reach(part.code, true);
         while (!_pending.empty())
         {
-            const std::string source = std::move(_pending.back());
+            const auto [source, own] = std::move(_pending.back());
             _pending.pop_back();
-            reach(source);
+            reach(source, own);
         }
 
         // Each timeline's text, its stage instances, typed.
@@ -569,7 +569,11 @@ private:
     std::vector<std::string> _notes;
     /// Each class looked for: its source and file, or none.
     std::map<std::string, std::optional<std::pair<std::string, std::string>>> _found;
-    std::vector<std::string> _pending;
+    /// Sources found and not yet looked through, and whether each is the
+    /// movie's own (not one of the components').
+    std::vector<std::pair<std::string, bool>> _pending;
+    /// The components the movie's own code uses.
+    std::set<std::string> _usedComponents;
 
     /// The source of \a qualified, looked for once; null for none.
     const std::pair<std::string, std::string>* find(const std::string& qualified)
@@ -590,7 +594,7 @@ private:
         std::string path = qualified;
         std::replace(path.begin(), path.end(), '.', '/');
         entry = std::make_pair(*source, path + ".as");
-        _pending.push_back(*source);
+        _pending.emplace_back(*source, qualified.rfind("fl.", 0) != 0);
         return &*entry;
     }
 
@@ -650,15 +654,17 @@ private:
     }
 
     /// Looks for the classes \a text names: dotted paths, and short names
-    /// in its own package, the top level or its wildcard imports.
-    void reach(const std::string& text)
+    /// in its own package, the top level or its wildcard imports. \a own:
+    /// the movie's code, not a component's.
+    void reach(const std::string& text, bool own)
     {
         const Scan seen = scan(text);
         std::set<std::string> asked;
         const auto ask = [&](const std::string& name) {
             const std::string last = shortOf(name);
-            if (!last.empty() && std::isupper(static_cast<unsigned char>(last[0])) && asked.insert(name).second)
-                find(name);
+            if (!last.empty() && std::isupper(static_cast<unsigned char>(last[0])) && asked.insert(name).second &&
+                find(name) && own && name.rfind("fl.controls.", 0) == 0)
+                _usedComponents.insert(name);
         };
         for (const std::string& word : seen.words)
         {
@@ -803,10 +809,15 @@ private:
         return symbol->symbolType == SymbolType::Button ? "flash.display.SimpleButton" : "flash.display.MovieClip";
     }
 
-    /// The skins the components the movie has name that its library has
-    /// no symbol for: they are drawn in a plain look of Phoenix's own.
+    /// The skins the components the movie has (in its library or made in
+    /// its code) name that its library has no symbol for: they are drawn
+    /// in a plain look of Phoenix's own.
     void missingSkins()
     {
+        std::set<std::string> used = _usedComponents;
+        for (const auto& [symbol, name] : _classes)
+            if (name.rfind("fl.controls.", 0) == 0)
+                used.insert(name);
         std::set<std::string> linked;
         if (_document.symbolList)
             for (const auto& [name, symbol] : _document.symbolList->symbolMap)
@@ -815,7 +826,7 @@ private:
         std::set<std::string> missing;
         for (const auto& [name, found] : _found)
         {
-            if (!found || name.rfind("fl.controls.", 0) != 0 || name.rfind("fl.controls.listClasses.", 0) == 0)
+            if (!found || !used.count(name))
                 continue;
             for (const std::string& literal : scan(found->first).strings)
             {
