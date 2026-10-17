@@ -225,6 +225,9 @@ set(HEADERS
     src/jsfl/native_extensions.h
     src/gui/mcp_server.h
     src/gui/stroke_style_dialog.h
+    src/gui/brush_library_store.h
+    src/gui/brush_library_dialog.h
+    src/gui/document_brushes_dialog.h
     src/gui/safe_zones_dialog.h
     src/gui/selection_targets.h
     src/gui/navigation_tools.h
@@ -357,6 +360,7 @@ set(HEADERS
     src/edit/font_items.h
     src/edit/vector_import.h
     src/edit/paint_brushes.h
+    src/edit/brush_library.h
     src/edit/pdf_objects.h
     src/edit/postscript_import.h
     src/edit/psd_import.h
@@ -505,6 +509,9 @@ set(SOURCES
     src/gui/xul_dialog.cpp
     src/gui/mcp_server.cpp
     src/gui/stroke_style_dialog.cpp
+    src/gui/brush_library_store.cpp
+    src/gui/brush_library_dialog.cpp
+    src/gui/document_brushes_dialog.cpp
     src/gui/safe_zones_dialog.cpp
     src/gui/navigation_tools.cpp
     src/gui/draw_placement.cpp

@@ -2,9 +2,11 @@
 
 #include "preferences.h"
 
+#include "brush_library_store.h"
 #include "draw_placement.h"
 #include "phoenix_view.h"
 
+#include "../data/fla_document.h"
 #include "../data/frame.h"
 #include "../data/shape.h"
 #include "../data/solid_color.h"
@@ -14,6 +16,7 @@
 #include "../edit/shape_recognition.h"
 #include "../edit/drawing_style.h"
 #include "../edit/element_commands.h"
+#include "../edit/paint_brushes.h"
 #include "../edit/selection.h"
 
 #include <QKeyEvent>
@@ -40,11 +43,21 @@ bool PencilTool::mousePress(PhoenixView& view, QMouseEvent* event, const QPointF
 
     _drawing = true;
     _points.clear();
+    _pen.clear();
     _axis = 0;
     beginExtension(view, documentPos);
     _points.push_back(fla::Point(documentPos.x(), documentPos.y()));
+    takePen(view);
     view.update();
     return true;
+}
+
+void PencilTool::takePen(PhoenixView& view)
+{
+    if (!view.penDown())
+        return;
+    for (const fla::BrushSample& sample : view.takeTabletSamples())
+        _pen.push_back(sample);
 }
 
 void PencilTool::beginExtension(PhoenixView& view, const QPointF& documentPos)
@@ -104,6 +117,7 @@ bool PencilTool::mouseMove(PhoenixView& view, QMouseEvent* event, const QPointF&
     // Everything the cursor reports is kept; thinning happens in the fit, where
     // the spacing rule can be applied consistently.
     _points.push_back(constrained(event, documentPos));
+    takePen(view);
     view.update();
     return true;
 }
@@ -136,6 +150,7 @@ bool PencilTool::mouseRelease(PhoenixView& view, QMouseEvent* event, const QPoin
         return false;
 
     _points.push_back(constrained(event, documentPos));
+    takePen(view);
     _drawing = false;
     finish(view);
     return true;
@@ -251,23 +266,60 @@ void PencilTool::finish(PhoenixView& view)
         return;
     }
 
-    fla::Element* shape = createShape(frame, path);
-    if (!shape)
+    // The Paint Brush's brush, copied into the document from the brush
+    // library on first use, as part of the stroke's step; with a pen, the
+    // stroke's width follows its pressure within the brush's range.
+    const bool paintBrush = _style.strokeLook.kind == fla::StrokeStyle::Style::PaintBrush;
+    if (paintBrush)
     {
-        view.update();
-        return;
+        view.flushPendingMerge();
+        _commandStack.beginMacro(_name.toStdString());
     }
+    const int brush = paintBrush ? paintBrushIndex(view) : 0;
+    std::vector<fla::StrokeStyle::WidthMarker> profile;
+    if (paintBrush && !_pen.empty())
+    {
+        const fla::Document* document = view.flaDocument() ? view.flaDocument()->document : nullptr;
+        const auto library = document ? fla::paintBrushesOf(*document) : nullptr;
+        const fla::PaintBrushDefinition* definition =
+            library ? library->find(brush > 0 ? brush : _style.strokeLook.paintBrush) : nullptr;
+        if (definition)
+            profile = fla::paintBrushWidthProfile(*definition, _pen);
+    }
+    _pen.clear();
 
-    placeDrawnElement(view, _commandStack, _selection, frame, shape, "Pencil",
-        _style.objectDrawing);
+    fla::Element* shape = createShape(frame, path, brush, profile);
+    if (shape)
+        placeDrawnElement(view, _commandStack, _selection, frame, shape, "Pencil", _style.objectDrawing);
+    else
+        view.update();
+    if (paintBrush)
+        _commandStack.endMacro();
 }
 
-fla::Element* PencilTool::createShape(fla::Frame* frame, const fla::EditablePath& path) const
+int PencilTool::paintBrushIndex(PhoenixView& view)
+{
+    fla::Document* document = view.flaDocument() ? view.flaDocument()->document : nullptr;
+    const std::string& guid = _style.strokeLook.paintBrushGuid;
+    if (!document || guid.empty())
+        return 0;
+    return paintBrushIndexFor(*document, _commandStack, guid);
+}
+
+fla::Element* PencilTool::createShape(fla::Frame* frame, const fla::EditablePath& path, int paintBrush,
+    const std::vector<fla::StrokeStyle::WidthMarker>& profile) const
 {
     fla::Shape* shape = new fla::Shape(frame);
 
     // A pencil stroke is a line, so it is stroke only however the fill is set.
     fla::StrokeStyle* stroke = _style.createStroke(shape);
+    if (stroke && stroke->style() == fla::StrokeStyle::Style::PaintBrush)
+    {
+        if (paintBrush > 0)
+            stroke->paintBrushDefinition = paintBrush;
+        if (!profile.empty())
+            stroke->widthProfile = profile;
+    }
     if (!stroke)
     {
         // With strokes off the stroke would be invisible, so fall back to a

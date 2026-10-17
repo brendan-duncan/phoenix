@@ -5,6 +5,7 @@
 #include "../data/stroke_style.h"
 
 #include <cstdint>
+#include <functional>
 #include <map>
 #include <string>
 #include <vector>
@@ -42,6 +43,11 @@ struct StrokeLook
     /// For a paint brush stroke (kind PaintBrush), the document's paint
     /// brush definition it draws with, by index.
     int paintBrush = 0;
+    /// The paint brush new strokes are drawn with, by its guid: one of the
+    /// document's, or one of the brush library's that is copied into the
+    /// document when a stroke first uses it. Empty to go by paintBrush.
+    /// Not part of a stroke, nor of comparing looks.
+    std::string paintBrushGuid;
     /// The kind's own settings (Custom Stroke Style): a dashed stroke's
     /// dash and gap, a dotted one's spacing, and a ragged, stipple or
     /// hatched one's choices by attribute name, as the file spells them.
@@ -351,6 +357,13 @@ public:
     /// Builds the stroke for a new object, or null when strokes are switched
     /// off. The caller owns the result.
     StrokeStyle* createStroke(DOMElement* parent) const;
+
+    /// For a paint brush named by its guid (strokeLook.paintBrushGuid), its
+    /// index in the document being drawn in: the document's own, or the
+    /// brush library's, copied in first. Set by the window; createStroke
+    /// asks it, so any tool drawing with a brush from the library brings
+    /// the brush into the document.
+    std::function<int(const std::string& guid)> paintBrushIndex;
 
     /// Whether \a stroke is what createStroke would make: the ink bottle and
     /// the drawing tools reuse a shape's matching stroke rather than adding

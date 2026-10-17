@@ -5,6 +5,14 @@ What changed in each release of Phoenix, newest first.
 ## Unreleased
 
 - Strokes drawn with FLA files' art and pattern paint brushes draw on the stage and in exports and SWF movies, and save as they were; the Paint Brush can draw with the file's brushes, listed under Brushes in this document
+- Brush Library (Window menu): brushes to paint with in any document, by category, with pictures; Phoenix comes with brushes of its own, and Import Brushes from Document adds a document's brushes to your library
+- A brush from the Brush Library is copied into the document with the first stroke drawn with it, and saved in the file as FLA files keep brushes
+- Copying or pasting strokes, frames or symbols to another document, or importing symbols from one, brings the paint brushes they use
+- Document Brushes lists the document's paint brushes with pictures and stroke counts, and selects, renames, takes off or removes unused brushes
+- Custom Stroke Style sets a stroke's kind and weight, and for a paint brush stroke the brush and its options, changing every stroke drawn with it or kept as a new brush
+- Paint brush strokes drawn with a pen follow its pressure and tilt within the brush's narrowest and widest, and show their width profiles
+- Pattern brushes turn sharp corners as their corner option says (centered, between, sliced or overlapping), and art brushes bend round them
+- Width profiles changed with the Width tool or a pen are saved in FLA and XFL files
 - SWF movies keep the movie clips, buttons and text fields inside graphic symbols as real clips scripts reach by name, the graphic's frames placed into the timeline as it loops, plays once or holds a frame
 - SWF movies: shape tweens go in as morph shapes the player blends, buttons keep their masks, and buttons play the sounds on their Up, Over, Down and Hit frames
 - SWF movies: the soundtrack covers every scene, played in a row, and event sounds start on the timeline they are on, so a movie clip a script stops starts no more of its sounds

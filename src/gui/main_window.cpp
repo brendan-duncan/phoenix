@@ -116,7 +116,10 @@
 #include "script_tool.h"
 #include "../jsfl/tool_script.h"
 #include "sprite_sheet_dialog.h"
+#include "brush_library_dialog.h"
+#include "brush_library_store.h"
 #include "brush_properties_dialog.h"
+#include "document_brushes_dialog.h"
 #include "publish_dialog.h"
 #include "html5_publish.h"
 #include "render_queue.h"
@@ -141,6 +144,7 @@
 #include "../data/edge.h"
 #include "../edit/path_tidy.h"
 #include "../edit/element_clone.h"
+#include "../edit/paint_brushes.h"
 #include "../edit/camera.h"
 #include "../edit/shape_tween.h"
 #include "../edit/new_document.h"
@@ -593,6 +597,12 @@ MainWindow::MainWindow(const QString& initialFile, QWidget* parent, bool startup
     _penTool = std::make_unique<PenTool>(_selection, stack, _drawingStyle);
     _pencilTool = std::make_unique<PencilTool>(_selection, stack, _drawingStyle);
     _paintBrushTool = std::make_unique<PencilTool>(_selection, stack, _drawingStyle, "Paint Brush");
+    // A brush from the brush library comes into the document with the
+    // first stroke any tool draws with it.
+    _drawingStyle.paintBrushIndex = [this](const std::string& guid) {
+        fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
+        return document ? paintBrushIndexFor(*document, _editContext.commandStack(), guid) : 0;
+    };
     _textTool = std::make_unique<TextTool>(_selection, stack, _drawingStyle);
     _subselectionTool = std::make_unique<SubselectionTool>(_selection, stack);
     _phoenixView->setSelection(&_selection);
@@ -2655,8 +2665,11 @@ void MainWindow::setupWindowMenu()
     QAction* motionPresetsAction = windowMenu->addAction("Motion &Presets…");
     motionPresetsAction->setStatusTip("Saved motions to put on an object");
     connect(motionPresetsAction, &QAction::triggered, this, &MainWindow::showMotionPresets);
+    QAction* brushLibraryAction = windowMenu->addAction("Brush &Library…");
+    brushLibraryAction->setStatusTip("Brushes to paint with in any document, by category");
+    connect(brushLibraryAction, &QAction::triggered, this, &MainWindow::showBrushLibrary);
     QAction* brushesAction = windowMenu->addAction("Document &Brushes…");
-    brushesAction->setStatusTip("The art and pattern brushes the document's strokes are drawn with");
+    brushesAction->setStatusTip("The paint brushes and symbols the document's strokes are drawn with");
     connect(brushesAction, &QAction::triggered, this, &MainWindow::manageBrushes);
     QAction* renderQueueAction = windowMenu->addAction("&Render Queue…");
     renderQueueAction->setStatusTip("Renders lined up and run one after another while you work");
@@ -6033,8 +6046,33 @@ void MainWindow::pasteFramesAs(bool overwrite)
             }
         }
     }
-    const bool rename = std::any_of(renamed.begin(), renamed.end(),
+    bool rename = std::any_of(renamed.begin(), renamed.end(),
         [](const auto& name) { return name.first != name.second; });
+    // The paint brushes the frames' strokes draw with come too, each once by
+    // guid, the copies drawing with them as this document numbers them.
+    std::map<int, int> brushIndexes;
+    if (document && _frameClipboardFrom && _frameClipboardFrom != document && documentOpenAnywhere(_frameClipboardFrom))
+    {
+        std::vector<const fla::Element*> drawn;
+        for (const auto& spans : _frameClipboard)
+            for (const auto& frame : spans)
+                for (const fla::Element* element : frame->elements)
+                    drawn.push_back(element);
+        const std::vector<fla::PaintBrushDefinition> brushes = fla::paintBrushesFor(*_frameClipboardFrom, drawn);
+        if (fla::CommandPtr command =
+                brushes.empty() ? nullptr : fla::adoptPaintBrushes(*document, brushes, brushIndexes, stepName))
+        {
+            if (!macro)
+            {
+                stack.beginMacro(stepName);
+                macro = true;
+            }
+            stack.push(std::move(command));
+        }
+        if (std::any_of(brushIndexes.begin(), brushIndexes.end(),
+                [](const auto& index) { return index.first != index.second; }))
+            rename = true;
+    }
 
     // The copies may come from another document: their instances are
     // pointed at this one's symbols before they are pasted.
@@ -6059,7 +6097,10 @@ void MainWindow::pasteFramesAs(bool overwrite)
             fla::transfer::renameUses(*copy, renamed);
             for (fla::Element* element : copy->elements)
                 if (element)
+                {
                     fla::relinkSymbols(*element, library);
+                    fla::remapPaintBrushes(*element, brushIndexes);
+                }
             renamedFrames->emplace_back(copy);
             clip.push_back(copy);
         }
@@ -10360,6 +10401,19 @@ void MainWindow::updateEditState()
     }
     if (_propertiesPanel)
         _propertiesPanel->refresh();
+    // The document's paint brushes changed (renamed, given other options,
+    // or an undo of that): the strokes drawn with them are laid out again.
+    if (_phoenixView && _flaDocument && _flaDocument->document && !stack.isInMacro())
+    {
+        fla::paintBrushesOf(*_flaDocument->document);
+        const void* brushes = _flaDocument->document->paintBrushesSource;
+        if (brushes != _paintBrushesShown)
+        {
+            _paintBrushesShown = brushes;
+            _phoenixView->clearCaches();
+            _phoenixView->update();
+        }
+    }
 
     if (_undoAction)
     {
@@ -10610,8 +10664,8 @@ void MainWindow::setupToolBar()
             "Draw freehand. The stroke is fitted on release; the mode is in the Properties panel.",
             [this]() -> Tool* { return _pencilTool.get(); }),
         makeTool(ToolIcons::Tool::PaintBrush, "Paint Brush", Qt::Key_Y,
-            "Paint a stroke with an art or pattern brush: a graphic symbol drawn along it, chosen under Brush "
-            "in the Properties panel.",
+            "Paint a stroke with an art or pattern brush, chosen under Brush in the Properties panel or in "
+            "Window > Brush Library; a pen's pressure sets its width.",
             [this]() -> Tool* { return _paintBrushTool.get(); }),
     });
     // The Brush, Nib and Ink brushes share a slot; B is the Brush's and
@@ -13871,103 +13925,187 @@ std::vector<fla::Shape*> MainWindow::allShapes() const
 
 void MainWindow::manageBrushes()
 {
-    if (!_flaDocument || !_flaDocument->document)
+    fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
+    if (!document)
         return;
-    QDialog dialog(this);
-    dialog.setWindowTitle("Document Brushes");
-    QVBoxLayout* layout = new QVBoxLayout(&dialog);
-    QLabel* intro = new QLabel("The graphic symbols the document's strokes are drawn with. Choose a brush for new "
-                               "strokes under Brush in the Properties panel; any graphic symbol can be one.", &dialog);
-    intro->setWordWrap(true);
-    layout->addWidget(intro);
-    QListWidget* list = new QListWidget(&dialog);
-    layout->addWidget(list);
-    QHBoxLayout* buttons = new QHBoxLayout;
-    QPushButton* draw = new QPushButton("Draw With It", &dialog);
-    draw->setToolTip("Use this brush for new strokes");
-    QPushButton* remove = new QPushButton("Take Off Strokes", &dialog);
-    remove->setToolTip("Draw the strokes that use this brush as plain lines again");
-    QPushButton* close = new QPushButton("Close", &dialog);
-    buttons->addWidget(draw);
-    buttons->addWidget(remove);
-    buttons->addStretch(1);
-    buttons->addWidget(close);
-    layout->addLayout(buttons);
-    connect(close, &QPushButton::clicked, &dialog, &QDialog::accept);
-
-    const auto brushOf = [](const fla::StrokeStyle* stroke) {
-        for (const auto& attribute : stroke->extraAttributes)
-            if (attribute.first == "phoenixBrush")
-                return attribute.second;
-        return std::string();
-    };
-    const auto fill = [&]() {
-        std::map<std::string, int> uses;
-        for (const fla::StrokeStyle* stroke : allStrokes())
-        {
-            const std::string brush = brushOf(stroke);
-            if (!brush.empty())
-                ++uses[brush];
-        }
-        list->clear();
-        for (const auto& [name, count] : uses)
-        {
-            QListWidgetItem* item = new QListWidgetItem(
-                QString("%1  (%2 stroke%3)").arg(QString::fromStdString(name)).arg(count).arg(count == 1 ? "" : "s"), list);
-            item->setData(Qt::UserRole, QString::fromStdString(name));
-        }
-        if (uses.empty())
-            list->addItem("No strokes are drawn with a brush.");
-        draw->setEnabled(!uses.empty());
-        remove->setEnabled(!uses.empty());
-    };
-    fill();
-    const auto chosen = [list]() {
-        QListWidgetItem* item = list->currentItem();
-        return item ? item->data(Qt::UserRole).toString().toStdString() : std::string();
-    };
-    connect(draw, &QPushButton::clicked, &dialog, [&]() {
-        const std::string name = chosen();
-        if (name.empty())
-            return;
-        _drawingStyle.strokeLook.brush = name;
-        if (_propertiesPanel)
-            _propertiesPanel->refresh();
-        statusBar()->showMessage(QString("New strokes are drawn with %1.").arg(QString::fromStdString(name)), 4000);
-    });
-    connect(remove, &QPushButton::clicked, &dialog, [&]() {
-        const std::string name = chosen();
-        if (name.empty())
-            return;
-        using Attributes = std::vector<std::pair<std::string, std::string>>;
-        fla::CommandStack& stack = _editContext.commandStack();
-        stack.beginMacro("Take Off Brush");
-        // By shape and place, as a later edit of the shape replaces its
-        // stroke styles.
-        for (fla::Shape* shape : allShapes())
-            for (size_t index = 0; index < shape->strokes.size(); ++index)
-            {
-                const fla::StrokeStyle* stroke = shape->strokes[index];
-                if (!stroke || brushOf(stroke) != name)
-                    continue;
-                Attributes after;
-                for (const auto& attribute : stroke->extraAttributes)
-                    if (attribute.first != "phoenixBrush" && attribute.first != "phoenixBrushPattern")
-                        after.push_back(attribute);
-                stack.push(fla::CommandPtr(new fla::StrokeFieldCommand<Attributes>(shape, index,
-                    &fla::StrokeStyle::extraAttributes, stroke->extraAttributes, after, "Take Off Brush")));
-            }
-        stack.endMacro();
-        stack.breakMergeChain();
+    const auto refreshView = [this]() {
         if (_phoenixView)
         {
             _phoenixView->clearCaches();
             _phoenixView->update();
         }
-        fill();
-    });
-    dialog.resize(420, 320);
+        if (_propertiesPanel)
+            _propertiesPanel->refresh();
+    };
+    // Whether \a stroke is drawn with \a brush.
+    const auto drawsWith = [](const fla::StrokeStyle& stroke, const fla::DocumentBrush& brush) {
+        if (brush.paintBrush)
+            return stroke.style() == fla::StrokeStyle::Style::PaintBrush &&
+                stroke.paintBrushDefinition == brush.definition.index;
+        for (const auto& attribute : stroke.extraAttributes)
+            if (attribute.first == "phoenixBrush")
+                return attribute.second == brush.symbol;
+        return false;
+    };
+    DocumentBrushesDialog::Hooks hooks;
+    hooks.drawWith = [this](const fla::DocumentBrush& brush) {
+        if (brush.paintBrush)
+        {
+            drawWithPaintBrush(brush.definition);
+            return;
+        }
+        _drawingStyle.strokeLook.brush = brush.symbol;
+        _drawingStyle.strokeLook.brushPattern = brush.pattern;
+        if (_drawingStyle.strokeLook.kind == fla::StrokeStyle::Style::PaintBrush)
+            _drawingStyle.strokeLook.kind = fla::StrokeStyle::Style::Solid;
+        if (_propertiesPanel)
+            _propertiesPanel->refresh();
+    };
+    hooks.selectStrokes = [this, drawsWith](const fla::DocumentBrush& brush) {
+        fla::Frame* frame = _phoenixView ? _phoenixView->activeFrame() : nullptr;
+        const fla::Layer* layer = frame ? dynamic_cast<const fla::Layer*>(frame->parent) : nullptr;
+        const fla::Timeline* timeline = layer ? dynamic_cast<const fla::Timeline*>(layer->parent) : nullptr;
+        if (!timeline || !_phoenixView)
+            return 0;
+        // What each layer shows at the playhead, unlocked.
+        const int at = frame->index;
+        std::vector<fla::DOMElement*> picked;
+        std::function<bool(const fla::Element&)> uses = [&](const fla::Element& element) {
+            if (const auto* shape = dynamic_cast<const fla::Shape*>(&element))
+                return std::any_of(shape->strokes.begin(), shape->strokes.end(),
+                    [&](const fla::StrokeStyle* stroke) { return stroke && drawsWith(*stroke, brush); });
+            if (const auto* group = dynamic_cast<const fla::Group*>(&element))
+                return std::any_of(group->members.begin(), group->members.end(),
+                    [&](const fla::Element* member) { return member && uses(*member); });
+            return false;
+        };
+        for (fla::Layer* each : timeline->layers)
+        {
+            if (!each || each->isLocked())
+                continue;
+            for (fla::Frame* shown : each->frames)
+                if (shown && shown->index <= at && at < shown->index + std::max(1, shown->duration))
+                    for (fla::Element* element : shown->elements)
+                        if (element && uses(*element))
+                            picked.push_back(element);
+        }
+        _selection.select(picked);
+        _phoenixView->update();
+        return static_cast<int>(picked.size());
+    };
+    hooks.takeOff = [this, drawsWith, refreshView](const fla::DocumentBrush& brush) {
+        fla::CommandStack& stack = _editContext.commandStack();
+        stack.beginMacro("Take Off Brush");
+        for (fla::Shape* shape : allShapes())
+        {
+            if (std::none_of(shape->strokes.begin(), shape->strokes.end(),
+                    [&](const fla::StrokeStyle* stroke) { return stroke && drawsWith(*stroke, brush); }))
+                continue;
+            // The strokes drawn with it become plain ones of their color and
+            // weight, kept where the edges find them.
+            std::unique_ptr<fla::Shape> after(static_cast<fla::Shape*>(fla::cloneElement(*shape, nullptr)));
+            for (fla::StrokeStyle*& style : after->strokes)
+            {
+                if (!style || !drawsWith(*style, brush))
+                    continue;
+                fla::StrokeLook look = fla::StrokeLook::of(*style);
+                look.brush.clear();
+                look.brushPattern = false;
+                if (look.kind == fla::StrokeStyle::Style::PaintBrush)
+                {
+                    look.kind = fla::StrokeStyle::Style::Solid;
+                    look.paintBrush = 0;
+                }
+                fla::StrokeStyle* plain = look.applyTo(*style, after.get());
+                for (auto& entry : after->strokesMap)
+                    if (entry.second == style)
+                        entry.second = plain;
+                delete style;
+                style = plain;
+            }
+            stack.push(fla::CommandPtr(new fla::SetShapeContentsCommand(shape, *after, "Take Off Brush")));
+        }
+        stack.endMacro();
+        stack.breakMergeChain();
+        refreshView();
+    };
+    hooks.push = [this, refreshView](fla::CommandPtr command) {
+        _editContext.commandStack().push(std::move(command));
+        _editContext.commandStack().breakMergeChain();
+        refreshView();
+    };
+    DocumentBrushesDialog dialog(*document, hooks, this);
     dialog.exec();
+}
+
+void MainWindow::drawWithPaintBrush(const fla::PaintBrushDefinition& definition)
+{
+    fla::StrokeLook& look = _drawingStyle.strokeLook;
+    look.kind = fla::StrokeStyle::Style::PaintBrush;
+    look.hairline = false;
+    look.brush.clear();
+    look.paintBrushGuid = definition.guid();
+    look.paintBrush = 0;
+    const fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
+    if (const auto own = document ? fla::paintBrushesOf(*document) : nullptr)
+        for (const fla::PaintBrushDefinition& candidate : own->definitions)
+            if (look.paintBrushGuid.empty() ? candidate.json == definition.json
+                                            : candidate.guid() == look.paintBrushGuid)
+                look.paintBrush = candidate.index;
+    // The Paint Brush tool, as its button would choose it.
+    for (const auto& [tool, action] : _toolActionList)
+        if (tool() == _paintBrushTool.get() && action && !action->isChecked())
+            action->trigger();
+    if (_propertiesPanel)
+    {
+        _propertiesPanel->refreshToolOptions();
+        _propertiesPanel->refresh();
+    }
+    statusBar()->showMessage(
+        QString("The Paint Brush draws with %1.").arg(QString::fromStdString(definition.name)), 4000);
+}
+
+void MainWindow::showBrushLibrary()
+{
+    if (!_brushLibrary)
+    {
+        BrushLibraryDialog::Hooks hooks;
+        hooks.document = [this]() -> const fla::Document* {
+            return _flaDocument ? _flaDocument->document : nullptr;
+        };
+        hooks.drawWith = [this](const fla::PaintBrushDefinition& definition) { drawWithPaintBrush(definition); };
+        hooks.addToDocument = [this](const fla::PaintBrushDefinition& definition) {
+            fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
+            if (!document)
+                return;
+            std::map<int, int> indexes;
+            if (fla::CommandPtr command = fla::adoptPaintBrushes(*document, {definition}, indexes, "Add Brush"))
+            {
+                _editContext.commandStack().push(std::move(command));
+                _editContext.commandStack().breakMergeChain();
+            }
+            if (_propertiesPanel)
+                _propertiesPanel->refresh();
+        };
+        hooks.readDocument = [](const QString& path, QString& error) {
+            std::string why;
+            std::unique_ptr<fla::FLADocument> loaded = commands::load(
+                QFileInfo(path).suffix() == "xfl" ? QFileInfo(path).absolutePath().toStdString() : path.toStdString(),
+                why);
+            if (!loaded || !loaded->document)
+            {
+                error = QString("%1 could not be opened. %2").arg(QFileInfo(path).fileName(), QString::fromStdString(why));
+                return std::vector<fla::PaintBrushDefinition>();
+            }
+            const auto library = fla::paintBrushesOf(*loaded->document);
+            return library ? library->definitions : std::vector<fla::PaintBrushDefinition>();
+        };
+        _brushLibrary = new BrushLibraryDialog(BrushLibraryStore::shared(), hooks, this);
+        _brushLibrary->setAttribute(Qt::WA_DeleteOnClose);
+    }
+    _brushLibrary->show();
+    _brushLibrary->raise();
+    _brushLibrary->activateWindow();
 }
 
 fla::Bitmap* MainWindow::bitmapNamed(const QString& name) const
@@ -16442,6 +16580,13 @@ void MainWindow::putOnSystemClipboard()
         }
         fla::XFLWriter writer;
         data->setData(kElementsMime, QByteArray::fromStdString(writer.writeDocument(holder)));
+        std::vector<const fla::Element*> copied;
+        for (const std::unique_ptr<fla::Element>& element : _clipboard)
+            copied.push_back(element.get());
+        const std::vector<fla::PaintBrushDefinition> brushes =
+            _clipboardFrom ? fla::paintBrushesFor(*_clipboardFrom, copied) : std::vector<fla::PaintBrushDefinition>();
+        if (!brushes.empty())
+            data->setData(kPaintBrushesMime, QByteArray::fromStdString(fla::writePaintBrushDefinitions(brushes)));
     }
     if (_phoenixView)
     {
@@ -16577,10 +16722,35 @@ bool MainWindow::pasteFromSystemClipboard(const char* name, bool centerInView)
     if (elements.empty())
         return false;
 
+    // The paint brushes the copied strokes draw with, when the copy carried
+    // them, come into the document as one step with the paste, and the
+    // strokes draw with them as it numbers them.
+    fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
+    fla::CommandStack& stack = _editContext.commandStack();
+    bool macro = false;
+    if (document && data->hasFormat(kPaintBrushesMime))
+    {
+        const std::vector<fla::PaintBrushDefinition> brushes =
+            fla::readPaintBrushDefinitions(data->data(kPaintBrushesMime).toStdString());
+        std::map<int, int> indexes;
+        if (fla::CommandPtr command = fla::adoptPaintBrushes(*document, brushes, indexes, name))
+        {
+            if (_phoenixView)
+                _phoenixView->flushPendingMerge();
+            stack.beginMacro(name);
+            macro = true;
+            stack.push(std::move(command));
+        }
+        for (const std::unique_ptr<fla::Element>& element : elements)
+            fla::remapPaintBrushes(*element, indexes);
+    }
+
     std::vector<const fla::Element*> sources;
     for (const std::unique_ptr<fla::Element>& element : elements)
         sources.push_back(element.get());
     placeCopies(sources, name, centerInView);
+    if (macro)
+        stack.endMacro();
     return true;
 }
 
@@ -16777,6 +16947,40 @@ void MainWindow::pasteElements(const char* name, bool centerInView, bool acrossF
                         fla::transfer::renameUses(*copy, renamed);
                         renamedCopies.emplace_back(copy);
                     }
+                sources.clear();
+                for (const std::unique_ptr<fla::Element>& copy : renamedCopies)
+                    sources.push_back(copy.get());
+            }
+        }
+        // The paint brushes the copies' strokes draw with come too, each once
+        // by guid, and the copies draw with them as this document numbers
+        // them.
+        const std::vector<fla::PaintBrushDefinition> brushes = fla::paintBrushesFor(*_clipboardFrom, sources);
+        if (!brushes.empty())
+        {
+            std::map<int, int> indexes;
+            fla::CommandPtr command = fla::adoptPaintBrushes(*document, brushes, indexes, name);
+            if (command)
+            {
+                if (!macro)
+                {
+                    if (_phoenixView)
+                        _phoenixView->flushPendingMerge();
+                    stack.beginMacro(name);
+                    macro = true;
+                }
+                stack.push(std::move(command));
+            }
+            if (std::any_of(indexes.begin(), indexes.end(), [](const auto& index) { return index.first != index.second; }))
+            {
+                std::vector<std::unique_ptr<fla::Element>> remapped;
+                for (const fla::Element* source : sources)
+                    if (fla::Element* copy = fla::cloneElement(*source, nullptr))
+                    {
+                        fla::remapPaintBrushes(*copy, indexes);
+                        remapped.emplace_back(copy);
+                    }
+                renamedCopies = std::move(remapped);
                 sources.clear();
                 for (const std::unique_ptr<fla::Element>& copy : renamedCopies)
                     sources.push_back(copy.get());

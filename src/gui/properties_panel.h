@@ -220,9 +220,16 @@ private:
 
     /// The stroke controls (style, cap, join, miter, scale),
     /// in \a section from \a row on, set from \a look; \a apply gets the
-    /// new look on any change. Returns the label and field of each row.
+    /// new look on any change, and \a applyWeight a weight set in Custom
+    /// Stroke Style. Returns the label and field of each row.
+    ///
+    /// For the strokes of the selection, a paint brush from the brush
+    /// library is copied into the document before \a apply gets it, as one
+    /// step with it; for the tool's style (\a forTool) it is copied when a
+    /// stroke is first drawn with it.
     std::vector<std::pair<QWidget*, QWidget*>> addStrokeLookFields(PropertySection* section, int& row,
-        const fla::StrokeLook& look, std::function<void(const fla::StrokeLook&)> apply);
+        const fla::StrokeLook& look, std::function<void(const fla::StrokeLook&)> apply,
+        std::function<void(double)> applyWeight, double weight, bool forTool = false);
     void addInstanceSections(QVBoxLayout* layout, fla::SymbolInstance* instance);
     /// The fields of \a instance's symbol when it is a template, each filled
     /// in for this instance.

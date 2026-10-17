@@ -159,6 +159,8 @@ set(PHOENIX_CORE_FILE_SOURCES
     edit/font_items.cpp
     edit/vector_import.cpp
     edit/paint_brushes.cpp
+    edit/brush_library.cpp
+    edit/phoenix_brushes.cpp
     edit/pdf_objects.cpp
     edit/postscript_import.cpp
     edit/postscript_interpreter.cpp
