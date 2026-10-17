@@ -25,7 +25,7 @@ FetchContent_MakeAvailable(libas3)
 add_library(libas3 INTERFACE)
 target_link_libraries(libas3 INTERFACE as3_parser)
 
-project(Phoenix VERSION 0.17.0 LANGUAGES C CXX)
+project(Phoenix VERSION 0.17.1 LANGUAGES C CXX)
 
 # libas3 copies as3_parser.pdb from beside the library after a Debug build,
 # but a single-configuration generator (Ninja) has MSVC write a static

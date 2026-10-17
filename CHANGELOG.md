@@ -2,6 +2,10 @@
 
 What changed in each release of Phoenix, newest first.
 
+## 0.17.1
+
+- Publish Settings is laid out in two columns, where and what to publish beside the formats' options, so it fits a laptop's screen
+
 ## 0.17.0
 
 - Publish configurations: Publish Settings can keep several, each with its own formats, options and location; File > Publish lists them, the current one on Shift+F12. A document with no publish settings now publishes an HTML5 page rather than an SWF movie and its page
