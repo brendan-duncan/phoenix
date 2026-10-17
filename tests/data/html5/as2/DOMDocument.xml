@@ -1,0 +1,147 @@
+<DOMDocument xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://ns.adobe.com/xfl/2008/" width="400" height="300" frameRate="12" currentTimeline="1" xflVersion="2.0" creatorInfo="Phoenix" platform="Windows" backgroundColor="#FFFFEE">
+     <symbols>
+          <Include href="Ball.xml" loadImmediate="false"/>
+          <Include href="Box.xml" loadImmediate="false"/>
+          <Include href="Btn.xml" loadImmediate="false"/>
+     </symbols>
+     <timelines>
+          <DOMTimeline name="Scene 1">
+               <layers>
+                    <DOMLayer name="actions" color="#FF4FFF">
+                         <frames>
+                              <DOMFrame index="0" duration="2" keyMode="9728">
+                                   <Actionscript>
+                                        <script><![CDATA[var frames = 0;
+score = 0;
+trace("start " + typeof this + " " + _currentframe + "/" + _totalframes + " " + this);
+
+// The drawing API: alphas from 0 to 100.
+var c = this.createEmptyMovieClip("canvas", 10);
+c.beginFill(0x00AA00, 50);
+c.moveTo(200, 20);
+c.lineTo(380, 20);
+c.lineTo(380, 120);
+c.lineTo(200, 120);
+c.lineTo(200, 20);
+c.endFill();
+c.lineStyle(4, 0x0000FF, 100);
+c.moveTo(200, 140);
+c.curveTo(290, 60, 380, 140);
+
+// A symbol by its identifier, made a Ball by its class.
+var b = attachMovie("ball", "ball1", 20, {_x: 60, _y: 150});
+trace("attached " + b._name + " " + b._x + " " + (b instanceof Ball) + " " + b.getDepth() + " " + b);
+var b2 = b.duplicateMovieClip("ball2", 21);
+b2._y = 200;
+new Color(b2).setRGB(0x3366FF);
+trace("next depth " + getNextHighestDepth());
+
+// A text field made by script, with a format.
+createTextField("label", 30, 200, 160, 190, 24);
+label.text = "AS2 on HTML5";
+label.textColor = 0x990000;
+var fmt = new TextFormat();
+fmt.bold = true;
+fmt.size = 16;
+label.setTextFormat(fmt);
+
+// Old-style targets.
+setProperty("box", _alpha, 60);
+tellTarget ("box") {
+    gotoAndStop(2);
+}
+trace("box " + box._currentframe + " " + box._alpha + " " + box._target);
+
+Key.addListener({onKeyDown: function () {
+    trace("key " + Key.getCode() + " " + Key.isDown(Key.LEFT));
+}});
+Mouse.addListener({onMouseDown: function () {
+    trace("mouse down");
+}});
+
+var ticks = 0;
+var id = setInterval(function () {
+    ticks++;
+    if (ticks == 3) {
+        clearInterval(id);
+        trace("ticks 3");
+    }
+}, 50);
+onEnterFrame = function () {
+    frames++;
+    score = "frames " + frames;
+};
+
+var bounds = box.getBounds(this);
+trace("bounds " + Math.round(bounds.xMin) + " " + Math.round(bounds.yMin) + " " + Math.round(bounds.xMax));
+var pt = {x: 0, y: 0};
+box.localToGlobal(pt);
+trace("global " + pt.x + "," + pt.y);
+trace("hit " + box.hitTest(30, 30, true) + " " + box.hitTest(390, 290, true));
+
+var x = new XML("<a n='1'><b>hi</b><b>there</b></a>");
+trace("xml " + x.firstChild.attributes.n + " " + x.firstChild.childNodes.length + " " + x.firstChild.firstChild.firstChild.nodeValue);
+var lv = new LoadVars();
+lv.decode("a=1&b=two%20words");
+trace("lv " + lv.a + " " + lv.b);
+var so = SharedObject.getLocal("as2test");
+so.data.visits = (so.data.visits || 0) + 1;
+so.flush();
+trace("so " + (so.data.visits >= 1));
+var list = [5, 1, 10];
+list.sort(Array.NUMERIC);
+trace("sorted " + list);
+trace("stage " + Stage.width + "x" + Stage.height);]]></script>
+                                   </Actionscript>
+                                   <elements/>
+                              </DOMFrame>
+                              <DOMFrame index="2" keyMode="9728">
+                                   <Actionscript>
+                                        <script><![CDATA[stop();
+trace("frame 3: " + frames + " frames, " + score_txt.text);]]></script>
+                                   </Actionscript>
+                                   <elements/>
+                              </DOMFrame>
+                         </frames>
+                    </DOMLayer>
+                    <DOMLayer name="stage" color="#4FFF4F">
+                         <frames>
+                              <DOMFrame index="0" duration="3" keyMode="9728">
+                                   <elements>
+                                        <DOMSymbolInstance libraryItemName="Box" name="box">
+                                             <matrix><Matrix tx="20" ty="20"/></matrix>
+                                             <Actionscript>
+                                                  <script><![CDATA[onClipEvent (load) {
+    trace("box load " + this._name);
+}
+onClipEvent (enterFrame) {
+    this._rotation += 5;
+}]]></script>
+                                             </Actionscript>
+                                        </DOMSymbolInstance>
+                                        <DOMSymbolInstance libraryItemName="Btn" name="btn" symbolType="button">
+                                             <matrix><Matrix tx="300" ty="240"/></matrix>
+                                             <Actionscript>
+                                                  <script><![CDATA[on (release) {
+    trace("btn released, ball1 at " + Math.round(_root.ball1._x));
+    _root.box.prevFrame();
+}]]></script>
+                                             </Actionscript>
+                                        </DOMSymbolInstance>
+                                        <DOMDynamicText name="score_txt" variableName="score" width="200" height="24">
+                                             <matrix><Matrix tx="10" ty="260"/></matrix>
+                                             <textRuns>
+                                                  <DOMTextRun>
+                                                       <characters>score</characters>
+                                                       <textAttrs><DOMTextAttrs face="Arial" size="14" fillColor="#000000"/></textAttrs>
+                                                  </DOMTextRun>
+                                             </textRuns>
+                                        </DOMDynamicText>
+                                   </elements>
+                              </DOMFrame>
+                         </frames>
+                    </DOMLayer>
+               </layers>
+          </DOMTimeline>
+     </timelines>
+</DOMDocument>

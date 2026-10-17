@@ -123,7 +123,7 @@ phoenix.as2Face = face;
 
 function linkageOf(d) {
     var def = d._placement && d._placement.def;
-    return def ? def.linkage || null : null;
+    return def ? def.ident || def.linkage || null : null;
 }
 function classFor(d) {
     var linkage = linkageOf(d);
@@ -559,12 +559,13 @@ function bounds(d, space, how) {
 
 function symbolByLinkage(id) {
     var symbols = phoenix._.library ? phoenix._.library.symbols : [];
+    // The identifier attachMovie names; an ActionScript 3 linkage after.
     for (var i = 0; i < symbols.length; ++i)
-        if (symbols[i].linkage === id)
+        if (symbols[i].ident === id || (!symbols[i].ident && symbols[i].linkage === id))
             return symbols[i];
     var lower = lowerCase(id);
     for (var j = 0; j < symbols.length; ++j)
-        if (symbols[j].linkage && lowerCase(symbols[j].linkage) === lower)
+        if (lowerCase(symbols[j].ident || symbols[j].linkage || "") === lower)
             return symbols[j];
     return null;
 }
@@ -1446,11 +1447,11 @@ function isButtonClip(d) {
         return d.enabled !== false && (!!(d._as2Handlers && d._as2Handlers.length) || hasButtonHandler(d));
     if (!(d instanceof display.Sprite) || d._as2Enabled === false)
         return false;
-    if (d._as2Handlers && d._as2Handlers.some(function (h) { return !h.clip || h.events.some(isMouseClipEvent); }))
-        return d._as2Handlers.some(function (h) { return !h.clip; });
+    // on() handlers on a movie clip make it a button; onClipEvent()s do not.
+    if (d._as2Handlers && d._as2Handlers.some(function (h) { return !h.clip; }))
+        return true;
     return hasButtonHandler(d);
 }
-function isMouseClipEvent() { return false; }
 function hasButtonHandler(d) {
     var self = faces.get(d);
     if (!self)
