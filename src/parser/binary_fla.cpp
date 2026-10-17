@@ -1504,7 +1504,12 @@ void readContents(Reader& r, Contents& c)
     c.height = (rect[3] - rect[2]) / 20.0;
     r.skip(2 + 2 + 1 + 2 + 2);
     r.skip(16); // grid and snap spacing
-    r.skip(12);
+    r.skip(8);
+    // The page setup: the printer's settings and its names (Windows' DEVMODE
+    // and DEVNAMES), each a u16 size and that many bytes; both sizes are 0
+    // unless the document was saved with a printer chosen. [S] 2 files.
+    for (int block = 0; block < 2; ++block)
+        r.skip(r.u16());
     c.background = r.color();
     r.color(); // grid color
     c.frameRate = r.u32() / 65536.0;

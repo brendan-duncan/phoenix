@@ -4,10 +4,11 @@ What changed in each release of Phoenix, newest first.
 
 ## Unreleased
 
-- The Brush, Nib Brush and Ink Brush paint in the fill color with Fill unchecked (the Nib Brush no longer turns into panning), and the Pencil and Paint Brush draw with the stroke's color, weight and brush with Stroke unchecked, not a black hairline
-- Old binary FLA files whose buttons carry scripts saved by Flash 8 open in full; six of the 1,603 such files on hand read where they stopped before
+- Old binary FLA files saved with a printer chosen in Page Setup open in full (ten more of the 1,603 on hand)
+- The Brush, Nib Brush and Ink Brush paint in the fill color with Fill unchecked, and the Pencil and Paint Brush draw with the stroke's color, weight and brush with Stroke unchecked, not a black hairline
+- Old binary FLA files whose buttons carry scripts saved by Flash 8 open in full
 - ActionScript 2's `_global` works in Test Movie: what a script sets there every script sees
-- The Tools panel's colors are one unit: overlapping fill and stroke squares, the one last clicked on top, with Black and White and Swap beside them, growing to fit a wider panel; a red line shows no fill or no stroke
+- The Tools panel's colors are one unit
 - The Tools panel adds columns when the window is too short to show every tool, and goes back to the columns you chose when there is room; along the top or bottom it adds rows
 
 ## 0.18.0
