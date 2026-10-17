@@ -205,9 +205,12 @@ set(PHOENIX_CORE_PYTHON_SOURCES
     python/python_keywords.cpp
 )
 
-# Playing movies with their ActionScript (Control > Test Movie): libas3.
+# Playing movies with their scripts (Control > Test Movie): libas3 for
+# ActionScript, QuickJS for HTML5 Canvas JavaScript.
 set(PHOENIX_CORE_PLAY_SOURCES
     play/movie_runtime.cpp
+    play/canvas/createjs.cpp
+    play/canvas/scripts.cpp
     play/display/bitmap_data.cpp
     play/display/bitmap_filter.cpp
     play/display/blend.cpp
@@ -281,7 +284,7 @@ function(phoenix_add_core target src)
         target_link_libraries(${target} PUBLIC ${CMAKE_DL_LIBS})
     endif()
     if(CORE_PLAY)
-        target_link_libraries(${target} PUBLIC as3_parser)
+        target_link_libraries(${target} PUBLIC as3_parser qjs)
         target_compile_definitions(${target} PUBLIC PHOENIX_PLAY)
     endif()
     # The audio engine (miniaudio) needs the system's audio and threads.

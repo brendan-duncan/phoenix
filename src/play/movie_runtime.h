@@ -47,6 +47,10 @@ namespace script {
 class Bindings;
 struct DisplayHost;
 }
+namespace canvas {
+class Scripts;
+struct Native;
+}
 
 /// The root timeline, or a movie clip or button on it as it plays: which
 /// frame it is on, whether it plays on, and what scripts have set on it.
@@ -191,7 +195,7 @@ public:
     /// After the pointer or a key went to the stage's display objects
     /// (their listeners may have sent clips to other frames): goes on with
     /// what they did.
-    void afterEvents() { settle(); }
+    void afterEvents();
 
     /// The scene playing goes to \a frame (from 0), as a script's
     /// gotoAndPlay or gotoAndStop sends it, keeping whether it plays: a
@@ -244,6 +248,11 @@ public:
     void setActionScriptVersion(int version) { _version = version; }
     /// Whether the movie plays as ActionScript 3 (once started).
     bool actionScript3() const { return _as3; }
+    /// The movie's scripts are JavaScript, as an HTML5 Canvas document's
+    /// are: played with CreateJS's API (see canvas::Scripts) rather than as
+    /// ActionScript. Set before start().
+    void setJavaScript(bool javaScript) { _javaScript = javaScript; }
+    bool javaScript() const { return _javaScript; }
     /// The library bitmaps scripts reach by their linkage (BitmapData
     /// classes). Set before start().
     void setLibraryBitmaps(const std::vector<const Bitmap*>& bitmaps) { _bitmaps = bitmaps; }
@@ -386,6 +395,8 @@ private:
     friend class ClipObject;
     friend class script::Bindings;
     friend struct script::DisplayHost;
+    friend class canvas::Scripts;
+    friend struct canvas::Native;
 
     void setupGlobals();
     /// ActionScript 3's own globals (the rest are the flash.* classes).
@@ -462,6 +473,11 @@ private:
     /// Sets the text \a field shows: its instance name's text, or the
     /// variable it shows.
     void setFieldText(Clip& clip, const StaticText& field, const std::string& text);
+    /// The dynamic or input text field \a name names on \a clip's frame
+    /// now, or null; and the text it shows (what a script put in it, else
+    /// its own).
+    const StaticText* textField(const Clip& clip, const std::string& name) const;
+    std::string fieldText(Clip& clip, const StaticText& field);
     as3::ValuePtr soundObject(const std::string& linkage, bool actionScript3);
     /// Tells of an error: \a message, in the script \a source, at \a line.
     void tell(const std::string& message, const DOMElement* source, int line);
@@ -574,6 +590,9 @@ private:
     mutable std::map<const Element*, std::unique_ptr<SymbolInstance>> _components;
     mutable std::map<const SymbolInstance*, std::string> _componentParameters;
     std::unique_ptr<script::Bindings> _bindings;
+    // JavaScript.
+    bool _javaScript = false;
+    std::unique_ptr<canvas::Scripts> _canvas;
     /// The clip the pointer was last sent over (pointerOver) and pressed
     /// on, for the display list's events when the stage does not send them.
     std::weak_ptr<display::DisplayObject> _pointerOver;

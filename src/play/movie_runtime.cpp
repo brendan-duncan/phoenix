@@ -12,6 +12,7 @@
 #include "../data/symbol_list.h"
 #include "../data/timeline.h"
 #include "../edit/script_edit.h"
+#include "canvas/scripts.h"
 #include "display/backend.h"
 #include "display/bitmap_filter.h"
 #include "display/display_object.h"
@@ -575,6 +576,7 @@ MovieRuntime::~MovieRuntime()
 {
     // The script objects first, while the VM they belong to is about.
     _bindings.reset();
+    _canvas.reset();
 }
 
 bool MovieRuntime::mouseHidden() const
@@ -661,6 +663,7 @@ void MovieRuntime::start()
         stopAllSounds();
     // The last run's script objects go before the VM they belong to.
     _bindings.reset();
+    _canvas.reset();
     _vm = std::make_unique<as3::VM>();
     if (!_stage)
         _stage = std::make_shared<display::Stage>();
@@ -677,6 +680,16 @@ void MovieRuntime::start()
     attachDisplay(*_root);
     _stage->addChildAt(_root->display, 0);
     _stage->setRootObject(_root->display.get());
+    if (_javaScript)
+    {
+        // JavaScript: CreateJS's classes over the timelines and the display
+        // list, the frames' scripts run by them.
+        _as3 = false;
+        _canvas = std::make_unique<canvas::Scripts>(*this);
+        std::vector<Clip*> entered{_root.get()};
+        enter(entered);
+        return;
+    }
     // A movie whose settings say ActionScript 3 but whose scripts are older
     // (a file saved again with new settings) plays as its scripts are.
     _as3 = _version == 3 ? !scriptsLookLikeActionScript2() || scriptsLookLikeActionScript3()
@@ -1564,6 +1577,17 @@ void MovieRuntime::setFieldText(Clip& clip, const StaticText& field, const std::
         changed();
 }
 
+const StaticText* MovieRuntime::textField(const Clip& clip, const std::string& name) const
+{
+    return fieldNamed(clip.timeline, clip.frame, name);
+}
+
+std::string MovieRuntime::fieldText(Clip& clip, const StaticText& field)
+{
+    const std::optional<std::string> shown = textOf(clip, field);
+    return shown ? *shown : drawnText(field);
+}
+
 void MovieRuntime::type(int code, int character)
 {
     Clip& clip = *_focus.clip;
@@ -1794,7 +1818,10 @@ void MovieRuntime::runFrameScripts(Clip& clip)
             continue;
         const std::string where = (clip.symbol ? clip.symbol->name : clip.timeline->name) + ", frame " +
             std::to_string(clip.frame + 1);
-        run(frame, frame->actionScript->code, clip, where);
+        if (_canvas)
+            _canvas->runFrame(clip, *frame, where);
+        else
+            run(frame, frame->actionScript->code, clip, where);
     }
 }
 
@@ -2250,7 +2277,7 @@ int MovieRuntime::sceneNamed(const std::string& name) const
 
 void MovieRuntime::settle()
 {
-    if (_as3)
+    if (_as3 || _canvas)
         placeMadeClips();
     // A script sent clips to other frames: their scripts run there, which
     // may send them on again; a chain is cut short at a few.
@@ -2301,7 +2328,7 @@ void MovieRuntime::settle()
             if (!clip.button)
                 runFrameScripts(clip);
         }
-        if (_as3)
+        if (_as3 || _canvas)
             placeMadeClips();
     }
     freeGone();
@@ -2360,6 +2387,13 @@ void MovieRuntime::advance(Clip& clip, std::vector<Clip*>& entered, std::vector<
             advance(*child, entered, scripts);
 }
 
+void MovieRuntime::afterEvents()
+{
+    if (_canvas)
+        _canvas->afterEvents();
+    settle();
+}
+
 void MovieRuntime::seek(int frame)
 {
     goTo(*_root, frame, _root->playing);
@@ -2397,6 +2431,13 @@ void MovieRuntime::step()
         if (!clip->gone)
             runFrameScripts(*clip);
     enter(entered);
+    // JavaScript's tick, once the frames' scripts have run, as the stage
+    // updates in CreateJS; and where it sent clips.
+    if (_canvas)
+    {
+        _canvas->tick();
+        settle();
+    }
     _stage->exitFrame();
     _stage->render();
 }
