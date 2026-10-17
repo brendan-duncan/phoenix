@@ -10671,17 +10671,11 @@ void MainWindow::setupToolBar()
         "Drag out from a stroke to widen it there, in to thin it; drag a width point to change it, select one "
         "and press Delete to take it away. Alt changes one side only.",
         [this]() -> Tool* { return _widthTool.get(); })});
-    addSlot({
-        makeTool(ToolIcons::Tool::Pencil, "Pencil", Qt::SHIFT | Qt::Key_Y,
-            "Draw freehand. The stroke is fitted on release; the mode is in the Properties panel.",
-            [this]() -> Tool* { return _pencilTool.get(); }),
-        makeTool(ToolIcons::Tool::PaintBrush, "Paint Brush", Qt::Key_Y,
-            "Paint a stroke with an art or pattern brush, chosen under Brush in the Properties panel or in "
-            "Window > Brush Library; a pen's pressure sets its width.",
-            [this]() -> Tool* { return _paintBrushTool.get(); }),
-    });
-    // The Brush, Nib and Ink brushes share a slot; B is the Brush's and
-    // Shift+B the Nib Brush's.
+    addSlot({makeTool(ToolIcons::Tool::Pencil, "Pencil", Qt::SHIFT | Qt::Key_Y,
+        "Draw freehand. The stroke is fitted on release; the mode is in the Properties panel.",
+        [this]() -> Tool* { return _pencilTool.get(); })});
+    // The brushes share a slot: the Brush, Nib, Ink and Paint brushes; B is
+    // the Brush's, Shift+B the Nib Brush's and Y the Paint Brush's.
     addSlot({
         makeTool(ToolIcons::Tool::FluidBrush, "Brush", Qt::Key_B,
             "Paint a fill whose width follows the pen's pressure and speed, with tapered ends "
@@ -10695,6 +10689,10 @@ void MainWindow::setupToolBar()
             "Paint steady inked lines: a stabilizer trails the pen, the pressure response is "
             "adjustable, and tilting the pen broadens the line.",
             [this]() -> Tool* { return _inkBrushTool.get(); }),
+        makeTool(ToolIcons::Tool::PaintBrush, "Paint Brush", Qt::Key_Y,
+            "Paint a stroke with an art or pattern brush, chosen under Brush in the Properties panel or in "
+            "Window > Brush Library; a pen's pressure sets its width.",
+            [this]() -> Tool* { return _paintBrushTool.get(); }),
     });
 
     addLine();
@@ -10774,8 +10772,20 @@ void MainWindow::setupToolBar()
         }
     }
     _toolbox->setDefaultLayout(defaultTools);
-    _toolbox->setLayout(Toolbox::Layout::fromJson(
-        QJsonDocument::fromJson(QSettings().value("toolbox/layout").toByteArray()).object()));
+    Toolbox::Layout saved =
+        Toolbox::Layout::fromJson(QJsonDocument::fromJson(QSettings().value("toolbox/layout").toByteArray()).object());
+    // The Paint Brush shared the Pencil's slot until 0.18; a layout that still
+    // has that slot as it was made has the Paint Brush moved to the brushes.
+    for (Toolbox::Slot& slot : saved.entries)
+        if (slot.size() == 2 && slot.contains("Pencil") && slot.contains("Paint Brush"))
+        {
+            slot.removeAll("Paint Brush");
+            for (Toolbox::Slot& brushes : saved.entries)
+                if (brushes.contains("Brush") && !brushes.contains("Paint Brush"))
+                    brushes.append("Paint Brush");
+            break;
+        }
+    _toolbox->setLayout(saved);
     connect(_toolbox, &Toolbox::layoutChanged, this, [this]() {
         QSettings().setValue("toolbox/layout", QJsonDocument(_toolbox->layout().toJson()).toJson(QJsonDocument::Compact));
     });
