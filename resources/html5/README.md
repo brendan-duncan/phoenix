@@ -141,7 +141,8 @@ What `as3` has:
   makes `getQualifiedClassName` and `getDefinitionByName` know it.
 - `as3.classByName(qualifiedName)`: a class by its name, or null.
 - `as3.linkClass(name, cls)`: binds `cls` to the library item whose
-  linkage class (or, failing that, library name) is `name`: a symbol (its
+  linkage class (or, failing that, library name: its path in the library,
+  folders and all, as the FLA names it) is `name`: a symbol (its
   instances, on the timelines or made with `new`, are `cls` objects, and
   `new cls()` makes one with the symbol's frames), a sound (`new cls()` is
   a `Sound` playing it) or a bitmap (`new cls()` is a `BitmapData` of its
