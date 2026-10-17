@@ -2,7 +2,7 @@
 
 What changed in each release of Phoenix, newest first.
 
-## Unreleased
+## 0.17.0
 
 - Publish says what it wrote: the files in the Output panel, and a dialog to open the page in the browser or show the files. Publish Settings has a Publish button and a Location: a parent folder (the document's by default) and a publish folder made in it for the files. A new document can be published before it is saved
 - HTML5 pages play ActionScript 3 movies with their scripts: frame scripts, the document class, linked classes and the components are translated to JavaScript, with a source map back to the .as files; what does not translate is reported with its file or frame and line
