@@ -151,7 +151,6 @@ ED.on = function (type, listener, scope, once, data, useCapture) {
         scope = scope || listener;
         listener = listener.handleEvent;
     }
-    var self = this;
     scope = scope || this;
     return this.addEventListener(type, function (event) {
         listener.call(scope, event, data);
@@ -1074,8 +1073,6 @@ global.lib = new Proxy({}, {
 });
 global.images = global.images || {};
 global.ss = global.ss || {};
-global.AdobeAn = strict({ getComposition: function () { missing("AdobeAn.getComposition()"); },
-    compositions: {}, bootstrapCallback: function () {} }, "AdobeAn");
 
 // What the runtime calls.
 
