@@ -24,6 +24,7 @@ namespace fla {
 
 class Bitmap;
 class DOMElement;
+class Element;
 class Document;
 class Frame;
 class Layer;
@@ -320,6 +321,20 @@ public:
     std::vector<Clip*> madeChildren(const Clip& clip) const;
     /// The display text field for \a field on \a clip's frame, or null.
     display::TextField* displayField(const Clip& clip, const StaticText& field) const;
+    /// The display object \a element (of \a clip's frame now) is placed
+    /// as, or null.
+    display::DisplayObject* timelineObject(const Clip& clip, const Element* element) const;
+    /// The instance an element of a frame places: itself, or for a
+    /// component kept as its XML, an instance of its symbol read from it;
+    /// null for one that is not an instance.
+    const SymbolInstance* instanceOf(const Element* element) const;
+    /// The parameters (its parametersAsXML) of a component instance
+    /// instanceOf read, or empty.
+    std::string componentParameters(const SymbolInstance* instance) const
+    {
+        const auto found = _componentParameters.find(instance);
+        return found == _componentParameters.end() ? std::string() : found->second;
+    }
     /// The clip a made instance (Clip::made) is, or null.
     Clip* clipOfMade(const SymbolInstance& instance) const;
     /// Whether \a clip is on the stage now: a pointer kept since the movie
@@ -556,6 +571,8 @@ private:
     bool _as3 = false;
     bool _stagePointer = false;
     std::vector<const Bitmap*> _bitmaps;
+    mutable std::map<const Element*, std::unique_ptr<SymbolInstance>> _components;
+    mutable std::map<const SymbolInstance*, std::string> _componentParameters;
     std::unique_ptr<script::Bindings> _bindings;
     /// The clip the pointer was last sent over (pointerOver) and pressed
     /// on, for the display list's events when the stage does not send them.

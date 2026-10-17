@@ -4716,6 +4716,15 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
     else if (!_displayDraws.empty() && !_maskPass && !_movieClips.empty() && _displayDraws.back().clip == _movieClips.back() &&
         dynamic_cast<const fla::Frame*>(element->parent) && !displayBefore(painter, element))
         return;
+    // A component on a movie's stage: its display object, as the display
+    // list draws it.
+    if (_movie && !_movieClips.empty() && element->elementType() == fla::Element::Type::Raw)
+        if (const fla::display::DisplayObject* component = _movie->timelineObject(*_movieClips.back(), element))
+        {
+            if (component->visible())
+                _displayPainter->draw(painter, *component);
+            return;
+        }
 
     // Text and bitmaps are color, not line.
     if (_renderPass == RenderPass::Lines && (element->elementType() == fla::Element::Type::StaticText ||

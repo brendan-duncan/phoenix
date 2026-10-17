@@ -316,6 +316,9 @@ public:
     /// Sets the variables a clip's class declares for the instances its
     /// timeline names to them (the frame now places them).
     void declareInstances(Clip& clip);
+    /// Sets a component instance's parameters (its parametersAsXML) on its
+    /// object, as its inspector gave them.
+    void applyParameters(Clip& clip);
 
     /// The source of a class the movie needs, by qualified name: what the
     /// runtime's class path finds, or a class made for a library symbol

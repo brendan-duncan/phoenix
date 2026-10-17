@@ -993,7 +993,9 @@ private:
         bool plain = false;
         int next = 0;
     };
-    std::vector<DisplayDraw> _displayDraws;
+    // A deque: drawing a child within one adds another, and the one being
+    // drawn stays where it is.
+    std::deque<DisplayDraw> _displayDraws;
     /// An element drawElement draws as it is, not where the display list
     /// puts it (the display list is drawing it).
     const fla::Element* _displayDirect = nullptr;

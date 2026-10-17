@@ -5,6 +5,7 @@
 #include "../data/document.h"
 #include "../data/frame.h"
 #include "../data/layer.h"
+#include "../data/raw_element.h"
 #include "../data/static_text.h"
 #include "../data/symbol.h"
 #include "../data/symbol_instance.h"
@@ -80,11 +81,13 @@ bool plays(const Layer& layer)
 }
 
 /// The key of an instance among its parent's: its name, or where it is.
-std::string keyOf(const Timeline& timeline, const Layer& layer, const Frame& frame, const SymbolInstance& instance)
+std::string keyOf(const Timeline& timeline, const Layer& layer, const Frame& frame, const SymbolInstance& instance,
+    const Element* element = nullptr)
 {
     if (!instance.name.empty())
         return instance.name;
-    const auto at = std::find(frame.elements.begin(), frame.elements.end(), &instance);
+    const Element* placed = element ? element : &instance;
+    const auto at = std::find(frame.elements.begin(), frame.elements.end(), placed);
     std::ostringstream key;
     key << "#" << layerIndex(timeline, &layer) << ":" << (at - frame.elements.begin()) << ":"
         << (instance.symbol ? instance.symbol->name : instance.libraryItemName);
@@ -104,6 +107,17 @@ void apply(const Transform& transform, double& x, double& y)
     y = transform.m12 * px + transform.m22 * y + transform.ty;
 }
 
+/// A text field's instance name: as written, or the name the file gives it.
+const std::string& nameOf(const StaticText& field)
+{
+    if (!field.instanceName.empty())
+        return field.instanceName;
+    for (const auto& [key, value] : field.extraAttributes)
+        if (key == "name")
+            return value;
+    return field.instanceName;
+}
+
 /// The text field named \a name on \a timeline's frame \a frame: a dynamic
 /// or input one; null when there is none.
 const StaticText* fieldNamed(const Timeline* timeline, int frame, const std::string& name)
@@ -116,7 +130,7 @@ const StaticText* fieldNamed(const Timeline* timeline, int frame, const std::str
         for (const Element* element : key ? key->elements : std::vector<Element*>())
         {
             const auto* text = dynamic_cast<const StaticText*>(element);
-            if (text && text->textType != StaticText::TextType::Static && text->instanceName == name)
+            if (text && text->textType != StaticText::TextType::Static && nameOf(*text) == name)
                 return text;
         }
     }
@@ -1005,7 +1019,7 @@ void MovieRuntime::setupGlobals()
         std::string dotted = "_level0";
         for (const char c : path == "/" ? std::string() : path)
             dotted += c == '/' ? '.' : c;
-        return Value::makeString(dotted + "." + _focus.field->instanceName);
+        return Value::makeString(dotted + "." + nameOf(*_focus.field));
     }));
     vm.setGlobal("Selection", selection);
     ValuePtr mouse = Value::makeObject();
@@ -1391,9 +1405,9 @@ std::optional<std::string> MovieRuntime::textOf(Clip& clip, const StaticText& fi
 {
     if (field.textType == StaticText::TextType::Static)
         return std::nullopt;
-    if (!field.instanceName.empty())
+    if (!nameOf(field).empty())
     {
-        const auto set = clip.texts.find(field.instanceName);
+        const auto set = clip.texts.find(nameOf(field));
         if (set != clip.texts.end())
             return set->second;
     }
@@ -1496,8 +1510,8 @@ void MovieRuntime::focusText(Clip* clip, const StaticText* field)
 
 void MovieRuntime::setFieldText(Clip& clip, const StaticText& field, const std::string& text)
 {
-    if (!field.instanceName.empty())
-        clip.texts[field.instanceName] = text;
+    if (!nameOf(field).empty())
+        clip.texts[nameOf(field)] = text;
     if (display::TextField* shown = displayField(clip, field))
     {
         shown->setText(text);
@@ -1768,10 +1782,10 @@ void MovieRuntime::syncChildren(Clip& clip, std::vector<Clip*>& entered)
             continue;
         for (const Element* element : frame->elements)
         {
-            const auto* instance = dynamic_cast<const SymbolInstance*>(element);
+            const SymbolInstance* instance = instanceOf(element);
             if (!instance || !instance->symbol || instance->symbolType == SymbolType::Graphic)
                 continue;
-            const std::string key = keyOf(*clip.timeline, *layer, *frame, *instance);
+            const std::string key = keyOf(*clip.timeline, *layer, *frame, *instance, element);
             // Already about, from the frame before: it goes on as it was.
             auto found = std::find_if(clip.children.begin(), clip.children.end(),
                 [&key](const std::unique_ptr<Clip>& c) { return c && c->key == key; });
@@ -1901,11 +1915,11 @@ void MovieRuntime::syncDisplay(Clip& clip)
             ++depth;
             std::shared_ptr<display::DisplayObject> object;
             std::string key;
-            const auto* instance = dynamic_cast<const SymbolInstance*>(element);
+            const SymbolInstance* instance = instanceOf(element);
             const auto* text = dynamic_cast<const StaticText*>(element);
             if (instance && instance->symbol && instance->symbolType != SymbolType::Graphic)
             {
-                key = keyOf(*clip.timeline, *layer, *frame, *instance);
+                key = keyOf(*clip.timeline, *layer, *frame, *instance, element);
                 Clip* child = clip.child(key);
                 if (!child || !child->display)
                     continue;
@@ -1919,8 +1933,8 @@ void MovieRuntime::syncDisplay(Clip& clip)
             }
             else if (text && text->textType != StaticText::TextType::Static)
             {
-                key = text->instanceName.empty() ? "#" + std::to_string(li) + ":" + std::to_string(ei) + ":text"
-                                                 : text->instanceName;
+                key = nameOf(*text).empty() ? "#" + std::to_string(li) + ":" + std::to_string(ei) + ":text"
+                                                 : nameOf(*text);
                 object = had(key);
                 auto* field = object && object->kind() == display::ObjectKind::TextField
                     ? static_cast<display::TextField*>(object.get()) : nullptr;
@@ -1928,9 +1942,9 @@ void MovieRuntime::syncDisplay(Clip& clip)
                 {
                     auto made = std::make_shared<display::TextField>();
                     made->setFromElement(*text);
-                    made->setName(text->instanceName);
+                    made->setName(nameOf(*text));
                     // What a script put in it already.
-                    const auto set = text->instanceName.empty() ? clip.texts.end() : clip.texts.find(text->instanceName);
+                    const auto set = nameOf(*text).empty() ? clip.texts.end() : clip.texts.find(nameOf(*text));
                     if (set != clip.texts.end())
                         made->setText(set->second);
                     made->timelineRevision = made->layoutRevision();
@@ -1970,12 +1984,59 @@ void MovieRuntime::syncDisplay(Clip& clip)
         _bindings->declareInstances(clip);
 }
 
+const SymbolInstance* MovieRuntime::instanceOf(const Element* element) const
+{
+    if (const auto* instance = dynamic_cast<const SymbolInstance*>(element))
+        return instance;
+    // A component placed on the stage, kept as its XML: an instance of its
+    // symbol, read once.
+    const auto* raw = dynamic_cast<const RawElement*>(element);
+    if (!raw || raw->xml.find("<DOMComponentInstance") == std::string::npos)
+        return nullptr;
+    const auto found = _components.find(raw);
+    if (found != _components.end())
+        return found->second.get();
+    tinyxml2::XMLDocument xml;
+    if (xml.Parse(raw->xml.c_str(), raw->xml.size()) != tinyxml2::XML_SUCCESS || !xml.RootElement())
+        return nullptr;
+    const tinyxml2::XMLElement* root = xml.RootElement();
+    const char* item = root->Attribute("libraryItemName");
+    const Symbol* symbol = nullptr;
+    for (const Symbol* each : _library)
+        if (each && item && each->name == item)
+            symbol = each;
+    if (!symbol)
+        return nullptr;
+    std::unique_ptr<SymbolInstance>& made = _components[raw];
+    made = std::make_unique<SymbolInstance>(raw->parent);
+    made->symbol = const_cast<Symbol*>(symbol);
+    made->libraryItemName = symbol->name;
+    made->symbolType = symbol->symbolType == SymbolType::Graphic ? SymbolType::MovieClip : symbol->symbolType;
+    made->name = root->Attribute("name") ? root->Attribute("name") : "";
+    if (const tinyxml2::XMLElement* matrix = root->FirstChildElement("matrix"))
+        if (const tinyxml2::XMLElement* m = matrix->FirstChildElement("Matrix"))
+            made->transform = Transform(m->DoubleAttribute("a", 1.0), m->DoubleAttribute("b", 0.0), m->DoubleAttribute("c", 0.0),
+                m->DoubleAttribute("d", 1.0), m->DoubleAttribute("tx", 0.0), m->DoubleAttribute("ty", 0.0));
+    if (const tinyxml2::XMLElement* parameters = root->FirstChildElement("parametersAsXML"))
+        if (parameters->GetText())
+            _componentParameters[made.get()] = parameters->GetText();
+    return made.get();
+}
+
+display::DisplayObject* MovieRuntime::timelineObject(const Clip& clip, const Element* element) const
+{
+    for (const auto& object : clip.timelineObjects)
+        if (object && object->timeline && object->timeline->element == element)
+            return object.get();
+    return nullptr;
+}
+
 display::TextField* MovieRuntime::displayField(const Clip& clip, const StaticText& field) const
 {
     for (const auto& object : clip.timelineObjects)
         if (object && object->kind() == display::ObjectKind::TextField && object->timeline &&
             (object->timeline->element == &field ||
-                (!field.instanceName.empty() && object->timeline->key == field.instanceName)))
+                (!nameOf(field).empty() && object->timeline->key == nameOf(field))))
             return static_cast<display::TextField*>(object.get());
     return nullptr;
 }

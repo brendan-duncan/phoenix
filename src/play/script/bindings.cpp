@@ -1,9 +1,11 @@
-#include "bindings.h"
+#include "native.h"
 
 #include "../../data/bitmap.h"
 #include "../../data/bitmap_decoder.h"
 #include "../../data/symbol.h"
 #include "../display/stage.h"
+
+#include <tinyxml2.h>
 
 #include <algorithm>
 #include <cmath>
@@ -466,6 +468,12 @@ void Bindings::attachSymbol(const Val& self, const Symbol& symbol)
     made->classed = true;
     self->host = std::make_shared<DisplayHost>(*this, made->display, made->life);
     made->display->script = self.ref;
+    // What its first frame places is there before its constructor goes on
+    // (a component's avatar); those clips' first frames are entered after.
+    std::vector<Clip*> entered;
+    runtime.syncChildren(*made, entered);
+    for (Clip* child : entered)
+        runtime._madeToEnter.push_back(child);
 }
 
 void Bindings::goToNow(Clip& clip, int frame, bool play)
@@ -807,7 +815,68 @@ Val Bindings::clipObject(Clip& clip)
         runtime._source = wasSource;
         declareInstances(clip);
     }
+    applyParameters(clip);
     return made;
+}
+
+void Bindings::applyParameters(Clip& clip)
+{
+    const std::string parameters = runtime.componentParameters(clip.placed);
+    if (parameters.empty() || !clip.object)
+        return;
+    tinyxml2::XMLDocument xml;
+    const std::string wrapped = "<parameters>" + parameters + "</parameters>";
+    if (xml.Parse(wrapped.c_str(), wrapped.size()) != tinyxml2::XML_SUCCESS)
+        return;
+    const Val self(clip.object);
+    const auto set = [&](const std::string& name, const Val& value) {
+        try
+        {
+            vm.setProperty(self, name, value);
+        }
+        catch (as3::ScriptException& exception)
+        {
+            report(exception, (clip.name.empty() ? clip.key : clip.name) + "." + name);
+        }
+    };
+    // As the player sets a component's parameters from its inspector: each
+    // in turn, by its type, between componentInspectorSetting true and false.
+    set("componentInspectorSetting", boolean(true));
+    for (const tinyxml2::XMLElement* property = xml.RootElement()->FirstChildElement("property"); property;
+         property = property->NextSiblingElement("property"))
+    {
+        const tinyxml2::XMLElement* inspectable = property->FirstChildElement("Inspectable");
+        if (!inspectable)
+            continue;
+        const char* variable = inspectable->Attribute("variable");
+        const char* named = inspectable->Attribute("name");
+        const std::string name = variable && *variable ? variable : named ? named : "";
+        const std::string value = inspectable->Attribute("defaultValue") ? inspectable->Attribute("defaultValue") : "";
+        const std::string type = inspectable->Attribute("type") ? inspectable->Attribute("type") : "String";
+        if (name.empty())
+            continue;
+        if (type == "Boolean")
+            set(name, boolean(value == "true"));
+        else if (type == "Number")
+            set(name, number(as3::stringToNumber(value)));
+        else if (type == "Color")
+            set(name, number(static_cast<double>(std::strtoul(value.c_str() + (value[0] == '#' ? 1 : 0), nullptr, 16))));
+        else if (type == "Array")
+        {
+            std::vector<Val> items;
+            std::stringstream list(value);
+            std::string item;
+            while (std::getline(list, item, ','))
+                items.push_back(text(item));
+            if (!value.empty())
+                set(name, vm.newArray(std::move(items)));
+        }
+        else if (type == "Collection")
+            continue;
+        else
+            set(name, text(value));
+    }
+    set("componentInspectorSetting", boolean(false));
 }
 
 void Bindings::declareInstances(Clip& clip)
