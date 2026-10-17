@@ -30,6 +30,18 @@ HEAD = """<!doctype html>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>What's new · Phoenix User Guide</title>
 <meta name="description" content="What changed in each release of Phoenix, newest first.">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Phoenix">
+<meta property="og:title" content="What's new · Phoenix User Guide">
+<meta property="og:description" content="What changed in each release of Phoenix, newest first.">
+<meta property="og:url" content="https://phoenixanimate.com/changelog.html">
+<meta property="og:image" content="https://phoenixanimate.com/assets/shots/hero.webp">
+<meta property="og:image:type" content="image/webp">
+<meta property="og:image:width" content="1704">
+<meta property="og:image:height" content="1061">
+<meta property="og:image:alt" content="The Phoenix window with three flower characters on the stage, the timeline below and the Properties panel on the right">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://phoenixanimate.com/assets/shots/hero.webp">
 <meta name="keywords" content="changelog release notes what's new versions updates history">
 <link rel="icon" href="assets/img/logo.png">
 <link rel="stylesheet" href="assets/site.css">
