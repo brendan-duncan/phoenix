@@ -2,6 +2,10 @@
 
 What changed in each release of Phoenix, newest first.
 
+## Unreleased
+
+- Published SWF movies run their ActionScript 3 in Test Movie: the classes compiled into the movie, its components among them, play as they were published, and a movie behind a preloader plays the movie it loads
+
 ## 0.16.1
 
 - Parented layers from Animate files play as Animate shows them: a child turns with its parent but keeps its own size, so arms and legs rigged with layer parenting no longer shrink or flip
