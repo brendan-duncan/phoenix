@@ -68,6 +68,17 @@ PublishSettingsDialog::PublishSettingsDialog(const std::string& xml, const QStri
     profileRow->addWidget(rename);
     profileRow->addWidget(_deleteProfile);
     layout->addLayout(profileRow);
+    // Two columns, so the dialog fits a laptop's screen: where and what on
+    // the left, the formats' options on the right.
+    QHBoxLayout* columns = new QHBoxLayout;
+    QVBoxLayout* left = new QVBoxLayout;
+    QVBoxLayout* right = new QVBoxLayout;
+    columns->addLayout(left, 1);
+    columns->addLayout(right, 1);
+    layout->addLayout(columns);
+    // Wide enough for the folders' paths, still well within a laptop's
+    // screen.
+    setMinimumWidth(860);
 
     // Where the files go: a folder of their own in the parent folder, or
     // the parent folder itself.
@@ -100,7 +111,7 @@ PublishSettingsDialog::PublishSettingsDialog(const std::string& xml, const QStri
     where->addRow("Files go in", _destination);
     connect(_parentFolder, &QLineEdit::textChanged, this, &PublishSettingsDialog::folderChanged);
     connect(_publishFolder, &QLineEdit::textChanged, this, &PublishSettingsDialog::folderChanged);
-    layout->addWidget(location);
+    left->addWidget(location);
 
     // The formats, each with its file name.
     QGroupBox* formats = new QGroupBox("Formats", this);
@@ -128,7 +139,8 @@ PublishSettingsDialog::PublishSettingsDialog(const std::string& xml, const QStri
     // The HTML5 page's name moves aside while the HTML page has the plain one.
     connect(_html, &QCheckBox::toggled, this, &PublishSettingsDialog::namesChanged);
     grid->setColumnStretch(1, 1);
-    layout->addWidget(formats);
+    left->addWidget(formats);
+    left->addStretch(1);
     connect(_defaultNames, &QCheckBox::toggled, this, &PublishSettingsDialog::namesChanged);
     namesChanged();
 
@@ -155,7 +167,7 @@ PublishSettingsDialog::PublishSettingsDialog(const std::string& xml, const QStri
     });
     _width->setEnabled(!settings.matchMovie);
     _height->setEnabled(!settings.matchMovie);
-    layout->addWidget(size);
+    right->addWidget(size);
 
     // Each format's options.
     QGroupBox* options = new QGroupBox("Options", this);
@@ -242,7 +254,8 @@ PublishSettingsDialog::PublishSettingsDialog(const std::string& xml, const QStri
     soundRow->addWidget(_soundStereo);
     soundRow->addStretch(1);
     form->addRow("SWF sound", soundRow);
-    layout->addWidget(options);
+    right->addWidget(options);
+    right->addStretch(1);
     QLabel* note = new QLabel("Still images show the frame labeled #Static, or the first frame. The settings "
                               "are kept in the document, so the file publishes the same wherever it goes.",
         this);
