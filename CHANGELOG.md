@@ -9,6 +9,9 @@ What changed in each release of Phoenix, newest first.
 - SWF movies: the soundtrack covers every scene, played in a row, and event sounds start on the timeline they are on, so a movie clip a script stops starts no more of its sounds
 - ActionScript 1 and 2 compiled into SWF movies runs a `finally` block when `break`, `continue` or `return` leaves its `try`
 - Test Movie runs a movie clip's `on()` handlers, and runs them and its `onClipEvent()` handlers on the clip itself, as players do
+- HTML5 Canvas scripts draw in Test Movie: `createjs.Shape` and its `Graphics` (fills, strokes, gradients, bitmap fills, arcs, shapes and the short forms), `Text`, `Bitmap`, `Container`, `Sprite` with `SpriteSheet`, and `MovieClip` timelines made in code
+- HTML5 Canvas scripts' filters, `cache()`, `shadow`, masks and `compositeOperation` show in Test Movie, and `skewX`, `skewY`, `regX` and `regY` move objects as in CreateJS
+- HTML5 Canvas scripts reach an instance before its keyframe, and an instance placed again by a later keyframe keeps its listeners
 
 ## 0.17.1
 

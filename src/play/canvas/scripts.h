@@ -16,6 +16,7 @@ class DOMElement;
 class Frame;
 
 namespace display {
+class BitmapData;
 class DisplayObject;
 class Event;
 } // namespace display
@@ -59,9 +60,20 @@ private:
     int idOf(Clip& clip);
     /// The clip numbered \a id, or null once it is gone.
     Clip* clipOf(int id) const;
-    /// The display object \a id's events come from: the clip's, or the
-    /// stage's for -1.
+    /// The display object numbered \a id: a clip's, one the scripts made
+    /// (new createjs.Shape()...), or the stage for -1; null for none.
     display::DisplayObject* displayOf(int id) const;
+    std::shared_ptr<display::DisplayObject> sharedOf(int id) const;
+    /// The number of \a object (a clip's or one the scripts made), -1 for
+    /// the stage, -2 for one the scripts do not know.
+    int idOfDisplay(const display::DisplayObject* object);
+    /// After the scripts have run: what they drew, wrote and set goes to
+    /// the display list, and the masks follow what they mask.
+    void sync();
+    void syncMasks();
+    /// The number of the image \a source names (see Native::image),
+    /// read the first time; -1 for none.
+    int imageNamed(const std::string& source);
     /// Starts or stops telling the scripts of the display list's events of
     /// CreateJS's \a type ("click", "mousedown"...) on \a id's object.
     void listen(int id, const std::string& type, bool on);
@@ -97,6 +109,27 @@ private:
         uint64_t id = 0;
     };
     std::map<std::pair<int, std::string>, Listening> _listening;
+    /// The display objects the scripts made, by number (the same numbers
+    /// as the clips'), until the scripts let go of them; and the numbers.
+    std::map<int, std::shared_ptr<display::DisplayObject>> _objects;
+    std::map<const display::DisplayObject*, int> _objectIds;
+    /// The images the scripts draw (library bitmaps, files, what a cache
+    /// drew), by number, and the numbers of those named.
+    std::map<int, std::shared_ptr<display::BitmapData>> _images;
+    std::map<std::string, int> _imageNames;
+    int _nextImage = 0;
+    /// A mask (a shape, or an image's alpha) on an object, by its number:
+    /// drawn through a copy placed where CreateJS places the mask.
+    struct Masking
+    {
+        /// The shape's number, or the image's.
+        int shape = -1;
+        int image = -1;
+        double x = 0.0, y = 0.0;
+        std::shared_ptr<display::DisplayObject> proxy;
+        uint64_t copied = 0;
+    };
+    std::map<int, Masking> _masks;
     /// The frame scripts compiled, by frame: their place in the scripts'
     /// list, -1 for one that does not compile. And the frames the scripts
     /// are named for, to tell where an error was from its stack.
