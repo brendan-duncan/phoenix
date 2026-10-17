@@ -16,6 +16,7 @@
 #include "stroke_style_dialog.h"
 #include "../edit/paint_brushes.h"
 #include "theme.h"
+#include "toolbox.h"
 #include "../jsfl/behavior_frames.h"
 #include "../jsfl/native_extensions.h"
 
@@ -53,6 +54,11 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QImage>
+#include <QMenu>
+#include <QPainter>
+#include <QResizeEvent>
+#include <QSignalBlocker>
+#include <QToolButton>
 #include <QTemporaryDir>
 
 #include <algorithm>
@@ -136,7 +142,10 @@ const char* const kHelp =
     "      <solid|hairline|dashed|dotted|ragged|stipple|hatched|paint-brush>]\n"
     "      (Custom Stroke Style, for a stroke drawn with the file's brush);\n"
     "      brush-library [--category <name>] (the file's brushes added to a\n"
-    "      library kept only for the picture); document-brushes.\n"
+    "      library kept only for the picture); document-brushes; toolbox\n"
+    "      [--columns N] [--height H] [--orientation horizontal] [--width W]\n"
+    "      [--flyout <tool>] (the Tools panel, taking more columns or rows\n"
+    "      where it is too short or narrow, a slot's flyout beside it).\n"
     "\n"
     "  run-script <script.jsfl|script.py> [document ...] [--timeout SECONDS]\n"
     "             [--no-native-extensions]\n"
@@ -1037,13 +1046,98 @@ int play(const QStringList& args)
     return errors > 0 ? 1 : 0;
 }
 
+/// capture-dialog toolbox: the Tools panel as Phoenix builds it, in the
+/// default layout, --columns wide (down a side) or along the top
+/// (--orientation horizontal), --height tall or --width wide; too short or
+/// narrow, it takes more columns or rows. --flyout <tool> opens that
+/// tool's slot beside it.
+int captureToolbox(const QStringList& args, const QString& out)
+{
+    const QString theme = option(args, "--theme");
+    MainWindow window(QString(), nullptr, false);
+    theme::preview(theme::load(theme.isEmpty() ? QString("Dark") : theme));
+    Toolbox* toolbox = window.toolbox();
+    // Quiet, so the layout saved for the user's own panel stays as it is,
+    // and out of its dock, which would size it to itself; it goes back
+    // after.
+    const QSignalBlocker quiet(toolbox);
+    QWidget* const dock = toolbox->parentWidget();
+    toolbox->setParent(nullptr);
+    const std::unique_ptr<QObject, std::function<void(QObject*)>> back(toolbox,
+        [dock](QObject* object) { static_cast<QWidget*>(object)->setParent(dock); });
+    Toolbox::Layout layout;
+    layout.columns = std::clamp(option(args, "--columns").toInt(), 1, 8);
+    toolbox->setLayout(layout);
+    const bool horizontal = option(args, "--orientation") == "horizontal";
+    toolbox->setOrientation(horizontal ? Qt::Horizontal : Qt::Vertical);
+    const QSize hint = toolbox->sizeHint();
+    QSize size;
+    int across = 1;
+    if (horizontal)
+    {
+        const int width = option(args, "--width").toInt() > 0 ? option(args, "--width").toInt() : hint.width();
+        across = toolbox->acrossFor(width);
+        size = QSize(width, toolbox->widthFor(across));
+    }
+    else
+    {
+        const int height = option(args, "--height").toInt() > 0 ? option(args, "--height").toInt() : hint.height();
+        across = toolbox->acrossFor(height);
+        size = QSize(toolbox->widthFor(across), height);
+    }
+    // Never shown, so it is told of its size itself, to lay out for it.
+    const QSize before = toolbox->size();
+    toolbox->resize(size);
+    QResizeEvent resized(size, before);
+    QApplication::sendEvent(toolbox, &resized);
+    QPixmap picture = toolbox->grab();
+    const QString flyoutTool = option(args, "--flyout");
+    if (!flyoutTool.isEmpty())
+    {
+        // The slot's flyout beside its button, as a long press opens it.
+        QToolButton* button = toolbox->buttonFor(flyoutTool);
+        QMenu* flyout = button ? button->menu() : nullptr;
+        if (!flyout)
+        {
+            std::fprintf(stderr, "capture-dialog: %s has no flyout\n", qPrintable(flyoutTool));
+            return 1;
+        }
+        flyout->ensurePolished();
+        flyout->adjustSize();
+        const QPixmap menu = flyout->grab();
+        const QPoint at(button->geometry().right() + 8, button->geometry().top());
+        const double ratio = picture.devicePixelRatio();
+        const QSize whole(std::max(size.width(), at.x() + menu.deviceIndependentSize().toSize().width() + 8), size.height());
+        QPixmap composed(whole * ratio);
+        composed.setDevicePixelRatio(ratio);
+        composed.fill(theme::color("window"));
+        QPainter painter(&composed);
+        painter.drawPixmap(0, 0, picture);
+        painter.drawPixmap(at, menu);
+        // Its edge, which the window around a shown menu would draw.
+        painter.setPen(theme::color("swatchBorder"));
+        painter.drawRect(QRect(at, menu.deviceIndependentSize().toSize()).adjusted(0, 0, -1, -1));
+        painter.end();
+        picture = composed;
+    }
+    if (!picture.save(out))
+    {
+        std::fprintf(stderr, "Could not write %s\n", qPrintable(out));
+        return 1;
+    }
+    std::printf("Drew the Tools panel, %d %s, %dx%d, to %s\n", across,
+        horizontal ? (across == 1 ? "row" : "rows") : (across == 1 ? "column" : "columns"), size.width(),
+        size.height(), qPrintable(out));
+    return 0;
+}
+
 /// capture-dialog <dialog> <file> --out <png> [--theme <name>]: a dialog
 /// drawn as it opens for \a file, with no window, for the guide's pictures
 /// (Dark unless another theme is named): publish-settings, stroke-style,
-/// brush-library or document-brushes.
+/// brush-library, document-brushes or toolbox.
 int captureDialog(const QStringList& args)
 {
-    const QStringList dialogs{"publish-settings", "stroke-style", "brush-library", "document-brushes"};
+    const QStringList dialogs{"publish-settings", "stroke-style", "brush-library", "document-brushes", "toolbox"};
     if (args.size() < 2 || !dialogs.contains(args.at(0)))
     {
         std::fprintf(stderr, "capture-dialog: %s <file> --out <png> [--theme <name>]\n",
@@ -1130,6 +1224,8 @@ int captureDialog(const QStringList& args)
             dialog.chooseCategory(category);
         return written(dialog, "Brush Library");
     }
+    if (args.at(0) == "toolbox")
+        return captureToolbox(args, out);
     if (args.at(0) == "document-brushes")
     {
         DocumentBrushesDialog dialog(document, DocumentBrushesDialog::Hooks(), nullptr);
