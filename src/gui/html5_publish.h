@@ -14,9 +14,10 @@ class Document;
 /// browser with Phoenix's JavaScript runtime. Beside the page go the
 /// runtime (phoenix.js, and phoenix-createjs.js for an HTML5 Canvas
 /// document), the movie's content (<name>.content.js, see
-/// fla::html5::content) and its pictures and sounds (<name>_assets). The
-/// page loads <name>.as.js too when there is one: the movie's ActionScript
-/// translated to JavaScript (resources/html5/README.md).
+/// fla::html5::content) and its pictures and sounds (<name>_assets). An
+/// ActionScript 3 movie's scripts go beside it as <name>.as.js (see
+/// actionScript), which the page loads (resources/html5/README.md,
+/// "Translated ActionScript").
 namespace Html5Publish {
 
 struct Settings

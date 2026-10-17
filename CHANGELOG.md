@@ -4,6 +4,7 @@ What changed in each release of Phoenix, newest first.
 
 ## Unreleased
 
+- HTML5 pages play ActionScript 3 movies with their scripts: frame scripts, the document class, linked classes and the components are translated to JavaScript, with a source map back to the .as files; what does not translate is reported with its file or frame and line
 - Published SWF movies carry their ActionScript 3, compiled: frame scripts, the document class, linked symbols' classes and the classes they use, and the fl.* components with their inspector parameters, so ActionScript 3 movies run outside Phoenix; what does not compile is reported with its file or frame and line
 - Publish to HTML5: a web page that plays the movie in any current browser with Phoenix's own player, no SWF needed, with its symbols, tweens, masks, filters, blend modes, text, bitmaps and sounds; HTML5 Canvas documents' scripts run with CreateJS's API. Also from the command line with `--out page.html`
 - The HTML page Publish writes for an SWF movie plays it in today's browsers with Ruffle, loaded from the web
