@@ -31,6 +31,17 @@
 <h1>AI assistants</h1>
 <p class="lead">An AI assistant can work with Phoenix: look at your document, tell you what is in it or wrong with it, and make changes for you, such as adding layers, drawing shapes, setting up tweens or tidying the library. Every change goes into the undo history, so one <kbd>Ctrl</kbd>+<kbd>Z</kbd> takes back what you did not want.</p>
 
+<div class="callout" id="your-artwork">
+  <span class="label">Your artwork and AI</span>
+  <p><strong>No AI is built into Phoenix.</strong> Phoenix has no AI model of its own and calls no AI service, it makes no images with AI, and it never sends your artwork anywhere to train an AI. Nothing you open or make in Phoenix leaves your computer for an AI unless you bring one in: an assistant you run yourself, such as Claude Code, Claude Desktop or another assistant that speaks MCP (Gemini CLI, for one), signed in with your own account or API key, and allowed to connect when Phoenix asks.</p>
+  <p>An assistant is a technical helper. It reads your document's scenes, layers, frames and library, makes the changes you ask for with Phoenix's own tools, and looks at a frame when you or it renders one. Every change it makes is in the undo history. What it reads goes to the company that runs it, under the terms of your account with them, so that is where training is decided, not in Phoenix:</p>
+  <ul>
+    <li>Anthropic does not train its models on what comes through the Claude API or its business plans. On a personal Claude plan, turn off <strong>Help improve Claude</strong> in Claude's privacy settings and it does not train on your chats or coding sessions either.</li>
+    <li>Google does not train on what you send with a paid Gemini API key; its free tier may use what you send to improve its products.</li>
+  </ul>
+  <p>These are the services' own terms, and they can change: check them before you share work you care about. Without an assistant, Phoenix has no AI in it at all.</p>
+</div>
+
 <p>Phoenix speaks the Model Context Protocol (MCP), which assistants such as Claude Desktop and Claude Code use to work with other programs. The assistant runs on your computer and talks to Phoenix there.</p>
 
 <h2>Open Claude Code from Phoenix</h2>
