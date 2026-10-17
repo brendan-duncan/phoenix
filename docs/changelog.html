@@ -34,6 +34,19 @@
 
 <p class="lead">What changed in each release of Phoenix, newest first.</p>
 
+<h2 id="vunreleased">Unreleased</h2>
+
+<ul>
+  <li>SWF movies keep the movie clips, buttons and text fields inside graphic symbols as real clips scripts reach by name, the graphic's frames placed into the timeline as it loops, plays once or holds a frame</li>
+  <li>SWF movies: shape tweens go in as morph shapes the player blends, buttons keep their masks, and buttons play the sounds on their Up, Over, Down and Hit frames</li>
+  <li>SWF movies: the soundtrack covers every scene, played in a row, and event sounds start on the timeline they are on, so a movie clip a script stops starts no more of its sounds</li>
+  <li>ActionScript 1 and 2 compiled into SWF movies runs a <code>finally</code> block when <code>break</code>, <code>continue</code> or <code>return</code> leaves its <code>try</code></li>
+  <li>Test Movie runs a movie clip's <code>on()</code> handlers, and runs them and its <code>onClipEvent()</code> handlers on the clip itself, as players do</li>
+  <li>HTML5 Canvas scripts draw in Test Movie: <code>createjs.Shape</code> and its <code>Graphics</code> (fills, strokes, gradients, bitmap fills, arcs, shapes and the short forms), <code>Text</code>, <code>Bitmap</code>, <code>Container</code>, <code>Sprite</code> with <code>SpriteSheet</code>, and <code>MovieClip</code> timelines made in code</li>
+  <li>HTML5 Canvas scripts' filters, <code>cache()</code>, <code>shadow</code>, masks and <code>compositeOperation</code> show in Test Movie, and <code>skewX</code>, <code>skewY</code>, <code>regX</code> and <code>regY</code> move objects as in CreateJS</li>
+  <li>HTML5 Canvas scripts reach an instance before its keyframe, and an instance placed again by a later keyframe keeps its listeners</li>
+</ul>
+
 <h2 id="v0-17-1">0.17.1</h2>
 
 <ul>

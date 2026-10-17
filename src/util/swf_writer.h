@@ -283,6 +283,37 @@ struct EditText
     double leftMargin = 0.0, rightMargin = 0.0, indent = 0.0, leading = 0.0;
 };
 
+/// A shape that changes from one form to another as its placement's ratio
+/// runs from 0 to 65535 (DefineMorphShape): every fill and line with a
+/// start and an end, and its outlines, each with the same pieces at the
+/// start and at the end. Fills are solid or gradients (the end's stops as
+/// many as the start's); lines solid.
+struct MorphFill
+{
+    Fill start;
+    Fill end;
+};
+
+struct MorphLine
+{
+    double startWidth = 1.0, endWidth = 1.0;
+    Color startColor, endColor;
+};
+
+/// One outline of a morph shape: its fills on either side (as SWF's edges
+/// have them: fill 0 on the left, fill 1 on the right) and its line, each
+/// 1 and up into the morph's tables, 0 for none; and its pieces at the
+/// start and at the end, a Move first and then as many Lines or Quads in
+/// each.
+struct MorphPath
+{
+    int fill0 = 0;
+    int fill1 = 0;
+    int line = 0;
+    std::vector<Segment> start;
+    std::vector<Segment> end;
+};
+
 /// A movie clip's own timeline (DefineSprite): characters placed and
 /// removed, sounds started and scripts run frame by frame, as a movie's
 /// are. Written with Writer::defineSprite.
@@ -365,6 +396,17 @@ public:
 
     /// A movie clip of \a sprite's frames (at least one); its character id.
     int defineSprite(const Sprite& sprite);
+
+    /// A morph shape (DefineMorphShape); its character id, or 0 when it
+    /// has no outline or an outline's start and end differ in pieces.
+    int defineMorphShape(const std::vector<MorphFill>& fills, const std::vector<MorphLine>& lines,
+        const std::vector<MorphPath>& paths);
+
+    /// The sounds button \a button plays (DefineButtonSound), by transition:
+    /// the pointer moving off (over up to idle), moving on (idle to over
+    /// up), pressing (over up to over down) and releasing (over down to
+    /// over up); a sound id 0 for none.
+    void defineButtonSound(int button, const std::vector<std::pair<int, SoundInfo>>& transitions);
 
     /// A button (DefineButton2): its characters by state, and the actions
     /// its transitions run; its character id. A menu button tracks the

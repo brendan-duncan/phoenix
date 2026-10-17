@@ -106,6 +106,11 @@ struct Clip
     std::vector<const Frame*> timelineFrames;
 
     std::vector<std::unique_ptr<Clip>> children;
+    /// JavaScript (HTML5 Canvas): named instances of its timeline off the
+    /// stage for now, as CreateJS keeps each from the start, made before
+    /// their frame or kept from an earlier one, the same object (its
+    /// listeners and all) when a frame places them again.
+    std::vector<std::unique_ptr<Clip>> parked;
     /// What scripts see it as.
     as3::ValuePtr object;
     /// Its onClipEvent handlers, by event.
@@ -613,6 +618,13 @@ private:
     bool scriptsLookLikeActionScript3() const;
     /// Whether they look like ActionScript 1 or 2 (scripts on instances...).
     bool scriptsLookLikeActionScript2() const;
+    /// JavaScript: the instance named \a name on \a clip's timeline,
+    /// wherever its frame is: on the stage, or kept off it (made now when
+    /// its frame is still to come). Null when the timeline has none.
+    Clip* canvasInstance(Clip& clip, const std::string& name);
+    /// A kept instance placed again: from its first frame, as CreateJS
+    /// resets a clip a timeline adds back.
+    void revive(Clip& clip, std::vector<Clip*>& entered);
     /// Moves the clips scripts made to where the display list has them:
     /// into the clip whose display object holds theirs, or off the stage.
     void placeMadeClips();

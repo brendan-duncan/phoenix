@@ -885,6 +885,43 @@ TEST(movie_runtime_clip_event_gathering_outlives_its_clip)
     CHECK(traced.size() == 2 && traced[0] == "loaded" && traced[1] == "ok");
 }
 
+TEST(movie_runtime_runs_a_clips_on_handlers_on_the_clip)
+{
+    // A movie clip's on() and onClipEvent() handlers run on the clip, as a
+    // player runs a clip's actions: its names, its timeline, this.
+    Movie movie;
+    movie.root->name = "Scene 1";
+    fla::Symbol* mc = movie.symbol("Mc", fla::SymbolType::MovieClip, 3);
+    fla::Layer* art = movie.layer(*movie.root, "art");
+    movie.place(*movie.frame(*art, 0, 2), *mc, "mc",
+        "onClipEvent (load) {\n\tsize = 5;\n\tstop();\n}\n"
+        "on (press) {\n\ttrace('pressed ' + _name + ' ' + size + ' ' + (this == _root.mc));\n\tgotoAndStop(3);\n}\n");
+    fla::Layer* actions = movie.layer(*movie.root, "actions");
+    movie.frame(*actions, 0, 1);
+    movie.frame(*actions, 1, 1, "stop();\ntrace(mc.size + ' ' + _root.size + ' ' + mc._currentframe);\n");
+
+    std::vector<std::string> traced;
+    std::vector<std::string> errors;
+    fla::play::MovieRuntime runtime(*movie.root, 12.0);
+    runtime.trace = [&traced](const std::string& line) { traced.push_back(line); };
+    runtime.error = [&errors](const std::string& line) { errors.push_back(line); };
+    runtime.start();
+    runtime.step();
+    fla::play::Clip* clip = runtime.root().child("mc");
+    CHECK(clip != nullptr && clip->wantsMouse());
+    if (clip)
+    {
+        runtime.pointerOver(clip);
+        runtime.pointerDown();
+        runtime.pointerUp();
+        CHECK(clip->frame == 2);
+    }
+    for (const std::string& error : errors)
+        std::printf("    %s\n", error.c_str());
+    CHECK(errors.empty());
+    CHECK(traced.size() == 2 && traced[0] == "5 undefined 1" && traced[1] == "pressed mc 5 true");
+}
+
 TEST(movie_runtime_holds_a_clip_where_its_time_remap_says)
 {
     // A clip of ten frames on a scene of ten, held on the scene's frames

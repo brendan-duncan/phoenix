@@ -361,6 +361,10 @@ bool Clip::wantsMouse() const
 {
     if (button)
         return true;
+    // A clip with on() handlers for the pointer, as a button is.
+    for (const char* event : {"press", "release", "releaseOutside", "rollOver", "rollOut", "dragOver", "dragOut"})
+        if (clipEvents.count(event))
+            return true;
     for (const auto& [type, list] : listeners)
         if (!list.empty() && isMouseEvent(type))
             return true;
@@ -1882,6 +1886,19 @@ void MovieRuntime::syncChildren(Clip& clip, std::vector<Clip*>& entered)
                 kept.push_back(std::move(*found));
                 continue;
             }
+            // JavaScript: one kept off the stage comes back as it was.
+            auto parked = std::find_if(clip.parked.begin(), clip.parked.end(),
+                [&key](const std::unique_ptr<Clip>& c) { return c && c->key == key; });
+            if (parked != clip.parked.end())
+            {
+                (*parked)->placed = instance;
+                (*parked)->layer = layer;
+                Clip* back = parked->get();
+                kept.push_back(std::move(*parked));
+                clip.parked.erase(parked);
+                revive(*back, entered);
+                continue;
+            }
             auto made = std::make_unique<Clip>();
             made->symbol = instance->symbol;
             made->timeline = instance->symbol->timelines.empty() ? nullptr : instance->symbol->timelines.front();
@@ -1907,6 +1924,13 @@ void MovieRuntime::syncChildren(Clip& clip, std::vector<Clip*>& entered)
     {
         if (gone && gone->made)
             kept.push_back(std::move(gone));
+        else if (gone && _javaScript && !gone->name.empty())
+        {
+            // CreateJS keeps a named instance for when a frame adds it back;
+            // the display list lets it go below.
+            _sent.erase(std::remove(_sent.begin(), _sent.end(), gone.get()), _sent.end());
+            clip.parked.push_back(std::move(gone));
+        }
         else if (gone)
         {
             forget(*gone);
@@ -1915,6 +1939,68 @@ void MovieRuntime::syncChildren(Clip& clip, std::vector<Clip*>& entered)
     }
     clip.children = std::move(kept);
     syncDisplay(clip);
+}
+
+void MovieRuntime::revive(Clip& clip, std::vector<Clip*>& entered)
+{
+    std::vector<Clip*> had;
+    for (const auto& child : clip.children)
+        if (child && !child->made)
+            had.push_back(child.get());
+    clip.frame = 0;
+    clip.playing = !clip.button;
+    clip.placement.known = false;
+    entered.push_back(&clip);
+    // What its first frame places: those it had from before start over too.
+    syncChildren(clip, entered);
+    for (const auto& child : clip.children)
+        if (child && std::find(had.begin(), had.end(), child.get()) != had.end())
+            revive(*child, entered);
+}
+
+Clip* MovieRuntime::canvasInstance(Clip& clip, const std::string& name)
+{
+    if (name.empty())
+        return nullptr;
+    if (Clip* on = clip.named(name))
+        return on;
+    for (const auto& kept : clip.parked)
+        if (kept && kept->name == name)
+            return kept.get();
+    if (!_javaScript || !clip.timeline)
+        return nullptr;
+    // Its first keyframe: made from it now, kept until a frame places it.
+    for (const Layer* layer : clip.timeline->layers)
+    {
+        if (!layer || !plays(*layer))
+            continue;
+        for (const Frame* frame : layer->frames)
+            for (const Element* element : frame ? frame->elements : std::vector<Element*>())
+            {
+                const SymbolInstance* instance = instanceOf(element);
+                if (!instance || !instance->symbol || instance->symbolType == SymbolType::Graphic ||
+                    instance->name != name)
+                    continue;
+                auto made = std::make_unique<Clip>();
+                made->symbol = instance->symbol;
+                made->timeline = instance->symbol->timelines.empty() ? nullptr : instance->symbol->timelines.front();
+                made->parent = &clip;
+                made->layer = layer;
+                made->placed = instance;
+                made->name = instance->name;
+                made->key = keyOf(*clip.timeline, *layer, *frame, *instance, element);
+                made->button = instance->symbolType == SymbolType::Button;
+                made->playing = !made->button;
+                made->length = lengthOf(made->timeline);
+                attachDisplay(*made);
+                // What is in it is made too, as CreateJS makes it all.
+                std::vector<Clip*> inside;
+                syncChildren(*made, inside);
+                clip.parked.push_back(std::move(made));
+                return clip.parked.back().get();
+            }
+    }
+    return nullptr;
 }
 
 void MovieRuntime::attachDisplay(Clip& clip)
@@ -2141,6 +2227,9 @@ void MovieRuntime::forget(Clip& clip)
         for (const auto& child : at.children)
             if (child)
                 mark(*child);
+        for (const auto& child : at.parked)
+            if (child)
+                mark(*child);
     };
     mark(clip);
     letGo(going);
@@ -2232,17 +2321,21 @@ void MovieRuntime::enter(std::vector<Clip*>& entered)
             const std::string script = instanceScript(*clip.placed);
             if (!script.empty())
             {
-                // Run with __onClipEvent gathering the handlers, into the
-                // clip as long as it lives.
+                // Run on the clip with __onClipEvent and __on gathering the
+                // handlers, into the clip as long as it lives: a clip's
+                // on() and onClipEvent() handlers run on the clip, as a
+                // player runs a placed clip's actions.
                 const std::shared_ptr<Clip*> life = clip.life;
-                _vm->registerBuiltin("__onClipEvent", [life](const std::vector<as3::ValuePtr>& args) {
+                const auto gather = [life](const std::vector<as3::ValuePtr>& args) {
                     Clip* gathering = *life;
                     if (gathering && args.size() >= 2)
                         for (const as3::ValuePtr& event : args[0]->elements)
                             gathering->clipEvents[event->toString()] = args[1];
                     return as3::Value::makeUndefined();
-                });
-                run(clip.placed, script, *clip.parent, clip.name.empty() ? clip.key : clip.name);
+                };
+                _vm->registerBuiltin("__onClipEvent", gather);
+                _vm->registerBuiltin("__on", gather);
+                run(clip.placed, script, clip, clip.name.empty() ? clip.key : clip.name);
             }
             runClipEvent(clip, "load");
         }
@@ -2289,6 +2382,13 @@ void MovieRuntime::applyScene(int scene, int frame, bool play)
             _gone.push_back(std::move(child));
         }
     root.children.clear();
+    for (auto& child : root.parked)
+        if (child)
+        {
+            forget(*child);
+            _gone.push_back(std::move(child));
+        }
+    root.parked.clear();
     _scene = scene;
     root.timeline = _scenes[static_cast<size_t>(scene)];
     root.length = lengthOf(root.timeline);
@@ -2623,6 +2723,8 @@ void MovieRuntime::pointerOver(Clip* button)
                 buttonSound(*left, 0);
             runButtonEvent(*left, _pressed == left ? "dragOut" : "rollOut");
         }
+        else
+            runClipEvent(*left, _pressed == left ? "dragOut" : "rollOut");
     }
     // What the pointer moved onto may be gone once those settled.
     if (button && _hovered == button)
@@ -2635,6 +2737,8 @@ void MovieRuntime::pointerOver(Clip* button)
                 buttonSound(*button, 1);
             runButtonEvent(*button, _pressed == button ? "dragOver" : "rollOver");
         }
+        else
+            runClipEvent(*button, _pressed == button ? "dragOver" : "rollOver");
     }
     settle();
 }
@@ -2663,6 +2767,8 @@ void MovieRuntime::pointerDown()
             buttonSound(pressed, 2);
             runButtonEvent(pressed, "press");
         }
+        else
+            runClipEvent(pressed, "press");
     }
     settle();
 }
@@ -2702,6 +2808,8 @@ void MovieRuntime::pointerUp()
             buttonSound(*pressed, 3);
         runButtonEvent(*pressed, pressed == hovered ? "release" : "releaseOutside");
     }
+    else if (pressed)
+        runClipEvent(*pressed, pressed == hovered ? "release" : "releaseOutside");
     settle();
 }
 

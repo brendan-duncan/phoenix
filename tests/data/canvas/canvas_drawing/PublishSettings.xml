@@ -1,0 +1,36 @@
+<flash_profiles>
+<flash_profile version="1.0" name="Default" current="true">
+  <PublishFormatProperties enabled="true">
+    <defaultNames>1</defaultNames>
+    <flash>0</flash>
+    <projectorWin>0</projectorWin>
+    <projectorMac>0</projectorMac>
+    <html>0</html>
+    <gif>0</gif>
+    <jpeg>0</jpeg>
+    <png>0</png>
+    <swc>0</swc>
+    <flashDefaultName>1</flashDefaultName>
+    <htmlDefaultName>1</htmlDefaultName>
+    <flashFileName>canvas_game.swf</flashFileName>
+    <htmlFileName>canvas_game.html</htmlFileName>
+  </PublishFormatProperties>
+  <PublishProperties id="JavaScript/HTML" name="JavaScript/HTML" enabled="true">
+    <Property name="filename">canvas_game.html</Property>
+    <Property name="default">true</Property>
+    <Property name="loop">true</Property>
+    <Property name="includeHTML">true</Property>
+    <Property name="hostedLibs">true</Property>
+    <Property name="libraryPath">libs/</Property>
+    <Property name="exportImages">true</Property>
+    <Property name="imagesPath">images/</Property>
+    <Property name="exportSounds">true</Property>
+    <Property name="soundsPath">sounds/</Property>
+    <Property name="namespace">lib</Property>
+    <Property name="frameBounds">false</Property>
+    <Property name="centerOption">2</Property>
+    <Property name="makeResponsive">false</Property>
+    <Property name="preloaderOption">default</Property>
+  </PublishProperties>
+</flash_profile>
+</flash_profiles>

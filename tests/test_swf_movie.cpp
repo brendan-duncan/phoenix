@@ -9,6 +9,7 @@
 #include "../src/data/symbol_instance.h"
 #include "../src/data/symbol_list.h"
 #include "../src/data/timeline.h"
+#include "../src/edit/graphic_loop.h"
 #include "../src/edit/html5_export.h"
 #include "../src/edit/swf_actionscript3.h"
 #include "../src/edit/swf_movie.h"
@@ -98,12 +99,23 @@ public:
             }
             const auto* instance = dynamic_cast<const fla::SymbolInstance*>(element);
             const auto* text = dynamic_cast<const fla::StaticText*>(element);
-            if (instance && instance->symbolType != fla::SymbolType::Graphic)
+            const bool opened = instance && instance->symbolType == fla::SymbolType::Graphic && instance->symbol &&
+                fla::swfmovie::holdsClips(*instance->symbol);
+            if (instance && (instance->symbolType != fla::SymbolType::Graphic || opened))
             {
                 piece.instance = instance;
                 piece.color = instance->colorTransform;
                 piece.filters = instance->filters;
                 piece.blendMode = instance->blendMode;
+                if (opened)
+                {
+                    int length = 1;
+                    for (const fla::Layer* inner : instance->symbol->timelines.front()->layers)
+                        for (const fla::Frame* f : inner->frames)
+                            length = std::max(length, f->index + f->duration);
+                    piece.graphicFrame = fla::graphicFrame(instance->loopType, instance->firstFrame,
+                        instance->lastFrame, length, frame - key->index);
+                }
             }
             else if (text && text->textType != fla::StaticText::TextType::Static)
                 piece.text = text;
@@ -122,6 +134,8 @@ public:
                     _shapes[element] = id;
                 }
                 piece.shapes.push_back({id, 1.0, swf::Writer::Blend::Normal});
+                // Drawn where it is: placed as it is.
+                piece.matrix = swf::Matrix();
             }
             pieces.push_back(piece);
         }
@@ -1064,4 +1078,305 @@ TEST(html5_tells_where_actionscript3_does_not_translate)
     CHECK(told);
     if (!told)
         std::printf("    notes: %s\n", text(translated.notes).c_str());
+}
+
+namespace {
+
+/// The placements (PlaceObject2 and 3) on a timeline (0 the main one) by the
+/// name they give, and how many there are.
+std::map<std::string, int> namesPlaced(const std::vector<Tag>& tags, int sprite)
+{
+    std::map<std::string, int> out;
+    for (const Tag& tag : tags)
+    {
+        if (tag.sprite != sprite || (tag.code != 26 && tag.code != 70) || !(tag.body[0] & 0x20))
+            continue;
+        // The name is the only text in these bodies: the longest printable
+        // run.
+        std::string best, run;
+        for (const uint8_t c : tag.body)
+        {
+            if (c >= 'a' && c <= 'z')
+                run += static_cast<char>(c);
+            else
+            {
+                if (run.size() > best.size())
+                    best = run;
+                run.clear();
+            }
+        }
+        ++out[run.size() > best.size() ? run : best];
+    }
+    return out;
+}
+
+const char* const kSquare = "<edges><Edge fillStyle1=\"1\" edges=\"!0 0|200 0!200 0|200 200!200 200|0 200!0 200|0 0\"/></edges>";
+
+std::string fill(const std::string& color)
+{
+    return "<fills><FillStyle index=\"1\"><SolidColor color=\"" + color + "\"/></FillStyle></fills>";
+}
+
+std::map<std::string, std::vector<uint8_t>> package(const std::string& layers, const std::map<std::string, std::string>& symbols)
+{
+    std::map<std::string, std::vector<uint8_t>> files;
+    std::string includes;
+    for (const auto& [name, xml] : symbols)
+    {
+        includes += "<Include href=\"" + name + ".xml\"/>";
+        files["LIBRARY/" + name + ".xml"] = bytesOf(xml);
+    }
+    files["DOMDocument.xml"] = bytesOf(
+        "<DOMDocument xmlns=\"http://ns.adobe.com/xfl/2008/\" width=\"200\" height=\"100\" frameRate=\"12\">"
+        "<symbols>" + includes + "</symbols><timelines><DOMTimeline name=\"Scene 1\"><layers>" + layers +
+        "</layers></DOMTimeline></timelines></DOMDocument>");
+    return files;
+}
+
+std::string symbolXml(const std::string& name, const std::string& type, const std::string& layers)
+{
+    return "<DOMSymbolItem xmlns=\"http://ns.adobe.com/xfl/2008/\" name=\"" + name + "\"" +
+        (type.empty() ? std::string() : " symbolType=\"" + type + "\"") + "><timeline><DOMTimeline name=\"" + name +
+        "\"><layers>" + layers + "</layers></DOMTimeline></timeline></DOMSymbolItem>";
+}
+
+/// A movie clip of three frames, a square on each.
+std::string spinner()
+{
+    return symbolXml("Spinner", "", "<DOMLayer name=\"art\"><frames><DOMFrame index=\"0\" duration=\"3\"><elements>"
+        "<DOMShape>" + fill("#FF0000") + kSquare + "</DOMShape></elements></DOMFrame></frames></DOMLayer>");
+}
+
+/// The movie \a document makes, with an event sound for every keyframe
+/// that names one (a sound of its own for each name, in \a sounds).
+std::vector<uint8_t> movieWithSounds(const fla::Document& document, std::map<std::string, int>& sounds,
+    std::vector<std::string>* problems = nullptr)
+{
+    swf::Writer writer(static_cast<int>(document.width), static_cast<int>(document.height), document.frameRate,
+        swf::Color{255, 255, 255, 255});
+    SquareDrawer drawer;
+    fla::swfmovie::Options options;
+    options.eventSound = [&](const fla::Frame& key, int& id, swf::SoundInfo& info) {
+        std::string name;
+        for (const auto& [attribute, value] : key.extraAttributes)
+            if (attribute == "soundName")
+                name = value;
+        if (name.empty())
+            return false;
+        int& known = sounds[name];
+        if (!known)
+            known = writer.defineSound(3, 11025, false, 4, std::vector<uint8_t>(8, 0));
+        id = known;
+        info = swf::SoundInfo();
+        return true;
+    };
+    fla::swfmovie::Movie movie(document, writer, drawer, options);
+    movie.write();
+    if (problems)
+        *problems = movie.problems();
+    return writer.finish(true);
+}
+
+} // namespace
+
+TEST(swf_movie_opens_graphics_with_clips_into_the_timeline)
+{
+    // A graphic of three frames holds a different named clip on its first
+    // frame and on the two after it; played once from its second frame, it
+    // shows the second clip throughout, a placed clip scripts reach.
+    const std::string box = symbolXml("Box", "graphic",
+        "<DOMLayer name=\"clips\"><frames>"
+        "<DOMFrame index=\"0\" duration=\"1\"><elements><DOMSymbolInstance libraryItemName=\"Spinner\" name=\"first\">"
+        "<matrix><Matrix tx=\"5\"/></matrix></DOMSymbolInstance></elements></DOMFrame>"
+        "<DOMFrame index=\"1\" duration=\"2\"><elements><DOMSymbolInstance libraryItemName=\"Spinner\" name=\"later\">"
+        "<matrix><Matrix tx=\"5\"/></matrix></DOMSymbolInstance></elements></DOMFrame>"
+        "</frames></DOMLayer>"
+        "<DOMLayer name=\"back\"><frames><DOMFrame index=\"0\" duration=\"3\"><elements><DOMShape>" + fill("#00FF00") +
+        kSquare + "</DOMShape></elements></DOMFrame></frames></DOMLayer>");
+    const std::string layers =
+        "<DOMLayer name=\"box\"><frames><DOMFrame index=\"0\" duration=\"4\"><elements>"
+        "<DOMSymbolInstance libraryItemName=\"Box\" symbolType=\"graphic\" loop=\"play once\" firstFrame=\"1\">"
+        "<matrix><Matrix tx=\"100\" ty=\"10\"/></matrix><color><Color alphaMultiplier=\"0.5\"/></color>"
+        "</DOMSymbolInstance></elements></DOMFrame></frames></DOMLayer>";
+    Parsed parsed = parse(package(layers, {{"Box", box}, {"Spinner", spinner()}}));
+    CHECK(parsed.document != nullptr);
+    if (!parsed.document)
+        return;
+    const auto found = parsed.document->symbolList->symbolMap.find("Box");
+    CHECK(found != parsed.document->symbolList->symbolMap.end() && fla::swfmovie::holdsClips(*found->second));
+    std::vector<std::string> problems;
+    const std::vector<uint8_t> swf = movieOf(*parsed.document, &problems);
+    CHECK(problems.empty());
+    const std::vector<Tag> tags = tagsOf(swf);
+    // The clip the graphic shows is placed once, by its name, and stays.
+    const std::map<std::string, int> placed = namesPlaced(tags, 0);
+    CHECK(placed.count("later") && placed.at("later") == 1);
+    CHECK(!placed.count("first"));
+
+    // Through the import: a movie clip named later on the scene, where the
+    // graphic puts it, faded as the graphic is.
+    std::map<std::string, std::vector<uint8_t>> files;
+    std::string error;
+    CHECK(SwfImport::convert(swf, files, error));
+    Parsed back = parse(files);
+    CHECK(back.document && !back.document->timelines.empty());
+    if (!back.document || back.document->timelines.empty())
+        return;
+    bool later = false;
+    for (const fla::SymbolInstance* instance : instancesOn(*back.document->timelines.front()))
+        if (instance->name == "later")
+        {
+            later = true;
+            CHECK(instance->symbolType == fla::SymbolType::MovieClip);
+            CHECK_NEAR(instance->transform.tx, 105.0);
+            CHECK_NEAR(instance->transform.ty, 10.0);
+            CHECK_NEAR(instance->colorTransform.alphaMultiplier, 0.5);
+        }
+    CHECK(later);
+}
+
+TEST(swf_movie_morphs_a_shape_tween)
+{
+    // A red square that grows into a blue one over four frames: one morph
+    // shape, placed with its ratio frame by frame.
+    const std::string layers =
+        "<DOMLayer name=\"grow\"><frames>"
+        "<DOMFrame index=\"0\" duration=\"4\" tweenType=\"shape\"><elements><DOMShape>" + fill("#FF0000") + kSquare +
+        "</DOMShape></elements></DOMFrame>"
+        "<DOMFrame index=\"4\" duration=\"1\"><elements><DOMShape>" + fill("#0000FF") +
+        "<edges><Edge fillStyle1=\"1\" edges=\"!0 0|800 0!800 0|800 800!800 800|0 800!0 800|0 0\"/></edges>"
+        "</DOMShape></elements></DOMFrame></frames></DOMLayer>";
+    Parsed parsed = parse(package(layers, {}));
+    CHECK(parsed.document != nullptr);
+    if (!parsed.document)
+        return;
+    const std::vector<uint8_t> swf = movieOf(*parsed.document);
+    const std::vector<Tag> tags = tagsOf(swf);
+    int morphs = 0;
+    int morph = 0;
+    std::vector<int> ratios;
+    for (const Tag& tag : tags)
+    {
+        if (tag.code == 46)
+        {
+            ++morphs;
+            morph = tag.body[0] | (tag.body[1] << 8);
+        }
+        if (tag.sprite == 0 && tag.code == 26 && (tag.body[0] & 0x10))
+        {
+            // Flags, depth, the character when placed anew, then the
+            // matrix: the ratio is easiest found by its place from the end
+            // (no name, no clip depth, no actions follow it).
+            ratios.push_back(tag.body[tag.body.size() - 2] | (tag.body[tag.body.size() - 1] << 8));
+        }
+    }
+    CHECK(morphs == 1);
+    CHECK(morph > 0);
+    // Frames 2 to 4 of the tween, a quarter further each.
+    CHECK(ratios.size() == 3);
+    if (ratios.size() == 3)
+    {
+        CHECK(std::abs(ratios[0] - 16384) <= 1);
+        CHECK(std::abs(ratios[1] - 32768) <= 1);
+        CHECK(std::abs(ratios[2] - 49151) <= 1);
+    }
+    // Through the import: a shape tween again.
+    std::map<std::string, std::vector<uint8_t>> files;
+    std::string error;
+    CHECK(SwfImport::convert(swf, files, error));
+    Parsed back = parse(files);
+    bool tween = false;
+    if (back.document && !back.document->timelines.empty())
+        for (const fla::Layer* layer : back.document->timelines.front()->layers)
+            for (const fla::Frame* frame : layer ? layer->frames : std::vector<fla::Frame*>())
+                tween = tween || frame->tweenType == fla::TweenType::Shape;
+    CHECK(tween);
+}
+
+TEST(swf_movie_starts_sounds_on_their_own_timelines_and_buttons)
+{
+    // A movie clip's sound starts in the clip's own timeline, the scene's
+    // in the movie's; a button sounds its Over and Down frames' sounds; a
+    // button's mask clips in a clip of its own for each state.
+    const std::string clip = symbolXml("Ticker", "",
+        "<DOMLayer name=\"art\"><frames><DOMFrame index=\"0\" duration=\"1\"><elements><DOMShape>" + fill("#FF0000") +
+        kSquare + "</DOMShape></elements></DOMFrame>"
+        "<DOMFrame index=\"1\" duration=\"2\" soundName=\"tick.wav\"><elements><DOMShape>" + fill("#FF0000") + kSquare +
+        "</DOMShape></elements></DOMFrame></frames></DOMLayer>");
+    const std::string button = symbolXml("Peek", "button",
+        "<DOMLayer name=\"sounds\"><frames><DOMFrame index=\"0\" duration=\"1\"><elements/></DOMFrame>"
+        "<DOMFrame index=\"1\" duration=\"1\" soundName=\"over.wav\"><elements/></DOMFrame>"
+        "<DOMFrame index=\"2\" duration=\"2\" soundName=\"down.wav\"><elements/></DOMFrame></frames></DOMLayer>"
+        "<DOMLayer name=\"window\" layerType=\"mask\"><frames><DOMFrame index=\"0\" duration=\"4\"><elements><DOMShape>" +
+        fill("#000000") + kSquare + "</DOMShape></elements></DOMFrame></frames></DOMLayer>"
+        "<DOMLayer name=\"view\" layerType=\"masked\" parentLayerIndex=\"1\"><frames>"
+        "<DOMFrame index=\"0\" duration=\"4\"><elements><DOMShape>" + fill("#00FF00") +
+        "<edges><Edge fillStyle1=\"1\" edges=\"!0 0|800 0!800 0|800 800!800 800|0 800!0 800|0 0\"/></edges>"
+        "</DOMShape></elements></DOMFrame></frames></DOMLayer>");
+    const std::string layers =
+        "<DOMLayer name=\"ui\"><frames><DOMFrame index=\"0\" duration=\"3\" soundName=\"start.wav\"><elements>"
+        "<DOMSymbolInstance libraryItemName=\"Peek\" symbolType=\"button\" name=\"peek\"/>"
+        "<DOMSymbolInstance libraryItemName=\"Ticker\" name=\"ticker\"><matrix><Matrix tx=\"50\"/></matrix>"
+        "</DOMSymbolInstance></elements></DOMFrame></frames></DOMLayer>";
+    Parsed parsed = parse(package(layers, {{"Peek", button}, {"Ticker", clip}}));
+    CHECK(parsed.document != nullptr);
+    if (!parsed.document)
+        return;
+    std::map<std::string, int> sounds;
+    std::vector<std::string> problems;
+    const std::vector<uint8_t> swf = movieWithSounds(*parsed.document, sounds, &problems);
+    for (const std::string& problem : problems)
+        std::printf("    %s\n", problem.c_str());
+    CHECK(problems.empty());
+    const std::vector<Tag> tags = tagsOf(swf);
+    std::map<int, int> sprites;
+    std::multimap<int, int> started;
+    int buttonSounds = 0;
+    std::vector<uint8_t> buttonSound, defineButton;
+    std::set<int> clipping;
+    for (const Tag& tag : tags)
+    {
+        if (tag.code == 15)
+            started.emplace(tag.sprite, tag.body[0] | (tag.body[1] << 8));
+        if (tag.code == 17)
+        {
+            ++buttonSounds;
+            buttonSound = tag.body;
+        }
+        if (tag.code == 34)
+            defineButton = tag.body;
+        // A placement that clips, in a clip.
+        if (tag.sprite != 0 && tag.code == 26 && (tag.body[0] & 0x40))
+            clipping.insert(tag.sprite);
+    }
+    // The scene's sound in the movie's timeline; the clip's in the clip's.
+    CHECK(sounds.count("start.wav") && sounds.count("tick.wav"));
+    bool sceneStarts = false, clipStarts = false;
+    for (const auto& [sprite, id] : started)
+    {
+        sceneStarts = sceneStarts || (sprite == 0 && id == sounds["start.wav"]);
+        clipStarts = clipStarts || (sprite != 0 && id == sounds["tick.wav"]);
+        CHECK(!(sprite == 0 && id == sounds["tick.wav"]));
+    }
+    CHECK(sceneStarts);
+    CHECK(clipStarts);
+    // The button's sounds: none leaving, Over's coming on, Down's pressing,
+    // none letting go.
+    CHECK(buttonSounds == 1);
+    if (buttonSound.size() >= 12)
+    {
+        CHECK((buttonSound[2] | (buttonSound[3] << 8)) == 0);
+        CHECK((buttonSound[4] | (buttonSound[5] << 8)) == sounds["over.wav"]);
+        CHECK((buttonSound[7] | (buttonSound[8] << 8)) == sounds["down.wav"]);
+        CHECK((buttonSound[10] | (buttonSound[11] << 8)) == 0);
+    }
+    else
+        CHECK(false);
+    // Its first record shows a clip that clips with its mask.
+    CHECK(defineButton.size() > 8);
+    if (defineButton.size() > 8)
+    {
+        const int character = defineButton[6] | (defineButton[7] << 8);
+        CHECK(clipping.count(character) == 1);
+    }
 }

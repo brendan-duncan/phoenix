@@ -59,6 +59,13 @@ public:
     /// Before the frame is shown.
     void frame(swf::Writer& writer, int frame);
 
+    /// For a movie that starts its sounds on the timelines they are on
+    /// (swfmovie::Options::eventSound), in place of define and frame:
+    /// keyframe \a key's event, start or stop sound's id, written to
+    /// \a writer the first time, and how it plays; false when it has none
+    /// or the sound cannot go in.
+    bool keySound(swf::Writer& writer, const Frame& key, int& id, swf::SoundInfo& info);
+
     /// Whether a sound asked for MP3 that could not be encoded, and went in
     /// as ADPCM instead.
     bool mp3Missing() const { return _mp3Missing; }

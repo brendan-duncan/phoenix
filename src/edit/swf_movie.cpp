@@ -5,17 +5,25 @@
 #include "../data/frame.h"
 #include "../data/group.h"
 #include "../data/layer.h"
+#include "../data/linear_gradient.h"
+#include "../data/morph_shape.h"
+#include "../data/radial_gradient.h"
 #include "../data/raw_element.h"
+#include "../data/shape.h"
+#include "../data/solid_color.h"
 #include "../data/static_text.h"
+#include "../data/stroke_style.h"
 #include "../data/symbol.h"
 #include "../data/symbol_instance.h"
 #include "../data/symbol_list.h"
 #include "../data/timeline.h"
 #include "../play/script/class_path.h"
 #include "phoenix_features.h"
+#include "shape_tween.h"
 #include "swf_actionscript3.h"
 #include "script_edit.h"
 #include "timeline_edit.h"
+#include "tween_ease.h"
 
 #include "avm1/avm1.h"
 
@@ -26,6 +34,7 @@
 #include <iterator>
 #include <set>
 #include <sstream>
+#include <tuple>
 
 namespace fla {
 namespace swfmovie {
@@ -164,6 +173,91 @@ std::string filtersKey(const std::vector<swf::Filter>& filters)
     return key.str();
 }
 
+/// \a inner placed by \a outer: one matrix that does both.
+swf::Matrix times(const swf::Matrix& outer, const swf::Matrix& inner)
+{
+    swf::Matrix m;
+    m.a = outer.a * inner.a + outer.c * inner.b;
+    m.b = outer.b * inner.a + outer.d * inner.b;
+    m.c = outer.a * inner.c + outer.c * inner.d;
+    m.d = outer.b * inner.c + outer.d * inner.d;
+    m.tx = outer.a * inner.tx + outer.c * inner.ty + outer.tx;
+    m.ty = outer.b * inner.tx + outer.d * inner.ty + outer.ty;
+    return m;
+}
+
+swf::Matrix matrixOf(const Transform& t)
+{
+    return swf::Matrix{t.m11, t.m12, t.m21, t.m22, t.tx, t.ty};
+}
+
+/// \a inner's color change, then \a outer's: one that does both.
+swf::ColorTransform then(const swf::ColorTransform& inner, const swf::ColorTransform& outer)
+{
+    swf::ColorTransform c;
+    c.red = inner.red * outer.red;
+    c.green = inner.green * outer.green;
+    c.blue = inner.blue * outer.blue;
+    c.alpha = inner.alpha * outer.alpha;
+    c.redAdd = static_cast<int>(std::lround(inner.redAdd * outer.red)) + outer.redAdd;
+    c.greenAdd = static_cast<int>(std::lround(inner.greenAdd * outer.green)) + outer.greenAdd;
+    c.blueAdd = static_cast<int>(std::lround(inner.blueAdd * outer.blue)) + outer.blueAdd;
+    c.alphaAdd = static_cast<int>(std::lround(inner.alphaAdd * outer.alpha)) + outer.alphaAdd;
+    return c;
+}
+
+/// A shape tween's fill as a morph shape has it, in the timeline's space
+/// (the shape placed by \a place): a color or a gradient; false for what a
+/// morph shape cannot blend (bitmaps, a radial gradient's focal point).
+bool morphFill(const FillStyle* style, const Transform& place, swf::Fill& out)
+{
+    if (!style)
+        return false;
+    const auto color = [](const uint8_t c[4]) { return swf::Color{c[0], c[1], c[2], c[3]}; };
+    out = swf::Fill();
+    switch (style->type())
+    {
+    case FillStyle::Type::SolidColor:
+        out.type = swf::Fill::Type::Solid;
+        out.color = color(static_cast<const SolidColor*>(style)->color);
+        return true;
+    case FillStyle::Type::LinearGradient:
+        out.type = swf::Fill::Type::Linear;
+        for (const GradientEntry& entry : static_cast<const LinearGradient*>(style)->entries)
+            out.stops.push_back({entry.ratio, color(entry.color)});
+        break;
+    case FillStyle::Type::RadialGradient:
+    {
+        const auto* radial = static_cast<const RadialGradient*>(style);
+        if (std::fabs(radial->focalPointRatio) > 1.0e-3)
+            return false;
+        out.type = swf::Fill::Type::Radial;
+        for (const RadialEntry& entry : radial->entries)
+            out.stops.push_back({entry.ratio, color(entry.color)});
+        break;
+    }
+    default:
+        return false;
+    }
+    out.matrix = times(matrixOf(place), matrixOf(style->transform));
+    return !out.stops.empty();
+}
+
+/// A shape tween's line as a morph shape has it: a plain solid line only.
+bool morphLine(const StrokeStyle* style, const Transform& place, double& width, swf::Color& color)
+{
+    if (!style || style->style() != StrokeStyle::Style::Solid || !style->fill ||
+        style->fill->type() != FillStyle::Type::SolidColor)
+        return false;
+    const uint8_t* c = static_cast<const SolidColor*>(style->fill)->color;
+    color = swf::Color{c[0], c[1], c[2], c[3]};
+    // Its weight scales with the shape, as Phoenix draws it.
+    const double scale = style->scaleMode == "none"
+        ? 1.0 : std::sqrt(std::fabs(place.m11 * place.m22 - place.m12 * place.m21));
+    width = style->weight * scale;
+    return true;
+}
+
 } // namespace
 
 std::string fieldName(const StaticText& text)
@@ -171,6 +265,58 @@ std::string fieldName(const StaticText& text)
     if (!text.instanceName.empty())
         return text.instanceName;
     return attributeOf(text.extraAttributes, "name");
+}
+
+bool scriptedField(const StaticText& text)
+{
+    if (text.textType == StaticText::TextType::Input)
+        return true;
+    return text.textType == StaticText::TextType::Dynamic &&
+        (!fieldName(text).empty() || !attributeOf(text.extraAttributes, "variableName").empty());
+}
+
+bool holdsClips(const Symbol& symbol)
+{
+    // Looked into once a symbol, a symbol inside itself not again.
+    std::set<const Symbol*> seen;
+    std::function<bool(const Symbol&)> holds;
+    std::function<bool(const Element*)> holdsIn = [&](const Element* element) {
+        if (!element)
+            return false;
+        if (element->elementType() == Element::Type::Group)
+        {
+            for (const Element* member : static_cast<const Group*>(element)->members)
+                if (holdsIn(member))
+                    return true;
+            return false;
+        }
+        if (element->elementType() == Element::Type::StaticText)
+            return scriptedField(*static_cast<const StaticText*>(element));
+        if (element->elementType() != Element::Type::SymbolInstance)
+            return false;
+        const auto* instance = static_cast<const SymbolInstance*>(element);
+        if (instance->symbolType != SymbolType::Graphic)
+            return instance->symbol != nullptr;
+        return instance->symbol && holds(*instance->symbol);
+    };
+    holds = [&](const Symbol& graphic) {
+        if (!seen.insert(&graphic).second || graphic.timelines.empty() || !graphic.timelines.front())
+            return false;
+        bool found = false;
+        for (const Layer* layer : graphic.timelines.front()->layers)
+        {
+            if (!layer || layer->layerType == Layer::Type::Guide || layer->layerType == Layer::Type::Folder)
+                continue;
+            // A mask in it: drawn as art, as masks are where they are.
+            if (layer->layerType == Layer::Type::Mask)
+                return false;
+            for (const Frame* frame : layer->frames)
+                for (const Element* element : frame ? frame->elements : std::vector<Element*>())
+                    found = found || holdsIn(element);
+        }
+        return found;
+    };
+    return holds(symbol);
 }
 
 bool Drawer::shows(const Timeline& timeline, const Layer& layer) const
@@ -475,7 +621,30 @@ struct Shown
     std::string name;
     int clipDepth = 0;
     std::vector<uint8_t> clipActions;
+    /// A morph shape's ratio, -1 for none.
+    int ratio = -1;
 };
+
+/// What places \a shown at \a depth anew.
+swf::Placement placementOf(int depth, const Shown& shown)
+{
+    swf::Placement p;
+    p.depth = depth;
+    p.character = shown.character;
+    p.hasMatrix = true;
+    p.matrix = shown.matrix;
+    p.hasColor = !shown.color.identity();
+    p.color = shown.color;
+    p.ratio = shown.ratio;
+    p.name = shown.name;
+    p.clipDepth = shown.clipDepth;
+    p.hasFilters = !shown.filters.empty();
+    p.filters = shown.filters;
+    p.hasBlend = shown.blend != 1;
+    p.blend = shown.blend;
+    p.clipActions = shown.clipActions;
+    return p;
+}
 
 /// Where a timeline's tags go: the movie's main timeline, or a sprite's.
 struct Out
@@ -487,6 +656,7 @@ struct Out
     void remove(int depth) { sprite ? sprite->remove(depth) : writer->remove(depth); }
     void label(const std::string& name, bool anchor) { sprite ? sprite->frameLabel(name, anchor) : writer->frameLabel(name, anchor); }
     void doAction(const std::vector<uint8_t>& actions) { sprite ? sprite->doAction(actions) : writer->doAction(actions); }
+    void startSound(int id, const swf::SoundInfo& info) { sprite ? sprite->startSound(id, info) : writer->startSound(id, info); }
     void show() { sprite ? sprite->showFrame() : writer->showFrame(); }
 };
 
@@ -496,8 +666,9 @@ struct Band
     int layer = -1;
     bool mask = false;
     int base = 0;
-    /// Where each (element, part) goes, counted from base.
-    std::map<std::pair<int, int>, int> slots;
+    /// Where each (element, place in the graphics it is in, part) goes,
+    /// counted from base.
+    std::map<std::tuple<int, std::vector<int>, int>, int> slots;
     int size = 0;
     int clipTop = 0;
 };
@@ -532,6 +703,11 @@ struct Movie::State
     /// symbols for their classes to make.
     std::map<const RawElement*, Component> components;
     std::map<const RawElement*, std::unique_ptr<SymbolInstance>> componentInstances;
+    /// Each shape tween's morph shape by its first keyframe, 0 for one that
+    /// cannot be.
+    std::map<const Frame*, int> morphs;
+    /// Button states baked with their masks, by what they place.
+    std::map<std::string, int> stateSprites;
 
     State(const Document& d, swf::Writer& w, Drawer& dr, const Options& o)
         : document(d)
@@ -693,7 +869,7 @@ struct Movie::State
         return true;
     }
 
-    /// The components on  layer's frame  frame added to its pieces, as
+    /// The components on \a layer's frame \a frame added to its pieces, as
     /// movie clips.
     void addComponents(const Layer& layer, int frame, std::vector<Piece>& pieces)
     {
@@ -730,6 +906,195 @@ struct Movie::State
             piece.matrix = found->second.matrix;
             pieces.push_back(piece);
         }
+    }
+
+    /// What \a layer shows on \a frame of its timeline: what the drawer
+    /// draws, a shape tween's shape as its morph shape (with \a morphs),
+    /// the components, and the graphics with clips in them opened into what
+    /// they show on the frame they are at.
+    std::vector<Piece> layerPieces(const Layer& layer, int frame, bool morphs, int depth = 0)
+    {
+        std::vector<Piece> pieces = drawer.layerFrame(layer, frame, writer);
+        if (morphs)
+            morphPieces(layer, frame, pieces);
+        addComponents(layer, frame, pieces);
+        if (std::none_of(pieces.begin(), pieces.end(), [](const Piece& piece) { return piece.graphicFrame >= 0; }))
+            return pieces;
+        std::vector<Piece> out;
+        for (Piece& piece : pieces)
+        {
+            const Symbol* symbol = piece.instance ? piece.instance->symbol : nullptr;
+            if (piece.graphicFrame < 0 || !symbol || symbol->timelines.empty() || !symbol->timelines.front())
+            {
+                if (piece.graphicFrame < 0)
+                    out.push_back(std::move(piece));
+                continue;
+            }
+            if (writing.count(symbol) || depth > 32)
+            {
+                problem(symbol->name + " is inside itself: left out there");
+                continue;
+            }
+            writing.insert(symbol);
+            // Its layers bottom first, each piece placed by the graphic and
+            // colored by it after its own.
+            const Timeline& timeline = *symbol->timelines.front();
+            const swf::ColorTransform color = then(colorTransform(piece.color), piece.within);
+            const int count = static_cast<int>(timeline.layers.size());
+            for (int i = count - 1; i >= 0; --i)
+            {
+                const Layer* inner = timeline.layers[static_cast<size_t>(i)];
+                if (!inner || !usable(timeline, *inner) || piece.graphicFrame >= timeline::layerEnd(*inner))
+                    continue;
+                for (Piece& part : layerPieces(*inner, piece.graphicFrame, morphs, depth + 1))
+                {
+                    std::vector<int> path = piece.path;
+                    path.push_back(count - 1 - i);
+                    path.push_back(part.element);
+                    path.insert(path.end(), part.path.begin(), part.path.end());
+                    part.path = std::move(path);
+                    part.element = piece.element;
+                    part.matrix = times(piece.matrix, part.matrix);
+                    part.within = then(part.within, color);
+                    out.push_back(std::move(part));
+                }
+            }
+            writing.erase(symbol);
+        }
+        return out;
+    }
+
+    /// A shape tween's in-between on \a layer's \a frame as its morph shape,
+    /// in place of the shape drawn, when the tween's fills and lines can be
+    /// a morph shape's.
+    void morphPieces(const Layer& layer, int frame, std::vector<Piece>& pieces)
+    {
+        if (layer.layerType == Layer::Type::Mask)
+            return;
+        const Frame* key = keyframeAt(layer, frame);
+        if (!key || key->tweenType != TweenType::Shape || frame <= key->index)
+            return;
+        const Frame* next = nullptr;
+        for (const Frame* f : layer.frames)
+            if (f && f->index == key->index + std::max(1, key->duration))
+                next = f;
+        const Shape* from = nullptr;
+        const Shape* to = nullptr;
+        if (!next || !tweenShapes(*key, *next, from, to))
+            return;
+        const int id = morphFor(*key, *next, *from, *to);
+        if (!id)
+            return;
+        const auto at = std::find(key->elements.begin(), key->elements.end(), static_cast<const Element*>(from));
+        if (at == key->elements.end())
+            return;
+        Piece morph;
+        morph.element = static_cast<int>(at - key->elements.begin());
+        morph.morph = id;
+        const double progress = std::clamp(static_cast<double>(frame - key->index) / std::max(1, key->duration), 0.0, 1.0);
+        const double t = easeProgress(progress, key->acceleration,
+            key->hasCustomEase ? key->customEase : std::vector<Point>(), key->easeMethod);
+        morph.ratio = static_cast<int>(std::lround(std::clamp(t, 0.0, 1.0) * 65535.0));
+        // The shape's place among the frame's pieces, its drawing gone.
+        auto first = std::find_if(pieces.begin(), pieces.end(),
+            [&](const Piece& piece) { return piece.element >= morph.element; });
+        const size_t place = static_cast<size_t>(first - pieces.begin());
+        pieces.erase(std::remove_if(pieces.begin(), pieces.end(),
+                         [&](const Piece& piece) { return piece.element == morph.element; }),
+            pieces.end());
+        pieces.insert(pieces.begin() + static_cast<std::ptrdiff_t>(std::min(place, pieces.size())), morph);
+    }
+
+    /// The morph shape of the shape tween from \a key to \a next, written
+    /// the first time; 0 when its fills or lines cannot be a morph shape's.
+    int morphFor(const Frame& key, const Frame& next, const Shape& from, const Shape& to)
+    {
+        const auto known = morphs.find(&key);
+        if (known != morphs.end())
+            return known->second;
+        int& id = morphs[&key];
+        ensureMorph(const_cast<Frame&>(key), next);
+        if (!key.morphShape)
+            return id = 0;
+        // The fills and lines by the first keyframe's indices, each with
+        // the last keyframe's of the same index (its own when that has
+        // none), numbered from 1 as the morph shape has them. A tween's
+        // styles are drawn in the first shape's space, as Phoenix blends
+        // them.
+        std::vector<swf::MorphFill> fills;
+        std::vector<swf::MorphLine> lines;
+        std::map<int, int> fillAt, lineAt;
+        for (const auto& [index, style] : from.fillsMap)
+        {
+            const FillStyle* end = to.getFillStyleByIndex(index);
+            swf::MorphFill fill;
+            if (!morphFill(style, from.transform, fill.start))
+                return id = 0;
+            // Unlike (another kind, or gradients of other stops): the first
+            // keyframe's all the way.
+            if (!end || !morphFill(end, from.transform, fill.end) || fill.end.type != fill.start.type ||
+                fill.end.stops.size() != fill.start.stops.size())
+                fill.end = fill.start;
+            fills.push_back(fill);
+            fillAt[index] = static_cast<int>(fills.size());
+        }
+        for (const auto& [index, style] : from.strokesMap)
+        {
+            const StrokeStyle* end = to.getStrokeStyleByIndex(index);
+            swf::MorphLine line;
+            if (!morphLine(style, from.transform, line.startWidth, line.startColor) ||
+                !morphLine(end ? end : style, from.transform, line.endWidth, line.endColor))
+                return id = 0;
+            lines.push_back(line);
+            lineAt[index] = static_cast<int>(lines.size());
+        }
+        const auto indexIn = [](const std::map<int, int>& table, int index) {
+            const auto found = table.find(index);
+            return found == table.end() ? 0 : found->second;
+        };
+        bool styled = false;
+        for (const MorphSegment* segment : key.morphShape->segments)
+            styled = styled ||
+                (segment && (segment->fillIndex1 || segment->fillIndex2 || segment->strokeIndex1 || segment->strokeIndex2));
+        const auto point = [](const Transform& t, const Point& p) {
+            return std::make_pair(t.m11 * p.x + t.m21 * p.y + t.tx, t.m12 * p.x + t.m22 * p.y + t.ty);
+        };
+        std::vector<swf::MorphPath> paths;
+        for (const MorphSegment* segment : key.morphShape->segments)
+        {
+            if (!segment)
+                continue;
+            swf::MorphPath path;
+            if (styled)
+            {
+                // As the file's edges number their sides: index 1 is fill 0.
+                path.fill0 = indexIn(fillAt, segment->fillIndex1);
+                path.fill1 = indexIn(fillAt, segment->fillIndex2);
+                path.line = indexIn(lineAt, segment->strokeIndex1 > 0 ? segment->strokeIndex1 : segment->strokeIndex2);
+            }
+            else
+            {
+                path.fill1 = fills.empty() ? 0 : 1;
+                path.line = lines.empty() ? 0 : 1;
+            }
+            const auto add = [&](swf::Segment::Kind kind, const Point& a, const Point& b, const Point& ca,
+                                 const Point& cb) {
+                const auto [ax, ay] = point(from.transform, a);
+                const auto [bx, by] = point(to.transform, b);
+                const auto [cax, cay] = point(from.transform, ca);
+                const auto [cbx, cby] = point(to.transform, cb);
+                path.start.push_back({kind, ax, ay, cax, cay});
+                path.end.push_back({kind, bx, by, cbx, cby});
+            };
+            add(swf::Segment::Kind::Move, segment->startPointA, segment->startPointB, Point(), Point());
+            for (const MorphCurves* curve : segment->curves)
+                if (curve)
+                    add(swf::Segment::Kind::Quad, curve->anchorPointA, curve->anchorPointB, curve->controlPointA,
+                        curve->controlPointB);
+            if (path.start.size() > 1 && (path.fill0 || path.fill1 || path.line))
+                paths.push_back(std::move(path));
+        }
+        return id = writer.defineMorphShape(fills, lines, paths);
     }
 
     /// Art of several shapes, or of one faded or blended: a clip of them.
@@ -944,59 +1309,81 @@ struct Movie::State
         // as a timeline has them.
         std::vector<std::vector<std::vector<Piece>>> captured(timeline->layers.size(),
             std::vector<std::vector<Piece>>(4));
+        bool masked = false;
         for (size_t i = 0; i < timeline->layers.size(); ++i)
         {
             const Layer* layer = timeline->layers[i];
             if (!layer || !usable(*timeline, *layer))
                 continue;
-            if (layer->layerType == Layer::Type::Mask)
-            {
-                problem(symbol->name + ": a button's mask is left out, what it masks drawn whole");
-                continue;
-            }
+            masked = masked || layer->layerType == Layer::Type::Mask;
             for (int state = 0; state < 4; ++state)
-                captured[i][static_cast<size_t>(state)] = drawer.layerFrame(*layer, state, writer);
+                captured[i][static_cast<size_t>(state)] = layerPieces(*layer, state, false);
         }
-        std::vector<Band> bands = plan(*timeline, captured, false);
+        std::vector<Band> bands = plan(*timeline, captured, masked);
         std::vector<swf::ButtonRecord> records;
-        for (const Band& band : bands)
+        const auto add = [&records](const swf::ButtonRecord& record) {
+            // The same in another state: one record for both.
+            for (swf::ButtonRecord& other : records)
+                if (other.character == record.character && other.depth == record.depth &&
+                    sameMatrix(other.matrix, record.matrix) && sameColor(other.color, record.color) &&
+                    filtersKey(other.filters) == filtersKey(record.filters) && other.blend == record.blend)
+                {
+                    other.states |= record.states;
+                    return;
+                }
+            records.push_back(record);
+        };
+        if (masked)
         {
+            // A button's characters cannot clip one another: each state
+            // with a mask is a clip of its own, its masks clipping in it.
             for (int state = 0; state < 4; ++state)
             {
-                std::map<int, int> parts;
-                for (const Piece& piece : captured[static_cast<size_t>(band.layer)][static_cast<size_t>(state)])
+                const std::map<int, Shown> now = shownOn(*timeline, captured, bands, state, false, -1);
+                if (now.empty())
+                    continue;
+                std::ostringstream key;
+                key.precision(6);
+                for (const auto& [depth, shown] : now)
                 {
-                    const int part = parts[piece.element]++;
-                    Shown shown;
-                    if (!showOf(piece, false, -1, shown))
-                        continue;
-                    const auto slot = band.slots.find({piece.element, part});
-                    if (slot == band.slots.end())
-                        continue;
+                    const swf::Matrix& m = shown.matrix;
+                    const swf::ColorTransform& c = shown.color;
+                    key << depth << ':' << shown.character << ',' << m.a << ',' << m.b << ',' << m.c << ',' << m.d
+                        << ',' << m.tx << ',' << m.ty << ',' << c.red << ',' << c.green << ',' << c.blue << ','
+                        << c.alpha << ',' << c.redAdd << ',' << c.greenAdd << ',' << c.blueAdd << ',' << c.alphaAdd
+                        << ',' << shown.ratio << ',' << shown.name << ',' << shown.clipDepth << ',' << shown.blend
+                        << ',' << shown.filterKey << ';';
+                }
+                int& sprite = stateSprites[key.str()];
+                if (!sprite)
+                {
+                    swf::Sprite state;
+                    for (const auto& [depth, shown] : now)
+                        state.place(placementOf(depth, shown));
+                    state.showFrame();
+                    sprite = writer.defineSprite(state);
+                }
+                swf::ButtonRecord record;
+                record.states = 1 << state;
+                record.character = sprite;
+                record.depth = 1;
+                add(record);
+            }
+        }
+        else
+            for (int state = 0; state < 4; ++state)
+                for (const auto& [depth, shown] : shownOn(*timeline, captured, bands, state, false, -1))
+                {
                     swf::ButtonRecord record;
                     record.states = 1 << state;
                     record.character = shown.character;
-                    record.depth = band.base + slot->second;
+                    record.depth = depth;
                     record.matrix = shown.matrix;
                     record.color = shown.color;
                     record.filters = shown.filters;
                     record.blend = shown.blend != 1 ? shown.blend : 0;
-                    // The same in another state: one record for both.
-                    bool merged = false;
-                    for (swf::ButtonRecord& other : records)
-                        if (other.character == record.character && other.depth == record.depth &&
-                            sameMatrix(other.matrix, record.matrix) && sameColor(other.color, record.color) &&
-                            filtersKey(other.filters) == filtersKey(record.filters) && other.blend == record.blend)
-                        {
-                            other.states |= record.states;
-                            merged = true;
-                            break;
-                        }
-                    if (!merged)
-                        records.push_back(record);
+                    add(record);
                 }
-            }
-        }
         // Without a hit frame the up frame is where the pointer finds it.
         if (std::none_of(records.begin(), records.end(), [](const swf::ButtonRecord& r) { return r.states & 8; }))
             for (swf::ButtonRecord& record : records)
@@ -1044,6 +1431,29 @@ struct Movie::State
         }
         const bool menu = attributeOf(symbol->extraAttributes, "trackAsMenu") == "true";
         const int id = writer.defineButton(records, actions, menu);
+        // The sounds of its states' frames: Up's as the pointer leaves, Over's
+        // as it comes, Down's as it presses and Hit's as it lets go.
+        if (options.eventSound)
+        {
+            std::vector<std::pair<int, swf::SoundInfo>> sounds(4);
+            bool any = false;
+            for (int state = 0; state < 4; ++state)
+                for (const Layer* layer : timeline->layers)
+                {
+                    const Frame* frame = layer && layer->visible && layer->layerType != Layer::Type::Guide &&
+                            layer->layerType != Layer::Type::Folder
+                        ? keyframeAt(*layer, state) : nullptr;
+                    std::pair<int, swf::SoundInfo>& sound = sounds[static_cast<size_t>(state)];
+                    if (sound.first || !frame || frame->index != state)
+                        continue;
+                    if (options.eventSound(*frame, sound.first, sound.second) && sound.first)
+                        any = true;
+                    else
+                        sound.first = 0;
+                }
+            if (any)
+                writer.defineButtonSound(id, sounds);
+        }
         writing.erase(symbol);
         buttons[key] = id;
         return id;
@@ -1081,7 +1491,7 @@ struct Movie::State
             shown.identity = symbol;
             shown.name = instance.name;
             shown.matrix = piece.matrix;
-            shown.color = colorTransform(piece.color);
+            shown.color = then(colorTransform(piece.color), piece.within);
             shown.filters = filters(piece.filters);
             shown.blend = blendMode(piece.blendMode);
         }
@@ -1091,6 +1501,17 @@ struct Movie::State
             shown.identity = piece.text;
             shown.name = fieldName(*piece.text);
             shown.matrix = piece.matrix;
+            shown.color = piece.within;
+        }
+        else if (piece.morph)
+        {
+            // A shape tween's morph shape, in the timeline's space or the
+            // graphic's it is in.
+            shown.character = piece.morph;
+            shown.ratio = std::clamp(piece.ratio, 0, 65535);
+            if (!piece.path.empty())
+                shown.matrix = piece.matrix;
+            shown.color = piece.within;
         }
         else
         {
@@ -1100,6 +1521,11 @@ struct Movie::State
             shown.character = piece.shapes.size() == 1 && only.alpha >= 0.999 && only.blend == swf::Writer::Blend::Normal
                 ? only.id : artSprite(piece.shapes);
             shown.identity = nullptr;
+            // Art is drawn in the timeline's space; in a graphic opened
+            // into it, placed by the graphic.
+            if (!piece.path.empty())
+                shown.matrix = piece.matrix;
+            shown.color = piece.within;
         }
         if (main && (options.scaleX != 1.0 || options.scaleY != 1.0))
         {
@@ -1157,20 +1583,21 @@ struct Movie::State
             Band band;
             band.layer = i;
             band.base = next;
-            // Each element's parts, as many as it has at most.
-            std::map<int, int> most;
+            // Each element's parts, as many as it has at most, and those of
+            // each place in the graphics opened into it.
+            std::map<std::pair<int, std::vector<int>>, int> most;
             for (const std::vector<Piece>& frame : captured[static_cast<size_t>(i)])
             {
-                std::map<int, int> parts;
+                std::map<std::pair<int, std::vector<int>>, int> parts;
                 for (const Piece& piece : frame)
-                    ++parts[piece.element];
-                for (const auto& [element, n] : parts)
-                    most[element] = std::max(most[element], n);
+                    ++parts[{piece.element, piece.path}];
+                for (const auto& [where, n] : parts)
+                    most[where] = std::max(most[where], n);
             }
             int offset = 0;
-            for (const auto& [element, n] : most)
+            for (const auto& [where, n] : most)
                 for (int part = 0; part < n; ++part)
-                    band.slots[{element, part}] = offset++;
+                    band.slots[std::make_tuple(where.first, where.second, part)] = offset++;
             band.size = offset;
             next += offset;
             bands.push_back(band);
@@ -1233,6 +1660,70 @@ struct Movie::State
         return id;
     }
 
+    /// What shows at each depth of \a timeline on \a frame, from its
+    /// layers' pieces \a captured and their depths \a bands. \a main and
+    /// \a scene as for showOf.
+    std::map<int, Shown> shownOn(const Timeline& timeline, const std::vector<std::vector<std::vector<Piece>>>& captured,
+        const std::vector<Band>& bands, int frame, bool main, int scene)
+    {
+        std::map<int, Shown> now;
+        for (const Band& band : bands)
+        {
+            const std::vector<std::vector<Piece>>& layer = captured[static_cast<size_t>(band.layer)];
+            if (frame < 0 || static_cast<size_t>(frame) >= layer.size())
+                continue;
+            const std::vector<Piece>& pieces = layer[static_cast<size_t>(frame)];
+            if (band.mask)
+            {
+                Shown mask;
+                std::string key;
+                mask.character = maskSprite(pieces, key);
+                if (!mask.character)
+                    continue;
+                mask.identity = timeline.layers[static_cast<size_t>(band.layer)];
+                mask.clipDepth = band.clipTop;
+                if (main && (options.scaleX != 1.0 || options.scaleY != 1.0))
+                {
+                    mask.matrix.a = options.scaleX;
+                    mask.matrix.d = options.scaleY;
+                }
+                now[band.base] = mask;
+                continue;
+            }
+            std::map<std::pair<int, std::vector<int>>, int> parts;
+            for (const Piece& piece : pieces)
+            {
+                const int part = parts[{piece.element, piece.path}]++;
+                const auto slot = band.slots.find(std::make_tuple(piece.element, piece.path, part));
+                Shown shown;
+                if (slot == band.slots.end() || !showOf(piece, main, scene, shown))
+                    continue;
+                now[band.base + slot->second] = shown;
+            }
+        }
+        return now;
+    }
+
+    /// The sounds that start on \a timeline's \a frame (its keyframes'
+    /// event, start and stop sounds), started in \a out.
+    void startSounds(const Timeline& timeline, int frame, Out& out)
+    {
+        if (!options.eventSound)
+            return;
+        for (const Layer* layer : timeline.layers)
+        {
+            // Hidden layers are silent, as playback has them.
+            if (!layer || !layer->visible || layer->layerType == Layer::Type::Guide ||
+                layer->layerType == Layer::Type::Folder)
+                continue;
+            const Frame* key = keyframeAt(*layer, frame);
+            int id = 0;
+            swf::SoundInfo info;
+            if (key && key->index == frame && options.eventSound(*key, id, info) && id)
+                out.startSound(id, info);
+        }
+    }
+
     /// Writes \a timelines one after another into \a out: the main
     /// timeline's scenes, or a symbol's timeline. \a beforeShow is called
     /// with each frame before it is shown.
@@ -1263,48 +1754,15 @@ struct Movie::State
                     if (sameAsBefore(*layer, frame))
                         captured[i][static_cast<size_t>(frame)] = captured[i][static_cast<size_t>(frame) - 1];
                     else if (frame < timeline::layerEnd(*layer))
-                    {
-                        captured[i][static_cast<size_t>(frame)] = drawer.layerFrame(*layer, frame, writer);
-                        addComponents(*layer, frame, captured[i][static_cast<size_t>(frame)]);
-                    }
+                        captured[i][static_cast<size_t>(frame)] =
+                            layerPieces(*layer, frame, layer->layerType != Layer::Type::Mask);
                 }
             }
             const std::vector<Band> bands = plan(*timeline, captured, true);
 
             for (int frame = 0; frame < length; ++frame)
             {
-                std::map<int, Shown> now;
-                for (const Band& band : bands)
-                {
-                    const std::vector<Piece>& pieces = captured[static_cast<size_t>(band.layer)][static_cast<size_t>(frame)];
-                    if (band.mask)
-                    {
-                        Shown mask;
-                        std::string key;
-                        mask.character = maskSprite(pieces, key);
-                        if (!mask.character)
-                            continue;
-                        mask.identity = timeline->layers[static_cast<size_t>(band.layer)];
-                        mask.clipDepth = band.clipTop;
-                        if (main && (options.scaleX != 1.0 || options.scaleY != 1.0))
-                        {
-                            mask.matrix.a = options.scaleX;
-                            mask.matrix.d = options.scaleY;
-                        }
-                        now[band.base] = mask;
-                        continue;
-                    }
-                    std::map<int, int> parts;
-                    for (const Piece& piece : pieces)
-                    {
-                        const int part = parts[piece.element]++;
-                        const auto slot = band.slots.find({piece.element, part});
-                        Shown shown;
-                        if (slot == band.slots.end() || !showOf(piece, main, scene, shown))
-                            continue;
-                        now[band.base + slot->second] = shown;
-                    }
-                }
+                const std::map<int, Shown> now = shownOn(*timeline, captured, bands, frame, main, scene);
                 // What went, or became something else, is taken off; then
                 // what is new is placed and what moved is moved.
                 for (const auto& [depth, was] : previous)
@@ -1319,26 +1777,14 @@ struct Movie::State
                     const auto was = previous.find(depth);
                     const bool fresh = was == previous.end() || was->second.character != shown.character ||
                         was->second.name != shown.name || was->second.clipDepth != shown.clipDepth;
-                    swf::Placement p;
-                    p.depth = depth;
                     if (fresh)
                     {
-                        p.character = shown.character;
-                        p.hasMatrix = true;
-                        p.matrix = shown.matrix;
-                        p.hasColor = !shown.color.identity();
-                        p.color = shown.color;
-                        p.name = shown.name;
-                        p.clipDepth = shown.clipDepth;
-                        p.hasFilters = !shown.filters.empty();
-                        p.filters = shown.filters;
-                        p.hasBlend = shown.blend != 1;
-                        p.blend = shown.blend;
-                        p.clipActions = shown.clipActions;
-                        out.place(p);
+                        out.place(placementOf(depth, shown));
                         continue;
                     }
                     const Shown& before = was->second;
+                    swf::Placement p;
+                    p.depth = depth;
                     p.move = true;
                     p.hasMatrix = !sameMatrix(before.matrix, shown.matrix);
                     p.matrix = shown.matrix;
@@ -1348,7 +1794,8 @@ struct Movie::State
                     p.filters = shown.filters;
                     p.hasBlend = before.blend != shown.blend;
                     p.blend = shown.blend;
-                    if (p.hasMatrix || p.hasColor || p.hasFilters || p.hasBlend)
+                    p.ratio = before.ratio != shown.ratio ? shown.ratio : -1;
+                    if (p.hasMatrix || p.hasColor || p.hasFilters || p.hasBlend || p.ratio >= 0)
                         out.place(p);
                 }
                 previous = now;
@@ -1399,6 +1846,9 @@ struct Movie::State
                     }
                     out.doAction(cached->second);
                 }
+                // Its sounds, where a player starts them: on this timeline,
+                // so a clip stopped starts none.
+                startSounds(*timeline, frame, out);
                 if (beforeShow && !beforeShow(written))
                     return written;
                 out.show();
