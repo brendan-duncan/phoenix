@@ -351,6 +351,39 @@ function wrapTables(content) {
     wrap.className = "table-wrap";
     table.replaceWith(wrap);
     wrap.append(table);
+    // On a phone a table too wide for the screen stacks its rows (site.css);
+    // with three or more columns the cells after the first carry their
+    // column's name.
+    const heads = [...table.querySelectorAll("thead th")].map(th => th.textContent.trim());
+    // Pairs of columns side by side (Key, Tool, Key, Tool) stack a pair to
+    // a line.
+    if (heads.length === 4 && heads[0] === heads[2] && heads[1] === heads[3]) {
+      table.classList.add("pairs");
+    } else if (heads.length >= 3) {
+      table.classList.add("labeled");
+      for (const row of table.querySelectorAll("tbody tr")) {
+        [...row.cells].forEach((cell, i) => { if (heads[i]) cell.dataset.label = heads[i]; });
+      }
+    }
+  }
+  fitTables(content);
+  // Measured again once the fonts are in, which can widen a table.
+  document.fonts?.ready.then(() => fitTables(content));
+  let pending = false;
+  addEventListener("resize", () => {
+    if (pending) return;
+    pending = true;
+    requestAnimationFrame(() => { pending = false; fitTables(content); });
+  });
+}
+
+/// Stacks, on a phone, the tables that would not fit across it.
+function fitTables(content) {
+  const phone = matchMedia("(max-width: 640px)").matches;
+  for (const table of content.querySelectorAll(".table-wrap > table")) {
+    table.classList.remove("stacked");
+    if (phone && table.scrollWidth > table.parentElement.clientWidth + 1)
+      table.classList.add("stacked");
   }
 }
 

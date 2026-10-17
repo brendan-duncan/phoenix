@@ -642,3 +642,32 @@ dl.defs dd { margin: 0; color: var(--text); }
   .pager { grid-template-columns: 1fr; }
   .pager .next { grid-column: 1; }
 }
+
+/* Tables too wide for a phone (site.js marks them): each row a block,
+   its first cell the heading. */
+@media (max-width: 640px) {
+  .content table.stacked thead { display: none; }
+  .content table.stacked, .stacked tbody, .stacked tr, .stacked td { display: block; width: auto; }
+  .stacked tr { padding: 10px 0; border-bottom: 1px solid var(--border); }
+  .stacked tbody tr:hover { background: none; }
+  .stacked td { padding: 2px 0; border: 0; white-space: normal; }
+  .stacked td:first-child { font-weight: 600; }
+  .stacked td[colspan] { padding-top: 12px; }
+  .stacked.pairs tr {
+    display: grid;
+    grid-template-columns: 7.5em minmax(0, 1fr);
+    gap: 6px 14px;
+    align-items: center;
+  }
+  .stacked.pairs td:first-child { font-weight: inherit; }
+  .stacked.labeled td:not(:first-child)[data-label]::before {
+    content: attr(data-label);
+    display: block;
+    margin-top: 6px;
+    color: var(--muted);
+    font-size: 11.5px;
+    font-weight: 600;
+    letter-spacing: .03em;
+    text-transform: uppercase;
+  }
+}
