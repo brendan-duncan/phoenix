@@ -38,6 +38,7 @@
 #include "../edit/shape_operators.h"
 #include "../edit/text_animators.h"
 #include "../edit/adjustments.h"
+#include "../edit/html5_export.h"
 #include "../edit/other_apps.h"
 #include "../edit/frame_bake.h"
 #include "motion_editor.h"
@@ -5785,11 +5786,13 @@ bool MainWindow::publishHtml5(const Html5Publish::Settings& settings, QStringLis
     // which keeps them exactly as Phoenix draws them.
     std::unique_ptr<fla::EditFramesCommand> baked = bakeBehaviorsForCopy(errors, nullptr, false);
     bool published = false;
-    if (fla::otherapps::needsTemplateBaking(*document))
+    // Compiled clips carrying their movie come in as symbols of it.
+    const std::map<std::string, std::vector<uint8_t>> compiled = fla::html5::compiledClips(*document);
+    if (fla::otherapps::needsTemplateBaking(*document) || !compiled.empty())
     {
-        // Template values and responsive time are written into a copy read
-        // back from a temporary file, published through a view of its own,
-        // so the document stays as it is.
+        // Template values, responsive time and compiled clips are written
+        // into a copy read back from a temporary file, published through a
+        // view of its own, so the document stays as it is.
         QTemporaryDir folder;
         const QString temporary = folder.filePath("copy.fla");
         if (!folder.isValid())
@@ -5804,6 +5807,24 @@ bool MainWindow::publishHtml5(const Html5Publish::Settings& settings, QStringLis
                 const fla::otherapps::Measure measure = measureForCopies();
                 fla::otherapps::bakeTemplates(*copy->document, baking, &measure);
                 for (const std::string& each : baking)
+                    notes << QString::fromStdString(each);
+                // A compiled clip's movie read as Phoenix imports SWF movies.
+                std::vector<std::unique_ptr<fla::Command>> embedded;
+                std::vector<std::string> brought;
+                fla::html5::embedCompiledClips(*copy->document, compiled,
+                    [](const std::vector<uint8_t>& swf) -> std::unique_ptr<fla::FLADocument> {
+                        QTemporaryDir folder;
+                        QFile file(folder.filePath("clip.swf"));
+                        if (!folder.isValid() || !file.open(QIODevice::WriteOnly) ||
+                            file.write(reinterpret_cast<const char*>(swf.data()), static_cast<qint64>(swf.size())) !=
+                                static_cast<qint64>(swf.size()))
+                            return nullptr;
+                        file.close();
+                        FLAParser parser;
+                        return std::unique_ptr<fla::FLADocument>(parser.parse(file.fileName().toStdString()));
+                    },
+                    embedded, brought);
+                for (const std::string& each : brought)
                     notes << QString::fromStdString(each);
                 Player player;
                 PhoenixView view(&player);

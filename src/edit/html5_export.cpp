@@ -2,12 +2,14 @@
 
 #include "adjustments.h"
 #include "camera.h"
+#include "command.h"
 #include "deformers.h"
 #include "frame_bake.h"
 #include "frame_sound.h"
 #include "graphic_loop.h"
 #include "layer_commands.h"
 #include "layer_effects.h"
+#include "library_transfer.h"
 #include "motion_blur.h"
 #include "motion_object.h"
 #include "node_graph.h"
@@ -22,6 +24,7 @@
 #include "../data/bitmap.h"
 #include "../data/bitmap_instance.h"
 #include "../data/document.h"
+#include "../data/fla_document.h"
 #include "../data/frame.h"
 #include "../data/layer.h"
 #include "../data/raw_element.h"
@@ -1355,6 +1358,126 @@ std::string content(const Document& document, ArtSource& source, const Options& 
 {
     Walker walker(document, source, options, notes);
     return walker.run();
+}
+
+std::map<std::string, std::vector<uint8_t>> compiledClips(const Document& document)
+{
+    std::map<std::string, std::vector<uint8_t>> movies;
+    for (const std::string& item : document.extraMedia)
+    {
+        if (item.find("CompiledClip") == std::string::npos)
+            continue;
+        tinyxml2::XMLDocument xml;
+        if (xml.Parse(item.c_str(), item.size()) != tinyxml2::XML_SUCCESS || !xml.RootElement() ||
+            !std::strstr(xml.RootElement()->Name(), "CompiledClip") || !xml.RootElement()->Attribute("name"))
+            continue;
+        // The file the item names (as a bitmap names its data), when it
+        // holds a movie.
+        for (const tinyxml2::XMLAttribute* attribute = xml.RootElement()->FirstAttribute(); attribute;
+             attribute = attribute->Next())
+        {
+            const std::string key = attribute->Name();
+            if (key.size() < 4 || key.compare(key.size() - 4, 4, "HRef") != 0)
+                continue;
+            const std::string value = attribute->Value();
+            for (const auto& [path, bytes] : document.extraFiles)
+            {
+                if (path != value && path != "bin/" + value)
+                    continue;
+                const std::vector<uint8_t>& data = bytes.get();
+                if (data.size() > 8 && (data[0] == 'F' || data[0] == 'C' || data[0] == 'Z') && data[1] == 'W' &&
+                    data[2] == 'S')
+                    movies[xml.RootElement()->Attribute("name")] = data;
+            }
+        }
+    }
+    return movies;
+}
+
+void embedCompiledClips(Document& copy, const std::map<std::string, std::vector<uint8_t>>& movies,
+    const std::function<std::unique_ptr<FLADocument>(const std::vector<uint8_t>& swf)>& read,
+    std::vector<std::unique_ptr<Command>>& keep, std::vector<std::string>& notes)
+{
+    for (const auto& [name, bytes] : movies)
+    {
+        // The movie read as a document of its own, its main timeline made a
+        // movie clip symbol, copied into the copy with all it uses.
+        std::unique_ptr<FLADocument> movie = read ? read(bytes) : nullptr;
+        Document* source = movie ? movie->document : nullptr;
+        if (!source || source->timelines.empty() || !source->timelines.front())
+        {
+            notes.push_back("The compiled clip " + name + " could not be read; it is not published.");
+            continue;
+        }
+        if (!source->symbolList)
+            source->symbolList = new SymbolList(source);
+        auto* symbol = new Symbol(source->symbolList);
+        symbol->name = name;
+        while (source->symbolList->symbolMap.count(symbol->name))
+            symbol->name += " clip";
+        symbol->symbolType = SymbolType::MovieClip;
+        Timeline* timeline = source->timelines.front();
+        source->timelines.erase(source->timelines.begin());
+        timeline->parent = symbol;
+        timeline->name = symbol->name;
+        symbol->timelines.push_back(timeline);
+        source->symbolList->symbols.push_back(symbol);
+        source->symbolList->link(symbol);
+        std::vector<std::string> added;
+        CommandPtr command =
+            transfer::copyItems(copy, *source, {symbol->name}, transfer::Resolution::KeepBoth, &added);
+        if (!command)
+            continue;
+        command->redo();
+        keep.push_back(std::move(command));
+        const std::string inCopy = added.empty() ? symbol->name : added.front();
+        Symbol* made = copy.symbolList && copy.symbolList->symbolMap.count(inCopy) ? copy.symbolList->symbolMap.at(inCopy)
+                                                                                    : nullptr;
+        if (!made)
+            continue;
+        // Each instance of the compiled clip, an instance of the symbol in
+        // its place.
+        std::vector<Timeline*> timelines(copy.timelines.begin(), copy.timelines.end());
+        for (Symbol* each : copy.symbolList->symbols)
+            if (each && each != made)
+                timelines.insert(timelines.end(), each->timelines.begin(), each->timelines.end());
+        int placed = 0;
+        for (Timeline* each : timelines)
+            for (Layer* layer : each ? each->layers : std::vector<Layer*>())
+                for (Frame* frame : layer ? layer->frames : std::vector<Frame*>())
+                {
+                    if (!frame)
+                        continue;
+                    for (Element*& element : frame->elements)
+                    {
+                        auto* raw = dynamic_cast<RawElement*>(element);
+                        tinyxml2::XMLDocument xml;
+                        if (!raw || raw->xml.find("CompiledClipInstance") == std::string::npos ||
+                            xml.Parse(raw->xml.c_str(), raw->xml.size()) != tinyxml2::XML_SUCCESS || !xml.RootElement())
+                            continue;
+                        const tinyxml2::XMLElement* root = xml.RootElement();
+                        const char* item = root->Attribute("libraryItemName");
+                        if (!item || name != item)
+                            continue;
+                        auto* instance = new SymbolInstance(frame);
+                        instance->libraryItemName = made->name;
+                        instance->symbol = made;
+                        instance->symbolType = SymbolType::MovieClip;
+                        instance->name = root->Attribute("name") ? root->Attribute("name") : "";
+                        if (const tinyxml2::XMLElement* matrix = root->FirstChildElement("matrix"))
+                            if (const tinyxml2::XMLElement* m = matrix->FirstChildElement("Matrix"))
+                                instance->transform = Transform(m->DoubleAttribute("a", 1.0), m->DoubleAttribute("b", 0.0),
+                                    m->DoubleAttribute("c", 0.0), m->DoubleAttribute("d", 1.0), m->DoubleAttribute("tx", 0.0),
+                                    m->DoubleAttribute("ty", 0.0));
+                        copy.symbolInstances.push_back(instance);
+                        delete raw;
+                        element = instance;
+                        ++placed;
+                    }
+                }
+        if (placed)
+            notes.push_back("The compiled clip " + name + " is published as the movie it carries.");
+    }
 }
 
 } // namespace fla::html5

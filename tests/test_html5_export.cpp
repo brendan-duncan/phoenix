@@ -3,11 +3,14 @@
 #include "../src/data/document.h"
 #include "../src/data/element.h"
 #include "../src/data/fla_document.h"
+#include "../src/edit/command.h"
 #include "../src/edit/html5_export.h"
 #include "../src/edit/publish_settings.h"
 #include "../src/parser/fla_parser.h"
 
 #include <filesystem>
+#include <fstream>
+#include <map>
 #include <memory>
 #include <string>
 #include <vector>
@@ -222,4 +225,56 @@ TEST(html5_phoenix_effects_are_native_or_pictures)
     CHECK(has(content, "{\"k\":\"S0L8E0\",\"d\":65537,\"t\":\"a\",\"id\":0}"));
     CHECK(has(content, "\"cc\":[0,["));
     CHECK(has(content, "[0.65,0.65,0.65,1,89.25,47.6,0,0]]"));
+}
+
+TEST(html5_tlf_text_is_published_as_text)
+{
+    const std::unique_ptr<fla::FLADocument> file = read(kData / "html5" / "tlf");
+    CHECK(file && file->document);
+    if (!file || !file->document)
+        return;
+    FakeArt art;
+    std::vector<std::string> notes;
+    const std::string content = fla::html5::content(*file->document, art, fla::html5::Options(), &notes);
+    CHECK(notes.empty());
+    // The heading and the columns are text drawn as art; the field a
+    // reader may edit is an input field of its runs.
+    CHECK(art.calls == 2);
+    CHECK(has(content, "\"texts\":[{\"x\":0,\"y\":0,\"w\":200,\"h\":24,\"type\":\"input\",\"ml\":1,\"wrap\":1,"
+                       "\"runs\":[{\"t\":\"Type here\",\"f\":\"Arial\",\"s\":14,\"c\":0}]}]"));
+    CHECK(has(content, "\"t\":\"x\",\"id\":0,\"m\":[1,0,0,1,20,215],\"n\":\"entry\""));
+}
+
+TEST(html5_compiled_clips_publish_the_movie_they_carry)
+{
+    const std::unique_ptr<fla::FLADocument> file = read(kData / "html5" / "compiled");
+    CHECK(file && file->document);
+    if (!file || !file->document)
+        return;
+    const std::map<std::string, std::vector<uint8_t>> movies = fla::html5::compiledClips(*file->document);
+    CHECK(movies.size() == 1 && movies.count("Clip"));
+    // Left as it is, the instance is noted and left out.
+    FakeArt art;
+    std::vector<std::string> notes;
+    fla::html5::content(*file->document, art, fla::html5::Options(), &notes);
+    CHECK(notes.size() == 1);
+    // Brought in, it is a movie clip of the movie's frames.
+    std::vector<std::unique_ptr<fla::Command>> keep;
+    std::vector<std::string> said;
+    fla::html5::embedCompiledClips(*file->document, movies,
+        [](const std::vector<uint8_t>& swf) {
+            const fs::path path = fs::temp_directory_path() / "phoenix_test_clip.swf";
+            std::ofstream(path, std::ios::binary).write(reinterpret_cast<const char*>(swf.data()),
+                static_cast<std::streamsize>(swf.size()));
+            std::unique_ptr<fla::FLADocument> movie = read(path);
+            fs::remove(path);
+            return movie;
+        },
+        keep, said);
+    CHECK(said.size() == 1);
+    notes.clear();
+    const std::string content = fla::html5::content(*file->document, art, fla::html5::Options(), &notes);
+    CHECK(notes.empty());
+    CHECK(has(content, "{\"name\":\"Clip\",\"type\":\"mc\""));
+    CHECK(has(content, "\"t\":\"s\",\"id\":0,\"m\":[0.5,0,0,0.5,40,30],\"n\":\"clip\""));
 }

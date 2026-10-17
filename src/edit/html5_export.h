@@ -1,12 +1,18 @@
 #pragma once
 
+#include <cstdint>
+#include <functional>
+#include <map>
+#include <memory>
 #include <string>
 #include <vector>
 
 namespace fla {
 
 class Bitmap;
+class Command;
 class Document;
+class FLADocument;
 class Element;
 class Timeline;
 
@@ -124,6 +130,21 @@ struct Options
 /// The content of \a document as JSON. \a notes gets what could not be
 /// published as it is.
 std::string content(const Document& document, ArtSource& source, const Options& options, std::vector<std::string>* notes);
+
+/// The movies of the compiled clips \a document carries: for each compiled
+/// clip library item naming a file of the document that is an SWF movie,
+/// the movie's bytes by the item's name.
+std::map<std::string, std::vector<uint8_t>> compiledClips(const Document& document);
+
+/// Brings each of \a movies into \a copy (a copy of a document being
+/// published) as a movie clip symbol of the movie's frames, which \a read
+/// makes a document of (Phoenix's SWF import), and makes the compiled clip
+/// instances placing it instances of that symbol. \a keep holds what copied
+/// them in, which must outlive the publish; \a notes says what came in and
+/// what could not.
+void embedCompiledClips(Document& copy, const std::map<std::string, std::vector<uint8_t>>& movies,
+    const std::function<std::unique_ptr<FLADocument>(const std::vector<uint8_t>& swf)>& read,
+    std::vector<std::unique_ptr<Command>>& keep, std::vector<std::string>& notes);
 
 /// \a value as JavaScript string literal text, quotes and all.
 std::string quoted(const std::string& value);

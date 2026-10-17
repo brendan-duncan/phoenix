@@ -8,6 +8,7 @@
 
 #include "../data/bitmap.h"
 #include "../data/document.h"
+#include "../data/symbol.h"
 #include "../edit/canvas_document.h"
 #include "../edit/html5_actionscript2.h"
 #include "../edit/html5_export.h"
