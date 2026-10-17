@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 
 namespace swf {
 
@@ -137,6 +138,134 @@ void rgba(Bits& out, const Color& color)
     out.u8(color.a);
 }
 
+void putString(Bits& out, const std::string& text)
+{
+    out.align();
+    for (const char c : text)
+        if (c != '\0')
+            out.bytes.push_back(static_cast<uint8_t>(c));
+    out.bytes.push_back(0);
+}
+
+/// 16.16 and 8.8 fixed point.
+void fixed16(Bits& out, double value)
+{
+    out.u32(static_cast<uint32_t>(static_cast<int32_t>(std::lround(std::clamp(value, -32768.0, 32767.0) * 65536.0))));
+}
+
+void fixed8(Bits& out, double value)
+{
+    out.u16(static_cast<int>(std::lround(std::clamp(value, -128.0, 127.99) * 256.0)) & 0xFFFF);
+}
+
+/// CXFORMWITHALPHA: multiply terms in 8.8, then add terms, each part only
+/// when it does something.
+void colorTransform(Bits& out, const ColorTransform& c)
+{
+    const auto multiply = [](double value) {
+        return static_cast<int32_t>(std::lround(std::clamp(value, -63.0, 63.0) * 256.0));
+    };
+    const int32_t m[4] = {multiply(c.red), multiply(c.green), multiply(c.blue), multiply(c.alpha)};
+    const int32_t a[4] = {std::clamp(c.redAdd, -255, 255), std::clamp(c.greenAdd, -255, 255),
+        std::clamp(c.blueAdd, -255, 255), std::clamp(c.alphaAdd, -255, 255)};
+    const bool multiplies = m[0] != 256 || m[1] != 256 || m[2] != 256 || m[3] != 256;
+    const bool adds = a[0] != 0 || a[1] != 0 || a[2] != 0 || a[3] != 0;
+    int bits = 1;
+    if (multiplies)
+        bits = std::max(bits, signedBits({m[0], m[1], m[2], m[3]}));
+    if (adds)
+        bits = std::max(bits, signedBits({a[0], a[1], a[2], a[3]}));
+    out.put(adds ? 1u : 0u, 1);
+    out.put(multiplies ? 1u : 0u, 1);
+    out.put(static_cast<uint32_t>(std::min(bits, 15)), 4);
+    if (multiplies)
+        for (int32_t value : m)
+            out.putSigned(value, bits);
+    if (adds)
+        for (int32_t value : a)
+            out.putSigned(value, bits);
+    out.align();
+}
+
+/// A FILTERLIST.
+void filterList(Bits& out, const std::vector<Filter>& filters)
+{
+    const size_t count = std::min<size_t>(filters.size(), 255);
+    out.u8(static_cast<int>(count));
+    for (size_t i = 0; i < count; ++i)
+    {
+        const Filter& f = filters[i];
+        out.u8(static_cast<int>(f.type));
+        // Inner, knockout, composite source (always), and on top and the
+        // passes for a bevel, or the passes alone.
+        const auto flags = [&](bool bevel) {
+            const int passes = std::clamp(f.passes, 1, bevel ? 15 : 31);
+            out.u8((f.inner ? 0x80 : 0) | (f.knockout ? 0x40 : 0) | 0x20 | (bevel && f.onTop ? 0x10 : 0) | passes);
+        };
+        switch (f.type)
+        {
+        case Filter::Type::DropShadow:
+            rgba(out, f.color);
+            fixed16(out, f.blurX);
+            fixed16(out, f.blurY);
+            fixed16(out, f.angle);
+            fixed16(out, f.distance);
+            fixed8(out, f.strength);
+            flags(false);
+            break;
+        case Filter::Type::Blur:
+            fixed16(out, f.blurX);
+            fixed16(out, f.blurY);
+            out.u8(std::clamp(f.passes, 1, 31) << 3);
+            break;
+        case Filter::Type::Glow:
+            rgba(out, f.color);
+            fixed16(out, f.blurX);
+            fixed16(out, f.blurY);
+            fixed8(out, f.strength);
+            flags(false);
+            break;
+        case Filter::Type::Bevel:
+            // The highlight first, as players read it (the format's
+            // description has them the other way round).
+            rgba(out, f.highlight);
+            rgba(out, f.color);
+            fixed16(out, f.blurX);
+            fixed16(out, f.blurY);
+            fixed16(out, f.angle);
+            fixed16(out, f.distance);
+            fixed8(out, f.strength);
+            flags(true);
+            break;
+        case Filter::Type::GradientGlow:
+        case Filter::Type::GradientBevel:
+        {
+            const size_t stops = std::min<size_t>(f.stops.size(), 15);
+            out.u8(static_cast<int>(stops));
+            for (size_t s = 0; s < stops; ++s)
+                rgba(out, f.stops[s].color);
+            for (size_t s = 0; s < stops; ++s)
+                out.u8(static_cast<int>(std::lround(std::clamp(f.stops[s].offset, 0.0, 1.0) * 255.0)));
+            fixed16(out, f.blurX);
+            fixed16(out, f.blurY);
+            fixed16(out, f.angle);
+            fixed16(out, f.distance);
+            fixed8(out, f.strength);
+            flags(true);
+            break;
+        }
+        case Filter::Type::ColorMatrix:
+            for (float value : f.matrix)
+            {
+                uint32_t bits = 0;
+                std::memcpy(&bits, &value, sizeof(bits));
+                out.u32(bits);
+            }
+            break;
+        }
+    }
+}
+
 std::vector<uint8_t> compress(const std::vector<uint8_t>& data)
 {
     uLongf size = compressBound(static_cast<uLong>(data.size()));
@@ -223,11 +352,96 @@ std::vector<uint8_t> removeBody(int depth)
     return body.bytes;
 }
 
+/// PlaceObject2's body, or PlaceObject3's when \a placement has filters,
+/// a blend mode or bitmap caching; \a code says which.
+std::vector<uint8_t> placementBody(const Placement& p, int& code)
+{
+    const bool three = p.hasFilters || p.hasBlend || p.cacheAsBitmap;
+    code = three ? 70 : 26;
+    Bits body;
+    body.u8((!p.clipActions.empty() ? 0x80 : 0) | (p.clipDepth > 0 ? 0x40 : 0) | (!p.name.empty() ? 0x20 : 0) |
+        (p.ratio >= 0 ? 0x10 : 0) | (p.hasColor ? 0x08 : 0) | (p.hasMatrix ? 0x04 : 0) | (p.character > 0 ? 0x02 : 0) |
+        (p.move ? 0x01 : 0));
+    if (three)
+        body.u8((p.cacheAsBitmap ? 0x04 : 0) | (p.hasBlend ? 0x02 : 0) | (p.hasFilters ? 0x01 : 0));
+    body.u16(p.depth);
+    if (p.character > 0)
+        body.u16(p.character);
+    if (p.hasMatrix)
+        matrix(body, p.matrix, 20.0);
+    if (p.hasColor)
+        colorTransform(body, p.color);
+    if (p.ratio >= 0)
+        body.u16(std::min(p.ratio, 65535));
+    if (!p.name.empty())
+        putString(body, p.name);
+    if (p.clipDepth > 0)
+        body.u16(p.clipDepth);
+    if (p.hasFilters)
+        filterList(body, p.filters);
+    if (p.hasBlend)
+        body.u8(std::clamp(p.blend, 1, 14));
+    if (p.cacheAsBitmap)
+        body.u8(1);
+    body.append(p.clipActions);
+    return body.bytes;
+}
+
+std::vector<uint8_t> labelBody(const std::string& name, bool anchor)
+{
+    Bits body;
+    putString(body, name);
+    if (anchor)
+        body.u8(1);
+    return body.bytes;
+}
+
 } // namespace
+
+std::vector<uint8_t> clipActions(const std::vector<ClipAction>& actions)
+{
+    if (actions.empty())
+        return {};
+    Bits out;
+    uint32_t all = 0;
+    for (const ClipAction& action : actions)
+        all |= action.events;
+    out.u16(0);
+    out.u32(all);
+    for (const ClipAction& action : actions)
+    {
+        const bool key = (action.events & ClipEvent::KeyPress) != 0;
+        out.u32(action.events);
+        out.u32(static_cast<uint32_t>(action.actions.size() + (key ? 1 : 0)));
+        if (key)
+            out.u8(action.key & 0xFF);
+        out.append(action.actions);
+    }
+    out.u32(0);
+    return out.bytes;
+}
 
 void Sprite::place(int id, int depth)
 {
     appendTag(_tags, 26, placeBody(id, depth)); // PlaceObject2
+}
+
+void Sprite::place(const Placement& placement)
+{
+    int code = 26;
+    const std::vector<uint8_t> body = placementBody(placement, code);
+    appendTag(_tags, code, body);
+}
+
+void Sprite::frameLabel(const std::string& name, bool anchor)
+{
+    appendTag(_tags, 43, labelBody(name, anchor));
+}
+
+void Sprite::doAction(const std::vector<uint8_t>& actions)
+{
+    if (!actions.empty())
+        appendTag(_tags, 12, actions);
 }
 
 void Sprite::remove(int depth)
@@ -251,10 +465,12 @@ Writer::Writer(int width, int height, double fps, Color background)
     , _height(std::max(1, height))
     , _fps(fps > 0.0 ? fps : 24.0)
 {
-    // FileAttributes: nothing asked of the player; then the stage color.
+    // FileAttributes: nothing asked of the player (until a movie says it
+    // runs ActionScript 3); then the stage color.
     Bits attributes;
     attributes.u32(0);
     tag(69, attributes.bytes);
+    _attributesAt = 2;
     Bits color;
     color.u8(background.r);
     color.u8(background.g);
@@ -539,6 +755,175 @@ int Writer::defineSprite(const Sprite& sprite)
     body.append(tags);
     tag(39, body.bytes); // DefineSprite
     return id;
+}
+
+int Writer::defineButton(const std::vector<ButtonRecord>& records, const std::vector<ButtonAction>& actions, bool menu)
+{
+    const int id = _nextId++;
+    Bits body;
+    body.u16(id);
+    body.u8(menu ? 1 : 0);
+    const size_t offsetAt = body.bytes.size();
+    body.u16(0); // where the actions start, once known
+    for (const ButtonRecord& record : records)
+    {
+        if (record.character <= 0 || (record.states & 0x0F) == 0)
+            continue;
+        body.u8((record.blend > 0 ? 0x20 : 0) | (!record.filters.empty() ? 0x10 : 0) | (record.states & 0x0F));
+        body.u16(record.character);
+        body.u16(record.depth);
+        matrix(body, record.matrix, 20.0);
+        colorTransform(body, record.color);
+        if (!record.filters.empty())
+            filterList(body, record.filters);
+        if (record.blend > 0)
+            body.u8(std::clamp(record.blend, 1, 14));
+    }
+    body.u8(0);
+    if (!actions.empty())
+    {
+        const size_t first = body.bytes.size() - offsetAt;
+        body.bytes[offsetAt] = static_cast<uint8_t>(first & 0xFF);
+        body.bytes[offsetAt + 1] = static_cast<uint8_t>((first >> 8) & 0xFF);
+        for (size_t i = 0; i < actions.size(); ++i)
+        {
+            // Each says how far on the next one is; the last, 0.
+            const size_t size = i + 1 < actions.size() ? 4 + actions[i].actions.size() : 0;
+            body.u16(static_cast<int>(std::min<size_t>(size, 0xFFFF)));
+            body.u16(actions[i].conditions);
+            body.append(actions[i].actions);
+        }
+    }
+    tag(34, body.bytes); // DefineButton2
+    return id;
+}
+
+int Writer::defineFont(const std::string& name, bool bold, bool italic)
+{
+    const int id = _nextId++;
+    Bits body;
+    body.u16(id);
+    body.u8(0x04 | (italic ? 0x02 : 0) | (bold ? 0x01 : 0)); // wide codes
+    body.u8(1); // Latin
+    const std::string shown = name.substr(0, 255);
+    body.u8(static_cast<int>(shown.size()));
+    for (const char c : shown)
+        body.bytes.push_back(static_cast<uint8_t>(c));
+    body.u16(0); // no glyphs: the player's own font
+    body.u16(2); // where the (empty) code table starts
+    tag(48, body.bytes); // DefineFont2
+    return id;
+}
+
+int Writer::defineEditText(const EditText& text)
+{
+    const int id = _nextId++;
+    Bits body;
+    body.u16(id);
+    rect(body, twips(text.left), twips(text.right), twips(text.top), twips(text.bottom));
+    const bool hasText = !text.text.empty();
+    body.u8((hasText ? 0x80 : 0) | (text.wordWrap ? 0x40 : 0) | (text.multiline ? 0x20 : 0) |
+        (text.password ? 0x10 : 0) | (text.readOnly ? 0x08 : 0) | 0x04 | (text.maxLength > 0 ? 0x02 : 0) |
+        (text.font > 0 ? 0x01 : 0));
+    body.u8((text.autoSize ? 0x40 : 0) | 0x20 | (text.noSelect ? 0x10 : 0) | (text.border ? 0x08 : 0) |
+        (text.html ? 0x02 : 0) | (text.useOutlines ? 0x01 : 0));
+    if (text.font > 0)
+    {
+        body.u16(text.font);
+        body.u16(std::clamp(static_cast<int>(twips(text.size)), 1, 0xFFFF));
+    }
+    rgba(body, text.color);
+    if (text.maxLength > 0)
+        body.u16(std::min(text.maxLength, 0xFFFF));
+    body.u8(std::clamp(text.align, 0, 3));
+    body.u16(std::clamp(static_cast<int>(twips(text.leftMargin)), 0, 0xFFFF));
+    body.u16(std::clamp(static_cast<int>(twips(text.rightMargin)), 0, 0xFFFF));
+    body.u16(std::clamp(static_cast<int>(twips(text.indent)), 0, 0xFFFF));
+    body.u16(std::clamp(static_cast<int>(twips(text.leading)), -32768, 32767) & 0xFFFF);
+    putString(body, text.variable);
+    if (hasText)
+        putString(body, text.text);
+    tag(37, body.bytes); // DefineEditText
+    return id;
+}
+
+void Writer::defineScalingGrid(int sprite, double left, double top, double right, double bottom)
+{
+    Bits body;
+    body.u16(sprite);
+    rect(body, twips(left), twips(right), twips(top), twips(bottom));
+    tag(78, body.bytes);
+}
+
+void Writer::place(const Placement& placement)
+{
+    int code = 26;
+    const std::vector<uint8_t> body = placementBody(placement, code);
+    tag(code, body);
+}
+
+void Writer::frameLabel(const std::string& name, bool anchor)
+{
+    tag(43, labelBody(name, anchor));
+}
+
+void Writer::doAction(const std::vector<uint8_t>& actions)
+{
+    if (!actions.empty())
+        tag(12, actions);
+}
+
+void Writer::doInitAction(int sprite, const std::vector<uint8_t>& actions)
+{
+    if (actions.empty())
+        return;
+    Bits body;
+    body.u16(sprite);
+    body.append(actions);
+    tag(59, body.bytes);
+}
+
+void Writer::exportAssets(const std::vector<std::pair<int, std::string>>& names)
+{
+    if (names.empty())
+        return;
+    Bits body;
+    body.u16(static_cast<int>(std::min<size_t>(names.size(), 0xFFFF)));
+    for (const auto& [id, name] : names)
+    {
+        body.u16(id);
+        putString(body, name);
+    }
+    tag(56, body.bytes);
+}
+
+void Writer::doABC(const std::string& name, const std::vector<uint8_t>& abc, bool lazy)
+{
+    Bits body;
+    body.u32(lazy ? 1u : 0u);
+    putString(body, name);
+    body.append(abc);
+    tag(82, body.bytes);
+}
+
+void Writer::symbolClass(const std::vector<std::pair<int, std::string>>& classes)
+{
+    if (classes.empty())
+        return;
+    Bits body;
+    body.u16(static_cast<int>(std::min<size_t>(classes.size(), 0xFFFF)));
+    for (const auto& [id, name] : classes)
+    {
+        body.u16(id);
+        putString(body, name);
+    }
+    tag(76, body.bytes);
+}
+
+void Writer::setActionScript3(bool on)
+{
+    if (_attributesAt < _tags.size())
+        _tags[_attributesAt] = on ? 0x08 : 0x00;
 }
 
 void Writer::showFrame()
