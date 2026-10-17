@@ -236,6 +236,9 @@ set(PHOENIX_CORE_PLAY_SOURCES
     play/script/png_reader.cpp
     edit/swf_actionscript3.cpp
     edit/swf_movie.cpp
+    # Publishing to HTML5, for the JavaScript runtime in resources/html5;
+    # it shares the filters' color math with the display list.
+    edit/html5_export.cpp
 )
 
 # phoenix_add_core(<target> <src dir> [FILES] [JSFL] [PYTHON] [PLAY]): the core

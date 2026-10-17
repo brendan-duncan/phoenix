@@ -696,6 +696,17 @@ public:
     /// stage at the origin, as fills and images (no stage color), masks as
     /// clips. What SWF export writes.
     std::vector<struct RecordedItem> recordFrame(int frame, const QSize& size);
+    /// What \a element draws, recorded as vectors in its own space (its own
+    /// transform taken off; a group's members keep theirs, as it draws
+    /// them), its outlines kept as strokes and its text as text where they
+    /// can be. What HTML5 publishing writes for a timeline's art.
+    std::vector<struct RecordedItem> recordElement(const fla::Element* element);
+private:
+    /// While recordElement records: a stroke whose width does not scale
+    /// (scale mode None) is drawn with a cosmetic pen of its weight, so the
+    /// recording keeps it as one.
+    bool _strokeScaleModes = false;
+public:
 
     /// One element of a layer's frame as an SWF with its structure has it:
     /// its art as recorded (in the timeline's own space), or a movie clip,

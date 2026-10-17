@@ -56,6 +56,16 @@ struct Settings
     bool svgHiddenLayers = true;
     bool svgEmbed = false;
 
+    /// HTML5: a page that plays the movie with Phoenix's JavaScript runtime
+    /// (resources/html5), its file name, whether the page fits the stage to
+    /// the window (or shows it at its own size), and whether the main
+    /// timeline loops. An HTML5 Canvas document keeps these in its Canvas
+    /// format's group (JavaScript/HTML), any other in Phoenix's own.
+    bool html5 = false;
+    std::string html5File;
+    bool html5Fit = true;
+    bool html5Loop = true;
+
     /// SWF sound: the soundtrack streamed with the movie, as "mp3",
     /// "adpcm", "raw" or "none" (silent); an MP3's bit rate in kbps, ADPCM's
     /// bits a sample (2 to 5), the sample rate (5512, 11025, 22050 or
@@ -102,7 +112,8 @@ Settings read(const std::string& xml, const std::string& name);
 std::string write(const std::string& xml, const Settings& settings, const std::string& name);
 
 /// A format's file name: its own, or with default names \a name and the
-/// extension.
+/// extension. HTML5's page is \a name.html, or \a name_html5.html while the
+/// HTML format writes \a name.html.
 std::string fileName(const Settings& settings, const std::string& format, const std::string& name);
 
 } // namespace publish

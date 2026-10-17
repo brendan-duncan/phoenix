@@ -109,7 +109,7 @@
 
 <h2 id="publish">Publish</h2>
 
-<p><span class="menu-path">File &rsaquo; Publish Settings...</span> (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>F12</kbd>) chooses what <span class="menu-path">File &rsaquo; Publish</span> (<kbd>Shift</kbd>+<kbd>F12</kbd>) writes, beside the document: an SWF movie, an HTML page, and PNG, JPEG, GIF and SVG images, each named after the document or with a name of its own. Images take the stage's size or one of their own. PNG can be 24-bit with alpha (a clear background), 24-bit, or 8-bit with a number of colors; JPEG has a quality and can be progressive; GIF can be still or animated, looping forever, playing once or repeating a number of times, with a number of colors; SVG can include hidden layers and embed its images or write them beside it. <strong>SWF sound</strong> sets how the movie's sound is compressed: MP3, ADPCM, raw or none, with its quality, sample rate and channels.</p>
+<p><span class="menu-path">File &rsaquo; Publish Settings...</span> (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>F12</kbd>) chooses what <span class="menu-path">File &rsaquo; Publish</span> (<kbd>Shift</kbd>+<kbd>F12</kbd>) writes, beside the document: an SWF movie, an HTML page, an HTML5 page that plays the movie without the SWF (see <a href="#html5">HTML5 pages</a>), and PNG, JPEG, GIF and SVG images, each named after the document or with a name of its own. Images take the stage's size or one of their own. PNG can be 24-bit with alpha (a clear background), 24-bit, or 8-bit with a number of colors; JPEG has a quality and can be progressive; GIF can be still or animated, looping forever, playing once or repeating a number of times, with a number of colors; SVG can include hidden layers and embed its images or write them beside it. <strong>SWF sound</strong> sets how the movie's sound is compressed: MP3, ADPCM, raw or none, with its quality, sample rate and channels.</p>
 
 <figure class="narrow">
   <img src="assets/shots/publish-settings.webp" alt="Publish Settings dialog with the formats to publish and their file names, the image size, and PNG, JPEG, GIF and SVG options" width="496" height="602">
@@ -117,6 +117,36 @@
 
 <p>Still images show the frame labeled <code>#Static</code>, or else the first frame. The HTML page shows the SWF movie, or else the first image published. The settings are kept in the FLA file's own publish settings, so a file that was set up to publish elsewhere publishes the same from Phoenix, and every setting Phoenix does not use is kept unchanged.</p>
 <p>Browsers no longer play SWF movies themselves, so an HTML page with an SWF movie loads <a href="https://ruffle.rs/">Ruffle</a>, a free, open source SWF player that runs in the browser, from the web (a fixed release, from unpkg.com). Ruffle finds the movie on the page and plays it; viewers need nothing installed. Ruffle plays ActionScript 1 and 2 well; its ActionScript 3 support is still growing (an ActionScript 3 movie that draws into bitmaps needs a browser with WebGL 2 or WebGPU), so check a scripted ActionScript 3 movie in a browser before you share it. The page needs an internet connection to load Ruffle, and a page opened straight from your disk may not play: put it on a web server, or open it through a local one (for example <code>python -m http.server</code> in its folder). To show the movie with a player of your own, keep the SWF and leave the HTML page out.</p>
+
+<h3 id="html5">HTML5 pages</h3>
+
+<p>The <strong>HTML5 page</strong> format publishes the movie as a web page that plays it with Phoenix's own JavaScript player, with no SWF and no plugin: the document's symbols, timelines and art drawn on a canvas in any current browser, sharp on high-density screens. It writes, beside the document:</p>
+
+<ul>
+  <li>the page (named after the document, or <code><em>name</em>_html5.html</code> while the HTML page format has the plain name);</li>
+  <li><code>phoenix.js</code>, the player, and for an HTML5 Canvas document <code>phoenix-createjs.js</code>, which runs its scripts;</li>
+  <li><code><em>name</em>.content.js</code>, the movie: its symbols, their timelines and their art;</li>
+  <li>a folder <code><em>name</em>_assets</code> of its pictures and sounds.</li>
+</ul>
+
+<p>Copy all of them together. Under <strong>Options</strong>, <strong>Fit to the window</strong> scales the stage to fill the browser window, keeping its shape (otherwise it shows at its own size), and <strong>Loop</strong> starts the main timeline again after its last frame. From the command line, <code>Phoenix render movie.fla --out site/movie.html</code> publishes the same page and files.</p>
+
+<p>What plays as it does in Phoenix:</p>
+
+<ul>
+  <li>Movie clips play on their own timelines, graphics with their parent's, buttons show their up, over and down frames under the pointer and are found by their hit frame. Instance names, frame labels and scenes are kept.</li>
+  <li>Classic tweens, motion tweens (with their color and filter changes), shape tweens and eases are worked out frame by frame as Phoenix draws them; graphics' loop settings, layer parenting, mask layers and hidden layers inside symbols too.</li>
+  <li>Fills and strokes as Phoenix draws them: solid colors, linear and radial gradients (with their spread and focal point), bitmap fills, caps, joins, and strokes that keep their width whatever the scale. Brushes, variable widths and stroke styles go as the outlines they draw.</li>
+  <li>Color effects (brightness, tint, alpha, advanced), blend modes, 9-slice scaling, and the filters: blur, drop shadow, glow, bevel, gradient glow, gradient bevel and adjust color. Filters are drawn by the browser, so their edges can differ slightly from Phoenix's.</li>
+  <li>Static text is real text in its font, so it stays sharp at any size; the viewer's computer needs the font, or the browser uses one like it. Dynamic text keeps its instance name, and input text can be typed into.</li>
+  <li>Bitmaps, as PNG files (opaque photographs as JPEG). Event, start, stop and stream sounds on frames, looping as set, as MP3 files (WAV where Phoenix's ffmpeg has no MP3 encoder).</li>
+</ul>
+
+<p>An HTML5 Canvas document's JavaScript frame scripts run as they do in Test Movie, with CreateJS's API: <code>this.stop()</code>, <code>gotoAndPlay</code> counting frames from 0, the instances by name, <code>on</code> and <code>addEventListener</code> with CreateJS's mouse events (<code>click</code>, <code>pressmove</code>, <code>rollover</code>...), <code>stage</code>, <code>exportRoot</code>, <code>lib</code>, and <code>createjs.Ticker</code>, <code>Tween</code>, <code>Ease</code>, <code>Sound</code>, <code>Shape</code>, <code>Text</code> and <code>ButtonHelper</code>.</p>
+
+<p>ActionScript is not published yet: an ActionScript document's page plays its timelines without its scripts, and Publish says so. The player is built so that ActionScript translated to JavaScript can be added beside the page later (as <code><em>name</em>.as.js</code>, which the page loads when it is there).</p>
+
+<p>Not published: 3D turns, Asset Warp puppets and deformers go as pictures of each frame's art rather than live objects; components and videos placed on the stage are left out; and Phoenix's own effects (behaviors, the scene camera, node graphs, adjustment layers and layer effects, motion blur) are not drawn. Browsers let a page make sound only once the viewer has clicked or pressed a key on it, so a movie's sound starts then. A page opened straight from your disk plays, with its sounds through the browser's simpler audio player; from a web server everything works.</p>
 
 <h2 id="sprite-sheets">Sprite sheets</h2>
 

@@ -734,6 +734,47 @@ void PhoenixView::takeCapturedArt()
     _capture->mark = items.size();
 }
 
+std::vector<RecordedItem> PhoenixView::recordElement(const fla::Element* element)
+{
+    // Big enough that nothing is culled for falling off it.
+    PaintRecorder recorder(QSize(1 << 24, 1 << 24));
+    recorder.keepStrokes = true;
+    recorder.keepText = true;
+    if (!element)
+        return recorder.items;
+    QTransform own;
+    if (element->elementType() != fla::Element::Type::Group)
+    {
+        const fla::Transform& t = element->transform;
+        bool invertible = false;
+        own = QTransform(t.m11, t.m12, t.m21, t.m22, t.tx, t.ty).inverted(&invertible);
+        if (!invertible)
+            return recorder.items;
+    }
+    QPainter painter(&recorder);
+    painter.setTransform(own);
+    const QTransform savedView = viewTransform;
+    const QRectF savedVisible = _visibleRect;
+    const bool wasExporting = _exporting;
+    const bool wasVector = _vectorMasks;
+    const QTransform savedElement = _elementTransform;
+    viewTransform = QTransform();
+    _visibleRect = QRectF(-1.0e7, -1.0e7, 2.0e7, 2.0e7);
+    _exporting = true;
+    _vectorMasks = true;
+    _strokeScaleModes = true;
+    _elementTransform = QTransform();
+    drawElement(painter, element, nullptr, 0.0);
+    _elementTransform = savedElement;
+    _strokeScaleModes = false;
+    _vectorMasks = wasVector;
+    _exporting = wasExporting;
+    viewTransform = savedView;
+    _visibleRect = savedVisible;
+    painter.end();
+    return recorder.items;
+}
+
 QImage PhoenixView::renderElements(const std::vector<const fla::Element*>& elements, double scale)
 {
     QRectF bounds;
@@ -5863,10 +5904,13 @@ QPen PhoenixView::getPen(const fla::StrokeStyle* strokeStyle, bool scaleForEleme
     // which is what a cosmetic pen of width zero draws.
     const bool hairline = strokeStyle->isHairline();
     double weight = hairline ? 0.0 : std::max(strokeStyle->weight, 0.05);
-    if (!hairline && scaleForElement)
+    // Only for a pen drawn now: a cached one stays as the stage draws it
+    // (penForHere sees to those).
+    const bool unscaled = _strokeScaleModes && scaleForElement && !hairline && strokeStyle->scaleMode == "none";
+    if (!hairline && scaleForElement && !unscaled)
         weight = scaledStrokeWeight(weight, strokeStyle->scaleMode);
     QPen pen(QColor(0, 0, 0, 255), weight);
-    pen.setCosmetic(hairline);
+    pen.setCosmetic(hairline || unscaled);
 
     // The FLA's defaults are round caps and round joins; the file only records
     // them when they differ. Qt's own defaults are square and bevel, which is
@@ -6021,6 +6065,14 @@ QPen PhoenixView::penForHere(const PathCacheEntry& entry) const
     if (!stroke || stroke->isHairline() || stroke->scaleMode.empty() || stroke->scaleMode == "normal")
         return entry.pen;
     QPen pen = entry.pen;
+    if (_strokeScaleModes && stroke->scaleMode == "none")
+    {
+        // Recorded as a stroke of its own width on the stage, whatever
+        // places it.
+        pen.setWidthF(std::max(stroke->weight, 0.05));
+        pen.setCosmetic(true);
+        return pen;
+    }
     pen.setWidthF(scaledStrokeWeight(entry.pen.widthF(), stroke->scaleMode));
     return pen;
 }

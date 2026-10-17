@@ -20,11 +20,25 @@ struct RecordedItem
     enum class Kind
     {
         Fill,
-        Image
+        Image,
+        /// With PaintRecorder::keepStrokes: an outline as drawn, its path
+        /// and pen on the device.
+        Stroke,
+        /// With PaintRecorder::keepText: a run of text as drawn.
+        Text
     };
     Kind kind = Kind::Fill;
-    /// A fill's area, or an image's box.
+    /// A fill's area, an image's box, or a stroke's path.
     QPainterPath path;
+    /// A stroke's pen, its width on the device; cosmetic when it keeps its
+    /// width whatever the scale.
+    QPen pen;
+    /// A text run: its words and font, where its baseline starts, and the
+    /// transform from there to the device (its color is the brush).
+    QString text;
+    QFont font;
+    QPointF at;
+    QTransform transform;
     /// The fill's brush, its transform taking brush space to the device.
     QBrush brush;
     /// An image, and its pixels' placement on the device.
@@ -50,6 +64,11 @@ public:
     QPaintEngine* paintEngine() const override;
 
     std::vector<RecordedItem> items;
+    /// Outlines kept as strokes (a pen and a path) where the transform
+    /// keeps their shape, rather than as the area they cover; text kept as
+    /// text rather than as its glyphs' outlines. Both off by default.
+    bool keepStrokes = false;
+    bool keepText = false;
 
 protected:
     int metric(PaintDeviceMetric metric) const override;

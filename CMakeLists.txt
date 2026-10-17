@@ -490,6 +490,7 @@ set(SOURCES
     src/gui/sprite_sheet_dialog.cpp
     src/gui/brush_properties_dialog.cpp
     src/gui/publish_dialog.cpp
+    src/gui/html5_publish.cpp
     src/gui/paint_recorder.cpp
     src/gui/swf_export.cpp
     src/gui/render_queue.cpp
@@ -622,6 +623,9 @@ qt_add_resources(Phoenix "cep" PREFIX "/" BASE "${CMAKE_SOURCE_DIR}/resources"
 # The built-in ActionScript library (the fl.* components), as :/as3 (resources/as3/README.md).
 file(GLOB_RECURSE PHOENIX_AS3_FILES CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/resources/as3/*.as")
 qt_add_resources(Phoenix "as3" PREFIX "/" BASE "${CMAKE_SOURCE_DIR}/resources" FILES ${PHOENIX_AS3_FILES})
+# The HTML5 runtime Publish writes beside a page, as :/html5 (resources/html5/README.md).
+file(GLOB PHOENIX_HTML5_FILES CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/resources/html5/*.js")
+qt_add_resources(Phoenix "html5" PREFIX "/" BASE "${CMAKE_SOURCE_DIR}/resources" FILES ${PHOENIX_HTML5_FILES})
 target_compile_definitions(Phoenix PRIVATE PHOENIX_VERSION="${PHOENIX_VERSION}")
 # HTML extension panels: see cmake/PhoenixWebView.cmake.
 include(cmake/PhoenixWebView.cmake)

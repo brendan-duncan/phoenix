@@ -5,6 +5,8 @@
 #include <QPixmap>
 #include <QTextItem>
 
+#include <cmath>
+
 class RecordingPaintEngine : public QPaintEngine
 {
 public:
@@ -28,6 +30,8 @@ public:
             addFill(transform.map(path), p->brush(), transform);
         // The outline, as the area it covers.
         const QPen pen = p->pen();
+        if (pen.style() != Qt::NoPen && pen.brush().style() != Qt::NoBrush && keptAsStroke(path, pen, transform))
+            return;
         if (pen.style() != Qt::NoPen && pen.brush().style() != Qt::NoBrush)
         {
             QPainterPathStroker stroker(pen);
@@ -103,6 +107,22 @@ public:
 
     void drawTextItem(const QPointF& at, const QTextItem& item) override
     {
+        if (_recorder->keepText)
+        {
+            QPainter* p = painter();
+            RecordedItem kept;
+            kept.kind = RecordedItem::Kind::Text;
+            kept.text = item.text();
+            kept.font = item.font();
+            kept.at = at;
+            kept.transform = p->transform();
+            kept.brush = p->pen().brush();
+            QPainterPath box;
+            box.addText(at, item.font(), item.text());
+            kept.path = p->transform().map(box);
+            record(kept);
+            return;
+        }
         // Text as its glyphs' outlines, in the pen's color.
         QPainterPath path;
         path.addText(at, item.font(), item.text());
@@ -144,6 +164,32 @@ public:
     }
 
 private:
+    /// With keepStrokes: \a path's outline as a stroke on the device, when
+    /// the transform turns and scales it evenly (or the pen is cosmetic), so
+    /// its width means the same everywhere along it. False to have it
+    /// recorded as the area it covers.
+    bool keptAsStroke(const QPainterPath& path, const QPen& pen, const QTransform& transform)
+    {
+        if (!_recorder->keepStrokes)
+            return false;
+        const double scale = std::sqrt(std::fabs(transform.determinant()));
+        const bool even = std::fabs(std::fabs(transform.m11()) - std::fabs(transform.m22())) <= 1e-6 * (1.0 + scale) &&
+            std::fabs(std::fabs(transform.m12()) - std::fabs(transform.m21())) <= 1e-6 * (1.0 + scale) &&
+            transform.isAffine();
+        if (!pen.isCosmetic() && (!even || scale <= 0.0))
+            return false;
+        RecordedItem item;
+        item.kind = RecordedItem::Kind::Stroke;
+        item.path = transform.map(path);
+        item.pen = pen;
+        if (!pen.isCosmetic())
+            item.pen.setWidthF(pen.widthF() * scale);
+        item.brush = pen.brush();
+        item.brush.setTransform(pen.brush().transform() * transform);
+        record(item);
+        return true;
+    }
+
     void addFill(const QPainterPath& area, const QBrush& brush, const QTransform& transform)
     {
         if (area.isEmpty())
