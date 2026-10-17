@@ -134,8 +134,11 @@ TEST(html5_content_carries_canvas_scripts)
 TEST(html5_publish_settings_round_trip)
 {
     fla::publish::Settings settings = fla::publish::read(std::string(), "movie");
-    CHECK(!settings.html5);
+    CHECK(settings.html5 && !settings.html);
     CHECK(settings.html5Fit);
+    CHECK(fla::publish::fileName(settings, "html5", "movie") == "movie.html");
+    // Beside the SWF's HTML page, the HTML5 page moves aside.
+    settings.html = true;
     CHECK(fla::publish::fileName(settings, "html5", "movie") == "movie_html5.html");
     settings.html5 = true;
     settings.html5Fit = false;

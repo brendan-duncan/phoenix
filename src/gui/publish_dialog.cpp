@@ -9,9 +9,12 @@
 #include <QGridLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
+#include <QInputDialog>
+#include <QMessageBox>
 #include <QLabel>
 #include <QLineEdit>
 #include <QPushButton>
+#include <QSignalBlocker>
 #include "hot_text.h"
 #include <QVBoxLayout>
 #include <algorithm>
@@ -36,17 +39,35 @@ QString publishFolderPath(const fla::publish::Settings& settings, const QString&
     return QDir::cleanPath(own.isEmpty() ? parent.absolutePath() : parent.absoluteFilePath(own));
 }
 
-PublishSettingsDialog::PublishSettingsDialog(const fla::publish::Settings& settings, const QString& documentName,
-    int stageWidth, int stageHeight, const QString& documentFolder, bool saved, QWidget* parent)
+PublishSettingsDialog::PublishSettingsDialog(const std::string& xml, const QString& documentName, int stageWidth,
+    int stageHeight, const QString& documentFolder, bool saved, QWidget* parent)
     : QDialog(parent)
-    , _settings(settings)
+    , _settings(fla::publish::read(xml, documentName.toStdString()))
+    , _xml(xml)
+    , _stageWidth(stageWidth)
+    , _stageHeight(stageHeight)
     , _name(documentName)
     , _documentFolder(documentFolder)
     , _saved(saved)
 {
+    const fla::publish::Settings settings = _settings;
     setWindowTitle("Publish Settings");
     QVBoxLayout* layout = new QVBoxLayout(this);
-    layout->addWidget(new QLabel(QString("Profile: <b>%1</b>").arg(QString::fromStdString(settings.profile).toHtmlEscaped()), this));
+
+    // The configurations: each with its own formats, options and location.
+    QHBoxLayout* profileRow = new QHBoxLayout;
+    profileRow->addWidget(new QLabel("Configuration", this));
+    _profile = new QComboBox(this);
+    _profile->setToolTip("The publish configuration shown; File > Publish lists them all");
+    profileRow->addWidget(_profile, 1);
+    QPushButton* add = new QPushButton("New...", this);
+    add->setToolTip("A new configuration, a copy of this one");
+    QPushButton* rename = new QPushButton("Rename...", this);
+    _deleteProfile = new QPushButton("Delete", this);
+    profileRow->addWidget(add);
+    profileRow->addWidget(rename);
+    profileRow->addWidget(_deleteProfile);
+    layout->addLayout(profileRow);
 
     // Where the files go: a folder of their own in the parent folder, or
     // the parent folder itself.
@@ -211,32 +232,9 @@ PublishSettingsDialog::PublishSettingsDialog(const fla::publish::Settings& setti
     _soundRate->setCurrentIndex(std::max(0, _soundRate->findData(settings.soundRate)));
     _soundStereo = new QCheckBox("Stereo", options);
     _soundStereo->setChecked(settings.soundStereo);
-    const auto fillQuality = [this](int bitRate, int bits) {
-        const QString codec = _soundCompression->currentData().toString();
-        _soundQuality->clear();
-        if (codec == "mp3")
-        {
-            for (int kbps : {8, 16, 20, 24, 32, 48, 56, 64, 80, 96, 112, 128, 160, 192})
-                _soundQuality->addItem(QString("%1 kbps").arg(kbps), kbps);
-            _soundQuality->setCurrentIndex(std::max(0, _soundQuality->findData(bitRate)));
-        }
-        else if (codec == "adpcm")
-        {
-            for (int b = 2; b <= 5; ++b)
-                _soundQuality->addItem(QString("%1-bit").arg(b), b);
-            _soundQuality->setCurrentIndex(std::max(0, _soundQuality->findData(bits)));
-        }
-        _soundQuality->setEnabled(_soundQuality->count() > 0);
-        _soundRate->setEnabled(codec != "none");
-        _soundStereo->setEnabled(codec != "none");
-        // MP3 has no 5.5 kHz.
-        if (codec == "mp3" && _soundRate->currentIndex() == 0)
-            _soundRate->setCurrentIndex(1);
-    };
-    fillQuality(settings.soundBitRate, settings.soundAdpcmBits);
-    connect(_soundCompression, &QComboBox::currentIndexChanged, this, [this, fillQuality]() {
-        fillQuality(_settings.soundBitRate, _settings.soundAdpcmBits);
-    });
+    fillSoundQuality(settings.soundBitRate, settings.soundAdpcmBits);
+    connect(_soundCompression, &QComboBox::currentIndexChanged, this,
+        [this]() { fillSoundQuality(_settings.soundBitRate, _settings.soundAdpcmBits); });
     QHBoxLayout* soundRow = new QHBoxLayout;
     soundRow->addWidget(_soundCompression);
     soundRow->addWidget(_soundQuality);
@@ -260,6 +258,140 @@ PublishSettingsDialog::PublishSettingsDialog(const fla::publish::Settings& setti
     connect(buttons->button(QDialogButtonBox::Ok), &QPushButton::clicked, this, [this]() { finish(false); });
     connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
     layout->addWidget(buttons);
+    listProfiles(settings.profile);
+    connect(add, &QPushButton::clicked, this, &PublishSettingsDialog::newProfile);
+    connect(rename, &QPushButton::clicked, this, &PublishSettingsDialog::renameProfile);
+    connect(_deleteProfile, &QPushButton::clicked, this, &PublishSettingsDialog::deleteProfile);
+    connect(_profile, &QComboBox::currentIndexChanged, this, &PublishSettingsDialog::profileChosen);
+    folderChanged();
+}
+
+void PublishSettingsDialog::listProfiles(const std::string& shown)
+{
+    const QSignalBlocker quiet(_profile);
+    _profile->clear();
+    const std::vector<std::string> names = fla::publish::profiles(_xml);
+    for (const std::string& name : names)
+        _profile->addItem(QString::fromStdString(name));
+    if (std::find(names.begin(), names.end(), shown) == names.end())
+        _profile->addItem(QString::fromStdString(shown));
+    _profile->setCurrentText(QString::fromStdString(shown));
+    _deleteProfile->setEnabled(_profile->count() > 1);
+}
+
+void PublishSettingsDialog::profileChosen()
+{
+    // What was shown is kept, then the chosen one shown.
+    _xml = fla::publish::write(_xml, settings(), _name.toStdString());
+    load(fla::publish::read(_xml, _name.toStdString(), _profile->currentText().toStdString()));
+}
+
+void PublishSettingsDialog::newProfile()
+{
+    bool ok = false;
+    const QString name = QInputDialog::getText(this, "New Configuration", "Name:", QLineEdit::Normal,
+        _profile->currentText() + " copy", &ok).trimmed();
+    if (!ok || name.isEmpty())
+        return;
+    if (_profile->findText(name) >= 0)
+    {
+        QMessageBox::information(this, "New Configuration", QString("There is a configuration named %1.").arg(name));
+        return;
+    }
+    _xml = fla::publish::write(_xml, settings(), _name.toStdString());
+    _xml = fla::publish::addProfile(_xml, name.toStdString(), _settings.profile, _name.toStdString());
+    load(fla::publish::read(_xml, _name.toStdString(), name.toStdString()));
+    listProfiles(name.toStdString());
+}
+
+void PublishSettingsDialog::renameProfile()
+{
+    bool ok = false;
+    const QString name = QInputDialog::getText(this, "Rename Configuration", "Name:", QLineEdit::Normal,
+        _profile->currentText(), &ok).trimmed();
+    if (!ok || name.isEmpty() || name == _profile->currentText())
+        return;
+    if (_profile->findText(name) >= 0)
+    {
+        QMessageBox::information(this, "Rename Configuration", QString("There is a configuration named %1.").arg(name));
+        return;
+    }
+    // A document with no settings yet has its one configuration written
+    // first, so there is one to rename.
+    _xml = fla::publish::write(_xml, settings(), _name.toStdString());
+    _xml = fla::publish::renameProfile(_xml, _settings.profile, name.toStdString());
+    _settings.profile = name.toStdString();
+    listProfiles(_settings.profile);
+}
+
+void PublishSettingsDialog::deleteProfile()
+{
+    if (_profile->count() < 2)
+        return;
+    if (QMessageBox::question(this, "Delete Configuration",
+            QString("Delete the configuration %1?").arg(_profile->currentText())) != QMessageBox::Yes)
+        return;
+    _xml = fla::publish::removeProfile(_xml, _settings.profile);
+    const std::string shown = fla::publish::currentProfile(_xml);
+    load(fla::publish::read(_xml, _name.toStdString(), shown));
+    listProfiles(shown);
+}
+
+std::string PublishSettingsDialog::xml() const
+{
+    const fla::publish::Settings shown = settings();
+    return fla::publish::setCurrentProfile(fla::publish::write(_xml, shown, _name.toStdString()), shown.profile);
+}
+
+void PublishSettingsDialog::load(const fla::publish::Settings& settings)
+{
+    _settings = settings;
+    _parentFolder->setText(
+        QDir::toNativeSeparators(QDir(_documentFolder).absoluteFilePath(QString::fromStdString(settings.parentFolder))));
+    _publishFolder->setText(QString::fromStdString(settings.publishFolder));
+    const std::pair<QCheckBox*, bool> formats[] = {{_flash, settings.flash}, {_html, settings.html},
+        {_png, settings.png}, {_jpeg, settings.jpeg}, {_gif, settings.gif}, {_svg, settings.svg},
+        {_html5, settings.html5}};
+    for (const auto& [box, on] : formats)
+    {
+        const QSignalBlocker quiet(box);
+        box->setChecked(on);
+    }
+    const std::pair<QLineEdit*, const std::string*> files[] = {{_flashFile, &settings.flashFile},
+        {_htmlFile, &settings.htmlFile}, {_pngFile, &settings.pngFile}, {_jpegFile, &settings.jpegFile},
+        {_gifFile, &settings.gifFile}, {_svgFile, &settings.svgFile}, {_html5File, &settings.html5File}};
+    for (const auto& [edit, file] : files)
+        edit->setText(QString::fromStdString(*file));
+    {
+        const QSignalBlocker quiet(_defaultNames);
+        _defaultNames->setChecked(settings.defaultNames);
+    }
+    namesChanged();
+    _matchMovie->setChecked(settings.matchMovie);
+    _width->setValue(settings.width > 0 && !settings.matchMovie ? settings.width : _stageWidth);
+    _height->setValue(settings.height > 0 && !settings.matchMovie ? settings.height : _stageHeight);
+    _width->setEnabled(!settings.matchMovie);
+    _height->setEnabled(!settings.matchMovie);
+    _pngDepth->setCurrentText(QString::fromStdString(settings.pngBitDepth));
+    _pngColors->setValue(settings.pngColors);
+    _jpegQuality->setValue(settings.jpegQuality);
+    _jpegProgressive->setChecked(settings.jpegProgressive);
+    _gifAnimated->setChecked(settings.gifAnimated);
+    _gifLoop->setCurrentIndex(settings.gifLoop ? 0 : settings.gifLoopCount > 0 ? 2 : 1);
+    _gifLoopCount->setValue(std::max(1, settings.gifLoopCount));
+    _gifColors->setValue(settings.gifColors);
+    _svgHidden->setChecked(settings.svgHiddenLayers);
+    _svgEmbed->setChecked(settings.svgEmbed);
+    _html5Fit->setChecked(settings.html5Fit);
+    _html5Loop->setChecked(settings.html5Loop);
+    _soundRate->setCurrentIndex(std::max(0, _soundRate->findData(settings.soundRate)));
+    _soundStereo->setChecked(settings.soundStereo);
+    {
+        const QSignalBlocker quiet(_soundCompression);
+        _soundCompression->setCurrentIndex(
+            std::max(0, _soundCompression->findData(QString::fromStdString(settings.soundCompression))));
+    }
+    fillSoundQuality(settings.soundBitRate, settings.soundAdpcmBits);
     folderChanged();
 }
 
@@ -303,6 +435,32 @@ void PublishSettingsDialog::finish(bool publish)
         return;
     _publish = publish;
     accept();
+}
+
+/// The soundtrack's quality choices for its codec: MP3's bit rates or
+/// ADPCM's bits, \a bitRate or \a bits chosen.
+void PublishSettingsDialog::fillSoundQuality(int bitRate, int bits)
+{
+    const QString codec = _soundCompression->currentData().toString();
+    _soundQuality->clear();
+    if (codec == "mp3")
+    {
+        for (int kbps : {8, 16, 20, 24, 32, 48, 56, 64, 80, 96, 112, 128, 160, 192})
+            _soundQuality->addItem(QString("%1 kbps").arg(kbps), kbps);
+        _soundQuality->setCurrentIndex(std::max(0, _soundQuality->findData(bitRate)));
+    }
+    else if (codec == "adpcm")
+    {
+        for (int b = 2; b <= 5; ++b)
+            _soundQuality->addItem(QString("%1-bit").arg(b), b);
+        _soundQuality->setCurrentIndex(std::max(0, _soundQuality->findData(bits)));
+    }
+    _soundQuality->setEnabled(_soundQuality->count() > 0);
+    _soundRate->setEnabled(codec != "none");
+    _soundStereo->setEnabled(codec != "none");
+    // MP3 has no 5.5 kHz.
+    if (codec == "mp3" && _soundRate->currentIndex() == 0)
+        _soundRate->setCurrentIndex(1);
 }
 
 void PublishSettingsDialog::namesChanged()

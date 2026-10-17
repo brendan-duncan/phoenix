@@ -256,6 +256,7 @@ namespace {
 /// layout from before the timeline, tools and outliner docked is not used.
 constexpr int kLayoutVersion = 2;
 fla::Frame* frameOfElement(const fla::Element* element);
+std::string publishXml(const fla::Document& document);
 }
 
 namespace {
@@ -6365,10 +6366,38 @@ void MainWindow::setupMenus()
     publishSettingsAction->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_F12));
     publishSettingsAction->setStatusTip("Which formats Publish writes, and their options");
     connect(publishSettingsAction, &QAction::triggered, this, &MainWindow::publishSettings);
-    QAction* publishAction = fileMenu->addAction("Publish");
+    // Publish: a submenu of the document's publish configurations, the
+    // current one first (Shift+F12), each publishing as it says.
+    QMenu* publishMenu = fileMenu->addMenu("Publish");
+    QAction* publishAction = publishMenu->addAction("Publish");
     publishAction->setShortcut(QKeySequence(Qt::SHIFT | Qt::Key_F12));
-    publishAction->setStatusTip("Write the formats the publish settings ask for, beside the document");
-    connect(publishAction, &QAction::triggered, this, &MainWindow::publish);
+    publishAction->setStatusTip("Publish with the current publish configuration");
+    connect(publishAction, &QAction::triggered, this, [this]() { publish(); });
+    connect(publishMenu, &QMenu::aboutToShow, this, [this, publishMenu, publishAction]() {
+        for (QAction* action : publishMenu->actions())
+            if (action != publishAction)
+            {
+                publishMenu->removeAction(action);
+                action->deleteLater();
+            }
+        const fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
+        const std::string xml = document ? publishXml(*document) : std::string();
+        const std::string current = fla::publish::read(xml, "Untitled").profile;
+        publishAction->setText(QString::fromStdString(current));
+        publishAction->setEnabled(document != nullptr);
+        for (const std::string& name : fla::publish::profiles(xml))
+        {
+            if (name == current)
+                continue;
+            const QString profile = QString::fromStdString(name);
+            QAction* other = publishMenu->addAction(profile);
+            other->setStatusTip(QString("Publish with the configuration %1").arg(profile));
+            connect(other, &QAction::triggered, this, [this, profile]() { publish(profile); });
+        }
+        publishMenu->addSeparator();
+        QAction* settings = publishMenu->addAction("Publish Settings...");
+        connect(settings, &QAction::triggered, this, &MainWindow::publishSettings);
+    });
 
     // The format Save As starts in for a new document: XFL folders suit a
     // studio keeping its files in version control.
@@ -8390,10 +8419,6 @@ void MainWindow::compareWith()
     dialog.exec();
 }
 
-namespace {
-std::string publishXml(const fla::Document& document);
-}
-
 int MainWindow::renderCommand(const QString& source, const QStringList& options)
 {
     // Phoenix render <document> [--range 1-240] [--out frames/|movie.mp4|anim.gif]
@@ -8964,15 +8989,15 @@ bool MainWindow::editPublishSettings(bool fromPublish)
         return false;
     const QString name = _documentPath.isEmpty() ? QString("Untitled") : QFileInfo(_documentPath).completeBaseName();
     const std::string xml = publishXml(*document);
-    PublishSettingsDialog dialog(fla::publish::read(xml, name.toStdString()), name, document->width, document->height,
-        publishDocumentFolder(), !_documentPath.isEmpty(), this);
+    PublishSettingsDialog dialog(xml, name, document->width, document->height, publishDocumentFolder(),
+        !_documentPath.isEmpty(), this);
     if (fromPublish)
         dialog.preferPublish();
     if (dialog.exec() != QDialog::Accepted)
         return false;
     // The parent folder is offered again for the next document never saved.
     QSettings().setValue("publish/parentFolder", dialog.parentFolder());
-    const std::string written = fla::publish::write(xml, dialog.settings(), name.toStdString());
+    const std::string written = dialog.xml();
     if (written != xml)
     {
         // One undo step: the package file replaced, or added.
@@ -9000,7 +9025,7 @@ void MainWindow::publishSettings()
         publish();
 }
 
-void MainWindow::publish()
+void MainWindow::publish(const QString& profile)
 {
     fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
     if (!document || !_phoenixView)
@@ -9015,13 +9040,18 @@ void MainWindow::publish()
     }
     QStringList written;
     QStringList problems;
-    publishFiles(written, problems);
+    publishFiles(written, problems, profile);
     const QString folder = QDir::toNativeSeparators(_publishedFolder);
 
     // What was written, in the Output panel.
     if (OutputPanel* output = _scripts ? _scripts->output() : nullptr)
     {
-        const QString name = _documentPath.isEmpty() ? QString("Untitled") : QFileInfo(_documentPath).fileName();
+        QString name = _documentPath.isEmpty() ? QString("Untitled") : QFileInfo(_documentPath).fileName();
+        const std::vector<std::string> configurations = fla::publish::profiles(publishXml(*document));
+        if (configurations.size() > 1)
+            name += QString(" (%1)").arg(profile.isEmpty()
+                    ? QString::fromStdString(fla::publish::currentProfile(publishXml(*document)))
+                    : profile);
         output->append(written.isEmpty() ? QString("Publish %1: nothing was published.").arg(name)
                                          : QString("Published %1 to %2:").arg(name, folder));
         for (const QString& file : written)
@@ -9043,7 +9073,7 @@ void MainWindow::publish()
     const QDir out(_publishedFolder);
     const std::string base =
         (_documentPath.isEmpty() ? QString("Untitled") : QFileInfo(_documentPath).completeBaseName()).toStdString();
-    const fla::publish::Settings settings = fla::publish::read(publishXml(*document), base);
+    const fla::publish::Settings settings = fla::publish::read(publishXml(*document), base, profile.toStdString());
     QString page;
     const auto pageOf = [&](bool on, const char* format) {
         const QString file = QString::fromStdString(fla::publish::fileName(settings, format, base));
@@ -9087,7 +9117,7 @@ void MainWindow::publish()
         revealInFileManager(page.isEmpty() ? out.filePath(written.front()) : page);
 }
 
-bool MainWindow::publishFiles(QStringList& written, QStringList& problems)
+bool MainWindow::publishFiles(QStringList& written, QStringList& problems, const QString& profile)
 {
     scriptEvent("prePublish");
     struct Published
@@ -9102,7 +9132,8 @@ bool MainWindow::publishFiles(QStringList& written, QStringList& problems)
         return false;
     }
     const QString name = _documentPath.isEmpty() ? QString("Untitled") : QFileInfo(_documentPath).completeBaseName();
-    const fla::publish::Settings settings = fla::publish::read(publishXml(*document), name.toStdString());
+    const fla::publish::Settings settings =
+        fla::publish::read(publishXml(*document), name.toStdString(), profile.toStdString());
     // The files go in the publish folder, made in the parent folder if need
     // be, or in the parent folder itself.
     _publishedFolder = publishFolderPath(settings, publishDocumentFolder());

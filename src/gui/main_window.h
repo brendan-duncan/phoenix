@@ -201,11 +201,13 @@ private slots:
     /// the files; the first Publish of a document never saved opens the
     /// settings first, to choose where the files go.
     void publishSettings();
-    void publish();
-    /// Publishes the shown document as its publish settings say, with no
-    /// dialogs: the files written and what went wrong. False when something
-    /// could not be written.
-    bool publishFiles(QStringList& written, QStringList& problems);
+    /// Publishes with the configuration \a profile, or the current one.
+    void publish(const QString& profile = QString());
+    /// Publishes the shown document as its publish settings say (the
+    /// configuration \a profile, or the current one), with no dialogs: the
+    /// files written and what went wrong. False when something could not be
+    /// written.
+    bool publishFiles(QStringList& written, QStringList& problems, const QString& profile = QString());
     /// The document as an SWF movie at \a size: its scenes with their
     /// structure (movie clips, buttons, instance names, masks, labels, text
     /// fields) and their ActionScript compiled, as fla::swfmovie writes

@@ -1,14 +1,16 @@
 #pragma once
 
 #include <string>
+#include <vector>
 
 namespace fla {
 
 /// The FLA's publish settings (PublishSettings.xml in the package): which
 /// formats File > Publish writes, their file names and their options.
-/// Phoenix reads the current profile, publishes what it can of it, and
-/// edits it in place, so every setting it does not use goes back into the
-/// file unchanged. Free of Qt.
+/// The file keeps them as profiles (publish configurations), one of them
+/// current. Phoenix reads a profile, publishes what it can of it, and edits
+/// it in place, so every setting it does not use goes back into the file
+/// unchanged. Free of Qt.
 namespace publish {
 
 struct Settings
@@ -16,9 +18,10 @@ struct Settings
     /// The profile's name, as the file records it.
     std::string profile = "Default";
 
-    /// The formats to publish.
-    bool flash = true;
-    bool html = true;
+    /// The formats to publish. A document with no publish settings
+    /// publishes an HTML5 page; a file's profile says for itself.
+    bool flash = false;
+    bool html = false;
     bool png = false;
     bool jpeg = false;
     bool gif = false;
@@ -68,7 +71,7 @@ struct Settings
     /// the window (or shows it at its own size), and whether the main
     /// timeline loops. An HTML5 Canvas document keeps these in its Canvas
     /// format's group (JavaScript/HTML), any other in Phoenix's own.
-    bool html5 = false;
+    bool html5 = true;
     std::string html5File;
     bool html5Fit = true;
     bool html5Loop = true;
@@ -110,13 +113,32 @@ struct Settings
 /// which Phoenix cannot write, comes back as mono ADPCM at its rate.
 Settings::SoundFormat soundFormat(int format, int compress);
 
-/// The current profile of a PublishSettings.xml; the defaults for a
-/// document named \a name when \a xml is empty or not one.
-Settings read(const std::string& xml, const std::string& name);
+/// The profile \a profile of a PublishSettings.xml, or with none named
+/// (or none of that name) the current one; the defaults for a document
+/// named \a name when \a xml is empty or not one.
+Settings read(const std::string& xml, const std::string& name, const std::string& profile = std::string());
 
-/// \a xml with the current profile's settings set to \a settings and all
-/// else kept; a new file of the usual form when \a xml is empty.
+/// \a xml with the settings of the profile \a settings names (or else the
+/// current one) set to \a settings and all else kept; a new file of the
+/// usual form when \a xml is empty.
 std::string write(const std::string& xml, const Settings& settings, const std::string& name);
+
+/// The profiles' names in the file's order, and the current one's: one
+/// profile, Default, when \a xml has none.
+std::vector<std::string> profiles(const std::string& xml);
+std::string currentProfile(const std::string& xml);
+/// \a xml with a new profile \a profile, a copy of \a from (every setting
+/// of it, Phoenix's and the file's), made current; \a xml unchanged when
+/// the name is empty or taken. \a name is the document's, for a file made
+/// from nothing.
+std::string addProfile(const std::string& xml, const std::string& profile, const std::string& from,
+    const std::string& name);
+/// \a xml with \a profile current, renamed, or removed (never the last;
+/// another becomes current when the current one goes); unchanged when
+/// there is no such profile or the new name is taken.
+std::string setCurrentProfile(const std::string& xml, const std::string& profile);
+std::string renameProfile(const std::string& xml, const std::string& profile, const std::string& to);
+std::string removeProfile(const std::string& xml, const std::string& profile);
 
 /// A format's file name: its own, or with default names \a name and the
 /// extension. HTML5's page is \a name.html, or \a name_html5.html while the

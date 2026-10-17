@@ -34,6 +34,23 @@ Element* group(Element* profile, const char* id)
 }
 
 /// The profile in use: the one marked current, or the first.
+XMLElement* currentProfile(XMLDocument& document);
+
+/// The profile named \a name, or the current one when there is none.
+XMLElement* profileNamed(XMLDocument& document, const std::string& name)
+{
+    XMLElement* root = document.RootElement();
+    if (!name.empty() && root && std::strcmp(root->Name(), "flash_profiles") == 0)
+        for (XMLElement* profile = root->FirstChildElement("flash_profile"); profile;
+             profile = profile->NextSiblingElement("flash_profile"))
+        {
+            const char* own = profile->Attribute("name");
+            if (own && name == own)
+                return profile;
+        }
+    return currentProfile(document);
+}
+
 XMLElement* currentProfile(XMLDocument& document)
 {
     XMLElement* root = document.RootElement();
@@ -163,7 +180,7 @@ XMLElement* svgSwitch(XMLDocument& document, XMLElement* formats)
 
 } // namespace
 
-Settings read(const std::string& xml, const std::string& name)
+Settings read(const std::string& xml, const std::string& name, const std::string& profileName)
 {
     Settings settings;
     settings.flashFile = name + ".swf";
@@ -176,11 +193,11 @@ Settings read(const std::string& xml, const std::string& name)
     XMLDocument document;
     if (xml.empty() || document.Parse(xml.c_str(), xml.size()) != tinyxml2::XML_SUCCESS)
         return settings;
-    const XMLElement* profile = currentProfile(document);
+    const XMLElement* profile = profileNamed(document, profileName);
     if (!profile)
         return settings;
-    if (const char* profileName = profile->Attribute("name"))
-        settings.profile = profileName;
+    if (const char* own = profile->Attribute("name"))
+        settings.profile = own;
     const XMLElement* formats = profile->FirstChildElement("PublishFormatProperties");
     settings.defaultNames = flagOf(formats, "defaultNames", true);
     settings.flash = flagOf(formats, "flash", true);
@@ -306,7 +323,7 @@ std::string write(const std::string& xml, const Settings& settings, const std::s
         profile->SetAttribute("current", "true");
         root->InsertEndChild(profile);
     }
-    XMLElement* profile = currentProfile(document);
+    XMLElement* profile = profileNamed(document, settings.profile);
     XMLElement* formats = child(document, profile, "PublishFormatProperties");
     if (!formats->Attribute("enabled"))
         formats->SetAttribute("enabled", "true");
@@ -414,6 +431,147 @@ std::string fileName(const Settings& settings, const std::string& format, const 
     if (format == "html5")
         return settings.html5File;
     return settings.svgFile;
+}
+
+namespace {
+
+/// The file's profiles, in its order: none when it has no list of them.
+std::vector<XMLElement*> profileList(XMLDocument& document)
+{
+    std::vector<XMLElement*> list;
+    XMLElement* root = document.RootElement();
+    if (root && std::strcmp(root->Name(), "flash_profiles") == 0)
+        for (XMLElement* profile = root->FirstChildElement("flash_profile"); profile;
+             profile = profile->NextSiblingElement("flash_profile"))
+            list.push_back(profile);
+    return list;
+}
+
+std::string printed(XMLDocument& document)
+{
+    tinyxml2::XMLPrinter printer;
+    document.Print(&printer);
+    return printer.CStr();
+}
+
+/// \a xml parsed, a file of the usual form made from nothing when it is
+/// empty or not one.
+bool parsed(const std::string& xml, const std::string& name, XMLDocument& document)
+{
+    if (!xml.empty() && document.Parse(xml.c_str(), xml.size()) == tinyxml2::XML_SUCCESS && !profileList(document).empty())
+        return true;
+    const std::string made = write(std::string(), read(std::string(), name), name);
+    return document.Parse(made.c_str(), made.size()) == tinyxml2::XML_SUCCESS && !profileList(document).empty();
+}
+
+bool named(const XMLElement* profile, const std::string& name)
+{
+    const char* own = profile->Attribute("name");
+    return own && name == own;
+}
+
+} // namespace
+
+std::vector<std::string> profiles(const std::string& xml)
+{
+    XMLDocument document;
+    std::vector<std::string> names;
+    if (!xml.empty() && document.Parse(xml.c_str(), xml.size()) == tinyxml2::XML_SUCCESS)
+    {
+        for (const XMLElement* profile : profileList(document))
+            names.push_back(profile->Attribute("name") ? profile->Attribute("name") : "");
+        if (names.empty())
+            if (const XMLElement* only = currentProfile(document))
+                names.push_back(only->Attribute("name") ? only->Attribute("name") : "Default");
+    }
+    if (names.empty())
+        names.push_back(Settings().profile);
+    return names;
+}
+
+std::string currentProfile(const std::string& xml)
+{
+    XMLDocument document;
+    if (xml.empty() || document.Parse(xml.c_str(), xml.size()) != tinyxml2::XML_SUCCESS)
+        return std::string();
+    const XMLElement* profile = currentProfile(document);
+    return profile && profile->Attribute("name") ? profile->Attribute("name") : std::string();
+}
+
+std::string addProfile(const std::string& xml, const std::string& profile, const std::string& from,
+    const std::string& name)
+{
+    XMLDocument document;
+    if (profile.empty() || !parsed(xml, name, document))
+        return xml;
+    std::vector<XMLElement*> list = profileList(document);
+    for (const XMLElement* each : list)
+        if (named(each, profile))
+            return xml;
+    XMLElement* source = profileNamed(document, from);
+    XMLElement* copy = source->DeepClone(&document)->ToElement();
+    copy->SetAttribute("name", profile.c_str());
+    for (XMLElement* each : list)
+        each->SetAttribute("current", "false");
+    copy->SetAttribute("current", "true");
+    document.RootElement()->InsertEndChild(copy);
+    return printed(document);
+}
+
+std::string setCurrentProfile(const std::string& xml, const std::string& profile)
+{
+    XMLDocument document;
+    if (xml.empty() || document.Parse(xml.c_str(), xml.size()) != tinyxml2::XML_SUCCESS)
+        return xml;
+    std::vector<XMLElement*> list = profileList(document);
+    if (std::none_of(list.begin(), list.end(), [&](const XMLElement* each) { return named(each, profile); }))
+        return xml;
+    for (XMLElement* each : list)
+    {
+        each->SetAttribute("current", "false");
+        if (named(each, profile))
+            each->SetAttribute("current", "true");
+    }
+    return printed(document);
+}
+
+std::string renameProfile(const std::string& xml, const std::string& profile, const std::string& to)
+{
+    XMLDocument document;
+    if (to.empty() || xml.empty() || document.Parse(xml.c_str(), xml.size()) != tinyxml2::XML_SUCCESS)
+        return xml;
+    XMLElement* found = nullptr;
+    for (XMLElement* each : profileList(document))
+    {
+        if (named(each, to))
+            return xml;
+        if (named(each, profile))
+            found = each;
+    }
+    if (!found)
+        return xml;
+    found->SetAttribute("name", to.c_str());
+    return printed(document);
+}
+
+std::string removeProfile(const std::string& xml, const std::string& profile)
+{
+    XMLDocument document;
+    if (xml.empty() || document.Parse(xml.c_str(), xml.size()) != tinyxml2::XML_SUCCESS)
+        return xml;
+    std::vector<XMLElement*> list = profileList(document);
+    if (list.size() < 2)
+        return xml;
+    for (size_t i = 0; i < list.size(); ++i)
+        if (named(list[i], profile))
+        {
+            const bool wasCurrent = list[i]->Attribute("current") && std::strcmp(list[i]->Attribute("current"), "true") == 0;
+            document.RootElement()->DeleteChild(list[i]);
+            if (wasCurrent)
+                list[i == 0 ? 1 : 0]->SetAttribute("current", "true");
+            return printed(document);
+        }
+    return xml;
 }
 
 } // namespace fla::publish

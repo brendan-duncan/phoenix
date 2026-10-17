@@ -51,9 +51,10 @@ TEST(publish_settings_are_read_from_the_current_profile)
     CHECK(settings.gifAnimated && !settings.gifLoop && settings.gifLoopCount == 3 && settings.gifColors == 64);
     CHECK(fla::publish::fileName(settings, "png", "shot") == "poster.png");
 
-    // No file: the format's defaults, named after the document.
+    // No file: an HTML5 page, named after the document.
     const fla::publish::Settings plain = fla::publish::read("", "shot");
-    CHECK(plain.flash && plain.html && !plain.png && plain.defaultNames);
+    CHECK(plain.html5 && !plain.flash && !plain.html && !plain.png && plain.defaultNames);
+    CHECK(fla::publish::fileName(plain, "html5", "shot") == "shot.html");
     CHECK(fla::publish::fileName(plain, "jpeg", "shot") == "shot.jpg");
 }
 
@@ -146,4 +147,45 @@ TEST(publish_settings_keep_where_the_files_go)
     const std::string cleared = fla::publish::write(written, settings, "shot");
     CHECK(cleared.find("PhoenixParentFolder") == std::string::npos);
     CHECK(cleared.find("PhoenixPublishFolder") == std::string::npos);
+}
+
+TEST(publish_configurations_are_the_files_profiles)
+{
+    // A document with no settings has one configuration, Default.
+    CHECK(fla::publish::profiles("") == std::vector<std::string>{"Default"});
+
+    // The file's own: both profiles, the current one first read.
+    CHECK((fla::publish::profiles(kAnimate) == std::vector<std::string>{"Old", "Default"}) ||
+        (fla::publish::profiles(kAnimate) == std::vector<std::string>{"Default", "Old"}));
+    CHECK(fla::publish::currentProfile(kAnimate) == "Default");
+
+    // A new one copies the current one, every setting, and becomes current.
+    const std::string added = fla::publish::addProfile(kAnimate, "Web", "Default", "shot");
+    CHECK(fla::publish::currentProfile(added) == "Web");
+    const fla::publish::Settings web = fla::publish::read(added, "shot");
+    CHECK(web.profile == "Web" && web.png && web.pngFile == "poster.png" && web.gifColors == 64);
+    CHECK(added.find("<Version>17</Version>") != added.rfind("<Version>17</Version>"));
+    // Taken names are refused.
+    CHECK(fla::publish::addProfile(added, "Web", "Default", "shot") == added);
+
+    // Each keeps its own settings.
+    fla::publish::Settings changed = web;
+    changed.png = false;
+    const std::string written = fla::publish::write(added, changed, "shot");
+    CHECK(!fla::publish::read(written, "shot", "Web").png);
+    CHECK(fla::publish::read(written, "shot", "Default").png);
+
+    // Current, renamed, removed.
+    const std::string back = fla::publish::setCurrentProfile(written, "Default");
+    CHECK(fla::publish::currentProfile(back) == "Default");
+    const std::string renamed = fla::publish::renameProfile(back, "Web", "Site");
+    CHECK(!fla::publish::read(renamed, "shot", "Site").png && fla::publish::read(renamed, "shot", "Site").profile == "Site");
+    const std::string removed = fla::publish::removeProfile(renamed, "Default");
+    CHECK(fla::publish::currentProfile(removed) != "Default");
+    CHECK(fla::publish::profiles(removed).size() == fla::publish::profiles(renamed).size() - 1);
+
+    // From nothing: Default, then the copy.
+    const std::string fresh = fla::publish::addProfile("", "Copy", "Default", "shot");
+    CHECK(fla::publish::profiles(fresh) == (std::vector<std::string>{"Default", "Copy"}));
+    CHECK(fla::publish::read(fresh, "shot", "Copy").html5);
 }

@@ -16,9 +16,12 @@ class HotSpinBox;
 /// empty or relative parent is from \a documentFolder.
 QString publishFolderPath(const fla::publish::Settings& settings, const QString& documentFolder);
 
-/// File > Publish Settings: where File > Publish writes, which formats,
-/// their file names, and each format's options, kept in the document as FLA
-/// files keep them. Publish closes it and publishes at once.
+/// File > Publish Settings: the document's publish configurations, and
+/// for each where File > Publish writes, which formats, their file names,
+/// and each format's options, kept in the document as FLA files keep them
+/// (a configuration is one of the file's publish profiles). New copies the
+/// configuration shown. Publish closes it and publishes the configuration
+/// shown at once.
 class PublishSettingsDialog : public QDialog
 {
     Q_OBJECT
@@ -27,10 +30,14 @@ public:
     /// \a documentFolder is the folder an empty parent folder stands for:
     /// the document's own, or for a document never saved (\a saved false)
     /// the parent folder last chosen.
-    PublishSettingsDialog(const fla::publish::Settings& settings, const QString& documentName, int stageWidth,
-        int stageHeight, const QString& documentFolder, bool saved, QWidget* parent);
+    PublishSettingsDialog(const std::string& xml, const QString& documentName, int stageWidth, int stageHeight,
+        const QString& documentFolder, bool saved, QWidget* parent);
 
+    /// The configuration shown, as its controls have it.
     fla::publish::Settings settings() const;
+    /// The publish settings as edited: every configuration, the one shown
+    /// current.
+    std::string xml() const;
     /// Closed with Publish rather than OK.
     bool publishRequested() const { return _publish; }
     /// Publish as the default button, for when Publish opened the dialog.
@@ -42,8 +49,23 @@ private:
     void namesChanged();
     void folderChanged();
     void finish(bool publish);
+    /// The controls set to \a settings.
+    void load(const fla::publish::Settings& settings);
+    void fillSoundQuality(int bitRate, int bits);
+    /// The configurations listed, \a shown chosen.
+    void listProfiles(const std::string& shown);
+    void profileChosen();
+    void newProfile();
+    void renameProfile();
+    void deleteProfile();
 
     fla::publish::Settings _settings;
+    /// Every configuration, as last stored from the controls.
+    std::string _xml;
+    QComboBox* _profile = nullptr;
+    QPushButton* _deleteProfile = nullptr;
+    int _stageWidth = 0;
+    int _stageHeight = 0;
     QString _name;
     QString _documentFolder;
     bool _saved = false;

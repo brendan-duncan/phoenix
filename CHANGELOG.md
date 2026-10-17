@@ -4,6 +4,7 @@ What changed in each release of Phoenix, newest first.
 
 ## 0.17.0
 
+- Publish configurations: Publish Settings can keep several, each with its own formats, options and location; File > Publish lists them, the current one on Shift+F12. A document with no publish settings now publishes an HTML5 page rather than an SWF movie and its page
 - Publish says what it wrote: the files in the Output panel, and a dialog to open the page in the browser or show the files. Publish Settings has a Publish button and a Location: a parent folder (the document's by default) and a publish folder made in it for the files. A new document can be published before it is saved
 - HTML5 pages play ActionScript 3 movies with their scripts: frame scripts, the document class, linked classes and the components are translated to JavaScript, with a source map back to the .as files; what does not translate is reported with its file or frame and line
 - Published SWF movies carry their ActionScript 3, compiled: frame scripts, the document class, linked symbols' classes and the classes they use, and the fl.* components with their inspector parameters, so ActionScript 3 movies run outside Phoenix; what does not compile is reported with its file or frame and line
