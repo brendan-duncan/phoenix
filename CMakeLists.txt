@@ -617,9 +617,10 @@ if(PHOENIX_TUTORIAL_FILES)
     qt_add_resources(Phoenix "tutorials" PREFIX "/" BASE "${CMAKE_SOURCE_DIR}/resources"
         FILES ${PHOENIX_TUTORIAL_FILES})
 endif()
-# The CSInterface shim HTML extension panels start with (cep_panel.cpp).
+# The CSInterface shim HTML extension panels start with, and the Node.js
+# modules of those that ask for them (cep_panel.cpp).
 qt_add_resources(Phoenix "cep" PREFIX "/" BASE "${CMAKE_SOURCE_DIR}/resources"
-    FILES "${CMAKE_SOURCE_DIR}/resources/cep/adobe_cep.js")
+    FILES "${CMAKE_SOURCE_DIR}/resources/cep/adobe_cep.js" "${CMAKE_SOURCE_DIR}/resources/cep/node.js")
 # The built-in ActionScript library (the fl.* components), as :/as3 (resources/as3/README.md).
 file(GLOB_RECURSE PHOENIX_AS3_FILES CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/resources/as3/*.as")
 qt_add_resources(Phoenix "as3" PREFIX "/" BASE "${CMAKE_SOURCE_DIR}/resources" FILES ${PHOENIX_AS3_FILES})

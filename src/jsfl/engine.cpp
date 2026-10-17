@@ -509,6 +509,64 @@ const char* const kPrelude = R"JS(
         }
     };
     fl.fileExists = function (uri) { return FLfile.exists(uri); };
+    // The ActionScript errors of the last publish: Phoenix reports them in
+    // the Output panel instead, so there are none to save here.
+    fl.compilerErrors = {
+        clear: function () {},
+        save: function (uri, append) {
+            if (!append || !FLfile.exists(uri))
+                FLfile.write(uri, "");
+        }
+    };
+    // fl.tools outside a tool's own script (a tool's script has its own,
+    // with the pen and keys as it works): the toolbox's tools and the one
+    // in use.
+    if (!fl.tools) {
+        var toolObj = function (name) {
+            this.__name = name;
+            this.depth = 0;
+            this.iconID = 0;
+            this.position = 0;
+        };
+        ["setToolName", "setMenuString", "setToolTip", "setIcon", "setOptionsFile", "setPI", "showPIControl",
+            "enablePIControl", "showTransformHandles"].forEach(function (name) {
+            toolObj.prototype[name] = function () {};
+        });
+        fl.tools = {
+            get toolObjs() {
+                return fl.__toolNames().map(function (name, i) {
+                    var tool = new toolObj(name);
+                    tool.position = i;
+                    return tool;
+                });
+            },
+            get activeTool() {
+                var name = fl.__activeTool();
+                if (name === null)
+                    return null;
+                var tool = new toolObj(name);
+                tool.position = fl.__toolNames().indexOf(name);
+                return tool;
+            },
+            penLoc: {x: 0, y: 0}, penDownLoc: {x: 0, y: 0},
+            mouseIsDown: false, altIsDown: false, ctlIsDown: false, shiftIsDown: false,
+            getKeyDown: function () { return 0; },
+            setCursor: function () {},
+            snapPoint: function (point) { return {x: point.x, y: point.y}; },
+            constrainPoint: function (from, to) {
+                var dx = to.x - from.x, dy = to.y - from.y;
+                var step = Math.PI / 4;
+                var angle = Math.round(Math.atan2(dy, dx) / step) * step;
+                var ux = Math.cos(angle), uy = Math.sin(angle);
+                if (Math.abs(ux) > 1e-9 && Math.abs(uy) > 1e-9) {
+                    var d = Math.max(Math.abs(dx), Math.abs(dy));
+                    return {x: from.x + (ux > 0 ? d : -d), y: from.y + (uy > 0 ? d : -d)};
+                }
+                var length = dx * ux + dy * uy;
+                return {x: from.x + ux * length, y: from.y + uy * length};
+            }
+        };
+    }
     global.an = fl;
 })(this);
 )JS";

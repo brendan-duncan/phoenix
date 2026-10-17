@@ -1,9 +1,10 @@
 // What an HTML extension panel's CSInterface.js expects to find in its page:
 // window.__adobe_cep__ (the host's side of CSInterface) and window.cep (the
-// file system and browser helpers). Phoenix runs this before the panel's own
-// scripts. Calls that answer at once go to Phoenix through a prompt the web
-// view hands over; evalScript and menus answer later through
-// window.__phoenixCep.
+// file system, processes and browser helpers). Phoenix runs this before the
+// panel's own scripts, and node.js after it for a panel that asks for
+// Node.js. Calls that answer at once go to Phoenix through a prompt the web
+// view hands over; evalScript, menus and what processes write answer later
+// through window.__phoenixCep.
 
 (function () {
     "use strict";
@@ -12,11 +13,16 @@
 
     var MARK = "\u0001phoenix-call\u0001";
 
-    function call(name, args) {
+    // The reply to a call as it comes: {value} or {error, code, ...}.
+    function request(name, args) {
         var answer = window.prompt(MARK + JSON.stringify({ name: name, args: args || [] }), "");
         if (answer === null || answer === undefined || answer === "")
-            return undefined;
-        var reply = JSON.parse(answer);
+            return {};
+        return JSON.parse(answer);
+    }
+
+    function call(name, args) {
+        var reply = request(name, args);
         if (reply.error)
             throw new Error(reply.error);
         return reply.value;
@@ -53,7 +59,26 @@
         }
     }
 
+    // What running processes write, and their ends, by process: the
+    // handlers cep.process and child_process set.
+    var processHandlers = {};
+
     window.__phoenixCep = {
+        request: request,
+        processHandlers: processHandlers,
+        processEvents: function (events) {
+            for (var i = 0; i < events.length; i++) {
+                var handler = processHandlers[events[i].id];
+                if (!handler)
+                    continue;
+                try {
+                    handler(events[i]);
+                } catch (e) {
+                    if (window.console)
+                        console.error(e);
+                }
+            }
+        },
         resolve: function (id, result) {
             var callback = callbacks[id];
             delete callbacks[id];
@@ -141,6 +166,12 @@
             case "getWindowTitle":
                 return call("getWindowTitle");
             default:
+                // Messages between applications (Vulcan): no other
+                // application answers here.
+                if (/^vulcan/.test(name)) {
+                    var none = /GetEndPoints|GetTargetSpecifiers/.test(name) ? [] : (/GetAppPath/.test(name) ? "" : false);
+                    return JSON.stringify({ result: none });
+                }
                 return "";
             }
         },
@@ -207,23 +238,101 @@
     for (var key in ERR)
         fs[key] = ERR[key];
 
-    function unsupported() {
-        return { err: ERR.ERR_UNKNOWN };
+    // cep.process: programs run with their output handed to callbacks.
+    // A process is known by the number createProcess gives.
+    var processes = {};
+
+    function decodeOutput(base64) {
+        var binary = window.atob(base64);
+        try {
+            return decodeURIComponent(escape(binary));
+        } catch (e) {
+            return binary;
+        }
     }
+
+    function processState(id) {
+        var state = processes[id];
+        if (!state) {
+            state = processes[id] = { stdout: null, stderr: null, onquit: null, pending: { stdout: [], stderr: [] }, ended: false };
+            processHandlers[id] = function (event) {
+                if (event.kind === "exit") {
+                    state.ended = true;
+                    if (state.onquit)
+                        state.onquit(event.code);
+                    return;
+                }
+                var text = decodeOutput(event.data);
+                if (state[event.kind])
+                    state[event.kind](text);
+                else
+                    state.pending[event.kind].push(text);
+            };
+        }
+        return state;
+    }
+
+    function processCall(name, args) {
+        var reply = request("proc." + name, args);
+        if (reply.error)
+            return { err: reply.code === "ENOENT" ? ERR.ERR_NOT_FOUND : ERR.ERR_UNKNOWN };
+        return { err: ERR.NO_ERROR, data: reply.value };
+    }
+
+    function outputCallback(kind) {
+        return function (pid, callback) {
+            if (!processes[pid] || typeof callback !== "function")
+                return { err: ERR.ERR_INVALID_PARAMS };
+            var state = processes[pid];
+            state[kind] = callback;
+            var pending = state.pending[kind];
+            state.pending[kind] = [];
+            for (var i = 0; i < pending.length; i++)
+                callback(pending[i]);
+            return { err: ERR.NO_ERROR };
+        };
+    }
+
+    var process = {
+        createProcess: function () {
+            if (arguments.length < 1)
+                return { err: ERR.ERR_INVALID_PARAMS };
+            var args = [];
+            for (var i = 1; i < arguments.length; i++)
+                args.push(String(arguments[i]));
+            var result = processCall("spawn", [String(arguments[0]), args, "", null, false]);
+            if (result.err)
+                return result;
+            processState(result.data.id);
+            return { err: ERR.NO_ERROR, data: result.data.id };
+        },
+        stdout: outputCallback("stdout"),
+        stderr: outputCallback("stderr"),
+        writeStdin: function (pid, data) {
+            var bytes = unescape(encodeURIComponent(String(data)));
+            var result = processCall("write", [Number(pid), window.btoa(bytes)]);
+            return { err: result.err };
+        },
+        getWorkingDirectory: function (pid) { return processCall("cwd", [Number(pid)]); },
+        waitfor: function (pid) { return processCall("wait", [Number(pid), -1]); },
+        onquit: function (pid, callback) {
+            if (!processes[pid] || typeof callback !== "function")
+                return { err: ERR.ERR_INVALID_PARAMS };
+            processes[pid].onquit = callback;
+            return { err: ERR.NO_ERROR };
+        },
+        isRunning: function (pid) { return processCall("running", [Number(pid)]); },
+        terminate: function (pid) { return processCall("kill", [Number(pid)]); }
+    };
 
     window.cep = {
         encoding: { UTF8: "UTF-8", Base64: "Base64" },
         fs: fs,
-        process: {
-            createProcess: unsupported, stdout: unsupported, stderr: unsupported, writeStdin: unsupported,
-            getWorkingDirectory: unsupported, waitfor: unsupported, onquit: unsupported, isRunning: unsupported,
-            terminate: unsupported
-        },
+        process: process,
         util: {
             openURLInDefaultBrowser: function (url) { return call("openURLInDefaultBrowser", [String(url)]); },
             registerExtensionUnloadCallback: function () {},
             storeProxyCredentials: function () {}
         }
     };
-    window.cep_node = undefined;
 })();

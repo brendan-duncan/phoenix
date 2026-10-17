@@ -148,6 +148,9 @@ set(PHOENIX_CORE_FILE_SOURCES
     parser/compound_file.cpp
     parser/zip_reader.cpp
     parser/extension_package.cpp
+    util/cep_native.cpp
+    edit/document_import.cpp
+    util/json.cpp
     parser/fla_doctor.cpp
     writer/document_diff.cpp
     util/zip_archive.cpp
@@ -192,6 +195,11 @@ set(PHOENIX_CORE_JSFL_SOURCES
     jsfl/model_layers.cpp
     jsfl/model_publish.cpp
     jsfl/model_shape.cpp
+    jsfl/model_commands.cpp
+    jsfl/model_import.cpp
+    jsfl/model_profiles.cpp
+    jsfl/model_style.cpp
+    jsfl/model_view.cpp
     jsfl/model_timeline.cpp
     jsfl/object.cpp
     jsfl/session.cpp

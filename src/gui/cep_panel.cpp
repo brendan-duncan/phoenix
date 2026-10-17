@@ -6,6 +6,8 @@
 #include "html_view.h"
 
 #include "../jsfl/panel_script.h"
+#include "../util/cep_native.h"
+#include "../util/json.h"
 
 #include <QApplication>
 #include <QCoreApplication>
@@ -25,6 +27,11 @@
 #include <QLocale>
 #include <QMainWindow>
 #include <QMenu>
+#ifdef PHOENIX_NETWORK
+#include <QNetworkAccessManager>
+#include <QNetworkReply>
+#include <QNetworkRequest>
+#endif
 #include <QStandardPaths>
 #include <QTextStream>
 #include <QTimer>
@@ -55,7 +62,7 @@ constexpr int kErrFileExists = 10;
 const char* const kHostId = "FLPR";
 const char* const kHostVersion = "24.0";
 
-QString json(const QJsonValue& value)
+QString jsonText(const QJsonValue& value)
 {
     if (value.isObject())
         return QString::fromUtf8(QJsonDocument(value.toObject()).toJson(QJsonDocument::Compact));
@@ -235,13 +242,22 @@ void fillJsonMenu(QMenu* menu, const QJsonArray& items, const std::function<void
     }
 }
 
-/// The CSInterface shim each page starts with.
-QString startScript()
+QString resourceText(const QString& path)
 {
-    QFile file(":/cep/adobe_cep.js");
+    QFile file(path);
     if (!file.open(QIODevice::ReadOnly))
         return QString();
     return QString::fromUtf8(file.readAll());
+}
+
+/// The CSInterface shim each page starts with, and Node.js's modules after
+/// it for a panel whose manifest asks for them.
+QString startScript(bool node)
+{
+    QString script = resourceText(":/cep/adobe_cep.js");
+    if (node)
+        script += "\n" + resourceText(":/cep/node.js");
+    return script;
 }
 
 } // namespace
@@ -258,6 +274,18 @@ CepPanel::CepPanel(CepPanels& panels, const extensions::Installed& extension, co
     , _id(QString::fromStdString(panel.id))
 {
     _root = extensionRoot(QDir(QString::fromStdString(extension.folder)).filePath("package"));
+
+    cep::NativeHost::Options options;
+    options.node = _panel.nodeJs;
+    options.root = QDir::toNativeSeparators(_root).toStdString();
+    options.page = QDir::toNativeSeparators(QDir::cleanPath(QDir(QString::fromStdString(extension.folder))
+                                                                .filePath("package/" + QString::fromStdString(_panel.mainPath))))
+                       .toStdString();
+    options.execPath = QDir::toNativeSeparators(QCoreApplication::applicationFilePath()).toStdString();
+    _native = std::make_unique<cep::NativeHost>(options);
+    // Processes write from threads of their own: what they write reaches
+    // the page from the event loop.
+    _native->setWake([this]() { QMetaObject::invokeMethod(this, [this]() { flushNativeEvents(); }, Qt::QueuedConnection); });
 
     auto* layout = new QVBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);
@@ -277,7 +305,7 @@ CepPanel::CepPanel(CepPanels& panels, const extensions::Installed& extension, co
 
     _view = new HtmlView(this);
     _view->setProfileFolder(QDir(ScriptRunner::settingsFolder()).filePath("WebView"));
-    _view->setStartScript(startScript());
+    _view->setStartScript(startScript(_panel.nodeJs));
     _view->onCall = [this](const QString& request) { return answer(request); };
     layout->addWidget(_view, 1);
 
@@ -289,7 +317,152 @@ CepPanel::CepPanel(CepPanels& panels, const extensions::Installed& extension, co
         setMaximumSize(_panel.maxWidth, _panel.maxHeight);
 }
 
-CepPanel::~CepPanel() = default;
+CepPanel::~CepPanel()
+{
+    // Its processes end before the panel does.
+    _native.reset();
+#ifdef PHOENIX_NETWORK
+    for (QNetworkReply* reply : std::as_const(_requests))
+    {
+        reply->disconnect(this);
+        reply->abort();
+        reply->deleteLater();
+    }
+#endif
+}
+
+void CepPanel::flushNativeEvents()
+{
+    if (!_native)
+        return;
+    const json::Value events = _native->takeEvents();
+    if (events.toArray().empty())
+        return;
+    _view->runScript("window.__phoenixCep && window.__phoenixCep.processEvents(" + QString::fromStdString(events.dump()) +
+                     ");");
+}
+
+void CepPanel::postToPage(const json::Value& event)
+{
+    _view->runScript("window.__phoenixCep && window.__phoenixCep.processEvents([" +
+                     QString::fromStdString(event.dump()) + "]);");
+}
+
+json::Value CepPanel::networkCall(const std::string& name, const json::Value& args)
+{
+    json::Value reply;
+    const auto fail = [&reply](const std::string& code, const std::string& message) {
+        reply.set("code", code);
+        reply.set("error", code + ": " + message);
+        return reply;
+    };
+    if (!_panel.nodeJs)
+        return fail("ERR_ACCESS_DENIED", "the panel's manifest does not ask for Node.js");
+#ifdef PHOENIX_NETWORK
+    if (name == "net.request")
+    {
+        const json::Value& o = args[0];
+        const QUrl url(QString::fromStdString(o["url"].toString()));
+        if (!url.isValid() || (url.scheme() != "http" && url.scheme() != "https"))
+            return fail("ERR_INVALID_URL", "not an http or https address: " + o["url"].toString());
+        if (!_network)
+            _network = new QNetworkAccessManager(this);
+        QNetworkRequest request(url);
+        // As Node's http does: redirects are the caller's to follow.
+        request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::ManualRedirectPolicy);
+        for (const auto& [key, value] : o["headers"].toObject())
+            request.setRawHeader(QByteArray::fromStdString(key), QByteArray::fromStdString(value.toString()));
+        if (o["timeout"].toNumber() > 0)
+            request.setTransferTimeout(o["timeout"].toInt());
+        const QByteArray body = QByteArray::fromBase64(QByteArray::fromStdString(o["body"].toString()));
+        const QByteArray method = QByteArray::fromStdString(o["method"].isString() ? o["method"].toString() : "GET");
+        QNetworkReply* sent = body.isEmpty() && method == "GET" ? _network->get(request)
+                                                                : _network->sendCustomRequest(request, method, body);
+        const int id = _nextRequest++;
+        _requests.insert(id, sent);
+        auto responded = std::make_shared<bool>(false);
+        const auto respond = [this, id, sent, responded]() {
+            if (*responded)
+                return;
+            const QVariant status = sent->attribute(QNetworkRequest::HttpStatusCodeAttribute);
+            if (!status.isValid())
+                return;
+            *responded = true;
+            json::Value event;
+            event.set("id", id);
+            event.set("kind", "response");
+            event.set("status", status.toInt());
+            event.set("statusText", sent->attribute(QNetworkRequest::HttpReasonPhraseAttribute).toString().toStdString());
+            json::Value headers(json::Value::Array{});
+            for (const QNetworkReply::RawHeaderPair& pair : sent->rawHeaderPairs())
+                headers.push(json::Value::Array{pair.first.toStdString(), pair.second.toStdString()});
+            event.set("headers", headers);
+            postToPage(event);
+        };
+        connect(sent, &QNetworkReply::metaDataChanged, this, respond);
+        connect(sent, &QIODevice::readyRead, this, [this, id, sent, respond]() {
+            respond();
+            const QByteArray bytes = sent->readAll();
+            if (bytes.isEmpty())
+                return;
+            json::Value event;
+            event.set("id", id);
+            event.set("kind", "data");
+            event.set("data", bytes.toBase64().toStdString());
+            postToPage(event);
+        });
+        connect(sent, &QNetworkReply::finished, this, [this, id, sent, respond, responded]() {
+            respond();
+            const QByteArray rest = sent->readAll();
+            if (!rest.isEmpty())
+            {
+                json::Value data;
+                data.set("id", id);
+                data.set("kind", "data");
+                data.set("data", rest.toBase64().toStdString());
+                postToPage(data);
+            }
+            json::Value event;
+            event.set("id", id);
+            if (*responded)
+                event.set("kind", "end");
+            else
+            {
+                const QNetworkReply::NetworkError error = sent->error();
+                event.set("kind", "error");
+                event.set("code", error == QNetworkReply::HostNotFoundError         ? "ENOTFOUND"
+                                  : error == QNetworkReply::ConnectionRefusedError ? "ECONNREFUSED"
+                                  : error == QNetworkReply::TimeoutError || error == QNetworkReply::OperationCanceledError
+                                      ? "ETIMEDOUT"
+                                      : "ECONNRESET");
+                event.set("message", sent->errorString().toStdString());
+            }
+            postToPage(event);
+            _requests.remove(id);
+            sent->deleteLater();
+        });
+        json::Value value;
+        value.set("id", id);
+        reply.set("value", value);
+        return reply;
+    }
+    if (name == "net.abort")
+    {
+        if (QNetworkReply* sent = _requests.take(args[0].toInt()))
+        {
+            sent->disconnect(this);
+            sent->abort();
+            sent->deleteLater();
+        }
+        reply.set("value", true);
+        return reply;
+    }
+    return fail("ENOSYS", "unknown call " + name);
+#else
+    (void)args;
+    return fail("ERR_NOT_AVAILABLE", "this Phoenix was built without networking (" + name + ")");
+#endif
+}
 
 QString CepPanel::menuText() const
 {
@@ -315,15 +488,27 @@ void CepPanel::deliver(const QJsonObject& event)
 {
     if (!_started || !_listening.contains(event.value("type").toString()))
         return;
-    _view->runScript("window.__phoenixCep && window.__phoenixCep.dispatch(" + json(event) + ");");
+    _view->runScript("window.__phoenixCep && window.__phoenixCep.dispatch(" + jsonText(event) + ");");
 }
 
 QString CepPanel::answer(const QString& request)
 {
+    // Files, processes and Node.js's modules: answered in JSON as they come.
+    if (request.contains(QLatin1String("\"node.")) || request.contains(QLatin1String("\"proc.")) ||
+        request.contains(QLatin1String("\"net.")))
+    {
+        bool parsed = false;
+        const json::Value call = json::Value::parse(request.toStdString(), &parsed);
+        const std::string name = call["name"].toString();
+        if (parsed && cep::NativeHost::handles(name))
+            return QString::fromStdString(_native->call(name, call["args"]).dump());
+        if (parsed && name.rfind("net.", 0) == 0)
+            return QString::fromStdString(networkCall(name, call["args"]).dump());
+    }
     const QJsonObject message = QJsonDocument::fromJson(request.toUtf8()).object();
     QJsonObject reply;
     reply["value"] = call(message.value("name").toString(), message.value("args").toArray());
-    return json(reply);
+    return jsonText(reply);
 }
 
 QJsonValue CepPanel::call(const QString& name, const QJsonArray& args)
@@ -332,16 +517,16 @@ QJsonValue CepPanel::call(const QString& name, const QJsonArray& args)
     if (name.startsWith("fs."))
         return fileCall(name.mid(3), args);
     if (name == "getHostEnvironment")
-        return json(hostEnvironment());
+        return jsonText(hostEnvironment());
     if (name == "getHostCapabilities")
-        return json(QJsonObject{{"EXTENDED_PANEL_MENU", true}, {"EXTENDED_PANEL_ICONS", false},
+        return jsonText(QJsonObject{{"EXTENDED_PANEL_MENU", true}, {"EXTENDED_PANEL_ICONS", false},
             {"DELEGATE_APE_ENGINE", false}, {"SUPPORT_HTML_EXTENSIONS", true}, {"DISABLE_FLASH_EXTENSIONS", true}});
     if (name == "getCurrentApiVersion")
-        return json(QJsonObject{{"major", 11}, {"minor", 0}, {"micro", 0}});
+        return jsonText(QJsonObject{{"major", 11}, {"minor", 0}, {"micro", 0}});
     if (name == "getExtensionId")
         return _id;
     if (name == "getNetworkPreferences")
-        return json(QJsonObject{{"proxyEnabled", false}, {"proxyType", 0}, {"proxyAddress", ""}, {"proxyPort", 0},
+        return jsonText(QJsonObject{{"proxyEnabled", false}, {"proxyType", 0}, {"proxyAddress", ""}, {"proxyPort", 0},
             {"exceptionList", ""}});
     if (name == "initResourceBundle")
         return resourceBundle();
@@ -396,7 +581,7 @@ QJsonValue CepPanel::call(const QString& name, const QJsonArray& args)
                 {"maxHeight", p.maxHeight}, {"defaultExtensionDataXml", ""}, {"specialExtensionDataXml", ""},
                 {"requiredRuntimeList", QJsonArray()}, {"isAutoVisible", true}, {"isPluginExtension", false}});
         }
-        return json(list);
+        return jsonText(list);
     }
     if (name == "evalScript")
     {
@@ -667,7 +852,7 @@ void CepPanel::evalScript(int callback, const QString& script)
             return;
         const QString value = result.ok ? QString::fromStdString(result.value) : QString("EvalScript error.");
         self->_view->runScript("window.__phoenixCep && window.__phoenixCep.resolve(" + QString::number(callback) + "," +
-                               json(value) + ");");
+                               jsonText(value) + ");");
     });
 }
 
@@ -697,7 +882,7 @@ void CepPanel::showContextMenu(const QString& kind, const QString& spec)
     QPointer<CepPanel> self(this);
     const auto chosen = [self](const QString& id, const QString&) {
         if (self)
-            self->_view->runScript("window.__phoenixCep && window.__phoenixCep.contextMenuClicked(" + json(id) + ");");
+            self->_view->runScript("window.__phoenixCep && window.__phoenixCep.contextMenuClicked(" + jsonText(id) + ");");
     };
     if (kind == "json")
         fillJsonMenu(&menu, QJsonDocument::fromJson(spec.toUtf8()).object().value("menu").toArray(), chosen);
@@ -749,7 +934,7 @@ QString CepPanel::resourceBundle() const
     const QString name = QLocale::system().name();
     read(locale.filePath(name.left(2) + "/messages.properties"));
     read(locale.filePath(name + "/messages.properties"));
-    return json(strings);
+    return jsonText(strings);
 }
 
 // ---------------------------------------------------------------------------

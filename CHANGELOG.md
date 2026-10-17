@@ -19,6 +19,11 @@ What changed in each release of Phoenix, newest first.
 - HTML5 pages of ActionScript 2 movies draw the version 2 components (Button, CheckBox, RadioButton, TextInput, TextArea, Label, ComboBox, List, NumericStepper) from their parameters, with their events
 - HTML5 Canvas pages' scripts draw as in Test Movie: CreateJS's whole Graphics API, Text, Bitmap, Sprite sheets, script-made clips, filters, shadows, masks, composite operations, skew and registration points
 - Export FLA for Other Apps bakes Link to Control behaviors with the controls they follow
+- HTML panels that ask for Node.js get it: `require` of their own files and packages, `fs`, `path`, `child_process`, `http` and `https`, `events`, `Buffer`, `zlib`, `crypto` and more, written into Phoenix; `cep.process` runs programs for any panel
+- More of JSFL: the selection's stroke and fill (`setStroke`, `setStrokeStyle` and their kin), `fl.selectTool` and `fl.tools`, `zoomFactor`, publish profiles with `asVersion` and `docClass`, custom eases, primitive rectangles and ovals, `convertSelectionToBitmap` and `testMovie`
+- Import takes FLA and XFL documents and SWF movies: their library, and their main timeline as a movie clip; scripts' `importFile` and `importEmbeddedSWF` too
+- Deleting a sound or video still in use takes it off its frames, as one step to undo
+- Script dialogs: a target list offers the timeline's named instances, and an embedded SWF panel plays in the dialog
 
 ## 0.17.1
 

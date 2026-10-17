@@ -1319,58 +1319,6 @@ const ClassInfo& Document::classInfo() const
             return Value();
         });
 
-        // The fill and stroke new shapes get (the toolbar's).
-        def.method("getCustomFill", 1, [](Document& d, const Args&) {
-            const fla::DrawingStyle& style = toolbarStyle(d);
-            Value fill = Value::map();
-            fill.set("style", style.hasFill ? "solid" : "noFill");
-            fill.set("color", colorText(style.fillColor));
-            return fill;
-        });
-        def.method("getCustomStroke", 1, [](Document& d, const Args&) {
-            const fla::DrawingStyle& style = toolbarStyle(d);
-            Value stroke = Value::map();
-            stroke.set("style", style.hasStroke ? "solid" : "noStroke");
-            stroke.set("color", colorText(style.strokeColor));
-            stroke.set("thickness", style.strokeWeight);
-            return stroke;
-        });
-        def.method("setCustomFill", 1, [](Document& d, const Args& args) {
-            fla::DrawingStyle& style = toolbarStyle(d);
-            if (const Value* kind = arg(args, 0).field("style"))
-                style.hasFill = kind->toString() != "noFill";
-            if (const Value* color = arg(args, 0).field("color"))
-                parseColor(*color, style.fillColor);
-            return Value();
-        });
-        def.method("setCustomStroke", 1, [](Document& d, const Args& args) {
-            fla::DrawingStyle& style = toolbarStyle(d);
-            if (const Value* kind = arg(args, 0).field("style"))
-                style.hasStroke = kind->toString() != "noStroke";
-            if (const Value* color = arg(args, 0).field("color"))
-                parseColor(*color, style.strokeColor);
-            if (const Value* thickness = arg(args, 0).field("thickness"))
-                style.strokeWeight = std::max(0.1, thickness->toNumber());
-            return Value();
-        });
-        def.method("setFillColor", 1, [](Document& d, const Args& args) {
-            fla::DrawingStyle& style = toolbarStyle(d);
-            style.hasFill = !arg(args, 0).isNullish();
-            if (style.hasFill && !parseColor(arg(args, 0), style.fillColor))
-                throw Error("That is not a color: " + arg(args, 0).toString());
-            return Value();
-        });
-        def.method("setStrokeColor", 1, [](Document& d, const Args& args) {
-            fla::DrawingStyle& style = toolbarStyle(d);
-            style.hasStroke = !arg(args, 0).isNullish();
-            if (style.hasStroke && !parseColor(arg(args, 0), style.strokeColor))
-                throw Error("That is not a color: " + arg(args, 0).toString());
-            return Value();
-        });
-        def.method("setStrokeSize", 1, [](Document& d, const Args& args) {
-            toolbarStyle(d).strokeWeight = std::max(0.1, arg(args, 0).toNumber());
-            return Value();
-        });
         def.method("swapStrokeAndFill", 0, [](Document& d, const Args&) {
             fla::DrawingStyle& style = toolbarStyle(d);
             std::swap(style.hasFill, style.hasStroke);
@@ -1554,26 +1502,6 @@ const ClassInfo& Document::classInfo() const
                 throw Error(error.empty() ? "The PNG could not be written." : error);
             return Value(true);
         });
-        def.method("importFile", 4, [](Document& d, const Args& args) {
-            d.data();
-            const std::string path = uri::toPath(arg(args, 0).toString());
-            std::error_code missing;
-            if (path.empty() || !std::filesystem::is_regular_file(std::filesystem::u8path(path), missing))
-                return Value(false);
-            if (d.document != d.session.host().activeDocument())
-            {
-                d.session.beforeSwitch();
-                d.session.host().activate(d.document);
-            }
-            // What the import pushes is part of the script's undo step.
-            d.session.beginStep(d.document);
-            std::string error;
-            const bool imported = d.session.host().importFile(d.document, path, arg(args, 1).toBool(), error);
-            d.session.invalidate(d.document);
-            if (!imported && !error.empty())
-                d.session.host().trace(error);
-            return Value(imported);
-        });
         def.method("xmlPanel", 1, [](Document& d, const Args& args) {
             return showXmlPanelFile(d.session, arg(args, 0).toString());
         });
@@ -1582,6 +1510,11 @@ const ClassInfo& Document::classInfo() const
         });
         describeDocumentData(def);
         describeDocumentPublishing(def);
+        describeDocumentStyle(def);
+        describeDocumentView(def);
+        describeDocumentImport(def);
+        describeDocumentProfiles(def);
+        describeDocumentCommands(def);
         return info;
     }();
     return info;

@@ -244,11 +244,10 @@ void deleteItem(Library& library, Item& item)
     case Item::Kind::Video:
     {
         const std::string name = item.name();
-        const std::map<std::string, int> uses = fla::library::useCounts(data);
-        const auto found = uses.find(name);
-        if (found != uses.end() && found->second > 0)
-            throw Error("The " + std::string(item.kind == Item::Kind::Sound ? "sound " : "video ") + name +
-                " is still used; delete what uses it first.");
+        // Taken off the frames that play it first, as part of the same
+        // step.
+        for (fla::CommandPtr& command : fla::media::removeUses(data, name))
+            library.push(std::move(command));
         library.push(fla::CommandPtr(new fla::RemoveMediaCommand(&data, name,
             item.kind == Item::Kind::Sound ? "Delete Sound" : "Delete Video")));
         break;
@@ -720,6 +719,28 @@ void describeSymbol(ClassDef<Item>& def)
         [](Item& i, const Value& v) {
             fla::Symbol* symbol = i.symbol();
             i.push(fla::CommandPtr(new fla::SetPropertyCommand<bool>(symbol->scale9, symbol->scale9, v.toBool(), "9-Slice Scaling")), false);
+        });
+    // The 9-slice guides, {left, top, right, bottom} in the symbol's space.
+    def.prop("scalingGridRect",
+        [](Item& i) {
+            const fla::Symbol* symbol = i.symbol();
+            Value rect = Value::map();
+            rect.set("left", symbol->scaleGridLeft);
+            rect.set("top", symbol->scaleGridTop);
+            rect.set("right", symbol->scaleGridRight);
+            rect.set("bottom", symbol->scaleGridBottom);
+            return rect;
+        },
+        [](Item& i, const Value& v) {
+            fla::Symbol* symbol = i.symbol();
+            const auto set = [&](double& slot, const char* name) {
+                if (const Value* value = v.field(name))
+                    i.push(fla::CommandPtr(new fla::SetPropertyCommand<double>(slot, slot, value->toNumber(), "9-Slice Scaling")), false);
+            };
+            set(symbol->scaleGridLeft, "left");
+            set(symbol->scaleGridTop, "top");
+            set(symbol->scaleGridRight, "right");
+            set(symbol->scaleGridBottom, "bottom");
         });
 }
 

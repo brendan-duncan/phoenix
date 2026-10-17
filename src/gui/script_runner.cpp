@@ -4,15 +4,22 @@
 #include "media_import.h"
 #include "main_window.h"
 #include "output_panel.h"
+#include "phoenix_view.h"
 #include "script_api.h"
+#include "toolbox.h"
 #include "xul_dialog.h"
 
+#include "../data/bitmap.h"
+#include "../data/bitmap_instance.h"
 #include "../data/document.h"
 #include "../data/fla_document.h"
+#include "../data/frame.h"
 #include "../data/layer.h"
 #include "../data/symbol.h"
 #include "../data/symbol_list.h"
 #include "../data/timeline.h"
+#include "../edit/element_commands.h"
+#include "../edit/library_media.h"
 #include "../edit/new_document.h"
 #include "../edit/selection.h"
 #include "../edit/timeline_edit.h"
@@ -52,6 +59,7 @@
 #include <QPushButton>
 #include <QSettings>
 #include <QStandardPaths>
+#include <QPointer>
 #include <QTimer>
 #include <QUrl>
 #include <QUuid>
@@ -509,6 +517,124 @@ public:
     // Drawing.
     fla::DrawingStyle* drawingStyle() override { return &_window._drawingStyle; }
     void copyText(const std::string& value) override { QApplication::clipboard()->setText(qtext(value)); }
+
+    // The toolbox and the view.
+    std::vector<std::string> tools() override
+    {
+        std::vector<std::string> names;
+        if (_window._toolbox)
+        {
+            for (const QString& id : _window._toolbox->toolIds())
+                names.push_back(text(id));
+        }
+        return names;
+    }
+    std::string activeTool() override
+    {
+        return _window._phoenixView ? text(_window.toolName(_window._phoenixView->activeTool())) : std::string();
+    }
+    bool selectTool(const std::string& name) override
+    {
+        QAction* action = _window._toolbox ? _window._toolbox->tool(qtext(name)) : nullptr;
+        if (!action)
+            return false;
+        action->trigger();
+        return true;
+    }
+    bool runCommand(fla::FLADocument* document, const std::string& name, std::string& error) override
+    {
+        if (document != _window._flaDocument || !_window._phoenixView)
+        {
+            error = name + " works on the document shown.";
+            return false;
+        }
+        if (name == "testMovie")
+        {
+            // Once the script is done: Test Movie holds the document still.
+            QPointer<MainWindow> window(&_window);
+            QTimer::singleShot(0, &_window, [window]() {
+                if (window)
+                    window->testMovie();
+            });
+            return true;
+        }
+        if (name == "convertLinesToFills")
+        {
+            _window.convertLinesToFillsSelection();
+            return true;
+        }
+        if (name == "convertSelectionToBitmap")
+            return convertSelectionToBitmap(*document->document, error);
+        error = "Phoenix has no command called " + name + ".";
+        return false;
+    }
+    /// The selected objects of one frame drawn into a new library bitmap,
+    /// placed where they were in their stead.
+    bool convertSelectionToBitmap(fla::Document& document, std::string& error)
+    {
+        PhoenixView* view = _window._phoenixView;
+        std::vector<fla::Element*> elements;
+        fla::Frame* frame = nullptr;
+        for (fla::DOMElement* selected : _window._selection.elements())
+        {
+            auto* element = dynamic_cast<fla::Element*>(selected);
+            auto* holder = element ? dynamic_cast<fla::Frame*>(element->parent) : nullptr;
+            if (!element || !holder || (frame && holder != frame))
+                continue;
+            frame = holder;
+            elements.push_back(element);
+        }
+        if (elements.empty())
+        {
+            error = "Select what to convert to a bitmap first.";
+            return false;
+        }
+        QRectF bounds;
+        for (const fla::Element* element : elements)
+        {
+            const QRectF box = view->elementBounds(element);
+            if (box.isValid())
+                bounds = bounds.isValid() ? bounds.united(box) : box;
+        }
+        const QImage image = view->renderElements(std::vector<const fla::Element*>(elements.begin(), elements.end()), 1.0);
+        if (image.isNull() || !bounds.isValid())
+        {
+            error = "The selection draws nothing to convert.";
+            return false;
+        }
+        const std::string itemName = fla::media::freeName(document, "Bitmap");
+        fla::Bitmap* bitmap = MediaImport::bitmapFromImage(document, image, qtext(itemName));
+        if (!bitmap)
+        {
+            error = "The bitmap could not be made.";
+            return false;
+        }
+        const std::string made = bitmap->name;
+        fla::CommandStack& stack = _window._editContext.commandStack();
+        stack.push(fla::CommandPtr(new fla::AddBitmapCommand(&document, bitmap, "Convert to Bitmap")));
+        for (fla::Element* element : elements)
+            stack.push(fla::CommandPtr(new fla::RemoveElementCommand(frame, element, "Convert to Bitmap", &_window._selection)));
+        auto* instance = new fla::BitmapInstance(frame);
+        instance->libraryItemName = made;
+        // The picture has a pixel of room around what it shows.
+        instance->transform.tx = bounds.left() - 1.0;
+        instance->transform.ty = bounds.top() - 1.0;
+        stack.push(fla::CommandPtr(new fla::AddElementCommand(frame, instance, "Convert to Bitmap", &_window._selection)));
+        _window._selection.select(instance);
+        view->clearCaches();
+        view->update();
+        return true;
+    }
+    double zoom(fla::FLADocument* document) override
+    {
+        return document == _window._flaDocument && _window._phoenixView ? _window._phoenixView->zoom() : 1.0;
+    }
+    void setZoom(fla::FLADocument* document, double zoom) override
+    {
+        if (document == _window._flaDocument && _window._phoenixView)
+            _window._phoenixView->setZoomLevel(zoom);
+    }
+
     jsfl::Rect bounds(fla::FLADocument*, const fla::Element* element) override
     {
         PhoenixView* view = _window._phoenixView;

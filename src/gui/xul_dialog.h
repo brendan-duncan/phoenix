@@ -3,6 +3,12 @@
 #include <QDialog>
 
 #include <map>
+#include <memory>
+#include <vector>
+
+namespace fla {
+class FLADocument;
+}
 
 namespace jsfl::xul {
 class Dialog;
@@ -30,6 +36,8 @@ private:
     void fill(const jsfl::xul::Node& node, QBoxLayout* box);
     QWidget* make(const jsfl::xul::Node& node);
     QWidget* makeGrid(const jsfl::xul::Node& node);
+    /// An embedded SWF panel (<flash src="..."/>), playing.
+    QWidget* makeMovie(const jsfl::xul::Node& node);
     QWidget* makeControl(jsfl::xul::Control& control);
     /// Shows \a control's value, items, enabled and visible state.
     void refresh(jsfl::xul::Control& control);
@@ -39,4 +47,6 @@ private:
     /// Labels whose control attribute names a control, to point at it.
     std::map<QWidget*, std::string> _buddies;
     bool _refreshing = false;
+    /// The SWF panels' movies, read as documents for the players.
+    std::vector<std::unique_ptr<fla::FLADocument>> _movies;
 };

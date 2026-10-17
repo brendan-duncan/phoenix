@@ -2,6 +2,7 @@
 
 #include "../parser/extension_package.h"
 
+#include <QHash>
 #include <QJsonObject>
 #include <QList>
 #include <QObject>
@@ -15,6 +16,8 @@
 class QDockWidget;
 class QMainWindow;
 class QMenu;
+class QNetworkAccessManager;
+class QNetworkReply;
 class QToolButton;
 class ScriptRunner;
 class HtmlView;
@@ -24,11 +27,21 @@ namespace jsfl {
 class PanelScript;
 }
 
+namespace cep {
+class NativeHost;
+}
+
+namespace json {
+class Value;
+}
+
 /// An HTML extension panel: the page its manifest names, shown in a web
 /// view, with the host side of CSInterface behind it. evalScript runs JSFL
 /// in a context of the panel's own, loaded with its ScriptPath file when
 /// the first call comes; the file system, dialogs, menus and events are
-/// answered here.
+/// answered here. Files, processes and, for a panel whose manifest asks for
+/// Node.js, Node's modules go to a cep::NativeHost; web requests for Node's
+/// http and https are made here.
 class CepPanel : public QWidget
 {
     Q_OBJECT
@@ -64,6 +77,12 @@ private:
     QJsonObject hostEnvironment() const;
     QString resourceBundle() const;
     QDockWidget* dock() const;
+    /// Hands the page what processes wrote and how they ended.
+    void flushNativeEvents();
+    /// A web request for Node's http and https ("net.request",
+    /// "net.abort"), its reply posted to the page as it comes.
+    json::Value networkCall(const std::string& name, const json::Value& args);
+    void postToPage(const json::Value& event);
 
     CepPanels& _panels;
     extensions::Installed _extension;
@@ -74,6 +93,10 @@ private:
     QToolButton* _flyoutButton = nullptr;
     QString _flyoutXml;
     std::unique_ptr<jsfl::PanelScript> _script;
+    std::unique_ptr<cep::NativeHost> _native;
+    QNetworkAccessManager* _network = nullptr;
+    QHash<int, QNetworkReply*> _requests;
+    int _nextRequest = 1 << 20;
     QSet<QString> _listening;
     bool _started = false;
 };

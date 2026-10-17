@@ -52,6 +52,7 @@
 #include "../edit/trace_bitmap.h"
 #include "movie_explorer.h"
 #include "../edit/library_transfer.h"
+#include "../edit/document_import.h"
 #include "../edit/document_session.h"
 #include "preferences.h"
 #include "../edit/ik_pose.h"
@@ -11744,11 +11745,12 @@ void MainWindow::placeLibraryItem(const QString& kind, const QString& droppedNam
 namespace {
 
 const char* const kImportFilter =
-    "All importable files (*.png *.jpg *.jpeg *.gif *.bmp *.psd *.psb *.svg *.ai *.eps *.ps *.pdf *.wav *.aif *.aiff *.mp3 *.flac *.ogg);;"
+    "All importable files (*.png *.jpg *.jpeg *.gif *.bmp *.psd *.psb *.svg *.ai *.eps *.ps *.pdf *.wav *.aif *.aiff *.mp3 *.flac *.ogg *.fla *.xfl *.swf);;"
     "Images (*.png *.jpg *.jpeg *.gif *.bmp);;"
     "Photoshop documents (*.psd *.psb);;"
     "Vector artwork (*.svg *.ai *.eps *.ps *.pdf);;"
     "Sounds (*.wav *.aif *.aiff *.mp3 *.flac *.ogg);;"
+    "Documents and movies (*.fla *.xfl *.swf);;"
     "All files (*)";
 
 } // namespace
@@ -12016,6 +12018,42 @@ void MainWindow::importMedia(const QStringList& paths, bool toStage, const QPoin
         }
         else if (MediaImport::isArtwork(path))
             importArtwork(path, toStage, at, frame, problems, placed);
+        else if (fla::documentImport::handles(path.toStdString()))
+        {
+            // Another document or a movie: its library, and its main
+            // timeline as a movie clip, placed where its stage was.
+            fla::documentImport::Result result;
+            std::string failure;
+            if (!fla::documentImport::read(*document, path.toStdString(), result, failure))
+            {
+                problems << QString::fromStdString(failure);
+                continue;
+            }
+            if (!result.notes.empty())
+                problems << QString::fromStdString(result.notes);
+            stack.push(std::move(result.command));
+            fla::Symbol* symbol = nullptr;
+            if (document->symbolList)
+            {
+                const auto found = document->symbolList->symbolMap.find(result.symbol);
+                if (found != document->symbolList->symbolMap.end())
+                    symbol = found->second;
+            }
+            if (!frame || !symbol)
+                continue;
+            auto* instance = new fla::SymbolInstance(frame);
+            instance->libraryItemName = symbol->name;
+            instance->symbol = symbol;
+            instance->symbolType = symbol->symbolType;
+            instance->loopType = fla::LoopType::Loop;
+            if (at)
+            {
+                instance->transform.tx = at->x();
+                instance->transform.ty = at->y();
+            }
+            stack.push(fla::CommandPtr(new fla::AddElementCommand(frame, instance, name, &_selection)));
+            placed.push_back(instance);
+        }
         else
         {
             problems << QString("%1 is not a file Phoenix imports.").arg(QFileInfo(path).fileName());

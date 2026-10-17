@@ -53,6 +53,11 @@ struct Sound
 /// when next shown. The number of bytes let go.
 size_t releaseLoadedMedia(const Document& document);
 
+/// What takes the library sound or video \a item off everything that plays
+/// it, as deleting it does: the keyframes that play the sound lose it, and
+/// the video's instances go. Not applied yet; empty when nothing uses it.
+std::vector<CommandPtr> removeUses(Document& document, const std::string& item);
+
 } // namespace media
 
 /// Adds a bitmap to the library.

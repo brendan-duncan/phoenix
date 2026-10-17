@@ -140,7 +140,7 @@ TEST(extension_packages_read_html_panels_from_their_manifest)
     }
     CHECK(read.hosts.size() == 1 && read.hosts[0] == "FLPR");
     // Installed: kept whole in its folder, nothing in the Configuration
-    // folder, a note that Node.js is missing, and all of it recorded.
+    // folder, a note on what of Node.js it has, and all of it recorded.
     extensions::Installed installed;
     std::vector<std::string> notes;
     const fs::path config = temp.path / "Configuration";

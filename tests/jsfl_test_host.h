@@ -50,6 +50,22 @@ public:
 
     fla::DrawingStyle* drawingStyle() override { return &style; }
 
+    /// A toolbox of a few tools, and the stage's zoom.
+    std::vector<std::string> toolbox{"Selection", "Subselection", "Pen", "Oval", "Paint Bucket", "Zoom"};
+    std::string tool = "Selection";
+    double zoomFactor = 1.0;
+    std::vector<std::string> tools() override { return toolbox; }
+    std::string activeTool() override { return tool; }
+    bool selectTool(const std::string& name) override
+    {
+        if (std::find(toolbox.begin(), toolbox.end(), name) == toolbox.end())
+            return false;
+        tool = name;
+        return true;
+    }
+    double zoom(fla::FLADocument*) override { return zoomFactor; }
+    void setZoom(fla::FLADocument*, double zoom) override { zoomFactor = zoom; }
+
     fla::FLADocument* add(fla::FLADocument* document, const std::string& path = std::string())
     {
         auto state = std::make_unique<State>();

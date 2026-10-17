@@ -1,8 +1,17 @@
 #include "library_media.h"
 
+#include "element_commands.h"
+#include "frame_sound.h"
 #include "library_commands.h"
-
+#include "property_command.h"
 #include "../data/bitmap.h"
+#include "../data/frame.h"
+#include "../data/group.h"
+#include "../data/layer.h"
+#include "../data/raw_element.h"
+#include "../data/symbol.h"
+#include "../data/symbol_list.h"
+#include "../data/timeline.h"
 
 #include <algorithm>
 #include <atomic>
@@ -133,6 +142,55 @@ size_t releaseLoadedMedia(const Document& document)
     for (const auto& file : document.extraFiles)
         release(file.second);
     return released;
+}
+
+std::vector<CommandPtr> removeUses(Document& document, const std::string& item)
+{
+    std::vector<CommandPtr> commands;
+    const auto timeline = [&](Timeline* timeline) {
+        if (!timeline)
+            return;
+        for (Layer* layer : timeline->layers)
+        {
+            for (Frame* frame : layer ? layer->frames : std::vector<Frame*>())
+            {
+                if (!frame)
+                    continue;
+                // The keyframe keeps playing nothing, its other settings
+                // gone with the sound.
+                if (frame_sound::read(*frame).name == item)
+                {
+                    auto attributes = frame->extraAttributes;
+                    auto children = frame->extraChildren;
+                    frame_sound::write(frame_sound::Settings(), 0, attributes, children);
+                    commands.push_back(CommandPtr(new SetPropertyCommand<std::vector<std::pair<std::string, std::string>>>(
+                        frame->extraAttributes, frame->extraAttributes, attributes, "Delete Sound")));
+                    commands.push_back(CommandPtr(new SetPropertyCommand<std::vector<std::string>>(
+                        frame->extraChildren, frame->extraChildren, children, "Delete Sound")));
+                }
+                for (Element* element : frame->elements)
+                {
+                    auto* video = dynamic_cast<RawElement*>(element);
+                    if (video && video->videoItem == item)
+                        commands.push_back(CommandPtr(new RemoveElementCommand(frame, video, "Delete Video")));
+                }
+            }
+        }
+    };
+    for (Timeline* t : document.timelines)
+        timeline(t);
+    if (document.symbolList)
+    {
+        for (Symbol* symbol : document.symbolList->symbols)
+        {
+            if (symbol)
+            {
+                for (Timeline* t : symbol->timelines)
+                    timeline(t);
+            }
+        }
+    }
+    return commands;
 }
 
 } // namespace media
