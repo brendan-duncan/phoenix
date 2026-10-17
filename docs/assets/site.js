@@ -237,7 +237,7 @@ function buildFooter(content) {
     `<p>Phoenix ${VERSION} (<a href="changelog.html">what's new</a>). Found a mistake in this guide? <a href="${REPO}/issues">Open an issue</a>.</p>` +
     `<p class="contact">` +
     `<a href="mailto:${CONTACT.email}">${ICONS.mail}<span>${CONTACT.email}</span></a>` +
-    `<a href="${CONTACT.mastodon}" rel="me">${ICONS.mastodon}<span>Mastodon</span></a>` +
+    //`<a href="${CONTACT.mastodon}" rel="me">${ICONS.mastodon}<span>Mastodon</span></a>` +
     `</p>` +
     `<p class="copyright">Copyright &copy; 2026 Brendan Duncan. All rights reserved. <a href="privacy.html">Privacy</a></p>`;
   content.append(footer);
