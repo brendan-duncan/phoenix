@@ -18,6 +18,13 @@ OpenSSH programs Windows, macOS and Linux all ship. Files on the server are
 added and overwritten; --mirror also removes those no longer in docs/. Either
 way the folders the server keeps for itself (updates/, download/) are left
 alone.
+
+The guide's What's New page, docs/changelog.html, is made again from
+CHANGELOG.md first (tools/build_changelog.py), so the site has every release.
+
+The site analytics client, analytics/phoenix_analytics.js, goes up with it as
+assets/analytics.js, stamped with the commit it was deployed from. The
+collector it reports to is deployed separately by tools/deploy_analytics.py.
 """
 
 import argparse
@@ -40,6 +47,11 @@ KEEP = ("updates", "download")
 
 # In docs/ but not for the site.
 SKIP_NAMES = {".DS_Store", "Thumbs.db", "desktop.ini"}
+
+# Published next to the docs: the analytics client, which docs/assets/site.js
+# loads on phoenixanimate.com only (see analytics/README.md).
+ANALYTICS_CLIENT = ROOT / "analytics" / "phoenix_analytics.js"
+ANALYTICS_PATH = "assets/analytics.js"
 
 TEMPLATE = """\
 ; Where tools/deploy_site.py copies docs/. Kept out of the repository.
@@ -77,9 +89,31 @@ def site_files():
             yield path
 
 
-def make_archive(files):
+def build_id():
+    """Short commit hash, with "+" when the working tree has changes."""
+    try:
+        commit = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=ROOT,
+                                capture_output=True, text=True, check=True).stdout.strip()
+        dirty = subprocess.run(["git", "status", "--porcelain"], cwd=ROOT,
+                               capture_output=True, text=True, check=True).stdout.strip()
+    except (OSError, subprocess.CalledProcessError):
+        return ""
+    return commit + ("+" if dirty else "") if commit.isalnum() else ""
+
+
+def analytics_client():
+    """The analytics client with this deploy's build id in its CONFIG, so
+    error reports name the build they came from."""
+    js = ANALYTICS_CLIENT.read_text(encoding="utf-8")
+    stamped = js.replace("build: '',", f"build: '{build_id()}',", 1)
+    if stamped == js:
+        sys.exit(f"No build field to stamp in {ANALYTICS_CLIENT}")
+    return stamped.encode("utf-8")
+
+
+def make_archive(files, extra):
     """The site as a .tgz in memory, readable by the web server whoever
-    unpacks it."""
+    unpacks it. `extra` maps more archive paths to their contents."""
     def normalize(info):
         info.uid = info.gid = 0
         info.uname = info.gname = ""
@@ -90,6 +124,11 @@ def make_archive(files):
     with tarfile.open(fileobj=data, mode="w:gz") as archive:
         for path in files:
             archive.add(path, arcname=path.relative_to(SITE).as_posix(), filter=normalize)
+        for name, content in extra.items():
+            info = normalize(tarfile.TarInfo(name))
+            info.size = len(content)
+            info.mtime = int(time.time())
+            archive.addfile(info, io.BytesIO(content))
     return data.getvalue()
 
 
@@ -112,16 +151,21 @@ def main():
     args = parser.parse_args()
 
     config = load_config()
+    # What's New, made from CHANGELOG.md, so it is never behind.
+    subprocess.run([sys.executable, str(ROOT / "tools" / "build_changelog.py")], check=True)
     files = list(site_files())
     if not files:
         sys.exit(f"Nothing in {SITE}")
-    print(f"{len(files)} files from {SITE} -> {config['user']}@{config['host']}:{config['dir']}")
+    extra = {ANALYTICS_PATH: analytics_client()}
+    print(f"{len(files)} files from {SITE} and {ANALYTICS_PATH} -> "
+          f"{config['user']}@{config['host']}:{config['dir']}")
     if args.dry_run:
         for path in files:
             print("  " + path.relative_to(SITE).as_posix())
+        print(f"  {ANALYTICS_PATH} (from {ANALYTICS_CLIENT.relative_to(ROOT).as_posix()})")
         return
 
-    archive = make_archive(files)
+    archive = make_archive(files, extra)
     stamp = time.strftime("%Y%m%d-%H%M%S")
     local = ROOT / "build" / "site.tgz"
     local.parent.mkdir(exist_ok=True)

@@ -1,0 +1,33 @@
+# systemd unit for the Phoenix analytics collector. Install:
+#   sudo cp ~/phoenix-analytics/phoenix-analytics.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now phoenix-analytics
+#
+# Resource limits keep a flood (or a bug) from taking Apache or the other
+# services on the host down with it: past MemoryHigh the kernel reclaims hard,
+# past MemoryMax only this service is OOM-killed, and systemd restarts it.
+
+[Unit]
+Description=Phoenix analytics collector
+After=network.target
+
+[Service]
+Type=simple
+User=admin
+WorkingDirectory=/home/admin/phoenix-analytics
+ExecStart=/usr/bin/node --disable-warning=ExperimentalWarning --max-old-space-size=64 server.mjs
+Environment=NODE_ENV=production
+Environment=ANALYTICS_DATA_DIR=/home/admin/phoenix-analytics/data
+Environment=ANALYTICS_PORT=8791
+Restart=always
+RestartSec=5
+MemoryHigh=128M
+MemoryMax=160M
+CPUQuota=50%
+Nice=10
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/home/admin/phoenix-analytics/data
+
+[Install]
+WantedBy=multi-user.target

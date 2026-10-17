@@ -1,0 +1,383 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>What's new · Phoenix User Guide</title>
+<meta name="description" content="What changed in each release of Phoenix, newest first.">
+<meta name="keywords" content="changelog release notes what's new versions updates history">
+<link rel="icon" href="assets/img/logo.png">
+<link rel="stylesheet" href="assets/site.css">
+<script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<main>
+<article class="content">
+
+<!-- Made from CHANGELOG.md by tools/build_changelog.py: edit that, not this. -->
+
+<p class="eyebrow">Reference</p>
+<h1>What's new</h1>
+
+<p class="lead">What changed in each release of Phoenix, newest first.</p>
+
+<h2 id="v0-16-0">0.16.0</h2>
+
+<ul>
+  <li>Updates and downloads now come through phoenixanimate.com, and Help &gt; Phoenix Help opens the guide there</li>
+</ul>
+
+<h2 id="v0-15-1">0.15.1</h2>
+
+<ul>
+  <li>Node graphs, adjustment layers and layer modes work on the stage alone in the view, as in an export: Vignette, ramps, wipes and other effects that go by the edges follow the stage's edges, not the window's, and art off the stage shows without them</li>
+</ul>
+
+<h2 id="v0-15-0">0.15.0</h2>
+
+<ul>
+  <li>Node graphs: Time Offset and Frame Hold nodes; a renamed layer keeps its Layer nodes; SVG exports show the graph; Export FLA for Other Apps bakes each graph into a layer of pictures; scripts and AI assistants can list, read and set graphs</li>
+  <li>Command-line renders no longer stop with a "no platform plugin" box in fresh builds and installs: the offscreen platform is deployed with Phoenix</li>
+  <li>Layers show badges for the effects they have on (motion blur, echo or posterize time, layer mode, mask edge, effect layer, node graph); hover for what each does, click to change its settings</li>
+  <li>Motion blur follows what animates inside graphics and movie clips in Test Movie too, and leaves a stopped or held symbol sharp inside</li>
+  <li>Time Remap works on movie clips too, which follow it instead of playing on their own (in Test Movie as well), and its Frame shown can be shaped as a curve in the Motion Editor</li>
+  <li>Bone springs bend boned shapes too: a shape's sprung bones trail, swing past and settle, on the stage, in Test Movie and in exports</li>
+  <li>Effects on one instance: a symbol instance can carry any of the adjustment effects (outline, glow, ripple, gradients, color grades, wipes...) on its own picture, from the new Effects side of the Behaviors panel, keyed like any other, on the stage, in Test Movie and in every export</li>
+  <li>Export FLA for Other Apps carries more effects: Glow and Outline as Glow filters, Hue/Saturation as Adjust Color, Fill and Levels as color effects, Directional Blur as a one-axis Blur; effects with no counterpart are drawn into bitmaps a frame at a time, so the look survives</li>
+  <li>Masks: objects on a mask layer can each have their own feather, kept by keyframe and blended through tweens; a masked layer can be masked by other mask layers too, added, subtracted or intersected (Also Masked By); and SVG exports write feathered masks as soft SVG masks instead of hard clips</li>
+  <li>Vertical text takes letter animators, and Text on a Path runs it along a motion guide, its letters standing as they do in the column</li>
+  <li>Bake to Keyframes and Export FLA for Other Apps keep tapered lines (as filled outlines), dashes with their caps, and gradients on strokes and fills, so other apps show shape operators as Phoenix does</li>
+  <li>3D: up to four lights in their own colors, soft shadows that clips nearer the viewer cast on turned clips behind them, and extrusion (a Depth for a movie clip, its edges drawn back and shaded by the lights)</li>
+  <li>Many behavior copies of movie clips, and of instances with filters, blend modes or color effects, draw from shared pictures instead of one by one, with the same result</li>
+  <li>Browse Presets shows shape operators on sample shapes and adjustment effects on a sample picture, each with a still in the list and playing beside it</li>
+  <li>Export FLA for Other Apps bakes templates further: parts pinned to text are moved and stretched to fit each instance's words, and symbols with responsive time play with their middle stretched to the span, as in Phoenix</li>
+  <li>Node graphs: Window &gt; Node Graph composites a timeline's layers through nodes (Layer, Merge with 13 blend modes, Composite, Matte, Mix, Transform and every adjustment effect), each node showing a picture of its result; search to add nodes, drop links on empty space, view any node on the stage, bypass, backdrops, a minimap, and keyed settings</li>
+  <li>HTML extension panels (CEP) show in Phoenix: Window &gt; Extensions opens them as docks, their scripts run JSFL in a context that keeps its functions between calls, and their panel menus, context menus, file access and events work</li>
+  <li>FLA files with components (Button, ColorPicker, ComboBox and the rest) open instead of failing, and keep their components when saved</li>
+  <li>SWF movies published with a preloader for TLF text open as the movie itself, not the preloader's empty frames</li>
+</ul>
+
+<h2 id="v0-14-0">0.14.0</h2>
+
+<ul>
+  <li>Native extensions: C and C++ libraries in the External Libraries folder, written for the <code>mm_jsapi.h</code> extension API, add functions scripts can call</li>
+  <li>Illustrator and EPS import: area and path text (Illustrator 11 and later too), patterns, placed images, Zstandard-compressed Illustrator files, shadings as gradients, image masks, and the widths of fonts the file carries; Photoshop EPS images and CMYK JPEGs come in with the right colors</li>
+  <li>Opening a SWF movie finds its tweens: smooth movement, fades, turns and eases come back as classic tweens, and morphs as shape tweens, instead of a keyframe on every frame; embedded video comes back as a video item of its size and length</li>
+  <li>JSFL: adding, duplicating, renaming, reordering and deleting scenes, <code>importFile</code>, sounds and videos renamed and deleted in the library, <code>exportToFile</code> for every bitmap and sound, filters, text strings, union, punch, crop, space, match, distribute to layers or keyframes, and finding objects by name or kind</li>
+  <li>Python as a module: <code>import phoenix</code> from your own Python opens, changes, renders and saves documents in a windowless Phoenix</li>
+  <li>Python scripts: keyword arguments (<code>timeline.insert_frames(5, all_layers=True)</code>), and <code>fl.runScript</code> runs JSFL scripts too; <code>Phoenix batch --python</code> runs scripts inside Phoenix, like <code>--jsfl</code></li>
+  <li>SWF export: sounds inside movie clips play, sounds keep their envelopes, in and out points and loops, and each library sound keeps its own compression; Animate's stream and event sound settings are read from the file</li>
+  <li>Old binary FLA files open from Flash 5, MX, MX 2004, Flash 8, CS3 and CS4, including the versions Phoenix refused before; more of each reads too: rectangle primitives, videos on the stage, CS4 text, exported symbols, and scripts in MX files</li>
+</ul>
+
+<h2 id="v0-13-3">0.13.3</h2>
+
+<ul>
+  <li>Tutorials: each lesson has a picture of how it turns out, which plays when you pick it, and tags (Animation, Motion Graphics, Rigging and more) to show only the lessons about one thing</li>
+</ul>
+
+<h2 id="v0-13-2">0.13.2</h2>
+
+<ul>
+  <li>Many crashes fixed: closing a document tab, adding bones then closing, undoing while an AI assistant edits, objects kept by scripts after they are gone, Test Movie clips made and removed by frame scripts, very large blurs, and high-density screens running out of memory</li>
+  <li>Started from Explorer or a shortcut, Phoenix no longer leaves a console window open beside it</li>
+  <li>Damaged or hostile SWF, FLA, PSD, EPS, PDF, SVG, extension and lip sync files are refused or read in part, rather than hanging Phoenix, closing it, or writing outside their folder</li>
+  <li>The Behaviors panel, Echo and Posterize Time, Mask Edge, bone springs, 3D Lights and Depth and template sliders use hot text numbers (drag to scrub, click to type) instead of arrow boxes</li>
+  <li>On Windows, a crash leaves a report in %LOCALAPPDATA%\Phoenix\Crashes to send with a bug report</li>
+</ul>
+
+<h2 id="v0-13-1">0.13.1</h2>
+
+<ul>
+  <li>Objects with behaviors that make copies (particles, rings, rows) are selected by clicking any copy that shows, not only the first</li>
+  <li>Effects use every processor core: filters, adjustment-layer effects, mask edges and blurs draw 5 to 25 times faster, looking exactly as before</li>
+  <li>Motion blur draws about 15 times faster, and with echoes about 90 times: only the part of the picture the layer covers is blurred, and frames already blurred are reused</li>
+  <li>The Text tool types c, x and v again; they were being taken for the copy, cut and paste keys</li>
+</ul>
+
+<h2 id="v0-13-0">0.13.0</h2>
+
+<ul>
+  <li>Eight new motion graphics lessons: motion blur and echo, glow and wipes, dashes and text on a path, a sound visualizer, controls on a null, 3D cards in the light, Motion Sketch, and a template that fits</li>
+  <li>Vignette darkens the edges of the whole picture, empty stage included, not just what is drawn</li>
+  <li>Lessons 18 and 21 say Shift+, (Control &gt; Rewind) to go back to frame 1, instead of Home</li>
+  <li>Opening a SWF movie keeps the stacking inside a shape drawn in several style groups: a nose no longer shows the outline of the mouth behind it</li>
+  <li>Time Remap: Blend between frames cross-fades between a graphic's frames in slow motion</li>
+  <li>3D: a light that shades movie clips as they turn, and depth of field that blurs them away from a focus depth (Lights and Depth... in the 3D section of the Properties panel)</li>
+  <li>Audio Spectrum and Audio Waveform behaviors: bars and dots that dance to the scene's sound, in a row or round a circle; ctx.spectrum() and ctx.waveform() for your own behaviors</li>
+  <li>Behaviors: controls on a null (Slider, Angle, Point, Color and Checkbox Control) that Link to Control and your own behaviors follow; behaviors can tint</li>
+  <li>Add Behavior &gt; Browse Presets... shows ready-made animations and every behavior or letter animator moving before you add it</li>
+  <li>Templates: checkbox fields (two-frame clips), lists (clips with labeled frames), a font for each text field, Pin to Text to stretch or move a part with the words, and responsive time (stretch and outro labels) so intros and outros keep their timing</li>
+  <li>Control &gt; Motion Sketch: press and move on the stage while the movie plays, and the selected instance follows the path you draw</li>
+  <li>Layers: Echo (a trail of earlier poses) and Posterize Time; Motion Editor: Easy Ease, Ease In, Ease Out and a speed curve</li>
+  <li>Letter animators: Flip In, Blur In and Source Text (keyed words); Animate Letters tips and swings letters in depth; Add Animator &gt; Presets</li>
+  <li>Shape operators: Twist, and Merge Paths (add, subtract, intersect, exclude)</li>
+  <li>Masks: Mask Edge feathers, grows, shrinks or inverts a mask; Layer Mode sets a layer to Stencil, Silhouette or Preserve Transparency</li>
+  <li>Adjustment layers: 25 new effects: directional, radial and lens blur, Glow, Gradient Ramp, 4-Color Gradient, Fill, Outline, Fractal Noise, Bulge, Ripple, Bend, Displacement Map, Levels, Curves, Hue/Saturation, Tritone, Vignette, Grain, Chromatic Aberration, and linear, radial, blinds and dissolve wipes</li>
+  <li>Letter animators: Text on a Path lays text along a motion guide with a margin to key; Wiggly shakes each letter on its own</li>
+  <li>Strokes: Dashes (with an offset to key) and Taper (start and end width, a travelling wave) shape operators; Apply to Strokes in the Color panel gives lines a gradient; width profiles now survive other shape operators</li>
+  <li>Time Remap behavior: key which frame of a graphic shows, for slow motion, freezes and running it backwards</li>
+  <li>Motion blur: turn it on for a layer from its right-click menu; the shutter angle and samples are on the Doc tab</li>
+  <li>Opening a SWF movie brings back its scenes, by name, instead of one long scene</li>
+  <li>SWF export: the scene's event, start and stop sounds go in as event sounds of their own instead of being mixed into the stream</li>
+  <li>Paste in Place with frames chosen on the timeline pastes onto every keyframe they cover</li>
+  <li>Motion Editor: color and filter curves stay within what each property can be (tint channels 0 to 255, no blur below 0)</li>
+</ul>
+
+<h2 id="v0-12-0">0.12.0</h2>
+
+<ul>
+  <li>Ctrl-dragging an outline with the Selection tool puts a new corner where you grab it and drags that, instead of moving the next corner along</li>
+  <li>Export FLA for Other Apps carries inverted track mattes (Layer and Erase blending) and adjustment-layer art (a mask over the filtered layers); SVG exports draw adjustment layers</li>
+  <li>Many copies of a graphic (crowds, grids, particles) draw from one picture of it: a thousand copies of a detailed symbol went from 433 ms a frame to 5 ms</li>
+  <li>Bone springs: a bone of an armature of symbols can trail, overshoot and settle as the armature moves, set with Spring and Damping when you click it with the Bone tool</li>
+  <li>Lessons: steps that ask for several settings wait for Next, and the Behaviors panel's Seed box shows its whole number</li>
+  <li>Shape hints steer a shape tween's outline along with its fill, so the two stay together through the morph</li>
+  <li>A mask with a shape tween no longer cuts off between its keyframes</li>
+  <li>Tutorials: Show Final opens how a lesson turns out in a tab of its own, from the step window or the Tutorials dialog</li>
+  <li>A line or shape just drawn bends when dragged with the Selection tool (Ctrl adds a corner) rather than moving; click it first to move it</li>
+  <li>The Text tool's Family and Text type lists keep their arrows in a narrow Properties panel</li>
+  <li>Templates: sliders (a named clip of several frames holds on the frame an instance picks) and image fields (a named clip holding a bitmap shows an image file instead)</li>
+  <li>Template fields are filled in under Template in the Properties panel</li>
+  <li>Render Queue: Add Data... renders a movie for each row of a CSV file in the background</li>
+  <li>Link to Object: pick the instance by clicking it on the stage, drive any change from any other, with an amount, offset and limits; a dashed line shows each link</li>
+  <li>Phoenix play --image saves the frame the movie ends on as Test Movie shows it; tools/consistency_check.py compares it with exported stills and movies</li>
+  <li>Text no longer comes out as empty boxes from Phoenix render, play, batch and the other commands run with no window</li>
+  <li>Adjustment layers: Turbulent Displace and Wave Displace push the picture below about, in random swirls or traveling waves</li>
+  <li>Baking behaviors, shape operators and letter animators keeps a keyframe only where something changes, holding the frames between</li>
+</ul>
+
+<h2 id="v0-11-0">0.11.0</h2>
+
+<ul>
+  <li>Commands &gt; Open Claude Code in a Terminal Window is gone: Claude Code opens in its panel (Commands &gt; Open Claude Code), which can float on its own</li>
+  <li>Asset Warp: turned pins, frozen pins and bones between pins in files are drawn as they bend the art; with the Asset Warp tool, Shift-drag turns a pin, F freezes it and Ctrl-click joins two pins with a bone</li>
+  <li>Export FLA for Other Apps also carries track mattes (as masks), adjustment layers (as filters on a movie clip) and template values (as symbol copies); Phoenix --convert in out --for-other-apps does the same from the command line</li>
+  <li>A mask that moves with a classic tween masks where it has moved to, rather than only where it started</li>
+  <li>AI assistants can set behaviors, shape operators and letter animators, make track mattes and adjustment layers, fill in template fields and render from data, and rename layers, symbols or instances to a naming convention</li>
+  <li>Pausing Test Movie holds its sounds too, and they play on from where they were</li>
+  <li>Behaviors: Loop repeats keyed motion (cycle, back and forth, continue); Jiggle sways parts on a spring as they are carried, through layer parenting; Scatter in a Shape places copies at random inside a guide's outline</li>
+  <li>Shape operators: Offset Path, Round Corners, Pucker and Bloat and Repeater; Animate Letters can also space out, color and blur letters</li>
+  <li>A new lesson, A bouncy antenna</li>
+  <li>Playing or scrubbing within a keyframe keeps the selection, so panels stay on it; the layer list marks adjustment layers and layers shown through a track matte</li>
+  <li>Eight new lessons in Help &gt; Tutorials: behaviors, writing your own behavior, a crowd from one cycle, draw-on lines, an animated title, particles, track mattes and adjustment layers, and lower thirds from a template</li>
+  <li>Add Behavior &gt; New Behavior... starts a behavior of your own from an example and opens it in the script editor; Open Behaviors Folder shows where they are kept</li>
+  <li>Symbol templates: named dynamic text and movie clips in a symbol become fields each instance fills with its own words and colors (Modify &gt; Symbol &gt; Template Fields); File &gt; Export &gt; Render from Data, or Phoenix render --data, renders a movie for each row of a CSV file</li>
+  <li>Dynamic and input text no longer show their dotted box in exported images and movies</li>
+  <li>Behaviors: Follow Sound moves, scales, turns, fades or changes the frame of an instance with how loud the scene's sound is; your own behaviors can ask ctx.loudness()</li>
+  <li>Track mattes: a layer can show through the layer above it, by its alpha or its lightness, soft edges and all; adjustment layers blur, color-correct or tint everything below them, with keyable settings</li>
+  <li>Letter animators on text: Typewriter, Cascade In, Bounce In, Fade by Word, Scramble, Wave and Animate Letters, the text staying editable; baked into a text field a letter</li>
+  <li>Shape operators: Trim Paths draws a line on or off, Wiggle Path boils outlines, Zig-zag puts teeth or waves along them; keyed in the Behaviors panel, baked like behaviors</li>
+  <li>Behaviors: Particles sends out copies that are born, fly, fall, spin, grow and fade, the same on every playback</li>
+  <li>Test Movie keeps time with its sound: frames follow the clock instead of drifting behind when drawing is slow</li>
+  <li>Behaviors: Look At, Link to Object and Link to Controller follow other instances by name or a master controller; Effector changes copies by distance, position or order; the Function view draws what behaviors make of a property as a dashed curve</li>
+  <li>Behaviors: Repeat along a Path and Follow Path place copies, or the instance, along the line on a motion guide</li>
+  <li>Behaviors: settings can be keyed over time; Repeat in a Circle, Repeat in a Line or Grid and Stagger draw copies; Bake to Keyframes, and File &gt; Export &gt; Export FLA for Other Apps writes a copy with behaviors baked</li>
+  <li>Behaviors: Window &gt; Behaviors gives symbol instances motion worked out every frame, with no keyframes: Wiggle, Oscillate, Spin, Pulse, Fade In and Out, Blink and Follow with Lag; your own behaviors are JavaScript files in the Behaviors folder</li>
+</ul>
+
+<h2 id="v0-10-0">0.10.0</h2>
+
+<ul>
+  <li>Default keys follow the standard FLA-editing layout: B for the Brush and Shift+B for the Nib Brush; new Modify &gt; Align and Text menus (Ctrl+Alt+1 to 8, Ctrl+Shift+B/I/L/C/R/J); Close All, Find Next, Hide Edges, Show Shape Hints and Phoenix Help (F1); keys for Pasteboard and Snap to Objects</li>
+  <li>The Update Ready message shows over the start screen instead of hiding behind it</li>
+  <li>Python scripts can listen for events with fl.addEventListener, as JSFL scripts do</li>
+  <li>Commands &gt; Manage Extensions installs extension packages (.zxp, or a folder) whose commands and tools join Phoenix, and removes them; opening or dropping a .zxp installs it</li>
+  <li>Text in Illustrator and PDF files comes in as editable text, in its own fonts; EPS text is spaced by the fonts' widths</li>
+  <li>SWF movies compressed with LZMA open, and fonts of the newer embedded kind keep their names</li>
+  <li>Flash CS3 and CS4 .fla files open whole: shapes drawn with curves and frames with custom eases no longer leave parts out</li>
+  <li>Exporting from the command line no longer waits on a message box when a document opens with a warning</li>
+  <li>Test Movie plays a button's sounds: Over on rolling over, Down on pressing, Hit on releasing, Up on rolling out; opened SWF movies keep them</li>
+  <li>The Asset Warp tool makes a puppet from a shape, bitmap, group or graphic: click it, and the first pin goes where you clicked</li>
+  <li>Window &gt; Collapse Right (or Left) Panels to Icons folds a side's panels into a strip of their names, each opening beside it, for more stage</li>
+  <li>Adding a bone to a posed armature keeps the eases between its poses</li>
+  <li>Test Movie: click an input text field and type into it (Selection.setFocus and stage.focus too), and sounds placed on keyframes play</li>
+  <li>Test Movie runs ActionScript 3 class files: the document class, on the main timeline before its first frame, and symbols' linked classes on their clips</li>
+  <li>A new page in the guide, ActionScript and Test Movie, covers the Actions panel and what runs in Test Movie</li>
+  <li>Playing on the stage runs on into the next scene, and looping the whole scene wraps from the last scene to the first</li>
+  <li>Orient to path on the Frame tab, for classic and motion tweens</li>
+  <li>Pose commands for armatures: Insert, Copy, Paste and Clear Pose, from the frame menu and Edit &gt; Timeline &gt; Pose</li>
+  <li>Library &gt; Properties... sets a symbol's type, class and 9-slice scaling; with 9-slice on, drag its guides inside the symbol</li>
+  <li>Import reads EPS and PostScript files: Illustrator EPS through the artwork inside, and any other EPS (FreeHand, Photoshop and the rest) by running its PostScript</li>
+  <li>Illustrator import reads many more files: ones saved without PDF content and ones from Illustrator 8 and older (Illustrator's own format, with gradients, clipping masks and text), and in PDF-based files spot colors, clipping masks, repeating patterns and palette images</li>
+  <li>Phoenix --export-image draws artwork files (SVG, Illustrator, EPS, PDF) to an image</li>
+  <li>Phoenix --view opens a file in a player window without the editor: documents, FLA, XFL and SWF movies play, SVG, Illustrator, PDF, Photoshop files and images show; on Windows, View in Phoenix in the right-click menu and Phoenix Viewer under Open with</li>
+  <li>Test Movie has a time slider, icon buttons, and shows only the stage</li>
+  <li>Textured brush strokes look the same in Animate: FLA and XFL files carry the grain as a repeating bitmap fill, and Phoenix reads them back as live textures</li>
+  <li>Line art draws faster: a stroke's outline is made once and kept, not again on every repaint</li>
+  <li>Scripts can listen for events with fl.addEventListener: documents opened, made, saved, closed and switched, the timeline, layer, frame and selection changing, and publishing</li>
+  <li>JSFL tools: scripts in the Tools folder become tools in the Tools panel, previewing on fl.drawingLayer as you drag and drawing shapes with path.makeShape(), with their settings from an options file</li>
+  <li>File &gt; Open reads SWF movies, bringing a published movie back as a document: shapes, symbols, a layer for each depth, bitmaps, sounds and text, for when only the .swf survives</li>
+  <li>Palettes shared between documents: save a palette to a file and link it from other documents, and color changes in one reach the rest</li>
+  <li>SWF movies carry the sound, streamed with the frames, and Publish Settings chooses its compression: MP3, ADPCM, raw or none, with its quality, sample rate and channels</li>
+</ul>
+
+<h2 id="v0-9-0">0.9.0</h2>
+
+<ul>
+  <li>Phoenix for Linux: a 64-bit AppImage that runs from the file and updates itself</li>
+  <li>Control &gt; Test Movie (Ctrl+Enter) plays the scene with its ActionScript 1 and 2: frame scripts, button handlers and clip events run, buttons answer the mouse, and what scripts trace and the errors they stop on go to the Output panel, so old Flash games such as dress-up games can be played</li>
+  <li>Window &gt; Actions (F9) writes ActionScript: the script of the frame at the playhead, or of the selected button or movie clip, edited as you type with each script one step to undo, a script navigator listing every script in the document, a pin, and syntax checks that mark the line in error</li>
+  <li>Commands &gt; Script Editor writes, opens, saves and runs JSFL and Python scripts (Ctrl+Enter), and edits ActionScript files, in the same editor: colored code, kept indents, find and replace, go to line and toggle comment</li>
+  <li>Test Movie plays every scene in turn and takes the keyboard (Key.isDown, keyPress handlers, key listeners), and has Pause and Step</li>
+  <li>Test Movie runs ActionScript 3 frame scripts with addEventListener: clicks and the other mouse events on movie clips and buttons, enterFrame, and key events on the stage</li>
+  <li>Test Movie runs what games most often use: text fields set from scripts and fields showing a variable, startDrag and stopDrag with the drop target, hitTest and hitTestObject, the mouse position, attachMovie and duplicateMovieClip, new and addChild for symbols with a class, library sounds from scripts, and getTimer</li>
+  <li>In Test Movie, buttons and clips are clicked by their art rather than their bounding box</li>
+  <li>Double-clicking a script error in the Output panel opens the script in the Actions panel at its line</li>
+  <li>The Actions panel's Target button inserts the path to a named movie clip or button</li>
+  <li>Code hints in the Actions panel and Script Editor: a dot offers what can follow it, and Ctrl+Space every word that fits, instance names included</li>
+  <li>The Actions panel's Snippets menu puts in ready-made ActionScript 2 and 3 for clicks, dragging, keys, text fields and sounds</li>
+  <li><code>Phoenix play &lt;file&gt;</code> plays a movie's scripts with no window and prints what they trace and the errors they stop on; <code>--click-all</code> clicks every button</li>
+  <li>ActionScript fixes: <code>x += 1</code> and the other compound assignments, <code>++x</code>, <code>a[i] = v</code>, and <code>new Object()</code> and <code>new Array()</code> work as they should</li>
+  <li>Commands &gt; Open Claude Code now runs Claude Code in a panel inside Phoenix, with copy, paste and scrollback; Open Claude Code in a Terminal Window still opens it in a terminal of its own</li>
+</ul>
+
+<h2 id="v0-8-0">0.8.0</h2>
+
+<ul>
+  <li>Commands &gt; Open Claude Code opens Claude Code in a terminal, already connected to Phoenix and let in without asking</li>
+  <li>Themes reach more of the window: transform handles, the selection marquee, color swatch borders, the X-sheet and Motion Editor playheads, and the Outliner's icons, which now show on light themes too</li>
+  <li>Bones can be added to an armature that already has several poses, on any frame: in the other poses the new bone turns with the one it hangs from</li>
+  <li>Scripts can use the same operations as AI assistants: <code>fl.phoenix.call("in_betweens", {...})</code>, with <code>fl.phoenix.operations()</code> to list them</li>
+  <li>AI assistants can make in-betweens between two keyframes, turn poses into a walk or run cycle, lip sync a mouth to a sound or cues, recolor artwork to a palette, and show a color script of the scene</li>
+  <li>JSFL on macOS: saving or writing to a file that does not exist yet keeps its whole path (<code>/Users/...</code>, <code>/var/...</code>) instead of losing the first folder</li>
+  <li>Trace Bitmap draws cleaner edges: soft and noisy borders between colors trace as straight lines instead of steps and spikes, upright and level edges stay exactly so, and the thin halos and slivers along edges fold away, with far fewer specks and points</li>
+  <li>In dialogs, Enter in a number field keeps the value typed and presses the dialog's main button, as it did before number fields became hot text; F2 opens a field for typing</li>
+  <li>No more faint lines of the background between fills that meet, in traced artwork and any shape with neighboring fills, on the stage and in exports</li>
+  <li>Trace Bitmap fits curves: rounds come out smooth, while straight sides and corners stay sharp (Curve fit Tight and smoother; Pixels and Very Tight keep the pixels' steps)</li>
+</ul>
+
+<h2 id="v0-7-0">0.7.0</h2>
+
+<ul>
+  <li>JSFL scripts: run them from the new Commands menu, keep your own in a Commands folder, and see their output and errors in the Output panel (F2); each run undoes in one step</li>
+  <li><code>Phoenix script.jsfl</code> runs a script in the open Phoenix, and <code>Phoenix run-script</code> runs one on documents with no window</li>
+  <li>Older scripts that use E4X XML (<code>x.@id</code>, <code>x..item</code>, XML literals) run</li>
+  <li>Scripts can ask for their settings in XUL dialogs (<code>fl.xmlPanel</code>, <code>fl.xmlPanelFromString</code>), with handlers and <code>fl.xmlui</code></li>
+  <li>Python scripts: run <code>.py</code> files from the Commands menu or <code>Phoenix run-script</code>, with your own Python and its packages, using the same objects and names as JSFL</li>
+  <li><code>Phoenix batch --jsfl script.jsfl</code> runs a script on every document in a folder, and <code>--save</code> writes back what it changed</li>
+  <li>Scripts can read a shape's outline (vertices, edges, contours, fills and strokes) and edit it, for exporters that walk shapes</li>
+  <li>Scripts can keep named data on objects, library items and the document, saved with the file</li>
+  <li>Scripts can copy, cut, paste and duplicate whole layers, move a layer into a folder, export SWF movies, publish, and run command lines</li>
+  <li>Trace Bitmap previews on the stage: Preview traces the selected bitmaps in place with how many areas and points they make, Auto Preview traces again as settings change, and Cancel puts the bitmaps back; the docs walk through choosing settings on a sample picture</li>
+  <li>Scripts can trace bitmaps with <code>document.traceBitmap</code></li>
+  <li>Right-click a bitmap on the stage for Trace Bitmap and Swap Bitmap</li>
+  <li>Every number field, in dialogs as well as panels, is now hot text: drag it to scrub, click to type, Tab between fields, and step with the arrow keys or the wheel; no more tiny arrow buttons</li>
+  <li>Safe zones and aspect-ratio frames over the stage (View &gt; Safe Zones, or the button on the edit bar): title and action safe, thirds, and 16:9, 4:3, 1.85:1, 2.39:1, 1:1, 4:5, 9:16 or your own frames, with presets, a default for new documents, snapping to their edges, and an option to draw them into review exports</li>
+</ul>
+
+<h2 id="v0-6-0">0.6.0</h2>
+
+<ul>
+  <li>Closing the last document brings back the start screen</li>
+  <li>Document tabs: a right-click menu (Close Others, Close All, Copy Path, Show in Explorer) and Ctrl+Shift+Tab</li>
+  <li>Move a tab to a window of its own, by its menu or by dragging it off the tab bar, and drag it back to merge</li>
+  <li>Copy and paste between documents and windows brings the symbols, bitmaps and sounds it uses</li>
+  <li>Quitting with several unsaved documents offers Save All, Discard All or a review of each</li>
+  <li>Recovery copies cover every open document, and several can be recovered at once</li>
+  <li>Phoenix reopens the documents that were open when you quit</li>
+  <li>Each tab keeps its zoom and scroll, and documents in the background use less memory</li>
+  <li>3D Position and View: set a movie clip's depth, the perspective angle and the vanishing point</li>
+  <li>Saving as FLA or XFL lists the Phoenix-only features the document uses; XFL folders keep them all</li>
+  <li>Bones: symbol armatures play between poses, the Bone tool bones shapes, and the new Bind tool picks which bone each point follows</li>
+  <li>AI assistants such as Claude can look at and change your document through MCP, with every change undoable</li>
+  <li>An animated graphic's selection box and snapping follow the frame it shows, not its first</li>
+  <li>The camera can fade, tint or dim the whole scene, keyed and tweened with its moves</li>
+  <li>Scale handles snap exactly onto guides, grid lines and other artwork's edges and anchor points</li>
+  <li>Merge drawing leaves no hairline gaps where shapes nearly share an edge, and rejoins curves an earlier merge cut once the cut is gone</li>
+</ul>
+
+<h2 id="v0-5-2">0.5.2</h2>
+
+<ul>
+  <li>Interactive tutorials: nine guided lessons in Help &gt; Tutorials, from your first animation to rigging</li>
+  <li>Install page links straight to the latest installers</li>
+</ul>
+
+<h2 id="v0-5-1">0.5.1</h2>
+
+<ul>
+  <li>Movie clip sounds play while the document plays, with View &gt; Mute Movie Clip Sounds</li>
+  <li>XFL folders open from their .xfl file</li>
+  <li>Photoshop large documents (.psb) import</li>
+  <li>Settings move to a new location; your old settings come with them</li>
+  <li>Updated user guide and screenshots, showing the version they describe</li>
+</ul>
+
+<h2 id="v0-5-0">0.5.0</h2>
+
+<ul>
+  <li>Stage controls on the edit bar: center, rotate, clip or dim outside the stage, and a zoom box</li>
+  <li>Frame scripts: stop(), play() and gotos work in playback with Control &gt; Enable Simple Frame Actions</li>
+  <li>Movie clips play on the stage during playback</li>
+  <li>Layer parenting can leave out the parent's scale, skew or flip</li>
+  <li>9-slice scaling works on rotated instances and with filters, blends and color effects</li>
+  <li>Custom Stroke Style dialog for dashed, dotted, ragged, stipple and hatched strokes</li>
+  <li>Paste SVG, PDF artwork and copied files from other apps; copies carry SVG out</li>
+  <li>TLF text opens as classic text</li>
+  <li>Older binary FLA files open more completely</li>
+  <li>Render queue for exporting several movies in the background</li>
+  <li>Publish, Publish Settings and SWF export</li>
+  <li>Video export and import need nothing installed: ffmpeg comes with Phoenix</li>
+  <li>Brush presets, tips, dynamics, Auto Fill and bitmap painting</li>
+  <li>Better SVG, PDF and PSD import</li>
+  <li>Animate Standard keyboard shortcuts, and importing shortcut files</li>
+  <li>Toolbox color controls redrawn; Flow Brush renamed Brush</li>
+  <li>Much more stable with large documents, long sessions and damaged files</li>
+</ul>
+
+<h2 id="v0-4-0">0.4.0</h2>
+
+<ul>
+  <li>Motion tweens you can create and edit, with the Motion Editor, motion paths and motion presets</li>
+  <li>Shape hints, graphic loop options, and Copy and Paste Motion</li>
+  <li>Bone tool, Asset Warp tool, 3D rotation and translation, and the Camera tool</li>
+  <li>Width tool, Paint Brush with art and pattern brushes, textured and bitmap brushes</li>
+  <li>Rigging: pegs, deformers, function curves, master controllers and an X-sheet</li>
+  <li>Multiplane camera with layer depth</li>
+  <li>Lip sync from a recording or cue files</li>
+  <li>Line and color art layers, effect layers and linked palettes</li>
+  <li>Export sprite sheets, ProRes, SVG sequences and compositing passes</li>
+  <li>Shot breakdown, linked shared assets, review notes and animatic import</li>
+  <li>Document tabs, templates, scenes panel, Find and Replace, History panel</li>
+  <li>Library upgrades: external libraries, use counts, folders and properties</li>
+  <li>Text: paragraph settings, vertical text, spell check and font mapping</li>
+  <li>Themes, workspaces and a dockable, customizable toolbox</li>
+  <li>Command line tools: render, doctor, diff, batch and benchmark</li>
+  <li>An HTML user guide</li>
+</ul>
+
+<h2 id="v0-3-0">0.3.0</h2>
+
+<ul>
+  <li>Export movies, animated GIFs, images, PNG sequences and sound</li>
+  <li>Classic, shape and object motion tweens play, with ease presets and custom eases</li>
+  <li>IK armatures and Asset Warp puppets play</li>
+  <li>Color panel with gradients and bitmap fills, Swatches panel</li>
+  <li>Align, Transform and Info panels, and Combine Objects</li>
+  <li>Edit filters, primitives and stroke styles in the Properties panel</li>
+  <li>Import images, sounds and video</li>
+  <li>Copy and paste through the system clipboard</li>
+  <li>Layer Properties, layer menu and drag-to-reorder layers</li>
+  <li>Phoenix document format (.phx), plus opening older binary FLA files</li>
+  <li>Start screen, autosave and crash recovery</li>
+  <li>Brushes with pen pressure and tilt, and the anchor point tools</li>
+</ul>
+
+<h2 id="v0-2-0">0.2.0</h2>
+
+<ul>
+  <li>Signed and notarized macOS installer</li>
+</ul>
+
+<h2 id="v0-1-0">0.1.0</h2>
+
+<ul>
+  <li>First release: open, edit, play and save FLA files with drawing tools, a timeline, symbols and a library</li>
+</ul>
+
+</article>
+</main>
+</body>
+</html>

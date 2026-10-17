@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy · Phoenix User Guide</title>
+<meta name="description" content="What phoenixanimate.com records about visits, what it never records, and how to opt out.">
+<meta name="keywords" content="privacy analytics cookies tracking do not track gpc opt out notrack data">
+<link rel="icon" href="assets/img/logo.png">
+<link rel="stylesheet" href="assets/site.css">
+<script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<main>
+<article class="content">
+
+<p class="eyebrow">About this site</p>
+<h1>Privacy</h1>
+<p class="lead">phoenixanimate.com counts visits so the guide can get better, without cookies, without third parties, and without keeping your IP address.</p>
+
+<h2>In short</h2>
+
+<ul>
+  <li>No cookies, and no identifier that follows you from one day to the next.</li>
+  <li>No advertising, and no scripts or trackers from other companies. The statistics are collected by a small program on the server that hosts this site, and only the author of Phoenix can see them.</li>
+  <li>Your IP address is used for a moment to estimate your country and city, then dropped. It is not stored with the statistics.</li>
+  <li>What you type in the search box is never recorded.</li>
+  <li>Do Not Track and Global Privacy Control are honored, and you can opt out with one click (see <a href="#opting-out">Opting out</a>).</li>
+</ul>
+
+<h2>What is recorded</h2>
+
+<p>For each page you open:</p>
+<ul>
+  <li>The page, the time, and the site that linked to it if you came from another site.</li>
+  <li>Your screen size, your browser's language, the name and version of your browser and operating system, and whether you are on a computer, tablet or phone.</li>
+  <li>An approximate location (country, region and city), looked up from your IP address when the visit is recorded. The address itself is not kept.</li>
+  <li>How long the page was on screen, how far down it you read, and which of its headings you reached.</li>
+  <li>How quickly the page loaded, and any script errors on it.</li>
+</ul>
+
+<p>And when you use the site:</p>
+<ul>
+  <li>Which Phoenix download you clicked (for example the Windows installer), and which lesson file you downloaded from a tutorial.</li>
+  <li>Clicks on links to other sites, such as the releases page on GitHub. For an email link, only that it was an email link.</li>
+  <li>For the search box: how many characters you typed, how many results it showed, and whether you chose one. Never the words.</li>
+  <li>Opening a tutorial page, switching between the light and dark theme, and copying text from a code example.</li>
+</ul>
+
+<h2>What is never recorded</h2>
+
+<ul>
+  <li>Cookies, or any identifier stored to recognize you on a later day.</li>
+  <li>Your IP address, in the statistics.</li>
+  <li>Your name, email address or any account. The site has no accounts.</li>
+  <li>The text you search for, or the text you copy.</li>
+  <li>Anything from the guide opened from a copy on your own computer, or from any other address than phoenixanimate.com.</li>
+</ul>
+
+<h2>How visits are counted</h2>
+
+<p>When you open the first page, your browser makes up a random visit number and keeps it in its session storage, which it clears when you close the tab. That number ties the pages of one visit together and nothing else.</p>
+
+<p>To count visitors per day, the server mixes your IP address and browser name with a random value that changes every day at midnight UTC, and keeps only a scrambled result that cannot be turned back into either. The day's random value is then thrown away, so the same person on two different days cannot be matched up.</p>
+
+<h2 id="opting-out">Opting out</h2>
+
+<ul>
+  <li>If your browser sends Do Not Track or Global Privacy Control, nothing is recorded.</li>
+  <li>Open <a href="https://phoenixanimate.com/?notrack">phoenixanimate.com/?notrack</a> once, and this browser records nothing from then on. It is remembered in your browser's local storage, so clearing the site's data undoes it. To opt back in, open <a href="https://phoenixanimate.com/?track">phoenixanimate.com/?track</a>.</li>
+  <li>Automated browsers and known crawlers are not counted.</li>
+</ul>
+
+<h2>How long it is kept</h2>
+
+<p>The detailed records are kept for 13 months and then deleted. What stays after that is daily totals, such as how many people visited each page on a day, which say nothing about any one visit. Nothing is sold or shared with anyone.</p>
+
+<h2>Server logs</h2>
+
+<p>Like any web server, the one that hosts this site writes a log line for each request: the IP address, the time, the address requested and the browser. The logs are used only to keep the server running and secure, and the server's routine log rotation deletes them after a short time.</p>
+
+<h2>Downloads and updates</h2>
+
+<p>The download links on this site lead to the release files on GitHub, so GitHub's privacy statement covers the download itself. Phoenix checks for updates through phoenixanimate.com, and that request appears in the server logs like any other. Phoenix itself sends no statistics about how you use it.</p>
+
+<h2>Location data</h2>
+
+<p>Locations come from the free IP to City Lite database by <a href="https://db-ip.com">DB-IP</a>, licensed under <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>. They are approximate, often only as close as your internet provider's nearest hub.</p>
+
+<h2>Questions</h2>
+
+<p>Write to <a href="mailto:brendan.duncan@gmail.com">brendan.duncan@gmail.com</a> with any question about this page or the data behind it.</p>
+
+</article>
+</main>
+</body>
+</html>

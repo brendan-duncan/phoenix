@@ -88,6 +88,7 @@ const NAV = [
     { href: "preferences.html", title: "Settings and preferences" },
     { href: "animate.html", title: "Coming from Animate" },
     { href: "harmony.html", title: "Coming from Harmony" },
+    { href: "changelog.html", title: "What's new" },
   ] },
 ];
 
@@ -222,18 +223,18 @@ function buildPager(content, page) {
 }
 
 // The footer every page ends with: the version, where to report a mistake,
-// the copyright and how to reach the author.
+// the copyright, the privacy statement and how to reach the author.
 function buildFooter(content) {
   const footer = document.createElement("footer");
   footer.className = "site-footer";
   footer.innerHTML =
-    `<p>Phoenix ${VERSION} (<a href="${REPO}/blob/main/CHANGELOG.md">what's new</a>). Found a mistake in this guide? <a href="${REPO}/issues">Open an issue</a>.</p>` +
+    `<p>Phoenix ${VERSION} (<a href="changelog.html">what's new</a>). Found a mistake in this guide? <a href="${REPO}/issues">Open an issue</a>.</p>` +
     `<p class="contact">` +
     `<a href="mailto:${CONTACT.email}">${ICONS.mail}<span>${CONTACT.email}</span></a>` +
     `<a href="${CONTACT.linkedin}" rel="me">${ICONS.linkedin}<span>LinkedIn</span></a>` +
     `<a href="${CONTACT.mastodon}" rel="me">${ICONS.mastodon}<span>Mastodon</span></a>` +
     `</p>` +
-    `<p class="copyright">Copyright &copy; 2026 Brendan Duncan. All rights reserved.</p>`;
+    `<p class="copyright">Copyright &copy; 2026 Brendan Duncan. All rights reserved. <a href="privacy.html">Privacy</a></p>`;
   content.append(footer);
 }
 
@@ -325,6 +326,19 @@ function setupLightbox(content) {
   });
 }
 
+// Site analytics (analytics/README.md): loaded only on phoenixanimate.com,
+// so the guide opened from disk or a local server never sends anything.
+// tools/deploy_site.py publishes the script as assets/analytics.js.
+const ANALYTICS_HOSTS = ["phoenixanimate.com", "www.phoenixanimate.com"];
+
+function loadAnalytics() {
+  if (!ANALYTICS_HOSTS.includes(location.hostname)) return;
+  const script = document.createElement("script");
+  script.src = "assets/analytics.js";
+  script.async = true;
+  document.head.append(script);
+}
+
 function wrapTables(content) {
   for (const table of content.querySelectorAll("table")) {
     if (table.parentElement.classList.contains("table-wrap")) continue;
@@ -352,4 +366,6 @@ document.addEventListener("DOMContentLoaded", () => {
   buildFooter(content);
   setupSearch();
   setupLightbox(content);
+  // Last, so it sees the finished page (headings with ids, header, footer).
+  loadAnalytics();
 });
