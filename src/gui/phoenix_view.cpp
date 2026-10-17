@@ -4152,6 +4152,26 @@ QTransform PhoenixView::rigTransform(const fla::Layer* layer, const fla::Frame* 
         const fla::Transform t = shownTransform(parent, 0);
         const QTransform world = QTransform(t.m11, t.m12, t.m21, t.m22, t.tx, t.ty) *
             rigTransform(candidate, parent.frame, loopType, firstFrame, depth + 1);
+        // A parent keyed in Animate turns its children with its rotation
+        // alone, keeping their size, their joints on it (see
+        // fla::layers::riggedTransform). Worked out for the layer's first
+        // element, which on a parented layer is usually the only one.
+        fla::Transform turn;
+        if (fla::layers::rigPropagationOf(*parent.frame, turn))
+        {
+            const LayerFrame own = resolveLayerFrame(layer, loopType, firstFrame);
+            const fla::Element* first = frame->elements.empty() ? nullptr : frame->elements[0];
+            fla::Transform child;
+            fla::Point pivot;
+            if (first)
+            {
+                child = own.frame == frame ? shownTransform(own, 0) : first->transform;
+                pivot = first->transformationPoint;
+            }
+            const fla::Transform placed = fla::layers::riggedTransform(
+                fla::Transform(world.m11(), world.m12(), world.m21(), world.m22(), world.dx(), world.dy()), turn, child, pivot);
+            return QTransform(placed.m11, placed.m12, placed.m21, placed.m22, placed.tx, placed.ty);
+        }
         // The parent's scale, skew or flip, as the layer takes them on.
         const fla::layers::ParentPropagation propagation = fla::layers::propagationOf(*layer);
         if (propagation.all())

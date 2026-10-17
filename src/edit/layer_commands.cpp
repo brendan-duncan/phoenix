@@ -574,6 +574,7 @@ namespace {
 const char* const kParentScale = "phoenixParentScale";
 const char* const kParentSkew = "phoenixParentSkew";
 const char* const kParentFlip = "phoenixParentFlip";
+const char* const kRigPropagation = "rigPropagationMatrix";
 
 } // namespace
 
@@ -654,6 +655,67 @@ Transform propagatedTransform(const Transform& parent, ParentPropagation propaga
         result.m12 = -result.m12;
     }
     return result;
+}
+
+namespace {
+
+/// \a first, then \a second.
+Transform followedBy(const Transform& first, const Transform& second)
+{
+    return Transform(first.m11 * second.m11 + first.m12 * second.m21, first.m11 * second.m12 + first.m12 * second.m22,
+        first.m21 * second.m11 + first.m22 * second.m21, first.m21 * second.m12 + first.m22 * second.m22,
+        first.tx * second.m11 + first.ty * second.m21 + second.tx, first.tx * second.m12 + first.ty * second.m22 + second.ty);
+}
+
+Point mapped(const Transform& t, const Point& p)
+{
+    return Point(t.m11 * p.x + t.m21 * p.y + t.tx, t.m12 * p.x + t.m22 * p.y + t.ty);
+}
+
+} // namespace
+
+bool rigPropagationOf(const Frame& frame, Transform& turn)
+{
+    for (const auto& [key, value] : frame.extraAttributes)
+    {
+        if (key != kRigPropagation)
+            continue;
+        double m[4] = {1.0, 0.0, 0.0, 1.0};
+        const char* names[4] = {"\"a\"", "\"b\"", "\"c\"", "\"d\""};
+        for (int i = 0; i < 4; ++i)
+        {
+            const size_t at = value.find(names[i]);
+            const size_t colon = at == std::string::npos ? at : value.find(':', at);
+            if (colon == std::string::npos)
+                return false;
+            m[i] = std::atof(value.c_str() + colon + 1) / 65536.0;
+        }
+        if (std::abs(m[0] * m[3] - m[1] * m[2]) < 1e-9)
+            return false;
+        turn = Transform(m[0], m[1], m[2], m[3], 0.0, 0.0);
+        return true;
+    }
+    return false;
+}
+
+Transform riggedTransform(const Transform& parent, const Transform& turn, const Transform& child, const Point& pivot)
+{
+    // The stored turn, brought round to the parent's rotation as shown.
+    const double by = std::atan2(parent.m12, parent.m11) - std::atan2(turn.m12, turn.m11);
+    const Transform turned = followedBy(turn, Transform(std::cos(by), std::sin(by), -std::sin(by), std::cos(by), 0.0, 0.0));
+    const double det = child.m11 * child.m22 - child.m12 * child.m21;
+    if (std::abs(det) < 1e-12)
+        return Transform(turned.m11, turned.m12, turned.m21, turned.m22, parent.tx, parent.ty);
+    // The child keeps its own shape, turned; its pivot sits where the whole
+    // parent puts it.
+    Transform shown = followedBy(Transform(child.m11, child.m12, child.m21, child.m22, 0.0, 0.0), turned);
+    const Point joint = mapped(parent, mapped(child, pivot));
+    const Point turnedPivot = mapped(shown, pivot);
+    shown.tx = joint.x - turnedPivot.x;
+    shown.ty = joint.y - turnedPivot.y;
+    const Transform back(child.m22 / det, -child.m12 / det, -child.m21 / det, child.m11 / det,
+        (child.m21 * child.ty - child.m22 * child.tx) / det, (child.m12 * child.tx - child.m11 * child.ty) / det);
+    return followedBy(back, shown);
 }
 
 std::vector<int> withContents(const Timeline& timeline, std::vector<int> indices)

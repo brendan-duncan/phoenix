@@ -2,6 +2,7 @@
 
 #include "command.h"
 #include "../data/layer.h"
+#include "../data/point.h"
 #include "../data/transform.h"
 
 #include <cstdint>
@@ -192,6 +193,19 @@ std::vector<std::pair<std::string, std::string>> withPropagation(
 /// side to side and turned half round, so a child that leaves flips behind
 /// still turns with it). With everything taken on it is \a parent exactly.
 Transform propagatedTransform(const Transform& parent, ParentPropagation propagation);
+
+/// The rigPropagationMatrix Animate writes on a parent layer's keyframes:
+/// the part of the parent's transform its children turn with, its rotation
+/// without its scale or flip (stored in 16.16 fixed point). False when
+/// \a frame has none, as a layer parented in Phoenix does not.
+bool rigPropagationOf(const Frame& frame, Transform& turn);
+/// How a child is placed under a parent keyed with \a turn, as Animate
+/// places it: the child's own transform \a child keeps its shape, turned by
+/// \a turn brought round to the rotation of \a parent (the parent as shown,
+/// so in-betweens and edits follow), and its transformation point \a pivot
+/// lands where the whole of \a parent puts it, so a forearm stays on its
+/// elbow. Returned as what follows \a child, as a layer's parenting does.
+Transform riggedTransform(const Transform& parent, const Transform& turn, const Transform& child, const Point& pivot);
 
 /// The layers at \a indices with everything inside them, in timeline order:
 /// a selection of layers grown to whole folders, masks and guides.

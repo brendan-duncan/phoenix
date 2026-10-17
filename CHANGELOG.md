@@ -2,6 +2,10 @@
 
 What changed in each release of Phoenix, newest first.
 
+## Unreleased
+
+- Parented layers from Animate files play as Animate shows them: a child turns with its parent but keeps its own size, so arms and legs rigged with layer parenting no longer shrink or flip
+
 ## 0.16.0
 
 - ActionScript 3 movies play with the flash.* classes in Test Movie: the display list, drawing, BitmapData, events, filters, text, ByteArray, Timer, loading files and images, SharedObject; library symbols are classes, frame scripts share their timeline, and classes load from the class path and Preferences

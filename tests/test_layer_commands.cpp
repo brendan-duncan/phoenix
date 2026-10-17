@@ -440,6 +440,45 @@ TEST(parent_propagation_leaves_out_what_is_off)
     checkSame(fla::layers::propagatedTransform(collapsed, follows(false, false, false)), collapsed);
 }
 
+TEST(a_child_of_an_animate_rig_turns_with_its_parent_but_keeps_its_size)
+{
+    // template_bike_girl.fla, frame 1: the upper arm, flipped and at half
+    // size, keyed with the rotation its forearm turns with.
+    fla::Frame keyed(nullptr);
+    keyed.extraAttributes = {{"rigPropagationMatrix", R"({"a":-54656,"b":35983,"c":-35983,"d":-54656,"tx":0,"ty":0})"}};
+    fla::Transform turn;
+    CHECK(fla::layers::rigPropagationOf(keyed, turn));
+    CHECK_NEAR(turn.m11, -54656.0 / 65536.0);
+    CHECK_NEAR(turn.m21, -35983.0 / 65536.0);
+    CHECK(!fla::layers::rigPropagationOf(fla::Frame(nullptr), turn));
+
+    const fla::Transform upperArm(-0.41082763671875, 0.271484375, 0.305877685546875, 0.46282958984375, 834.0, 329.95);
+    const fla::Transform forearm(-0.351516723632812, 0.34588623046875, -0.34588623046875, -0.351516723632812, 0.6, 199.75);
+    const fla::Point elbow(0.1, 0.5);
+    const fla::Transform after = fla::layers::riggedTransform(upperArm, turn, forearm, elbow);
+    // The forearm as shown: forearm, then what parenting adds.
+    const auto map = [](const fla::Transform& t, double x, double y) {
+        return std::make_pair(t.m11 * x + t.m21 * y + t.tx, t.m12 * x + t.m22 * y + t.ty);
+    };
+    const auto [x0, y0] = map(after, forearm.tx, forearm.ty);
+    const auto [x1, y1] = map(after, forearm.m11 + forearm.tx, forearm.m12 + forearm.ty);
+    const auto [x2, y2] = map(after, forearm.m21 + forearm.tx, forearm.m22 + forearm.ty);
+    const double a = x1 - x0, b = y1 - y0, c = x2 - x0, d = y2 - y0;
+    // Its own size (as near as the stored turn, 0.998, keeps it), not the
+    // parent's half of it, and not flipped.
+    CHECK_NEAR(std::hypot(a, b), std::hypot(forearm.m11, forearm.m12) * std::hypot(turn.m11, turn.m12));
+    CHECK(a * d - b * c > 0.0);
+    // Turned by the parent's rotation.
+    const double turned = std::atan2(b, a) - std::atan2(forearm.m12, forearm.m11) - std::atan2(upperArm.m12, upperArm.m11);
+    CHECK_NEAR(std::remainder(turned, 4.0 * std::acos(0.0)), 0.0);
+    // And its elbow where the whole upper arm puts it.
+    const auto [ex, ey] = map(forearm, elbow.x, elbow.y);
+    const auto [wx, wy] = map(upperArm, ex, ey);
+    const auto [sx, sy] = map(after, ex, ey);
+    CHECK_NEAR(sx, wx);
+    CHECK_NEAR(sy, wy);
+}
+
 TEST(layer_properties_edit_undoes_layer_settings)
 {
     std::unique_ptr<fla::Timeline> timeline(new fla::Timeline(nullptr));
