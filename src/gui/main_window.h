@@ -202,10 +202,16 @@ private slots:
     /// settings say, with no dialogs: the files written and what went
     /// wrong. False when something could not be written.
     bool publishFiles(QStringList& written, QStringList& problems);
-    /// The current scene as an SWF movie at \a size: its frames as vector
-    /// shapes, images and what filters and blends make as bitmaps. False
-    /// with \a error when it could not be written.
+    /// The document as an SWF movie at \a size: its scenes with their
+    /// structure (movie clips, buttons, instance names, masks, labels, text
+    /// fields) and their ActionScript compiled, as fla::swfmovie writes
+    /// them; or, where Phoenix draws something a player cannot (its own
+    /// effects, behaviors, 3D...), the current scene's frames as vector
+    /// shapes, images and what filters and blends make as bitmaps, without
+    /// scripts. False with \a error when it could not be written; what did
+    /// not go in as it is, in swfNotes().
     bool exportSwf(const QString& path, const QSize& size, QString& error);
+    const QStringList& swfNotes() const { return _swfNotes; }
     /// Tells scripts listening for \a type (fl.addEventListener), and
     /// JSFL tools, that it happened.
     void scriptEvent(const char* type);
@@ -1202,6 +1208,8 @@ private:
     QString _documentName;
     /// Where the document was last saved or loaded from, for File > Save.
     QString _documentPath;
+    /// What the last SWF export could not put in as it is.
+    QStringList _swfNotes;
     Player* _player;
     Updater* _updater;
     DocumentView* _documentView;

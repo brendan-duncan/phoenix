@@ -122,6 +122,10 @@
 #include "../util/swf_writer.h"
 #include "../edit/publish_settings.h"
 #include "../edit/swf_event_sounds.h"
+#include "../edit/swf_movie.h"
+#include "../play/script/class_path.h"
+#include "movie_hooks.h"
+#include "swf_export.h"
 #include "../edit/brush_presets.h"
 #include "image_export.h"
 #include "timeline_view.h"
@@ -8051,7 +8055,7 @@ int MainWindow::exportFromCommandLine(const QString& source, const QString& outp
     const fla::Document* document = _flaDocument->document;
     if (output.endsWith(".swf", Qt::CaseInsensitive) && !perLayer)
     {
-        // A movie of vector shapes, with its soundtrack.
+        // A movie with its scripts, or of vector shapes, with its soundtrack.
         QString error;
         const QString path = QFileInfo(output).absoluteFilePath();
         if (!exportSwf(path, QSize(document->width, document->height), error))
@@ -8059,6 +8063,8 @@ int MainWindow::exportFromCommandLine(const QString& source, const QString& outp
             std::fprintf(stderr, "%s\n", qPrintable(error.isEmpty() ? QString("Export cancelled.") : error));
             return 1;
         }
+        for (const QString& note : _swfNotes)
+            std::fprintf(stderr, "%s\n", qPrintable(note));
         std::printf("Exported %d frames to %s\n", std::max(1, _phoenixView->frameCount()), qPrintable(path));
         return 0;
     }
@@ -8542,7 +8548,8 @@ int MainWindow::renderCommand(const QString& source, const QStringList& options)
     }
     else if (suffix == "swf")
     {
-        // A movie of vector shapes, the scene's frames all.
+        // A movie with its scripts, or of vector shapes, the scene's frames
+        // all.
         QDir().mkpath(QFileInfo(out).absolutePath());
         QString error;
         if (!exportSwf(QFileInfo(out).absoluteFilePath(), settings.size, error))
@@ -8550,6 +8557,8 @@ int MainWindow::renderCommand(const QString& source, const QStringList& options)
             std::fprintf(stderr, "%s\n", qPrintable(error.isEmpty() ? QString("Render stopped.") : error));
             return 1;
         }
+        for (const QString& note : _swfNotes)
+            std::fprintf(stderr, "%s\n", qPrintable(note));
         std::printf("Rendered %d frames of %s to %s\n", std::max(1, _phoenixView->frameCount()), qPrintable(source),
             qPrintable(QFileInfo(out).absoluteFilePath()));
         return 0;
@@ -9108,110 +9117,6 @@ bool MainWindow::publishFiles(QStringList& written, QStringList& problems)
     return problems.isEmpty();
 }
 
-namespace {
-
-/// A path's outline for SWF: lines kept, cubic curves as quadratic ones
-/// (four to a cubic), every subpath closed.
-std::vector<swf::Segment> swfOutline(const QPainterPath& path)
-{
-    using K = swf::Segment::Kind;
-    std::vector<swf::Segment> out;
-    QPointF start, at;
-    bool open = false;
-    const auto close = [&]() {
-        if (open && at != start)
-            out.push_back({K::Line, start.x(), start.y()});
-        open = false;
-    };
-    for (int i = 0; i < path.elementCount(); ++i)
-    {
-        const QPainterPath::Element& e = path.elementAt(i);
-        if (e.type == QPainterPath::MoveToElement)
-        {
-            close();
-            start = at = QPointF(e.x, e.y);
-            out.push_back({K::Move, e.x, e.y});
-            open = true;
-        }
-        else if (e.type == QPainterPath::LineToElement)
-        {
-            at = QPointF(e.x, e.y);
-            out.push_back({K::Line, e.x, e.y});
-        }
-        else if (e.type == QPainterPath::CurveToElement && i + 2 < path.elementCount())
-        {
-            const QPointF p0 = at;
-            const QPointF p1(e.x, e.y);
-            const QPointF p2(path.elementAt(i + 1).x, path.elementAt(i + 1).y);
-            const QPointF p3(path.elementAt(i + 2).x, path.elementAt(i + 2).y);
-            const auto point = [&](double t) {
-                const double u = 1.0 - t;
-                return p0 * (u * u * u) + p1 * (3 * u * u * t) + p2 * (3 * u * t * t) + p3 * (t * t * t);
-            };
-            const auto tangent = [&](double t) {
-                const double u = 1.0 - t;
-                return (p1 - p0) * (3 * u * u) + (p2 - p1) * (6 * u * t) + (p3 - p2) * (3 * t * t);
-            };
-            // Each quarter as a quadratic whose control sits where the
-            // tangents at its ends meet, or midway when they do not.
-            for (int k = 0; k < 4; ++k)
-            {
-                const double t0 = k / 4.0, t1 = (k + 1) / 4.0;
-                const QPointF a = point(t0), b = point(t1);
-                const QPointF da = tangent(t0), db = tangent(t1);
-                const double cross = da.x() * db.y() - da.y() * db.x();
-                QPointF control = (a + b) / 2.0;
-                if (std::fabs(cross) > 1.0e-9)
-                {
-                    const QPointF d = b - a;
-                    const double s = (d.x() * db.y() - d.y() * db.x()) / cross;
-                    const QPointF meet = a + da * s;
-                    if (std::hypot(meet.x() - control.x(), meet.y() - control.y()) < std::hypot(d.x(), d.y()) * 2.0)
-                        control = meet;
-                }
-                out.push_back({K::Quad, b.x(), b.y(), control.x(), control.y()});
-            }
-            at = p3;
-            i += 2;
-        }
-    }
-    close();
-    return out;
-}
-
-swf::Color swfColor(const QColor& color, double opacity)
-{
-    return swf::Color{static_cast<uint8_t>(color.red()), static_cast<uint8_t>(color.green()),
-        static_cast<uint8_t>(color.blue()), static_cast<uint8_t>(std::lround(color.alpha() * std::clamp(opacity, 0.0, 1.0)))};
-}
-
-swf::Matrix swfMatrix(const QTransform& t)
-{
-    return swf::Matrix{t.m11(), t.m12(), t.m21(), t.m22(), t.dx(), t.dy()};
-}
-
-/// The premultiplied ARGB bytes SWF bitmaps hold.
-std::vector<uint8_t> swfPixels(const QImage& source)
-{
-    const QImage image = source.convertToFormat(QImage::Format_ARGB32_Premultiplied);
-    std::vector<uint8_t> out;
-    out.reserve(static_cast<size_t>(image.width()) * image.height() * 4);
-    for (int y = 0; y < image.height(); ++y)
-    {
-        const QRgb* line = reinterpret_cast<const QRgb*>(image.constScanLine(y));
-        for (int x = 0; x < image.width(); ++x)
-        {
-            out.push_back(static_cast<uint8_t>(qAlpha(line[x])));
-            out.push_back(static_cast<uint8_t>(qRed(line[x])));
-            out.push_back(static_cast<uint8_t>(qGreen(line[x])));
-            out.push_back(static_cast<uint8_t>(qBlue(line[x])));
-        }
-    }
-    return out;
-}
-
-} // namespace
-
 bool MainWindow::exportSwf(const QString& path, const QSize& size, QString& error)
 {
     const fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
@@ -9220,25 +9125,12 @@ bool MainWindow::exportSwf(const QString& path, const QSize& size, QString& erro
         error = "No document is open.";
         return false;
     }
+    _swfNotes.clear();
     const int frames = std::max(1, _phoenixView->frameCount());
     swf::Writer writer(size.width(), size.height(), document->frameRate,
         swf::Color{document->backgroundColor[0], document->backgroundColor[1], document->backgroundColor[2], 255});
     // Shapes and bitmaps written once and placed in every frame they show in.
-    std::map<QByteArray, int> shapes;
-    std::map<QByteArray, int> bitmaps;
-    const auto bitmapOf = [&](const QImage& image) {
-        const QImage pixels = image.convertToFormat(QImage::Format_ARGB32_Premultiplied);
-        QCryptographicHash hash(QCryptographicHash::Sha1);
-        hash.addData(QByteArrayView(reinterpret_cast<const char*>(pixels.constBits()), pixels.sizeInBytes()));
-        hash.addData(QByteArray::number(pixels.width()) + "x" + QByteArray::number(pixels.height()));
-        const QByteArray key = hash.result();
-        const auto found = bitmaps.find(key);
-        if (found != bitmaps.end())
-            return found->second;
-        const int id = writer.defineBitmap(pixels.width(), pixels.height(), swfPixels(pixels));
-        bitmaps[key] = id;
-        return id;
-    };
+    SwfArt art(writer);
     // The soundtrack, mixed as playback mixes it, streamed a block a frame
     // as Publish Settings say.
     const fla::publish::Settings publish = fla::publish::read(publishXml(*document), std::string());
@@ -9297,124 +9189,86 @@ bool MainWindow::exportSwf(const QString& path, const QSize& size, QString& erro
     QProgressDialog progress("Exporting SWF...", "Cancel", 0, frames, this);
     progress.setWindowModality(Qt::WindowModal);
     progress.setMinimumDuration(400);
-    int placed = 0;
-    for (int frame = 0; frame < frames; ++frame)
-    {
-        progress.setValue(frame);
-        if (progress.wasCanceled())
-            return false;
-        // What last frame showed goes; this frame's things go on in order.
-        for (int depth = 1; depth <= placed; ++depth)
-            writer.remove(depth);
-        placed = 0;
-        for (const RecordedItem& item : _phoenixView->recordFrame(frame, size))
-        {
-            QPainterPath area = item.path;
-            if (item.clipped)
-                area = area.intersected(item.clip);
-            area = area.simplified();
-            if (area.isEmpty())
-                continue;
-            swf::Fill fill;
-            double alpha = item.opacity;
-            if (item.kind == RecordedItem::Kind::Image)
-            {
-                fill.type = swf::Fill::Type::Bitmap;
-                fill.bitmap = bitmapOf(item.image);
-                fill.matrix = swfMatrix(item.imageTransform);
-            }
-            else
-            {
-                const QBrush& brush = item.brush;
-                const QGradient* gradient = brush.gradient();
-                if (gradient && (gradient->type() == QGradient::LinearGradient || gradient->type() == QGradient::RadialGradient))
-                {
-                    fill.type = gradient->type() == QGradient::LinearGradient ? swf::Fill::Type::Linear : swf::Fill::Type::Radial;
-                    for (const QGradientStop& stop : gradient->stops())
-                        fill.stops.push_back({stop.first, swfColor(stop.second, alpha)});
-                    fill.spread = gradient->spread() == QGradient::ReflectSpread ? 1 : gradient->spread() == QGradient::RepeatSpread ? 2 : 0;
-                    QTransform square;
-                    if (fill.type == swf::Fill::Type::Linear)
-                    {
-                        const auto* linear = static_cast<const QLinearGradient*>(gradient);
-                        const QPointF from = linear->start(), to = linear->finalStop();
-                        const QPointF d = to - from;
-                        square = QTransform(d.x() / 1638.4, d.y() / 1638.4, -d.y() / 1638.4, d.x() / 1638.4,
-                            (from.x() + to.x()) / 2.0, (from.y() + to.y()) / 2.0);
-                    }
-                    else
-                    {
-                        const auto* radial = static_cast<const QRadialGradient*>(gradient);
-                        const QPointF center = radial->center();
-                        const QPointF toward = radial->focalPoint() - center;
-                        const double radius = std::max(radial->radius(), 1.0e-6);
-                        const double angle = std::hypot(toward.x(), toward.y()) > 1.0e-9 ? std::atan2(toward.y(), toward.x()) : 0.0;
-                        const double k = radius / 819.2;
-                        square = QTransform(std::cos(angle) * k, std::sin(angle) * k, -std::sin(angle) * k, std::cos(angle) * k,
-                            center.x(), center.y());
-                        fill.focal = std::clamp(std::hypot(toward.x(), toward.y()) / radius, 0.0, 0.99);
-                    }
-                    fill.matrix = swfMatrix(square * brush.transform());
-                    alpha = 1.0;
-                }
-                else if (brush.style() == Qt::TexturePattern)
-                {
-                    fill.type = swf::Fill::Type::Bitmap;
-                    fill.repeat = true;
-                    fill.bitmap = bitmapOf(brush.textureImage());
-                    fill.matrix = swfMatrix(brush.transform());
-                }
-                else
-                {
-                    fill.color = swfColor(brush.color(), alpha);
-                    alpha = 1.0;
-                }
-            }
-            const std::vector<swf::Segment> outline = swfOutline(area);
-            // The same outline and fill: the same shape.
-            QCryptographicHash hash(QCryptographicHash::Sha1);
-            for (const swf::Segment& segment : outline)
-                hash.addData(QByteArrayView(reinterpret_cast<const char*>(&segment), sizeof(segment)));
-            hash.addData(QByteArrayView(reinterpret_cast<const char*>(&fill.type), sizeof(fill.type)));
-            hash.addData(QByteArrayView(reinterpret_cast<const char*>(&fill.color), sizeof(fill.color)));
-            hash.addData(QByteArrayView(reinterpret_cast<const char*>(&fill.matrix), sizeof(fill.matrix)));
-            hash.addData(QByteArray::number(fill.bitmap) + "/" + QByteArray::number(fill.spread) + "/" +
-                QByteArray::number(fill.focal) + "/" + QByteArray::number(fill.repeat));
-            for (const swf::Fill::Stop& stop : fill.stops)
-                hash.addData(QByteArrayView(reinterpret_cast<const char*>(&stop), sizeof(stop)));
-            const QByteArray key = hash.result();
-            int id = 0;
-            const auto found = shapes.find(key);
-            if (found != shapes.end())
-                id = found->second;
-            else
-            {
-                id = writer.defineShape(fill, outline);
-                shapes[key] = id;
-            }
-            if (id == 0)
-                continue;
-            swf::Writer::Blend blend = swf::Writer::Blend::Normal;
-            switch (item.composition)
-            {
-            case QPainter::CompositionMode_Multiply: blend = swf::Writer::Blend::Multiply; break;
-            case QPainter::CompositionMode_Screen: blend = swf::Writer::Blend::Screen; break;
-            case QPainter::CompositionMode_Lighten: blend = swf::Writer::Blend::Lighten; break;
-            case QPainter::CompositionMode_Darken: blend = swf::Writer::Blend::Darken; break;
-            case QPainter::CompositionMode_Difference: blend = swf::Writer::Blend::Difference; break;
-            case QPainter::CompositionMode_Plus: blend = swf::Writer::Blend::Add; break;
-            case QPainter::CompositionMode_Overlay: blend = swf::Writer::Blend::Overlay; break;
-            case QPainter::CompositionMode_HardLight: blend = swf::Writer::Blend::HardLight; break;
-            default: break;
-            }
-            writer.place(id, ++placed, alpha, blend);
-        }
-        if (streaming && static_cast<size_t>(frame) < sound.blocks.size())
+    // This frame's part of the soundtrack and its event sounds, for frame
+    // \a frame of the scene.
+    const auto sounds = [&](int frame) {
+        if (streaming && frame >= 0 && static_cast<size_t>(frame) < sound.blocks.size())
             writer.soundBlock(sound.blocks[static_cast<size_t>(frame)]);
-        events.frame(writer, frame);
-        writer.showFrame();
+        if (frame >= 0 && frame < frames)
+            events.frame(writer, frame);
+    };
+
+    // The movie with its structure (movie clips, buttons, names, scripts)
+    // unless Phoenix draws something there a player cannot: then frames of
+    // shapes, as Phoenix draws them, with no scripts.
+    const std::string flat = fla::swfmovie::unstructured(*document);
+    if (flat.empty())
+    {
+        SwfViewDrawer drawer(*_phoenixView, art);
+        fla::swfmovie::Options options;
+        const QString folder = _documentPath.isEmpty() ? QString() : QFileInfo(_documentPath).absolutePath();
+        std::vector<std::string> extra;
+        for (const QString& entry : actionScriptClassPaths())
+            if (!entry.trimmed().isEmpty())
+                extra.push_back(QDir::fromNativeSeparators(entry.trimmed()).toStdString());
+        const fla::play::ClassPath classPath(*document, folder.toStdString(), extra);
+        options.findClass = [classPath](const std::string& name) -> std::optional<std::string> {
+            const std::optional<fla::play::ClassFile> found = classPath.find(name);
+            return found ? std::optional<std::string>(found->source) : std::nullopt;
+        };
+        options.scaleX = document->width > 0 ? size.width() / document->width : 1.0;
+        options.scaleY = document->height > 0 ? size.height() / document->height : 1.0;
+        fla::swfmovie::Movie movie(*document, writer, drawer, options);
+        const int start = movie.sceneStart(document->currentScene());
+        bool cancelled = false;
+        movie.write([&](int frame) {
+            progress.setValue(std::clamp(frame - start, 0, frames));
+            if (progress.wasCanceled())
+            {
+                cancelled = true;
+                return false;
+            }
+            sounds(frame - start);
+            return true;
+        });
+        if (cancelled)
+            return false;
+        for (const std::string& problem : movie.problems())
+            _swfNotes << QString::fromStdString(problem);
+    }
+    else
+    {
+        if (fla::swfmovie::hasScripts(*document))
+            _swfNotes << QString("The movie's scripts are left out: it is drawn as frames of shapes for %1.")
+                             .arg(QString::fromStdString(flat));
+        int placed = 0;
+        for (int frame = 0; frame < frames; ++frame)
+        {
+            progress.setValue(frame);
+            if (progress.wasCanceled())
+                return false;
+            // What last frame showed goes; this frame's things go on in order.
+            for (int depth = 1; depth <= placed; ++depth)
+                writer.remove(depth);
+            placed = 0;
+            for (const RecordedItem& item : _phoenixView->recordFrame(frame, size))
+            {
+                double alpha = 1.0;
+                swf::Writer::Blend blend = swf::Writer::Blend::Normal;
+                const int id = art.shapeOf(item, alpha, blend);
+                if (id == 0)
+                    continue;
+                writer.place(id, ++placed, alpha, blend);
+            }
+            sounds(frame);
+            writer.showFrame();
+        }
     }
     progress.setValue(frames);
+    if (!_swfNotes.isEmpty())
+        statusBar()->showMessage(_swfNotes.size() == 1 ? _swfNotes.front()
+                                                       : QString("%1 (and %2 more)").arg(_swfNotes.front()).arg(_swfNotes.size() - 1),
+            10000);
     const std::vector<uint8_t> bytes = writer.finish(true);
     QFile file(path);
     if (!file.open(QIODevice::WriteOnly) ||

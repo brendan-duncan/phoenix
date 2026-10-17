@@ -1328,8 +1328,10 @@ private:
             case 3: // bevel
             {
                 filter.element = "BevelFilter";
-                const Rgba shadow = readRgb(tag, true);
+                // The highlight comes first, whatever the format's
+                // description says.
                 const Rgba highlight = readRgb(tag, true);
+                const Rgba shadow = readRgb(tag, true);
                 set("shadowColor", hexColor(shadow));
                 set("shadowAlpha", number(shadow.a / 255.0));
                 set("highlightColor", hexColor(highlight));
@@ -2618,7 +2620,7 @@ private:
         const EditText& e = c.edit;
         tinyxml2::XMLElement* text = doc.NewElement(e.readOnly ? "DOMDynamicText" : "DOMInputText");
         if (!p.name.empty())
-            text->SetAttribute("name", p.name.c_str());
+            text->SetAttribute("instanceName", p.name.c_str());
         const double width = std::max(1.0, (e.bounds.right - e.bounds.left) / 20.0 - 4.0);
         const double height = std::max(1.0, (e.bounds.bottom - e.bounds.top) / 20.0 - 4.0);
         text->SetAttribute("width", number(width).c_str());

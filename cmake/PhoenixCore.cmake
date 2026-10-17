@@ -206,8 +206,9 @@ set(PHOENIX_CORE_PYTHON_SOURCES
     python/python_keywords.cpp
 )
 
-# Playing movies with their scripts (Control > Test Movie): libas3 for
-# ActionScript, QuickJS for HTML5 Canvas JavaScript.
+# Playing movies with their scripts (Control > Test Movie), and publishing
+# them with their ActionScript compiled (SWF): libas3 for ActionScript,
+# QuickJS for HTML5 Canvas JavaScript.
 set(PHOENIX_CORE_PLAY_SOURCES
     play/movie_runtime.cpp
     play/canvas/createjs.cpp
@@ -233,6 +234,7 @@ set(PHOENIX_CORE_PLAY_SOURCES
     play/script/bindings.cpp
     play/script/class_path.cpp
     play/script/png_reader.cpp
+    edit/swf_movie.cpp
 )
 
 # phoenix_add_core(<target> <src dir> [FILES] [JSFL] [PYTHON] [PLAY]): the core

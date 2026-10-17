@@ -140,10 +140,11 @@ if(PHOENIX_TESTS_HAVE_JSFL)
         test_jsfl_native.cpp)
 endif()
 
-# Playing movies with their scripts, with libas3 in the build.
+# Playing movies with their scripts, and publishing them, with libas3 in the
+# build.
 if(TARGET phoenix_core AND TARGET as3_parser)
     list(APPEND TEST_SOURCES test_movie_runtime.cpp test_display.cpp test_as3_bindings.cpp test_canvas_scripts.cpp
-        test_canvas_document.cpp)
+        test_canvas_document.cpp test_swf_movie.cpp)
 endif()
 
 # Python scripts over the same object model; the tests skip themselves where

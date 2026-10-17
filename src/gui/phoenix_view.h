@@ -8,6 +8,7 @@
 #include "../edit/text_animators.h"
 
 #include "../data/color_transform.h"
+#include "../data/filter.h"
 #include "../data/edge.h"
 #include "../data/fla_document.h"
 #include "../data/group.h"
@@ -56,10 +57,13 @@ class QTimer;
 #include <QPolygonF>
 #include <functional>
 
+#include "paint_recorder.h"
+
 namespace fla {
 class Bitmap;
 class IKArmature;
 class StaticText;
+class SymbolInstance;
 class Command;
 class CommandStack;
 class Selection;
@@ -693,6 +697,26 @@ public:
     /// clips. What SWF export writes.
     std::vector<struct RecordedItem> recordFrame(int frame, const QSize& size);
 
+    /// One element of a layer's frame as an SWF with its structure has it:
+    /// its art as recorded (in the timeline's own space), or a movie clip,
+    /// button or text field it places and how that shows on the frame (a
+    /// tween's in-between), left for the movie to draw. A group with clips
+    /// in it gives a piece for each part, in drawing order.
+    struct CapturedPiece
+    {
+        int element = -1;
+        std::vector<RecordedItem> art;
+        const fla::SymbolInstance* instance = nullptr;
+        const fla::StaticText* text = nullptr;
+        QTransform matrix;
+        fla::ColorTransform color;
+        std::vector<fla::Filter> filters;
+    };
+    /// What \a layer shows on frame \a frame (from 0) of its timeline, as
+    /// pieces: the movie clips and buttons on it, and dynamic text with a
+    /// name or a variable and input text, apart from the art.
+    std::vector<CapturedPiece> captureLayerFrame(const fla::Layer* layer, int frame);
+
     /// While set, renderFrame draws nothing of the scene but \a layer (its
     /// mask still masking it), for exporting a sequence per layer.
     void setOnlyLayer(const fla::Layer* layer) { _onlyLayer = layer; }
@@ -1282,6 +1306,18 @@ private:
     /// Masks clip what they mask to their area as a path, for exports that
     /// write vectors, rather than compositing pixels.
     bool _vectorMasks = false;
+    /// While captureLayerFrame draws: what it records, the element of the
+    /// layer's frame being drawn, and where its art not yet taken starts.
+    struct Capture
+    {
+        PaintRecorder* recorder = nullptr;
+        std::vector<CapturedPiece> pieces;
+        int element = -1;
+        size_t mark = 0;
+    };
+    Capture* _capture = nullptr;
+    /// The art recorded since the mark, as a piece of the element drawn.
+    void takeCapturedArt();
     /// For an SVG export: a soft mask (feathered) is written as an SVG
     /// mask with a blur rather than a hard clip. What it masks is drawn into
     /// an SVG of its own, and a marker drawn in its place stands for it

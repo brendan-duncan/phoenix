@@ -1,13 +1,20 @@
 #pragma once
 
 #include <cstdint>
+#include <string>
+#include <utility>
 #include <vector>
 
 /// Writes SWF movies: shapes with solid, gradient and bitmap fills, and
 /// lossless bitmaps, placed and removed frame by frame. Each shape has one
 /// fill, filled even-odd, so a caller hands it outlines that do not cross
 /// (simplified). Coordinates are in pixels; the file has them in twips.
-/// Free of Qt.
+///
+/// And what a movie needs for its scripts: movie clips with timelines of
+/// their own, buttons, text fields, placements with instance names, color
+/// transforms, filters and blend modes, frame labels, and ActionScript as
+/// action bytecode (DoAction, DoInitAction, clip and button actions) or as
+/// ActionScript 3 (DoABC, SymbolClass). Free of Qt.
 namespace swf {
 
 struct Color
@@ -88,15 +95,208 @@ struct SoundInfo
     std::vector<EnvelopePoint> envelope;
 };
 
+/// A color transform (CXFORMWITHALPHA): each channel multiplied, then the
+/// offset (-255 to 255) added.
+struct ColorTransform
+{
+    double red = 1.0, green = 1.0, blue = 1.0, alpha = 1.0;
+    int redAdd = 0, greenAdd = 0, blueAdd = 0, alphaAdd = 0;
+
+    bool identity() const
+    {
+        return red == 1.0 && green == 1.0 && blue == 1.0 && alpha == 1.0 && redAdd == 0 && greenAdd == 0 &&
+            blueAdd == 0 && alphaAdd == 0;
+    }
+};
+
+/// A filter on a placed movie clip or button, as PlaceObject3 lists them:
+/// its type as SWF numbers them; its color (a bevel's shadow) and a bevel's
+/// highlight; blur in pixels; a shadow's or bevel's angle in radians and
+/// distance in pixels; strength (1 plain); inner, knockout and a bevel's
+/// on top (full); passes (quality); a gradient filter's stops; a color
+/// matrix's 20 numbers, row by row.
+struct Filter
+{
+    enum class Type
+    {
+        DropShadow = 0,
+        Blur = 1,
+        Glow = 2,
+        Bevel = 3,
+        GradientGlow = 4,
+        ColorMatrix = 6,
+        GradientBevel = 7
+    };
+    Type type = Type::Blur;
+    Color color;
+    Color highlight{255, 255, 255, 255};
+    double blurX = 4.0, blurY = 4.0;
+    double angle = 0.0;
+    double distance = 0.0;
+    double strength = 1.0;
+    bool inner = false;
+    bool knockout = false;
+    bool onTop = false;
+    int passes = 1;
+    struct Stop
+    {
+        double offset = 0.0;
+        Color color;
+    };
+    std::vector<Stop> stops;
+    float matrix[20] = {1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0};
+};
+
+/// The events of a movie clip's handler (CLIPEVENTFLAGS), to or together.
+namespace ClipEvent {
+enum : uint32_t
+{
+    Load = 1u << 0,
+    EnterFrame = 1u << 1,
+    Unload = 1u << 2,
+    MouseMove = 1u << 3,
+    MouseDown = 1u << 4,
+    MouseUp = 1u << 5,
+    KeyDown = 1u << 6,
+    KeyUp = 1u << 7,
+    Data = 1u << 8,
+    Initialize = 1u << 9,
+    Press = 1u << 10,
+    Release = 1u << 11,
+    ReleaseOutside = 1u << 12,
+    RollOver = 1u << 13,
+    RollOut = 1u << 14,
+    DragOver = 1u << 15,
+    DragOut = 1u << 16,
+    KeyPress = 1u << 17,
+    Construct = 1u << 18
+};
+}
+
+/// A movie clip's handler (CLIPACTIONRECORD): the events it runs on, the
+/// key for KeyPress (a code from the key table, or a character), and its
+/// actions, ActionEnd last.
+struct ClipAction
+{
+    uint32_t events = 0;
+    int key = 0;
+    std::vector<uint8_t> actions;
+};
+
+/// A placement's CLIPACTIONS, for Placement::clipActions; empty for none.
+std::vector<uint8_t> clipActions(const std::vector<ClipAction>& actions);
+
+/// A character put at a depth, or a change to the one there
+/// (PlaceObject2, or PlaceObject3 when it has filters, a blend mode or
+/// bitmap caching).
+struct Placement
+{
+    int depth = 1;
+    /// The character placed, 0 to change the one at the depth (move).
+    int character = 0;
+    /// Changes or replaces what is at the depth, rather than placing anew.
+    bool move = false;
+    bool hasMatrix = false;
+    Matrix matrix;
+    bool hasColor = false;
+    ColorTransform color;
+    /// A morph shape's ratio, 0 to 65535; -1 for none.
+    int ratio = -1;
+    /// The instance name scripts address it by.
+    std::string name;
+    /// For a mask: the top depth it masks.
+    int clipDepth = 0;
+    bool hasFilters = false;
+    std::vector<Filter> filters;
+    /// The blend mode, as Writer::Blend numbers them (1 normal; 2 layer,
+    /// 10 invert, 11 alpha, 12 erase too).
+    bool hasBlend = false;
+    int blend = 1;
+    bool cacheAsBitmap = false;
+    std::vector<uint8_t> clipActions;
+};
+
+/// One character of a button's states (BUTTONRECORD): which states show it
+/// (1 up, 2 over, 4 down, 8 hit), at what depth and where, with its color,
+/// filters and blend mode (0 for none).
+struct ButtonRecord
+{
+    int states = 1;
+    int character = 0;
+    int depth = 1;
+    Matrix matrix;
+    ColorTransform color;
+    std::vector<Filter> filters;
+    int blend = 0;
+};
+
+/// The transitions a button's actions run on (BUTTONCONDACTION), to or
+/// together; a key's code (ButtonCondition::key) for a key press.
+namespace ButtonCondition {
+enum : uint16_t
+{
+    IdleToOverUp = 0x0001,
+    OverUpToIdle = 0x0002,
+    OverUpToOverDown = 0x0004,
+    OverDownToOverUp = 0x0008,
+    OverDownToOutDown = 0x0010,
+    OutDownToOverDown = 0x0020,
+    OutDownToIdle = 0x0040,
+    IdleToOverDown = 0x0080,
+    OverDownToIdle = 0x0100
+};
+inline uint16_t key(int code)
+{
+    return static_cast<uint16_t>((code & 0x7F) << 9);
+}
+}
+
+struct ButtonAction
+{
+    uint16_t conditions = 0;
+    std::vector<uint8_t> actions;
+};
+
+/// A text field (DefineEditText): its box in pixels, the font (a
+/// defineFont id) and its size in pixels, the color, the variable it shows
+/// and the text it starts with, and what can be done with it.
+struct EditText
+{
+    double left = 0.0, top = 0.0, right = 100.0, bottom = 20.0;
+    int font = 0;
+    double size = 12.0;
+    Color color;
+    std::string variable;
+    std::string text;
+    bool wordWrap = false;
+    bool multiline = false;
+    bool password = false;
+    bool readOnly = false;
+    bool noSelect = false;
+    bool border = false;
+    bool html = false;
+    bool autoSize = false;
+    bool useOutlines = false;
+    int maxLength = 0;
+    /// 0 left, 1 right, 2 center, 3 justify.
+    int align = 0;
+    double leftMargin = 0.0, rightMargin = 0.0, indent = 0.0, leading = 0.0;
+};
+
 /// A movie clip's own timeline (DefineSprite): characters placed and
-/// removed and sounds started frame by frame, as a movie's are. Written
-/// with Writer::defineSprite.
+/// removed, sounds started and scripts run frame by frame, as a movie's
+/// are. Written with Writer::defineSprite.
 class Sprite
 {
 public:
     void place(int id, int depth);
+    void place(const Placement& placement);
     void remove(int depth);
     void startSound(int id, const SoundInfo& info);
+    /// The frame's label (FrameLabel); an anchor names a place to link to.
+    void frameLabel(const std::string& name, bool anchor = false);
+    /// Actions run as the frame is entered (DoAction), ActionEnd last.
+    void doAction(const std::vector<uint8_t>& actions);
     void showFrame();
 
     int frames() const { return _frames; }
@@ -126,6 +326,7 @@ public:
     enum class Blend
     {
         Normal = 1,
+        Layer = 2,
         Multiply = 3,
         Screen = 4,
         Lighten = 5,
@@ -133,6 +334,9 @@ public:
         Difference = 7,
         Add = 8,
         Subtract = 9,
+        Invert = 10,
+        Alpha = 11,
+        Erase = 12,
         Overlay = 13,
         HardLight = 14
     };
@@ -162,6 +366,42 @@ public:
     /// A movie clip of \a sprite's frames (at least one); its character id.
     int defineSprite(const Sprite& sprite);
 
+    /// A button (DefineButton2): its characters by state, and the actions
+    /// its transitions run; its character id. A menu button tracks the
+    /// pointer pressed elsewhere too.
+    int defineButton(const std::vector<ButtonRecord>& records, const std::vector<ButtonAction>& actions,
+        bool menu = false);
+    /// A font named for the player to find among the system's (DefineFont2
+    /// with no glyphs), for text fields; its id.
+    int defineFont(const std::string& name, bool bold = false, bool italic = false);
+    /// A text field; its character id.
+    int defineEditText(const EditText& text);
+    /// 9-slice scaling for movie clip \a sprite (DefineScalingGrid): the
+    /// box in its own space, in pixels, whose corners keep their size.
+    void defineScalingGrid(int sprite, double left, double top, double right, double bottom);
+
+    /// Puts or changes a character at a depth.
+    void place(const Placement& placement);
+    /// This frame's label (FrameLabel); an anchor names a place to link to.
+    void frameLabel(const std::string& name, bool anchor = false);
+    /// Actions run as this frame is entered (DoAction), ActionEnd last.
+    void doAction(const std::vector<uint8_t>& actions);
+    /// Actions run once, before the first frame's, for movie clip \a sprite
+    /// (DoInitAction): its #initclip code, or a class it defines.
+    void doInitAction(int sprite, const std::vector<uint8_t>& actions);
+    /// Characters scripts reach by name (ExportAssets): attachMovie's
+    /// linkage identifiers.
+    void exportAssets(const std::vector<std::pair<int, std::string>>& names);
+    /// An ActionScript 3 program (DoABC): its ABC bytes, named, initialized
+    /// when first used when \a lazy.
+    void doABC(const std::string& name, const std::vector<uint8_t>& abc, bool lazy = true);
+    /// The ActionScript 3 classes of characters (SymbolClass), 0 for the
+    /// main timeline's (the document class).
+    void symbolClass(const std::vector<std::pair<int, std::string>>& classes);
+    /// Whether the movie runs ActionScript 3 rather than 1 and 2: the
+    /// FileAttributes flag, and the SWF version the file says.
+    void setActionScript3(bool on);
+
     void showFrame();
 
     /// The file: compressed (CWS) unless \a compress is false.
@@ -180,6 +420,8 @@ private:
     int _frames = 0;
     int _nextId = 1;
     std::vector<uint8_t> _tags;
+    /// Where FileAttributes' flags are in the tags.
+    size_t _attributesAt = 0;
 };
 
 } // namespace swf
