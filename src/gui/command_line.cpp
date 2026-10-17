@@ -9,6 +9,8 @@
 #include "updater.h"
 #include "phoenix_view.h"
 #include "player.h"
+#include "publish_dialog.h"
+#include "theme.h"
 #include "../jsfl/behavior_frames.h"
 #include "../jsfl/native_extensions.h"
 
@@ -121,6 +123,10 @@ const char* const kHelp =
     "      Lists the symbols linked to a master file; --update brings them up to\n"
     "      date from their masters (what they use comes too), --save writes the\n"
     "      file back. batch <folder> --update-links --save does every shot.\n"
+    "\n"
+    "  capture-dialog publish-settings <file> --out <png> [--theme <name>]\n"
+    "      Draws a dialog as it opens for the file, with no window, for the\n"
+    "      guide's pictures; in the Dark theme unless another is named.\n"
     "\n"
     "  run-script <script.jsfl|script.py> [document ...] [--timeout SECONDS]\n"
     "             [--no-native-extensions]\n"
@@ -1021,11 +1027,54 @@ int play(const QStringList& args)
     return errors > 0 ? 1 : 0;
 }
 
+/// capture-dialog <dialog> <file> --out <png> [--theme <name>]: a dialog
+/// drawn as it opens for \a file, with no window, for the guide's pictures
+/// (Dark unless another theme is named). Only publish-settings for now.
+int captureDialog(const QStringList& args)
+{
+    if (args.size() < 2 || args.at(0) != "publish-settings")
+    {
+        std::fprintf(stderr, "capture-dialog: publish-settings <file> --out <png> [--theme <name>]\n");
+        return 1;
+    }
+    const int outAt = args.indexOf("--out");
+    const int themeAt = args.indexOf("--theme");
+    const QString out = outAt >= 0 && outAt + 1 < args.size() ? args.at(outAt + 1) : QString();
+    if (out.isEmpty())
+    {
+        std::fprintf(stderr, "capture-dialog: where to? (--out <png>)\n");
+        return 1;
+    }
+    std::string error;
+    const std::unique_ptr<fla::FLADocument> file = load(args.at(1).toStdString(), error);
+    if (!file)
+    {
+        std::fprintf(stderr, "%s\n", error.c_str());
+        return 1;
+    }
+    theme::preview(theme::load(themeAt >= 0 && themeAt + 1 < args.size() ? args.at(themeAt + 1) : QString("Dark")));
+    std::string xml;
+    for (const auto& [path, bytes] : file->document->extraFiles)
+        if (path == "PublishSettings.xml")
+            xml.assign(bytes.get().begin(), bytes.get().end());
+    const QFileInfo info(args.at(1));
+    PublishSettingsDialog dialog(xml, info.completeBaseName(), file->document->width, file->document->height,
+        info.absolutePath(), true, nullptr);
+    dialog.adjustSize();
+    if (!dialog.grab().save(out))
+    {
+        std::fprintf(stderr, "Could not write %s\n", qPrintable(out));
+        return 1;
+    }
+    std::printf("Drew Publish Settings for %s to %s\n", qPrintable(args.at(1)), qPrintable(out));
+    return 0;
+}
+
 } // namespace
 
 bool isCommand(const QString& name)
 {
-    return name == "play" || name == "display-check" || name == "benchmark" || name == "render" || name == "run-script" || name == "doctor" || name == "diff" || name == "batch" || name == "shots" || name == "links" || name == "shortcuts" || name == "lessons" || name == "help" ||
+    return name == "capture-dialog" || name == "play" || name == "display-check" || name == "benchmark" || name == "render" || name == "run-script" || name == "doctor" || name == "diff" || name == "batch" || name == "shots" || name == "links" || name == "shortcuts" || name == "lessons" || name == "help" ||
            name == "--help";
 }
 
@@ -1151,6 +1200,8 @@ int run(const QStringList& arguments)
         return batch(args);
     if (name == "shots")
         return splitShots(args);
+    if (name == "capture-dialog")
+        return captureDialog(args);
     if (name == "links")
     {
         if (args.isEmpty())
