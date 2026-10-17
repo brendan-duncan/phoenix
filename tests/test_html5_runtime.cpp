@@ -12,6 +12,7 @@
 #include <fstream>
 #include <sstream>
 #include <string>
+#include <vector>
 
 namespace {
 
@@ -335,4 +336,61 @@ phoenix.start({}).then(function (player) {
 )JS"),
         "2 true object true 0"));
     CHECK(same(js.output(), "hat frame 1\ntick 40 0\nhat frame 1"));
+}
+
+TEST(html5_runtime_runs_translated_actionscript)
+{
+    // libas3's translation of a linked class, an Event subclass and a main
+    // timeline's frame script, run on the runtime as a published page
+    // runs them: the classes extend the runtime's by $construct.
+    const std::vector<as3::js::Source> sources = {
+        {"package com.studio {\n"
+         "  import flash.display.MovieClip;\n  import flash.events.Event;\n"
+         "  public class Hat extends MovieClip {\n"
+         "    public var spins:int = 0;\n"
+         "    public function Hat() { addEventListener(Event.ENTER_FRAME, spin); }\n"
+         "    private function spin(e:Event):void { spins++; }\n"
+         "  }\n}\n",
+            "Hat.as"},
+        {"package com.studio {\n  import flash.events.Event;\n"
+         "  public class HatEvent extends Event {\n    public var count:int;\n"
+         "    public function HatEvent(type:String, count:int) { super(type, true); this.count = count; }\n"
+         "  }\n}\n",
+            "HatEvent.as"}};
+    as3::js::Timeline main;
+    main.className = as3::js::timelineClassName("t");
+    main.instances = {{"hat", "com.studio.Hat"}};
+    main.frames = {{0, "import com.studio.*;\n"
+                       "var e:HatEvent = new HatEvent('worn', 3);\n"
+                       "trace(hat is Hat, hat.spins, e.type, e.bubbles, e.count, getQualifiedClassName(hat));\n"
+                       "addEventListener('worn', function (ev:HatEvent):void { trace('heard', ev.count, ev.target == this); });\n"
+                       "dispatchEvent(e);\n"
+                       "var t:Timer = new Timer(10, 1);\n"
+                       "var v:Vector.<int> = new Vector.<int>();\nv.push(1.5);\n"
+                       "trace(t.delay, t.repeatCount, v, int(7 / 2), new Dictionary() is Dictionary);\n"
+                       "stop();\n"}};
+    const as3::js::Output translated = as3::js::translate(sources, {main});
+    CHECK(translated.ok);
+    if (!translated.ok)
+    {
+        std::printf("    %s\n", translated.errorText().c_str());
+        return;
+    }
+    Runtime js;
+    CHECK(js.eval(translated.bundle, "t.as.js"));
+    CHECK(same(js.run(std::string(kMovie) + R"JS(
+phoenix.content(movie);
+phoenix.actionscript(function (movie) {
+    movie.documentClass(as3.use("t_fla.MainTimeline"));
+});
+phoenix.start({}).then(function (player) {
+    player.pause();
+    player.tick();
+    player.tick();
+    var hat = player.root.hat;
+    __result = [hat instanceof as3.use("com.studio.Hat"), hat.spins, player.root.currentFrame].join(" ");
+});
+)JS"),
+        "true 2 1"));
+    CHECK(same(js.output(), "true 0 worn true 3 com.studio::Hat\nheard 3 true\n10 1 1 3 true"));
 }

@@ -9,6 +9,7 @@
 #include "../src/data/symbol_instance.h"
 #include "../src/data/symbol_list.h"
 #include "../src/data/timeline.h"
+#include "../src/edit/html5_export.h"
 #include "../src/edit/swf_actionscript3.h"
 #include "../src/edit/swf_movie.h"
 #include "../src/parser/document_parser.h"
@@ -985,4 +986,82 @@ TEST(swf_movie_puts_a_document_class_on_the_main_timeline)
     compiled = fla::swfmovie::compileActionScript3(*plain.document, as3);
     CHECK(compiled.mainClass == "Main");
     CHECK(std::find(compiled.defined.begin(), compiled.defined.end(), "Main") != compiled.defined.end());
+}
+
+namespace {
+
+/// Art as one small shape, for the HTML5 content.
+class OneShape : public fla::html5::ArtSource
+{
+public:
+    std::string art(const fla::Element&) override
+    {
+        return "{\"o\":[{\"p\":\"M0 0L1 0L1 1Z\",\"f\":{\"c\":0,\"a\":1}}],\"b\":[0,0,1,1]}";
+    }
+    int bitmap(const fla::Bitmap&) override { return -1; }
+    int sound(const std::string&) override { return -1; }
+    std::string images() override { return "[]"; }
+    std::string sounds() override { return "[]"; }
+};
+
+} // namespace
+
+TEST(html5_translates_a_movies_actionscript3_as_swf_publishing_compiles_it)
+{
+    // The same classes SWF publishing compiles, translated for an HTML5
+    // page: the document class under the timeline's, the symbols' classes,
+    // the components (Phoenix's own, translated too) with their parameters.
+    Parsed game = parseWithSettings(actionScript3Package("message.text = String(box.size);", "Main"));
+    CHECK(game.document != nullptr);
+    if (!game.document)
+        return;
+    fla::swfmovie::ActionScript3Options as3;
+    as3.findClass = testClass;
+    as3.documentName = "test";
+    const fla::swfmovie::JavaScript3 translated = fla::swfmovie::translateActionScript3(*game.document, as3);
+    CHECK(translated.mainClass == "test_fla.MainTimeline");
+    for (const char* defined : {"as3.define(\"test_fla.MainTimeline\"", "class MainTimeline extends Main",
+             "as3.define(\"Main\"", "as3.define(\"shapes.Box\"", "as3.define(\"fl.controls.CheckBox\"",
+             "this.agree.label = \"I agree\"", "this.addFrameScript(0, as3.bind(this, \"frame1\"))"})
+    {
+        const bool found = translated.bundle.find(defined) != std::string::npos;
+        CHECK(found);
+        if (!found)
+            std::printf("    not in the bundle: %s\n", defined);
+    }
+    CHECK(translated.sourceMap.find("\"mappings\"") != std::string::npos);
+    // The clip with a frame script of its own has a class made for it.
+    bool ball = false;
+    for (const auto& [symbol, name] : translated.classes)
+        ball = ball || (symbol && symbol->name == "Ball" && name.rfind("test_fla.", 0) == 0);
+    CHECK(ball);
+
+    // Its components are on the stage, named as the code setting their
+    // parameters names them.
+    OneShape art;
+    std::vector<std::string> notes;
+    const std::string content = fla::html5::content(*game.document, art, fla::html5::Options(), &notes);
+    CHECK(content.find("\"n\":\"agree\"") != std::string::npos);
+    CHECK(content.find("\"n\":\"__id0_\"") != std::string::npos);
+    CHECK(content.find("\"linkage\":\"fl.controls.CheckBox\"") != std::string::npos);
+}
+
+TEST(html5_tells_where_actionscript3_does_not_translate)
+{
+    Parsed game = parseWithSettings(actionScript3Package("var a:int = 1;\nvar b:int = ;"));
+    CHECK(game.document != nullptr);
+    if (!game.document)
+        return;
+    fla::swfmovie::ActionScript3Options as3;
+    as3.findClass = testClass;
+    as3.documentName = "test";
+    const fla::swfmovie::JavaScript3 translated = fla::swfmovie::translateActionScript3(*game.document, as3);
+    CHECK(translated.bundle.empty());
+    CHECK(translated.mainClass.empty());
+    bool told = false;
+    for (const std::string& note : translated.notes)
+        told = told || note.rfind("Scene 1, layer actions, frame 1, line 2", 0) == 0;
+    CHECK(told);
+    if (!told)
+        std::printf("    notes: %s\n", text(translated.notes).c_str());
 }
