@@ -1313,7 +1313,8 @@
                         while (j < length && !isWinSep(p.charCodeAt(j)))
                             j++;
                         result.device = "\\\\" + server + "\\" + p.slice(last, j);
-                        result.rootEnd = j;
+                        // The separator after the share is part of the root.
+                        result.rootEnd = j < length ? j + 1 : j;
                     }
                 }
             }
@@ -1414,7 +1415,13 @@
                 if (slashes >= 2)
                     joined = "\\" + joined.slice(slashes);
             }
-            return win32.normalize(joined);
+            var normalized = win32.normalize(joined);
+            // A relative path with a colon in it would read as a drive:
+            // ".\" in front keeps it relative.
+            if (!win32.isAbsolute(parts[0]) && winRoot(parts[0]).device.length === 0 &&
+                /^[A-Za-z]:|\\[A-Za-z]:(\\|$)/.test(normalized) && normalized.slice(0, 2) !== ".\\")
+                normalized = ".\\" + normalized;
+            return normalized;
         },
         relative: function (from, to) {
             validatePath(from, "from");
