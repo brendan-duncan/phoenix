@@ -226,6 +226,113 @@ class GlowFilter extends BitmapFilter {
     }
 }
 
+/// A gradient's colors by ratio: 256 entries of red, green, blue and alpha.
+function gradientTable(colors, alphas, ratios) {
+    var table = new Uint8ClampedArray(256 * 4);
+    var stops = [];
+    for (var i = 0; i < Math.min(colors.length, alphas.length, ratios.length); ++i)
+        stops.push([+ratios[i], colors[i] >>> 0, +alphas[i]]);
+    stops.sort(function (a, b) { return a[0] - b[0]; });
+    for (var r = 0; r < 256; ++r) {
+        var before = null, after = null;
+        for (var k = 0; k < stops.length; ++k) {
+            if (stops[k][0] <= r)
+                before = stops[k];
+            if (stops[k][0] >= r && !after)
+                after = stops[k];
+        }
+        before = before || after;
+        after = after || before;
+        if (!before)
+            continue;
+        var t = after[0] > before[0] ? (r - before[0]) / (after[0] - before[0]) : 0;
+        for (var c = 0; c < 3; ++c) {
+            var shift = 16 - c * 8;
+            table[r * 4 + c] = ((before[1] >> shift) & 255) * (1 - t) + ((after[1] >> shift) & 255) * t;
+        }
+        table[r * 4 + 3] = (before[2] * (1 - t) + after[2] * t) * 255;
+    }
+    return table;
+}
+/// The alpha of \a canvas, blurred, as an array of 0 to 255.
+function blurredAlpha(canvas, blurX, blurY, quality, scale) {
+    var soft = blurred(silhouette(canvas, 0, 1, 1), blurX, blurY, quality, scale);
+    var data = soft.getContext("2d").getImageData(0, 0, soft.width, soft.height).data;
+    var alpha = new Float32Array(soft.width * soft.height);
+    for (var i = 0; i < alpha.length; ++i)
+        alpha[i] = data[i * 4 + 3];
+    return alpha;
+}
+function alphaOf(canvas) {
+    var data = canvas.getContext("2d").getImageData(0, 0, canvas.width, canvas.height).data;
+    var alpha = new Float32Array(canvas.width * canvas.height);
+    for (var i = 0; i < alpha.length; ++i)
+        alpha[i] = data[i * 4 + 3];
+    return alpha;
+}
+/// A picture of the colors \a table gives each pixel's value (0 to 255).
+function colored(width, height, values, table) {
+    var out = phoenix.makeCanvas(width, height);
+    var ctx = out.getContext("2d");
+    var image = ctx.createImageData(width, height), d = image.data;
+    for (var i = 0; i < values.length; ++i) {
+        var v = Math.max(0, Math.min(255, Math.round(values[i]))) * 4;
+        d[i * 4] = table[v];
+        d[i * 4 + 1] = table[v + 1];
+        d[i * 4 + 2] = table[v + 2];
+        d[i * 4 + 3] = table[v + 3];
+    }
+    ctx.putImageData(image, 0, 0);
+    return out;
+}
+/// The object with \a effect over it (inside), under it (outside), or in
+/// place of it (knocked out).
+function compose(canvas, effect, inner, knockout, under) {
+    var out = newLike(canvas);
+    var ctx = out.getContext("2d");
+    if (knockout) {
+        ctx.drawImage(effect, 0, 0);
+        ctx.globalCompositeOperation = inner ? "destination-in" : "destination-out";
+        ctx.drawImage(canvas, 0, 0);
+        return out;
+    }
+    if (under) {
+        ctx.drawImage(effect, 0, 0);
+        ctx.drawImage(canvas, 0, 0);
+        return out;
+    }
+    ctx.drawImage(canvas, 0, 0);
+    ctx.globalCompositeOperation = "source-atop";
+    ctx.drawImage(effect, 0, 0);
+    return out;
+}
+/// The bevel work: each pixel's light (toward the angle) and shade (away
+/// from it), from the blurred silhouette, as a value from 0 (all light) to
+/// 255 (all shade) colored through \a table, inside the object, outside it,
+/// or both.
+function bevel(canvas, scale, o, table) {
+    var w = canvas.width, h = canvas.height;
+    var soft = blurredAlpha(canvas, o.blurX, o.blurY, o.quality, scale);
+    var own = alphaOf(canvas);
+    var dx = Math.round(Math.cos(o.angle * Math.PI / 180) * o.distance * scale);
+    var dy = Math.round(Math.sin(o.angle * Math.PI / 180) * o.distance * scale);
+    var at = function (x, y) {
+        return x < 0 || y < 0 || x >= w || y >= h ? 0 : soft[y * w + x];
+    };
+    var values = new Float32Array(w * h), inside = o.type !== "outer", outsideToo = o.type !== "inner";
+    for (var y = 0; y < h; ++y)
+        for (var x = 0; x < w; ++x) {
+            var i = y * w + x;
+            // Lit where the silhouette falls away toward the light.
+            var light = at(x - dx, y - dy), shade = at(x + dx, y + dy);
+            var v = 128 + (light - shade) * 0.5 * o.strength;
+            var weight = (inside ? own[i] / 255 : 0) + (outsideToo ? 1 - own[i] / 255 : 0);
+            values[i] = 128 + (v - 128) * Math.min(1, weight);
+        }
+    var effect = colored(w, h, values, table);
+    return compose(canvas, effect, o.type === "inner", o.knockout, false);
+}
+
 /// A bevel: the shadow color on the side away from the light and the
 /// highlight on the side toward it, inside the object (outside for an
 /// outer bevel, both for a full one).
@@ -249,41 +356,14 @@ class BevelFilter extends BitmapFilter {
         return Math.ceil((Math.abs(this.distance) + Math.max(this.blurX, this.blurY) * Math.max(1, this.quality) / 2) * scale + 2);
     }
     _apply(canvas, scale) {
-        var inner = this.type !== "outer", outer = this.type !== "inner";
-        var common = {distance: this.distance, blurX: this.blurX, blurY: this.blurY, strength: this.strength,
-            quality: this.quality, knockout: false, hideObject: false};
-        var out = canvas;
-        if (inner) {
-            out = shadow(out, scale, Object.assign({}, common, {angle: this.angle, color: this.shadowColor,
-                alpha: this.shadowAlpha, inner: true}));
-            out = shadow(out, scale, Object.assign({}, common, {angle: this.angle + 180, color: this.highlightColor,
-                alpha: this.highlightAlpha, inner: true}));
-        }
-        if (outer) {
-            out = shadow(out, scale, Object.assign({}, common, {angle: this.angle, color: this.shadowColor,
-                alpha: this.shadowAlpha, inner: false}));
-            out = shadow(out, scale, Object.assign({}, common, {angle: this.angle + 180, color: this.highlightColor,
-                alpha: this.highlightAlpha, inner: false}));
-        }
-        if (this.knockout) {
-            var ctx = out.getContext("2d");
-            ctx.globalCompositeOperation = "destination-out";
-            ctx.drawImage(canvas, 0, 0);
-            ctx.globalCompositeOperation = "source-over";
-        }
-        return out;
+        var table = gradientTable([this.highlightColor, this.highlightColor, this.shadowColor],
+            [this.highlightAlpha, 0, this.shadowAlpha], [0, 128, 255]);
+        return bevel(canvas, scale, this, table);
     }
 }
 
-/// The gradient filters as their plain kin, in the gradient's strongest
-/// color.
-function strongest(colors, alphas) {
-    var best = 0;
-    for (var i = 0; i < (alphas || []).length; ++i)
-        if (alphas[i] >= alphas[best])
-            best = i;
-    return {color: colors && colors.length ? colors[best] : 0, alpha: alphas && alphas.length ? alphas[best] : 1};
-}
+/// A glow colored by its strength through a gradient: the blurred
+/// silhouette's alpha is the ratio.
 class GradientGlowFilter extends BitmapFilter {
     constructor(distance, angle, colors, alphas, ratios, blurX, blurY, strength, quality, type, knockout) {
         super();
@@ -296,19 +376,29 @@ class GradientGlowFilter extends BitmapFilter {
         return Math.ceil((Math.abs(this.distance) + Math.max(this.blurX, this.blurY) * Math.max(1, this.quality) / 2) * scale + 2);
     }
     _apply(canvas, scale) {
-        var s = strongest(this.colors, this.alphas);
-        return shadow(canvas, scale, {distance: this.distance, angle: this.angle, color: s.color, alpha: s.alpha,
-            blurX: this.blurX, blurY: this.blurY, strength: this.strength, quality: this.quality,
-            inner: this.type === "inner", knockout: this.knockout, hideObject: false});
+        var w = canvas.width, h = canvas.height;
+        var table = gradientTable(this.colors, this.alphas, this.ratios);
+        var inner = this.type === "inner";
+        var dx = Math.round(Math.cos(this.angle * Math.PI / 180) * this.distance * scale);
+        var dy = Math.round(Math.sin(this.angle * Math.PI / 180) * this.distance * scale);
+        var source = canvas;
+        if (inner)
+            source = outside(canvas, 0, dx, dy);
+        var soft = blurredAlpha(source, this.blurX, this.blurY, this.quality, scale);
+        var values = new Float32Array(w * h);
+        for (var y = 0; y < h; ++y)
+            for (var x = 0; x < w; ++x) {
+                var sx = inner ? x : x - dx, sy = inner ? y : y - dy;
+                var a = sx < 0 || sy < 0 || sx >= w || sy >= h ? 0 : soft[sy * w + sx];
+                values[y * w + x] = a * this.strength;
+            }
+        var effect = colored(w, h, values, table);
+        return compose(canvas, effect, inner, this.knockout, !inner && this.type !== "full");
     }
 }
 class GradientBevelFilter extends GradientGlowFilter {
     _apply(canvas, scale) {
-        var first = this.colors.length ? this.colors[0] : 0xffffff, last = this.colors.length ? this.colors[this.colors.length - 1] : 0;
-        var bevel = new BevelFilter(this.distance, this.angle, first, this.alphas.length ? this.alphas[0] : 1, last,
-            this.alphas.length ? this.alphas[this.alphas.length - 1] : 1, this.blurX, this.blurY, this.strength, this.quality,
-            this.type, this.knockout);
-        return bevel._apply(canvas, scale);
+        return bevel(canvas, scale, this, gradientTable(this.colors, this.alphas, this.ratios));
     }
 }
 

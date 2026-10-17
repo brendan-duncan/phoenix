@@ -126,12 +126,16 @@ function renderObject(ctx, object, parentM, parentC, r) {
     if (!r.maskPass && c[3] <= 0 && c[7] <= 0)
         return;
     var blend = object._blendMode;
+    // Alpha and erase work on a layer their parent makes; outside one there
+    // is nothing for them to work on, and they draw nothing.
     if ((blend === "alpha" || blend === "erase") && !r.inLayer)
-        blend = "normal";
+        return;
     var layered = !r.maskPass && (object._filters.length > 0 || !!object._mask ||
         (blend !== "normal" && blend !== "shader") || object._opaqueBackground !== null);
     ++r.depth;
     try {
+        if (!layered && object._scale9Grid && !object._m[1] && !object._m[2] && drawNineSlice(ctx, object, parentM, c, r))
+            return;
         if (!layered) {
             if (object._scrollRect) {
                 ctx.save();
@@ -147,6 +151,50 @@ function renderObject(ctx, object, parentM, parentC, r) {
         --r.depth;
     }
 }
+/// 9-slice scaling: the object's content cut by its grid into nine cells,
+/// the corners kept at their size, the edges stretched one way and the
+/// middle both, to fill the box its scale gives it. Each cell is its
+/// content drawn through that cell's own stretch, clipped to the cell.
+function drawNineSlice(ctx, object, parentM, c, r) {
+    var box = object._localBounds(false), grid = object._scale9Grid;
+    if (!box)
+        return false;
+    var m = object._m;
+    var cut = function (low, high, first, last, scale) {
+        var from = [low, Math.max(low, Math.min(high, first)), Math.max(low, Math.min(high, last)), high];
+        var reach = (high - low) * Math.abs(scale);
+        var fixed = (from[1] - from[0]) + (from[3] - from[2]);
+        var k = fixed > reach && fixed > 0 ? reach / fixed : 1;
+        var start = low * scale;
+        var sign = scale < 0 ? -1 : 1;
+        var to = [start, start + sign * (from[1] - from[0]) * k, start + (high - low) * scale - sign * (from[3] - from[2]) * k,
+            start + (high - low) * scale];
+        return {from: from, to: to};
+    };
+    var xs = cut(box[0], box[2], grid.x, grid.x + grid.width, m[0]);
+    var ys = cut(box[1], box[3], grid.y, grid.y + grid.height, m[3]);
+    for (var j = 0; j < 3; ++j) {
+        for (var i = 0; i < 3; ++i) {
+            var fx = xs.from[i + 1] - xs.from[i], fy = ys.from[j + 1] - ys.from[j];
+            var tx = xs.to[i + 1] - xs.to[i], ty = ys.to[j + 1] - ys.to[j];
+            if (fx <= 0 || fy <= 0 || !tx || !ty)
+                continue;
+            var sx = tx / fx, sy = ty / fy;
+            var cell = [sx, 0, 0, sy, xs.to[i] - xs.from[i] * sx + m[4], ys.to[j] - ys.from[j] * sy + m[5]];
+            ctx.save();
+            ctx.setTransform(parentM[0], parentM[1], parentM[2], parentM[3], parentM[4], parentM[5]);
+            ctx.beginPath();
+            var x0 = Math.min(xs.to[i], xs.to[i + 1]) + m[4], y0 = Math.min(ys.to[j], ys.to[j + 1]) + m[5];
+            // A hair over, so the cells meet without a seam.
+            ctx.rect(x0 - 0.25, y0 - 0.25, Math.abs(tx) + 0.5, Math.abs(ty) + 0.5);
+            ctx.clip();
+            object._draw(ctx, M.multiply(cell, parentM), c, r);
+            ctx.restore();
+        }
+    }
+    return true;
+}
+
 function clipToScroll(ctx, object, parentM) {
     var sm = M.multiply(object._m, parentM), s = object._scrollRect;
     ctx.setTransform(sm[0], sm[1], sm[2], sm[3], sm[4], sm[5]);
@@ -214,6 +262,8 @@ function drawLayered(ctx, object, parentM, m, c, blend, r) {
     }
     if (filtered)
         layer = colorLayer(layer, c);
+    if ((blend === "subtract" || blend === "invert") && blendPixels(ctx, layer, box, blend, filtered && C.alphaOnly(c) ? c[3] : 1))
+        return;
     ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     if (filtered && C.alphaOnly(c))
@@ -221,6 +271,32 @@ function drawLayered(ctx, object, parentM, m, c, blend, r) {
     ctx.globalCompositeOperation = compositeOf(blend);
     ctx.drawImage(layer, box[0], box[1]);
     ctx.restore();
+}
+/// The blend modes the canvas has no operation for, worked on the pixels:
+/// subtract takes the object's colors from what is under it, invert turns
+/// what is under it to its opposite where the object covers it. False when
+/// the canvas's pixels cannot be read.
+function blendPixels(ctx, layer, box, blend, alpha) {
+    var w = layer.width, h = layer.height;
+    var under, over;
+    try {
+        under = ctx.getImageData(box[0], box[1], w, h);
+        over = layer.getContext("2d").getImageData(0, 0, w, h).data;
+    } catch (error) {
+        return false;
+    }
+    var d = under.data;
+    for (var i = 0; i < d.length; i += 4) {
+        var a = over[i + 3] / 255 * alpha;
+        if (a <= 0)
+            continue;
+        for (var k = 0; k < 3; ++k) {
+            var made = blend === "invert" ? 255 - d[i + k] : Math.max(0, d[i + k] - over[i + k]);
+            d[i + k] = d[i + k] + (made - d[i + k]) * a;
+        }
+    }
+    ctx.putImageData(under, box[0], box[1]);
+    return true;
 }
 
 /// A container's children in order, each timeline mask with the objects

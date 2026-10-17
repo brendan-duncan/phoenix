@@ -697,6 +697,12 @@ public:
     /// them), its outlines kept as strokes and its text as text where they
     /// can be. What HTML5 publishing writes for a timeline's art.
     std::vector<struct RecordedItem> recordElement(const fla::Element* element);
+private:
+    /// While recordElement records: a stroke whose width does not scale
+    /// (scale mode None) is drawn with a cosmetic pen of its weight, so the
+    /// recording keeps it as one.
+    bool _strokeScaleModes = false;
+public:
 
     /// While set, renderFrame draws nothing of the scene but \a layer (its
     /// mask still masking it), for exporting a sequence per layer.
