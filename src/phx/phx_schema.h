@@ -138,7 +138,7 @@ namespace BitmapFill { enum : uint32_t { BitmapPath = 1, Clipped = 2 }; }
 namespace Stroke { enum : uint32_t {
     Kind = 1, Weight = 2, ScaleMode = 3, SolidStyle = 4, Caps = 5, Joints = 6, MiterLimit = 7, PixelHinting = 8,
     Dash1 = 9, Dash2 = 10, DotSpace = 11, StyleAttributes = 12, ExtraChildren = 13, WidthProfile = 14, Fill = 15,
-    Xfl = 16, Brush = 30,
+    Xfl = 16, PaintBrushDefinition = 17, Brush = 30,
 }; }
 namespace WidthMarker { enum : uint32_t { Position = 1, Left = 2, Right = 3, Corner = 4 }; }
 

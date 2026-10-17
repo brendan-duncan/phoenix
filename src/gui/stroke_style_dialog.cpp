@@ -101,6 +101,14 @@ StrokeStyleDialog::StrokeStyleDialog(const fla::StrokeLook& look, double weight,
         layout->addWidget(none);
         break;
     }
+    case Style::PaintBrush:
+    {
+        QLabel* none = new QLabel("A paint brush stroke draws its brush's art along the line; choose the brush "
+                                  "under Brush in the Properties panel.", this);
+        none->setWordWrap(true);
+        layout->addWidget(none);
+        break;
+    }
     }
 
     QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);

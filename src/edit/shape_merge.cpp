@@ -104,11 +104,13 @@ StrokeStyle* cloneStroke(const StrokeStyle* stroke, DOMElement* parent)
     case StrokeStyle::Style::Dotted:  copy = new DottedStroke(parent); break;
     case StrokeStyle::Style::Hatched: copy = new HatchedStroke(parent); break;
     case StrokeStyle::Style::Solid:   copy = new SolidStroke(parent); break;
+    case StrokeStyle::Style::PaintBrush: copy = new PaintBrushStroke(parent); break;
     }
 
     if (!copy)
         return nullptr;
 
+    copy->paintBrushDefinition = stroke->paintBrushDefinition;
     copy->weight = stroke->weight;
     copy->scaleMode = stroke->scaleMode;
     copy->solidStyle = stroke->solidStyle;

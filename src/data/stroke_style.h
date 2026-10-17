@@ -21,7 +21,8 @@ public:
         Ragged,
         Stipple,
         Dotted,
-        Hatched
+        Hatched,
+        PaintBrush
     };
 
     double weight = 1.0;
@@ -45,6 +46,10 @@ public:
 
     /// Gap between the dots of a DottedStroke, in pixels.
     double dotSpace = 3.0;
+
+    /// The document's paint brush a PaintBrushStroke draws with: its index
+    /// among the definitions in PaintBrushDefinitions.xml; 0 for none.
+    int paintBrushDefinition = 0;
 
     /// The settings of a ragged, stipple or hatched stroke, by attribute
     /// name as the file spells them ("waveHeight" = "wavy", "dotSize" =
@@ -184,6 +189,24 @@ public:
     static DOMType staticDomType() { return DOMType::DottedStroke; }
 
     Style style() const override { return Style::Dotted; }
+};
+
+/// A stroke drawn with one of the document's paint brushes: its art
+/// stretched along the line, or its tile repeated along it.
+class PaintBrushStroke : public StrokeStyle
+{
+public:
+    PaintBrushStroke(DOMElement* parent)
+        : StrokeStyle(parent)
+    {}
+
+    std::string domTypeName() const override { return "PaintBrushStroke"; }
+
+    DOMType domType() const override { return DOMType::PaintBrushStroke; }
+
+    static DOMType staticDomType() { return DOMType::PaintBrushStroke; }
+
+    Style style() const override { return Style::PaintBrush; }
 };
 
 } // namespace fla

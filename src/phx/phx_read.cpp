@@ -321,6 +321,7 @@ fla::StrokeStyle* readStroke(const Reader& field, fla::DOMElement* parent, Conte
     case 3: stroke = new fla::StippleStroke(parent); break;
     case 4: stroke = new fla::DottedStroke(parent); break;
     case 5: stroke = new fla::HatchedStroke(parent); break;
+    case 6: stroke = new fla::PaintBrushStroke(parent); break;
     default: stroke = new fla::SolidStroke(parent); break;
     }
     Reader r = field.message();
@@ -330,9 +331,10 @@ fla::StrokeStyle* readStroke(const Reader& field, fla::DOMElement* parent, Conte
         {
         case s::Stroke::Kind:
             // A kind this Phoenix does not know draws solid, and is kept.
-            if (r.uint() > 5)
+            if (r.uint() > 6)
                 r.keep(stroke->phxUnknown);
             break;
+        case s::Stroke::PaintBrushDefinition: stroke->paintBrushDefinition = static_cast<int>(r.int32()); break;
         case s::Stroke::Weight: stroke->weight = r.real(); break;
         case s::Stroke::ScaleMode: stroke->scaleMode = r.string(); break;
         case s::Stroke::SolidStyle: stroke->solidStyle = r.string(); break;
