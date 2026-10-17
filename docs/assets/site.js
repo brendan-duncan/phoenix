@@ -372,6 +372,7 @@ document.addEventListener("DOMContentLoaded", () => {
   buildFooter(content);
   // Where a page names the current version (the downloads), it is this one.
   for (const el of document.querySelectorAll(".phoenix-version")) el.textContent = VERSION;
+  for (const el of document.querySelectorAll("[data-version-text]")) el.textContent = el.dataset.versionText.replace("{}", VERSION);
   setupSearch();
   setupLightbox(content);
   // Last, so it sees the finished page (headings with ids, header, footer).
