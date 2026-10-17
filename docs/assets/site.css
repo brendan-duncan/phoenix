@@ -586,9 +586,26 @@ dl.defs dd { margin: 0; color: var(--text); }
 
 .site-footer {
   margin-top: 40px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
   color: var(--muted);
   font-size: 13px;
 }
+.site-footer p { margin: 0 0 8px; }
+.site-footer .contact {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+}
+.site-footer .contact a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+}
+.site-footer .contact a:hover { color: var(--accent); }
+.site-footer .contact svg { width: 15px; height: 15px; flex: none; }
+.site-footer .copyright { margin-bottom: 0; }
 
 /* Narrow screens */
 
