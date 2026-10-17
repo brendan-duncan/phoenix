@@ -1,8 +1,8 @@
-# Builds Phoenix and its tests and runs the tests on every push to main and
-# on pull requests, on each platform, so a test that fails on only one of
-# them shows up before a release rather than in it (as
-# jsfl_publishing_goes_to_the_host did on macOS in 0.7.0), and so does code
-# only one platform compiles (the Claude Code panel's terminal). Built as the
+# Builds Phoenix and its tests and runs the tests on pull requests, and when
+# started by hand (Actions > Tests > Run workflow), on each platform, so a
+# test that fails on only one of them shows up before a release rather than
+# in it (as jsfl_publishing_goes_to_the_host did on macOS in 0.7.0), and so
+# does code only one platform compiles (the Claude Code panel's terminal). Built as the
 # release builds them (release.yml), with the Qt archive and the JSFL, Python
 # and ActionScript parts, but not packed.
 #
@@ -12,8 +12,6 @@
 name: Tests
 
 on:
-  push:
-    branches: [main]
   pull_request:
   workflow_dispatch:
 
