@@ -818,7 +818,8 @@ private:
                 const size_t bar = literal.find('_');
                 const bool skin = bar != std::string::npos && bar > 0 && bar + 1 < literal.size() &&
                     std::isupper(static_cast<unsigned char>(literal[0])) &&
-                    std::all_of(literal.begin(), literal.end(), [](char c) { return std::isalpha(static_cast<unsigned char>(c)) || c == '_'; });
+                    std::all_of(literal.begin(), literal.end(),
+                        [](char c) { return std::isalpha(static_cast<unsigned char>(c)) || c == '_'; });
                 if (skin && !linked.count(literal))
                     missing.insert(literal);
             }

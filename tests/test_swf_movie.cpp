@@ -9,19 +9,27 @@
 #include "../src/data/symbol_instance.h"
 #include "../src/data/symbol_list.h"
 #include "../src/data/timeline.h"
+#include "../src/edit/swf_actionscript3.h"
 #include "../src/edit/swf_movie.h"
 #include "../src/parser/document_parser.h"
 #include "../src/parser/swf_import.h"
 #include "../src/parser/zip_reader.h"
 #include "../src/util/swf_writer.h"
 
+#include "abc/abc_file.h"
+#include "abc/abc_verifier.h"
 #include "avm1/avm1.h"
 #include "zlib.h"
 
 #include <algorithm>
+#include <filesystem>
+#include <fstream>
 #include <functional>
 #include <map>
 #include <memory>
+#include <optional>
+#include <set>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -682,4 +690,297 @@ TEST(swf_movie_color_effects_and_filters_as_swf_has_them)
         CHECK(list[1].type == swf::Filter::Type::Bevel && list[1].onTop && !list[1].inner);
     }
     CHECK(fla::swfmovie::blendMode("multiply") == 3 && fla::swfmovie::blendMode("") == 1);
+}
+
+// ---- ActionScript 3
+
+namespace {
+
+/// An ActionScript 3 movie: a frame script on the main timeline that
+/// reaches a text field and a clip by name, a clip with a frame script of
+/// its own, symbols linked to a class with a file and to one without, and
+/// two CheckBox components, one named, with a label set in the inspector.
+std::map<std::string, std::vector<uint8_t>> actionScript3Package(const std::string& frameScript,
+    const std::string& documentClass = std::string())
+{
+    std::map<std::string, std::vector<uint8_t>> files;
+    const std::string square = "<DOMShape><fills><FillStyle index=\"1\"><SolidColor color=\"#FF0000\"/></FillStyle></fills>"
+                               "<edges><Edge fillStyle1=\"1\" edges=\"!0 0|200 0!200 0|200 200!200 200|0 200!0 200|0 0\"/>"
+                               "</edges></DOMShape>";
+    files["DOMDocument.xml"] = bytesOf(
+        "<DOMDocument xmlns=\"http://ns.adobe.com/xfl/2008/\" width=\"200\" height=\"100\" frameRate=\"24\">"
+        "<symbols><Include href=\"Ball.xml\"/><Include href=\"Box.xml\"/><Include href=\"CheckBox.xml\"/>"
+        "<Include href=\"Star.xml\"/></symbols>"
+        "<timelines><DOMTimeline name=\"Scene 1\"><layers>"
+        "<DOMLayer name=\"actions\"><frames><DOMFrame index=\"0\" duration=\"2\">"
+        "<Actionscript><script><![CDATA[" +
+        frameScript +
+        "]]></script></Actionscript><elements/></DOMFrame></frames></DOMLayer>"
+        "<DOMLayer name=\"ui\"><frames><DOMFrame index=\"0\" duration=\"2\"><elements>"
+        "<DOMDynamicText name=\"message\" left=\"0\" top=\"0\" width=\"60\" height=\"20\">"
+        "<textRuns><DOMTextRun><characters>0</characters><textAttrs><DOMTextAttrs face=\"Arial\" size=\"14\"/>"
+        "</textAttrs></DOMTextRun></textRuns></DOMDynamicText>"
+        "<DOMComponentInstance libraryItemName=\"CheckBox\" name=\"agree\"><matrix><Matrix tx=\"10\" ty=\"60\"/></matrix>"
+        "<parametersAsXML><![CDATA[<property id=\"label\"><Inspectable name=\"label\" variable=\"label\" "
+        "defaultValue=\"I agree\" type=\"String\"/></property><property id=\"selected\"><Inspectable name=\"selected\" "
+        "variable=\"selected\" defaultValue=\"true\" type=\"Boolean\"/></property>]]></parametersAsXML>"
+        "</DOMComponentInstance>"
+        "<DOMComponentInstance libraryItemName=\"CheckBox\"><matrix><Matrix tx=\"110\" ty=\"60\"/></matrix>"
+        "</DOMComponentInstance>"
+        "</elements></DOMFrame></frames></DOMLayer>"
+        "<DOMLayer name=\"clips\"><frames><DOMFrame index=\"0\" duration=\"2\"><elements>"
+        "<DOMSymbolInstance libraryItemName=\"Ball\" name=\"ball\"><matrix><Matrix tx=\"20\" ty=\"30\"/></matrix>"
+        "</DOMSymbolInstance>"
+        "<DOMSymbolInstance libraryItemName=\"Box\" name=\"box\"><matrix><Matrix tx=\"80\" ty=\"30\"/></matrix>"
+        "</DOMSymbolInstance>"
+        "</elements></DOMFrame></frames></DOMLayer>"
+        "</layers></DOMTimeline></timelines></DOMDocument>");
+    const auto symbol = [&](const std::string& name, const std::string& attributes, const std::string& script) {
+        return bytesOf("<DOMSymbolItem xmlns=\"http://ns.adobe.com/xfl/2008/\" name=\"" + name + "\"" + attributes +
+            "><timeline><DOMTimeline name=\"" + name + "\"><layers>" +
+            (script.empty() ? std::string()
+                            : "<DOMLayer name=\"actions\"><frames><DOMFrame index=\"0\" duration=\"2\"><Actionscript><script>"
+                              "<![CDATA[" + script + "]]></script></Actionscript><elements/></DOMFrame></frames></DOMLayer>") +
+            "<DOMLayer name=\"art\"><frames><DOMFrame index=\"0\" duration=\"2\"><elements>" + square +
+            "</elements></DOMFrame></frames></DOMLayer></layers></DOMTimeline></timeline></DOMSymbolItem>");
+    };
+    files["LIBRARY/Ball.xml"] = symbol("Ball", "", "stop();");
+    files["LIBRARY/Box.xml"] = symbol("Box", " linkageExportForAS=\"true\" linkageClassName=\"shapes.Box\"", "");
+    files["LIBRARY/Star.xml"] = symbol("Star", " linkageExportForAS=\"true\" linkageClassName=\"Star\"", "");
+    files["LIBRARY/CheckBox.xml"] = bytesOf(
+        "<DOMComponentItem xmlns=\"http://ns.adobe.com/xfl/2008/\" name=\"CheckBox\" linkageExportForAS=\"true\" "
+        "linkageClassName=\"fl.controls.CheckBox\"><timeline><DOMTimeline name=\"CheckBox\"><layers>"
+        "<DOMLayer name=\"avatar\"><frames><DOMFrame index=\"0\"><elements>" +
+        square + "</elements></DOMFrame></frames></DOMLayer></layers></DOMTimeline></timeline></DOMComponentItem>");
+    files["PublishSettings.xml"] = bytesOf(
+        "<flash_profiles><flash_profile name=\"Default\" current=\"true\"><PublishFlashProperties enabled=\"true\">"
+        "<ActionScriptVersion>3</ActionScriptVersion><DocumentClass>" +
+        documentClass +
+        "</DocumentClass><AS3AutoDeclare>4096</AS3AutoDeclare></PublishFlashProperties></flash_profile>"
+        "</flash_profiles>");
+    return files;
+}
+
+/// A package parsed with its publish settings, as Phoenix opens a file.
+Parsed parseWithSettings(const std::map<std::string, std::vector<uint8_t>>& files)
+{
+    Parsed parsed = parse(files);
+    const auto settings = files.find("PublishSettings.xml");
+    if (parsed.document && settings != files.end())
+        parsed.document->extraFiles.emplace_back("PublishSettings.xml", fla::LazyBytes(settings->second));
+    return parsed;
+}
+
+/// The classes a test movie finds: its own, and Phoenix's components from
+/// the source tree's resources.
+std::optional<std::string> testClass(const std::string& name)
+{
+    if (name == "shapes.Box")
+        return std::string("package shapes {\n  import flash.display.MovieClip;\n"
+                           "  public class Box extends MovieClip {\n    public var size:Number = 2;\n  }\n}\n");
+    if (name == "Main")
+        return std::string("package {\n  import flash.display.MovieClip;\n"
+                           "  public class Main extends MovieClip {\n    public function Main() { trace(\"main\"); }\n  }\n}\n");
+    std::string path = name;
+    std::replace(path.begin(), path.end(), '.', '/');
+    std::ifstream in(std::filesystem::u8path(std::string(PHOENIX_TEST_DATA) + "/../../resources/as3/" + path + ".as"),
+        std::ios::binary);
+    if (!in)
+        return std::nullopt;
+    std::stringstream text;
+    text << in.rdbuf();
+    return text.str();
+}
+
+struct Published
+{
+    std::vector<uint8_t> swf;
+    std::vector<std::string> problems;
+    std::vector<std::string> notes;
+};
+
+Published publishActionScript3(const fla::Document& document)
+{
+    Published out;
+    fla::swfmovie::ActionScript3Options as3;
+    as3.findClass = testClass;
+    as3.documentName = "test";
+    fla::swfmovie::Options options;
+    options.actionScript3 = [&](swf::Writer& writer, const std::map<const fla::Symbol*, int>& sprites) {
+        out.notes = fla::swfmovie::writeActionScript3(document, writer, sprites, as3);
+    };
+    out.swf = movieOf(document, &out.problems, options);
+    return out;
+}
+
+/// A movie's SymbolClass entries.
+std::vector<std::pair<int, std::string>> symbolClassesOf(const std::vector<Tag>& tags)
+{
+    std::vector<std::pair<int, std::string>> out;
+    for (const Tag& tag : tags)
+    {
+        if (tag.code != 76)
+            continue;
+        const int count = tag.body[0] | (tag.body[1] << 8);
+        size_t at = 2;
+        for (int i = 0; i < count; ++i)
+        {
+            const int id = tag.body[at] | (tag.body[at + 1] << 8);
+            const std::string name = stringAt(tag.body, at + 2);
+            out.emplace_back(id, name);
+            at += 2 + name.size() + 1;
+        }
+    }
+    return out;
+}
+
+/// The abcFile of a movie's DoABC tag, empty when it has none.
+std::vector<uint8_t> abcOf(const std::vector<Tag>& tags)
+{
+    for (const Tag& tag : tags)
+        if (tag.code == 82)
+        {
+            const size_t name = 4 + stringAt(tag.body, 4).size() + 1;
+            return std::vector<uint8_t>(tag.body.begin() + static_cast<std::ptrdiff_t>(name), tag.body.end());
+        }
+    return {};
+}
+
+} // namespace
+
+TEST(swf_movie_compiles_actionscript_3_to_abc)
+{
+    Parsed game = parseWithSettings(actionScript3Package("message.text = \"hi\";\nball.x = box.size + agree.width;\nstop();"));
+    CHECK(game.document != nullptr);
+    if (!game.document)
+        return;
+    const Published published = publishActionScript3(*game.document);
+    CHECK(published.problems.empty());
+    if (!published.problems.empty())
+        std::printf("    problems: %s\n", text(published.problems).c_str());
+    // The library has none of the components' skins: they are drawn plain.
+    for (const std::string& note : published.notes)
+        CHECK(note.find("fl.skins.DefaultSkin") != std::string::npos);
+    CHECK(!published.notes.empty() && published.notes[0].find("CheckBox_upIcon") != std::string::npos);
+
+    const std::vector<Tag> tags = tagsOf(published.swf);
+    // The ABC first, then the classes of the characters.
+    size_t abcAt = tags.size(), classesAt = tags.size(), shownAt = tags.size();
+    std::set<int> sprites;
+    std::map<std::string, std::vector<int>> placed;
+    for (size_t i = 0; i < tags.size(); ++i)
+    {
+        const Tag& tag = tags[i];
+        if (tag.sprite != 0)
+            continue;
+        if (tag.code == 82 && abcAt == tags.size())
+            abcAt = i;
+        if (tag.code == 76)
+            classesAt = i;
+        if (tag.code == 1 && shownAt == tags.size())
+            shownAt = i;
+        if (tag.code == 39)
+            sprites.insert(tag.body[0] | (tag.body[1] << 8));
+        if (tag.code == 26 && (tag.body[0] & 0x22) == 0x22)
+        {
+            // Placed with a name: the name ends the tag's fields here.
+            const int character = tag.body[3] | (tag.body[4] << 8);
+            for (const char* name : {"agree", "__id0_", "ball", "box", "message"})
+            {
+                const std::string wanted = std::string(name) + '\0';
+                if (std::search(tag.body.begin(), tag.body.end(), wanted.begin(), wanted.end()) != tag.body.end())
+                    placed[name].push_back(character);
+            }
+        }
+    }
+    CHECK(abcAt < classesAt && classesAt < shownAt);
+    const std::vector<std::pair<int, std::string>> classes = symbolClassesOf(tags);
+    std::map<std::string, int> idOf;
+    for (const auto& [id, name] : classes)
+    {
+        idOf[name.rfind("test_fla.Ball_", 0) == 0 ? std::string("Ball") : name] = id;
+        // Each a sprite of the movie, or the main timeline.
+        CHECK(id == 0 || sprites.count(id));
+    }
+    CHECK(idOf.count("test_fla.MainTimeline") && idOf["test_fla.MainTimeline"] == 0);
+    CHECK(idOf.count("Ball") && idOf.count("shapes.Box") && idOf.count("Star") && idOf.count("fl.controls.CheckBox"));
+    // The instances placed are of the characters their classes are on.
+    CHECK(placed["ball"] == std::vector<int>{idOf["Ball"]});
+    CHECK(placed["box"] == std::vector<int>{idOf["shapes.Box"]});
+    CHECK(placed["agree"] == std::vector<int>{idOf["fl.controls.CheckBox"]});
+    CHECK(placed["__id0_"] == std::vector<int>{idOf["fl.controls.CheckBox"]});
+    CHECK(placed["message"].size() == 1);
+
+    // The ABC reads and verifies, and has the classes the movie needs.
+    as3::abc::AbcFile file;
+    std::string error;
+    CHECK(as3::abc::read(abcOf(tags), file, error));
+    CHECK(as3::abc::verify(file).empty());
+    const std::string listing = as3::abc::disassemble(file);
+    for (const char* defined : {" fl.controls:CheckBox extends fl.controls:LabelButton",
+             " fl.core:UIComponent extends flash.display:Sprite", " shapes:Box extends flash.display:MovieClip",
+             " Star extends flash.display:MovieClip", " test_fla:MainTimeline extends flash.display:MovieClip",
+             "slot message slot 0 : flash.text:TextField", "slot agree slot 0 : fl.controls:CheckBox",
+             "slot __id0_ slot 0 : fl.controls:CheckBox", "slot box slot 0 : shapes:Box", "componentInspectorSetting"})
+    {
+        CHECK(listing.find(defined) != std::string::npos);
+        if (listing.find(defined) == std::string::npos)
+            std::printf("    missing: %s\n", defined);
+    }
+    // A superclass is defined before the classes that extend it.
+    CHECK(listing.find(" fl.core:UIComponent extends") < listing.find(" fl.controls:BaseButton extends"));
+    CHECK(listing.find(" fl.controls:BaseButton extends") < listing.find(" fl.controls:LabelButton extends"));
+}
+
+TEST(swf_movie_tells_where_actionscript_3_does_not_compile)
+{
+    Parsed game = parseWithSettings(actionScript3Package("message.text = \"hi\";\nvar = 3;\nstop();"));
+    CHECK(game.document != nullptr);
+    if (!game.document)
+        return;
+    const Published published = publishActionScript3(*game.document);
+    bool told = false;
+    for (const std::string& note : published.notes)
+        told = told || note.rfind("Scene 1, layer actions, frame 1, line 2: ", 0) == 0;
+    CHECK(told);
+    if (!told)
+        std::printf("    notes: %s\n", text(published.notes).c_str());
+    // Nothing that would not run: no ABC, no classes.
+    const std::vector<Tag> tags = tagsOf(published.swf);
+    CHECK(abcOf(tags).empty());
+    CHECK(symbolClassesOf(tags).empty());
+}
+
+TEST(swf_movie_puts_a_document_class_on_the_main_timeline)
+{
+    // With the stage's instances declared by the class under it.
+    Parsed game = parseWithSettings(actionScript3Package("", "Main"));
+    CHECK(game.document != nullptr);
+    if (!game.document)
+        return;
+    fla::swfmovie::ActionScript3Options as3;
+    as3.findClass = testClass;
+    as3.documentName = "test";
+    fla::swfmovie::ActionScript3 compiled = fla::swfmovie::compileActionScript3(*game.document, as3);
+    CHECK(compiled.mainClass == "test_fla.MainTimeline");
+    as3::abc::AbcFile file;
+    std::string error;
+    CHECK(as3::abc::read(compiled.abc, file, error));
+    CHECK(as3::abc::disassemble(file).find(" test_fla:MainTimeline extends Main") != std::string::npos);
+
+    // Without them, the document class itself.
+    std::map<std::string, std::vector<uint8_t>> files = actionScript3Package("", "Main");
+    std::string dom(files["DOMDocument.xml"].begin(), files["DOMDocument.xml"].end());
+    for (size_t at = dom.find("<DOMComponentInstance"); at != std::string::npos; at = dom.find("<DOMComponentInstance"))
+        dom.erase(at, dom.find("</DOMComponentInstance>", at) + 23 - at);
+    files["DOMDocument.xml"] = bytesOf(dom);
+    std::string settings(files["PublishSettings.xml"].begin(), files["PublishSettings.xml"].end());
+    settings.replace(settings.find("4096"), 4, "0");
+    files["PublishSettings.xml"] = bytesOf(settings);
+    Parsed plain = parseWithSettings(files);
+    if (!plain.document)
+        return;
+    compiled = fla::swfmovie::compileActionScript3(*plain.document, as3);
+    CHECK(compiled.mainClass == "Main");
+    CHECK(std::find(compiled.defined.begin(), compiled.defined.end(), "Main") != compiled.defined.end());
 }
