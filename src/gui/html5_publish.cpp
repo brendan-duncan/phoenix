@@ -19,6 +19,7 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QFontInfo>
 #include <QPainterPathStroker>
 
 #include <algorithm>
@@ -482,7 +483,12 @@ private:
                 css += "italic ";
             if (font.weight() >= QFont::DemiBold)
                 css += "bold ";
-            css += number(size, 2) + "px \"" + font.family().toStdString() + "\", sans-serif";
+            // The family the font resolved to here, then the one asked for.
+            const QString resolved = QFontInfo(font).family();
+            css += number(size, 2) + "px \"" + resolved.toStdString() + "\"";
+            if (font.family() != resolved)
+                css += ", \"" + font.family().toStdString() + "\"";
+            css += ", sans-serif";
             const QRectF reach = item.path.boundingRect();
             grow(reach);
             std::string op = "{\"t\":" + fla::html5::quoted(item.text.toStdString()) + ",\"font\":" + fla::html5::quoted(css) + ",\"x\":" +
