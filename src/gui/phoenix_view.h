@@ -689,6 +689,9 @@ public:
     /// and movie clips playing their own timelines. The stage color fills
     /// it unless \a transparent.
     QImage renderFrame(int frame, const QSize& size, bool transparent);
+    /// The button, or movie clip listening for the mouse, at \a at on the
+    /// stage in the movie last drawn, or null.
+    fla::play::Clip* movieButtonAtStage(const QPointF& at);
     /// The same of \a area of the document, rather than the stage.
     QImage renderFrame(int frame, const QSize& size, bool transparent, const QRectF& area);
 

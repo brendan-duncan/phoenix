@@ -8666,7 +8666,13 @@ void PhoenixView::drawDisplayTimeline(QPainter& painter, const fla::display::Dis
 
 fla::play::Clip* PhoenixView::movieButtonAt(const QPointF& widgetPos)
 {
-    const QPointF at = mapToDocument(widgetPos);
+    return movieButtonAtStage(mapToDocument(widgetPos));
+}
+
+fla::play::Clip* PhoenixView::movieButtonAtStage(const QPointF& at)
+{
+    if (!_movie)
+        return nullptr;
     // The one drawn last is on top; within its box, it is found by its art.
     for (auto area = _buttonAreas.rbegin(); area != _buttonAreas.rend(); ++area)
     {

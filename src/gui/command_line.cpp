@@ -869,7 +869,16 @@ int play(const QStringList& args)
         }
         inputs.push_back(input);
     }
-    const auto send = [&movie](const Input& input) {
+    // Buttons are found under the pointer as the window finds them: by the
+    // art last drawn, so the frame is drawn before each look.
+    const QSize stageSize(std::max(1, static_cast<int>(std::lround(document->document->width))),
+        std::max(1, static_cast<int>(std::lround(document->document->height))));
+    const auto buttonAt = [&](double x, double y) {
+        player.setCurrentFrame(movie.root().frame);
+        view.renderFrame(movie.root().frame, stageSize, false);
+        return view.movieButtonAtStage(QPointF(x, y));
+    };
+    const auto send = [&](const Input& input) {
         fla::display::Stage& stage = movie.stage();
         if (input.kind == "key")
         {
@@ -879,9 +888,11 @@ int play(const QStringList& args)
             return;
         }
         movie.pointerAt(input.x, input.y);
+        movie.pointerOver(buttonAt(input.x, input.y));
         stage.pointerMove(input.x, input.y);
         if (input.kind == "click" || input.kind == "drag")
         {
+            movie.pointerDown();
             stage.pointerDown(input.x, input.y);
             movie.afterEvents();
             if (input.kind == "drag")
@@ -890,11 +901,14 @@ int play(const QStringList& args)
                     const double x = input.x + (input.toX - input.x) * step / 8.0;
                     const double y = input.y + (input.toY - input.y) * step / 8.0;
                     movie.pointerAt(x, y);
+                    movie.pointerOver(buttonAt(x, y));
                     stage.pointerMove(x, y);
                     movie.afterEvents();
                 }
             const double x = input.kind == "drag" ? input.toX : input.x;
             const double y = input.kind == "drag" ? input.toY : input.y;
+            movie.pointerOver(buttonAt(x, y));
+            movie.pointerUp();
             stage.pointerUp(x, y);
         }
         movie.afterEvents();
