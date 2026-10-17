@@ -3,12 +3,15 @@
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDialogButtonBox>
+#include <QDir>
+#include <QFileDialog>
 #include <QFormLayout>
 #include <QGridLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
+#include <QPushButton>
 #include "hot_text.h"
 #include <QVBoxLayout>
 #include <algorithm>
@@ -26,15 +29,57 @@ HotSpinBox* spin(int low, int high, int value, QWidget* parent)
 
 } // namespace
 
+QString publishFolderPath(const fla::publish::Settings& settings, const QString& documentFolder)
+{
+    const QDir parent(QDir(documentFolder).filePath(QString::fromStdString(settings.parentFolder)));
+    const QString own = QString::fromStdString(settings.publishFolder).trimmed();
+    return QDir::cleanPath(own.isEmpty() ? parent.absolutePath() : parent.absoluteFilePath(own));
+}
+
 PublishSettingsDialog::PublishSettingsDialog(const fla::publish::Settings& settings, const QString& documentName,
-    int stageWidth, int stageHeight, QWidget* parent)
+    int stageWidth, int stageHeight, const QString& documentFolder, bool saved, QWidget* parent)
     : QDialog(parent)
     , _settings(settings)
     , _name(documentName)
+    , _documentFolder(documentFolder)
+    , _saved(saved)
 {
     setWindowTitle("Publish Settings");
     QVBoxLayout* layout = new QVBoxLayout(this);
     layout->addWidget(new QLabel(QString("Profile: <b>%1</b>").arg(QString::fromStdString(settings.profile).toHtmlEscaped()), this));
+
+    // Where the files go: a folder of their own in the parent folder, or
+    // the parent folder itself.
+    QGroupBox* location = new QGroupBox("Location", this);
+    QFormLayout* where = new QFormLayout(location);
+    _parentFolder = new QLineEdit(
+        QDir::toNativeSeparators(QDir(documentFolder).absoluteFilePath(QString::fromStdString(settings.parentFolder))),
+        location);
+    _parentFolder->setToolTip(saved ? "The folder the published files go in, or their publish folder is made in; "
+                                      "the document's own folder unless you choose another"
+                                    : "The folder the published files go in, or their publish folder is made in");
+    QPushButton* browse = new QPushButton("Browse...", location);
+    connect(browse, &QPushButton::clicked, this, [this]() {
+        const QString chosen = QFileDialog::getExistingDirectory(this, "Parent Folder", parentFolder());
+        if (!chosen.isEmpty())
+            _parentFolder->setText(QDir::toNativeSeparators(chosen));
+    });
+    QHBoxLayout* parentRow = new QHBoxLayout;
+    parentRow->addWidget(_parentFolder, 1);
+    parentRow->addWidget(browse);
+    where->addRow("Parent folder", parentRow);
+    _publishFolder = new QLineEdit(QString::fromStdString(settings.publishFolder), location);
+    _publishFolder->setPlaceholderText("None: the files go in the parent folder");
+    _publishFolder->setToolTip("A folder made in the parent folder to hold the published files; leave it empty to "
+                               "write them in the parent folder itself");
+    where->addRow("Publish folder", _publishFolder);
+    _destination = new QLabel(location);
+    _destination->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    _destination->setWordWrap(true);
+    where->addRow("Files go in", _destination);
+    connect(_parentFolder, &QLineEdit::textChanged, this, &PublishSettingsDialog::folderChanged);
+    connect(_publishFolder, &QLineEdit::textChanged, this, &PublishSettingsDialog::folderChanged);
+    layout->addWidget(location);
 
     // The formats, each with its file name.
     QGroupBox* formats = new QGroupBox("Formats", this);
@@ -206,10 +251,58 @@ PublishSettingsDialog::PublishSettingsDialog(const fla::publish::Settings& setti
     note->setWordWrap(true);
     layout->addWidget(note);
 
+    // Publish keeps the settings and publishes with them; OK only keeps
+    // them.
     QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
-    connect(buttons, &QDialogButtonBox::accepted, this, &QDialog::accept);
+    _publishButton = buttons->addButton("Publish", QDialogButtonBox::AcceptRole);
+    _publishButton->setToolTip("Keep these settings and publish now");
+    connect(_publishButton, &QPushButton::clicked, this, [this]() { finish(true); });
+    connect(buttons->button(QDialogButtonBox::Ok), &QPushButton::clicked, this, [this]() { finish(false); });
     connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
     layout->addWidget(buttons);
+    folderChanged();
+}
+
+void PublishSettingsDialog::preferPublish()
+{
+    _publishButton->setDefault(true);
+    _publishButton->setFocus();
+}
+
+QString PublishSettingsDialog::parentFolder() const
+{
+    const QString typed = QDir::fromNativeSeparators(_parentFolder->text().trimmed());
+    return typed.isEmpty() ? QString() : QDir::cleanPath(QDir(_documentFolder).absoluteFilePath(typed));
+}
+
+void PublishSettingsDialog::folderChanged()
+{
+    const QString parent = parentFolder();
+    QPushButton* ok = findChild<QDialogButtonBox*>() ? findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Ok)
+                                                     : nullptr;
+    if (parent.isEmpty())
+    {
+        _destination->setText("<i>Choose a parent folder.</i>");
+        if (ok)
+            ok->setEnabled(false);
+        _publishButton->setEnabled(false);
+        return;
+    }
+    if (ok)
+        ok->setEnabled(true);
+    _publishButton->setEnabled(true);
+    fla::publish::Settings place;
+    place.parentFolder = parent.toStdString();
+    place.publishFolder = _publishFolder->text().trimmed().toStdString();
+    _destination->setText(QDir::toNativeSeparators(publishFolderPath(place, _documentFolder)).toHtmlEscaped());
+}
+
+void PublishSettingsDialog::finish(bool publish)
+{
+    if (parentFolder().isEmpty())
+        return;
+    _publish = publish;
+    accept();
 }
 
 void PublishSettingsDialog::namesChanged()
@@ -231,6 +324,17 @@ void PublishSettingsDialog::namesChanged()
 fla::publish::Settings PublishSettingsDialog::settings() const
 {
     fla::publish::Settings out = _settings;
+    // The parent folder from the document's own when the document has one,
+    // so the setting goes with the file; empty when it is that folder.
+    const QString parent = parentFolder();
+    if (_saved)
+    {
+        const QString relative = QDir(_documentFolder).relativeFilePath(parent);
+        out.parentFolder = relative == "." ? std::string() : relative.toStdString();
+    }
+    else
+        out.parentFolder = parent.toStdString();
+    out.publishFolder = _publishFolder->text().trimmed().toStdString();
     out.flash = _flash->isChecked();
     out.html = _html->isChecked();
     out.png = _png->isChecked();

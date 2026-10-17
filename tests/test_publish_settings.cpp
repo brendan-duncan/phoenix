@@ -126,3 +126,24 @@ TEST(publish_settings_read_animates_sound_codes)
     CHECK(settings.event.compression == "mp3" && settings.event.bitRate == 56 && settings.event.stereo);
     CHECK(settings.overrideSounds);
 }
+
+TEST(publish_settings_keep_where_the_files_go)
+{
+    // None set: the document's own folder, and nothing written for it.
+    fla::publish::Settings settings = fla::publish::read(kAnimate, "shot");
+    CHECK(settings.parentFolder.empty() && settings.publishFolder.empty());
+    CHECK(fla::publish::write(kAnimate, settings, "shot").find("PhoenixParentFolder") == std::string::npos);
+
+    settings.parentFolder = "../out";
+    settings.publishFolder = "web";
+    const std::string written = fla::publish::write(kAnimate, settings, "shot");
+    const fla::publish::Settings back = fla::publish::read(written, "shot");
+    CHECK(back.parentFolder == "../out" && back.publishFolder == "web");
+
+    // Cleared again, the elements go.
+    settings.parentFolder.clear();
+    settings.publishFolder.clear();
+    const std::string cleared = fla::publish::write(written, settings, "shot");
+    CHECK(cleared.find("PhoenixParentFolder") == std::string::npos);
+    CHECK(cleared.find("PhoenixPublishFolder") == std::string::npos);
+}

@@ -87,6 +87,16 @@ void setNumber(XMLDocument& document, XMLElement* parent, const char* name, int 
     setText(document, parent, name, std::to_string(value));
 }
 
+/// \a value as the child \a name, or no such child when it is empty: for
+/// Phoenix's own settings, so a file that never set them is left as it was.
+void setOptionalText(XMLDocument& document, XMLElement* parent, const char* name, const std::string& value)
+{
+    if (!value.empty())
+        setText(document, parent, name, value);
+    else if (XMLElement* element = parent->FirstChildElement(name))
+        parent->DeleteChild(element);
+}
+
 /// An "otf" format's settings (SVG Image): its Property elements.
 XMLElement* properties(XMLDocument& document, XMLElement* profile, const char* id, const char* name)
 {
@@ -183,6 +193,8 @@ Settings read(const std::string& xml, const std::string& name)
     settings.pngFile = textOf(formats, "pngFileName", settings.pngFile);
     settings.jpegFile = textOf(formats, "jpegFileName", settings.jpegFile);
     settings.gifFile = textOf(formats, "gifFileName", settings.gifFile);
+    settings.parentFolder = textOf(formats, "PhoenixParentFolder");
+    settings.publishFolder = textOf(formats, "PhoenixPublishFolder");
     for (const XMLElement* element = formats ? formats->FirstChildElement("publishFormat") : nullptr; element;
          element = element->NextSiblingElement("publishFormat"))
     {
@@ -319,6 +331,8 @@ std::string write(const std::string& xml, const Settings& settings, const std::s
         setText(document, formats, tag.c_str(), settings.defaultNames ? name + entry.extension : *entry.file);
     }
     svgSwitch(document, formats)->SetText(settings.svg ? "1" : "0");
+    setOptionalText(document, formats, "PhoenixParentFolder", settings.parentFolder);
+    setOptionalText(document, formats, "PhoenixPublishFolder", settings.publishFolder);
 
     const auto sized = [&](const char* tag) {
         XMLElement* group = child(document, profile, tag);

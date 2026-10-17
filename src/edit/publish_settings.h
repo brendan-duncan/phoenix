@@ -24,6 +24,13 @@ struct Settings
     bool gif = false;
     bool svg = false;
 
+    /// Where the files go: publishFolder, a folder made in parentFolder to
+    /// hold them, or parentFolder itself when publishFolder is empty. An
+    /// empty parentFolder is the document's own folder; a relative one is
+    /// from it. Phoenix's own, kept beside the file's.
+    std::string parentFolder;
+    std::string publishFolder;
+
     /// File names; with defaultNames, each is the document's name with the
     /// format's extension.
     bool defaultNames = true;

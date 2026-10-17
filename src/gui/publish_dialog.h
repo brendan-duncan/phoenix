@@ -6,27 +6,52 @@
 
 class QCheckBox;
 class QComboBox;
+class QLabel;
+class QPushButton;
 class QLineEdit;
 class HotSpinBox;
 
-/// File > Publish Settings: which formats File > Publish writes, their
-/// file names, and each format's options, kept in the document as FLA files
-/// keep them.
+/// The folder \a settings publish into: their publish folder in their
+/// parent folder, the parent alone when there is no publish folder. An
+/// empty or relative parent is from \a documentFolder.
+QString publishFolderPath(const fla::publish::Settings& settings, const QString& documentFolder);
+
+/// File > Publish Settings: where File > Publish writes, which formats,
+/// their file names, and each format's options, kept in the document as FLA
+/// files keep them. Publish closes it and publishes at once.
 class PublishSettingsDialog : public QDialog
 {
     Q_OBJECT
 
 public:
+    /// \a documentFolder is the folder an empty parent folder stands for:
+    /// the document's own, or for a document never saved (\a saved false)
+    /// the parent folder last chosen.
     PublishSettingsDialog(const fla::publish::Settings& settings, const QString& documentName, int stageWidth,
-        int stageHeight, QWidget* parent);
+        int stageHeight, const QString& documentFolder, bool saved, QWidget* parent);
 
     fla::publish::Settings settings() const;
+    /// Closed with Publish rather than OK.
+    bool publishRequested() const { return _publish; }
+    /// Publish as the default button, for when Publish opened the dialog.
+    void preferPublish();
+    /// The parent folder as chosen, in full.
+    QString parentFolder() const;
 
 private:
     void namesChanged();
+    void folderChanged();
+    void finish(bool publish);
 
     fla::publish::Settings _settings;
     QString _name;
+    QString _documentFolder;
+    bool _saved = false;
+    bool _publish = false;
+    QLineEdit* _parentFolder = nullptr;
+    QLineEdit* _publishFolder = nullptr;
+    QLabel* _destination = nullptr;
+    QPushButton* _publishButton = nullptr;
     QCheckBox* _flash = nullptr;
     QCheckBox* _html = nullptr;
     QCheckBox* _png = nullptr;

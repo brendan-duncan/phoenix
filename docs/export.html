@@ -109,7 +109,11 @@
 
 <h2 id="publish">Publish</h2>
 
-<p><span class="menu-path">File &rsaquo; Publish Settings...</span> (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>F12</kbd>) chooses what <span class="menu-path">File &rsaquo; Publish</span> (<kbd>Shift</kbd>+<kbd>F12</kbd>) writes, beside the document: an SWF movie, an HTML page, an HTML5 page that plays the movie without the SWF (see <a href="#html5">HTML5 pages</a>), and PNG, JPEG, GIF and SVG images, each named after the document or with a name of its own. Images take the stage's size or one of their own. PNG can be 24-bit with alpha (a clear background), 24-bit, or 8-bit with a number of colors; JPEG has a quality and can be progressive; GIF can be still or animated, looping forever, playing once or repeating a number of times, with a number of colors; SVG can include hidden layers and embed its images or write them beside it. <strong>SWF sound</strong> sets how the movie's sound is compressed: MP3, ADPCM, raw or none, with its quality, sample rate and channels.</p>
+<p><span class="menu-path">File &rsaquo; Publish Settings...</span> (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>F12</kbd>) chooses what <span class="menu-path">File &rsaquo; Publish</span> (<kbd>Shift</kbd>+<kbd>F12</kbd>) writes: an SWF movie, an HTML page, an HTML5 page that plays the movie without the SWF (see <a href="#html5">HTML5 pages</a>), and PNG, JPEG, GIF and SVG images, each named after the document or with a name of its own. Images take the stage's size or one of their own. PNG can be 24-bit with alpha (a clear background), 24-bit, or 8-bit with a number of colors; JPEG has a quality and can be progressive; GIF can be still or animated, looping forever, playing once or repeating a number of times, with a number of colors; SVG can include hidden layers and embed its images or write them beside it. <strong>SWF sound</strong> sets how the movie's sound is compressed: MP3, ADPCM, raw or none, with its quality, sample rate and channels.</p>
+
+<p><strong>Location</strong> sets where the files go. The <strong>parent folder</strong> is the document's own folder unless you choose another; a <strong>publish folder</strong> names a folder made in it to hold the files, so a page and everything it loads stay together, and left empty the files go in the parent folder itself. <strong>Files go in</strong> shows the folder that results. A document you have not saved yet publishes to the parent folder you chose last, and its first <span class="menu-path">File &rsaquo; Publish</span> opens Publish Settings so you can choose. <strong>Publish</strong> keeps the settings and publishes at once.</p>
+
+<p>When it is done, Publish lists the files it wrote in the Output panel and shows where they went, with <strong>Open in Browser</strong> for the HTML5 or HTML page and <strong>Show in Explorer</strong> (Show in Finder on macOS) for the files. Clear <strong>Show this after publishing</strong> to keep to the Output panel and the status bar; the dialog still comes up when something could not be published.</p>
 
 <figure class="narrow">
   <img src="assets/shots/publish-settings.webp" alt="Publish Settings dialog with the formats to publish and their file names, the image size, and PNG, JPEG, GIF and SVG options" width="496" height="602">
@@ -120,7 +124,7 @@
 
 <h3 id="html5">HTML5 pages</h3>
 
-<p>The <strong>HTML5 page</strong> format publishes the movie as a web page that plays it with Phoenix's own JavaScript player, with no SWF and no plugin: the document's symbols, timelines and art drawn on a canvas in any current browser, sharp on high-density screens. It writes, beside the document:</p>
+<p>The <strong>HTML5 page</strong> format publishes the movie as a web page that plays it with Phoenix's own JavaScript player, with no SWF and no plugin: the document's symbols, timelines and art drawn on a canvas in any current browser, sharp on high-density screens. It writes, in the folder Publish writes into:</p>
 
 <ul>
   <li>the page (named after the document, or <code><em>name</em>_html5.html</code> while the HTML page format has the plain name);</li>

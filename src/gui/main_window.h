@@ -195,12 +195,16 @@ private slots:
     /// image with a description beside it.
     void exportSpriteSheet(const QString& symbol = QString());
     /// File > Publish Settings and File > Publish: the formats the document's
-    /// publish settings ask for, written beside the document.
+    /// publish settings ask for, written where they say (beside the
+    /// document unless another folder is chosen). Publish says what it
+    /// wrote in the Output panel and a dialog that opens the page or shows
+    /// the files; the first Publish of a document never saved opens the
+    /// settings first, to choose where the files go.
     void publishSettings();
     void publish();
-    /// Publishes the shown document beside its file as its publish
-    /// settings say, with no dialogs: the files written and what went
-    /// wrong. False when something could not be written.
+    /// Publishes the shown document as its publish settings say, with no
+    /// dialogs: the files written and what went wrong. False when something
+    /// could not be written.
     bool publishFiles(QStringList& written, QStringList& problems);
     /// The document as an SWF movie at \a size: its scenes with their
     /// structure (movie clips, buttons, instance names, masks, labels, text
@@ -1208,6 +1212,15 @@ private:
     QString _documentName;
     /// Where the document was last saved or loaded from, for File > Save.
     QString _documentPath;
+    /// Publishing: the folder an empty parent folder stands for (the
+    /// document's own, or the last one chosen for a document never saved);
+    /// the folder the last Publish wrote into; and the unsaved document
+    /// whose settings the first Publish already showed.
+    QString publishDocumentFolder() const;
+    /// Edits the publish settings; true when closed with Publish.
+    bool editPublishSettings(bool fromPublish);
+    QString _publishedFolder;
+    const fla::Document* _publishAskedFor = nullptr;
     /// What the last SWF export could not put in as it is.
     QStringList _swfNotes;
     /// How many frames the last SWF export wrote (every scene, one after

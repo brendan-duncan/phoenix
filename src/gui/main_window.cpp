@@ -8947,34 +8947,57 @@ std::string publishXml(const fla::Document& document)
 
 } // namespace
 
-void MainWindow::publishSettings()
+QString MainWindow::publishDocumentFolder() const
+{
+    if (!_documentPath.isEmpty())
+        return QFileInfo(_documentPath).absolutePath();
+    // A document never saved publishes where the last one chose, at first
+    // the Documents folder.
+    const QString last = QSettings().value("publish/parentFolder").toString();
+    return !last.isEmpty() ? last : QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation);
+}
+
+bool MainWindow::editPublishSettings(bool fromPublish)
 {
     fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
     if (!document)
-        return;
+        return false;
     const QString name = _documentPath.isEmpty() ? QString("Untitled") : QFileInfo(_documentPath).completeBaseName();
     const std::string xml = publishXml(*document);
-    PublishSettingsDialog dialog(fla::publish::read(xml, name.toStdString()), name, document->width, document->height, this);
+    PublishSettingsDialog dialog(fla::publish::read(xml, name.toStdString()), name, document->width, document->height,
+        publishDocumentFolder(), !_documentPath.isEmpty(), this);
+    if (fromPublish)
+        dialog.preferPublish();
     if (dialog.exec() != QDialog::Accepted)
-        return;
+        return false;
+    // The parent folder is offered again for the next document never saved.
+    QSettings().setValue("publish/parentFolder", dialog.parentFolder());
     const std::string written = fla::publish::write(xml, dialog.settings(), name.toStdString());
-    if (written == xml)
-        return;
-    // One undo step: the package file replaced, or added.
-    using Files = std::vector<std::pair<std::string, fla::LazyBytes>>;
-    Files after = document->extraFiles;
-    bool found = false;
-    for (auto& [path, bytes] : after)
-        if (path == kPublishFile)
-        {
-            bytes = fla::LazyBytes(std::vector<uint8_t>(written.begin(), written.end()));
-            found = true;
-        }
-    if (!found)
-        after.emplace_back(kPublishFile, fla::LazyBytes(std::vector<uint8_t>(written.begin(), written.end())));
-    _editContext.commandStack().push(fla::CommandPtr(
-        new fla::SetPropertyCommand<Files>(document->extraFiles, document->extraFiles, after, "Publish Settings")));
-    _editContext.commandStack().breakMergeChain();
+    if (written != xml)
+    {
+        // One undo step: the package file replaced, or added.
+        using Files = std::vector<std::pair<std::string, fla::LazyBytes>>;
+        Files after = document->extraFiles;
+        bool found = false;
+        for (auto& [path, bytes] : after)
+            if (path == kPublishFile)
+            {
+                bytes = fla::LazyBytes(std::vector<uint8_t>(written.begin(), written.end()));
+                found = true;
+            }
+        if (!found)
+            after.emplace_back(kPublishFile, fla::LazyBytes(std::vector<uint8_t>(written.begin(), written.end())));
+        _editContext.commandStack().push(fla::CommandPtr(
+            new fla::SetPropertyCommand<Files>(document->extraFiles, document->extraFiles, after, "Publish Settings")));
+        _editContext.commandStack().breakMergeChain();
+    }
+    return dialog.publishRequested();
+}
+
+void MainWindow::publishSettings()
+{
+    if (editPublishSettings(false))
+        publish();
 }
 
 void MainWindow::publish()
@@ -8982,21 +9005,86 @@ void MainWindow::publish()
     fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
     if (!document || !_phoenixView)
         return;
-    // Published files go beside the document, named after it: it needs a
-    // name and a place first.
-    if (_documentPath.isEmpty())
+    // A document never saved has no folder of its own: the first time, the
+    // settings come up to choose where its files go.
+    if (_documentPath.isEmpty() && _publishAskedFor != document)
     {
-        QMessageBox::information(this, "Publish", "Save the document first: Publish writes its files beside it.");
-        return;
+        _publishAskedFor = document;
+        if (!editPublishSettings(true))
+            return;
     }
     QStringList written;
     QStringList problems;
     publishFiles(written, problems);
-    if (!problems.isEmpty())
-        QMessageBox::warning(this, "Publish", problems.join("\n"));
+    const QString folder = QDir::toNativeSeparators(_publishedFolder);
+
+    // What was written, in the Output panel.
+    if (OutputPanel* output = _scripts ? _scripts->output() : nullptr)
+    {
+        const QString name = _documentPath.isEmpty() ? QString("Untitled") : QFileInfo(_documentPath).fileName();
+        output->append(written.isEmpty() ? QString("Publish %1: nothing was published.").arg(name)
+                                         : QString("Published %1 to %2:").arg(name, folder));
+        for (const QString& file : written)
+            output->append("    " + file);
+        for (const QString& problem : problems)
+            output->appendError(problem);
+    }
     statusBar()->showMessage(written.isEmpty() ? QString("Nothing was published.")
                                                : QString("Published %1").arg(written.join(", ")),
         6000);
+
+    // And a dialog that opens the page, or shows the files, unless asked
+    // not to.
+    QSettings options;
+    if (!options.value("publish/showComplete", true).toBool() && problems.isEmpty())
+        return;
+    // The page to open: the HTML5 page, which plays without the SWF, or
+    // else the SWF's page.
+    const QDir out(_publishedFolder);
+    const std::string base =
+        (_documentPath.isEmpty() ? QString("Untitled") : QFileInfo(_documentPath).completeBaseName()).toStdString();
+    const fla::publish::Settings settings = fla::publish::read(publishXml(*document), base);
+    QString page;
+    const auto pageOf = [&](bool on, const char* format) {
+        const QString file = QString::fromStdString(fla::publish::fileName(settings, format, base));
+        if (on && written.contains(file))
+            page = out.filePath(file);
+    };
+    pageOf(settings.html, "html");
+    pageOf(settings.html5, "html5");
+    QMessageBox box(this);
+    box.setWindowTitle("Publish");
+    box.setIcon(problems.isEmpty() ? QMessageBox::Information : QMessageBox::Warning);
+    if (written.isEmpty())
+        box.setText("Nothing was published.");
+    else
+        box.setText(QString("Published %1 %2 to<br><b>%3</b>")
+                        .arg(written.size())
+                        .arg(written.size() == 1 ? "file" : "files")
+                        .arg(folder.toHtmlEscaped()));
+    box.setInformativeText(problems.isEmpty() ? QString() : problems.join("\n"));
+    box.setDetailedText(written.join("\n"));
+    QPushButton* openPage = page.isEmpty() ? nullptr : box.addButton("Open in Browser", QMessageBox::ActionRole);
+    if (openPage)
+        openPage->setToolTip(QDir::toNativeSeparators(page));
+#if defined(Q_OS_MACOS)
+    const char* showLabel = "Show in Finder";
+#elif defined(Q_OS_WIN)
+    const char* showLabel = "Show in Explorer";
+#else
+    const char* showLabel = "Show Files";
+#endif
+    QPushButton* showFiles = written.isEmpty() ? nullptr : box.addButton(showLabel, QMessageBox::ActionRole);
+    box.addButton(QMessageBox::Close);
+    QCheckBox* again = new QCheckBox("Show this after publishing", &box);
+    again->setChecked(options.value("publish/showComplete", true).toBool());
+    box.setCheckBox(again);
+    box.exec();
+    options.setValue("publish/showComplete", again->isChecked());
+    if (openPage && box.clickedButton() == openPage)
+        QDesktopServices::openUrl(QUrl::fromLocalFile(page));
+    else if (showFiles && box.clickedButton() == showFiles)
+        revealInFileManager(page.isEmpty() ? out.filePath(written.front()) : page);
 }
 
 bool MainWindow::publishFiles(QStringList& written, QStringList& problems)
@@ -9008,15 +9096,22 @@ bool MainWindow::publishFiles(QStringList& written, QStringList& problems)
         ~Published() { window.scriptEvent("postPublish"); }
     } published{*this};
     fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
-    if (!document || !_phoenixView || _documentPath.isEmpty())
+    if (!document || !_phoenixView)
     {
-        problems << "Save the document first: Publish writes its files beside it.";
+        problems << "There is no document to publish.";
         return false;
     }
-    const QFileInfo info(_documentPath);
-    const QString name = info.completeBaseName();
-    const QDir folder = info.absoluteDir();
+    const QString name = _documentPath.isEmpty() ? QString("Untitled") : QFileInfo(_documentPath).completeBaseName();
     const fla::publish::Settings settings = fla::publish::read(publishXml(*document), name.toStdString());
+    // The files go in the publish folder, made in the parent folder if need
+    // be, or in the parent folder itself.
+    _publishedFolder = publishFolderPath(settings, publishDocumentFolder());
+    const QDir folder(_publishedFolder);
+    if (!QDir().mkpath(_publishedFolder))
+    {
+        problems << QString("Could not make the folder %1.").arg(QDir::toNativeSeparators(_publishedFolder));
+        return false;
+    }
     const QSize size = settings.matchMovie || settings.width <= 0 || settings.height <= 0
         ? QSize(std::max(1, document->width), std::max(1, document->height))
         : QSize(settings.width, settings.height);
