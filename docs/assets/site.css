@@ -601,13 +601,10 @@ dl.defs dd { margin: 0; color: var(--text); }
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  color: var(--muted);
 }
-.site-footer .contact a:hover { color: var(--accent); }
 .site-footer .contact svg { width: 15px; height: 15px; flex: none; }
 .site-footer .copyright { margin-bottom: 0; }
-.site-footer .copyright a { margin-left: 12px; color: var(--muted); }
-.site-footer .copyright a:hover { color: var(--accent); }
+.site-footer .copyright a { margin-left: 12px; }
 
 /* Narrow screens */
 

@@ -100,7 +100,6 @@ const NAV = [
 
 const ICONS = {
   mail: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>',
-  linkedin: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M4.98 3.5a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5zM3 9.5h4V21H3zM9.5 9.5h3.8v1.6h.05c.53-1 1.83-2.05 3.77-2.05 4.03 0 4.78 2.65 4.78 6.1V21h-4v-5.1c0-1.22-.02-2.79-1.7-2.79-1.7 0-1.96 1.33-1.96 2.7V21h-4z"/></svg>',
   mastodon: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M21.3 13.9c-.3 1.5-2.6 3.2-5.3 3.5-1.4.2-2.8.3-4.2.3-2.4-.1-4.3-.6-4.3-.6v.7c.3 2.4 2.4 2.6 4.3 2.6 2 .1 3.8-.5 3.8-.5l.1 1.8s-1.4.7-3.9.9c-1.4.1-3.1 0-5.1-.6C2.4 21.3 1.6 16.5 1.5 11.6V7.7C1.5 2.9 4.7 1.4 4.7 1.4 6.3.7 9.1.4 12 .4h.1c2.9 0 5.7.3 7.3 1 0 0 3.2 1.5 3.2 6.3 0 0 0 3.5-1.3 6.2zM17.9 8.1c0-1.2-.3-2.1-.9-2.8-.6-.7-1.5-1-2.5-1-1.2 0-2.1.4-2.6 1.4L11.3 6.6l-.6-.9c-.6-1-1.4-1.4-2.6-1.4-1 0-1.9.3-2.5 1-.6.7-.9 1.6-.9 2.8V14h2.3V8.3c0-1.2.5-1.8 1.5-1.8 1.1 0 1.7.7 1.7 2.2v3.1H12V8.7c0-1.5.6-2.2 1.7-2.2 1 0 1.5.6 1.5 1.8V14h2.3z"/></svg>',
   search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>',
   menu: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>',
@@ -112,6 +111,7 @@ const ICONS = {
 const REPO = "https://github.com/brendan-duncan/phoenix";
 const CONTACT = {
   email: "brendan.duncan@gmail.com",
+  mastodon: "https://mastodon.gamedev.place/@brendan",
 };
 
 function storageGet(key) { try { return localStorage.getItem(key); } catch { return null; } }
@@ -237,7 +237,6 @@ function buildFooter(content) {
     `<p>Phoenix ${VERSION} (<a href="changelog.html">what's new</a>). Found a mistake in this guide? <a href="${REPO}/issues">Open an issue</a>.</p>` +
     `<p class="contact">` +
     `<a href="mailto:${CONTACT.email}">${ICONS.mail}<span>${CONTACT.email}</span></a>` +
-    `<a href="${CONTACT.linkedin}" rel="me">${ICONS.linkedin}<span>LinkedIn</span></a>` +
     `<a href="${CONTACT.mastodon}" rel="me">${ICONS.mastodon}<span>Mastodon</span></a>` +
     `</p>` +
     `<p class="copyright">Copyright &copy; 2026 Brendan Duncan. All rights reserved. <a href="privacy.html">Privacy</a></p>`;
