@@ -753,7 +753,15 @@ private:
             }
             if (!symbol)
             {
-                note("Videos placed on the stage are not published.");
+                // What it is, by its tag: a video, a TLF text field...
+                const size_t start = raw->xml.find("<DOM");
+                const size_t end = start == std::string::npos ? start : raw->xml.find_first_of(" />", start);
+                const std::string tag = start == std::string::npos ? std::string("element")
+                                                                   : raw->xml.substr(start + 4, end - start - 4);
+                note(component != _components.end()
+                        ? "The component " + component->second.name + " is not published: its symbol " +
+                            component->second.symbol + " is not in the library."
+                        : "What the file keeps as " + tag + " is not published.");
                 return std::string();
             }
             // Its name (one made for it when it has none) is what the

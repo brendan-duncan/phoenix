@@ -141,7 +141,10 @@ class DisplayObject extends EventDispatcher {
         this._changed();
     }
     get z() { return 0; }
-    set z(value) {}
+    set z(value) {
+        if (+value)
+            phoenix.unsupported("DisplayObject.z", "is not supported: objects stay flat");
+    }
     get scaleX() { return this._parts().sx; }
     set scaleX(value) {
         var parts = Object.assign({}, this._parts());
@@ -171,9 +174,15 @@ class DisplayObject extends EventDispatcher {
         this._compose(parts);
     }
     get rotationX() { return 0; }
-    set rotationX(value) {}
+    set rotationX(value) {
+        if (+value)
+            phoenix.unsupported("DisplayObject.rotationX", "is not supported: objects stay flat");
+    }
     get rotationY() { return 0; }
-    set rotationY(value) {}
+    set rotationY(value) {
+        if (+value)
+            phoenix.unsupported("DisplayObject.rotationY", "is not supported: objects stay flat");
+    }
     get rotationZ() { return this.rotation; }
     set rotationZ(value) { this.rotation = value; }
     get width() {

@@ -479,10 +479,15 @@ class DisplacementMapFilter extends BitmapFilter {
         Object.assign(this, {mapBitmap: mapBitmap || null, mapPoint: mapPoint || null, componentX: componentX | 0,
             componentY: componentY | 0, scaleX: +scaleX || 0, scaleY: +scaleY || 0, mode: mode || "wrap",
             color: color >>> 0, alpha: +alpha || 0});
+        phoenix.unsupported("DisplacementMapFilter", "is not supported: it draws nothing");
     }
 }
 class ShaderFilter extends BitmapFilter {
-    constructor(shader) { super(); this.shader = shader || null; }
+    constructor(shader) {
+        super();
+        this.shader = shader || null;
+        phoenix.unsupported("ShaderFilter", "is not supported: it draws nothing");
+    }
 }
 
 phoenix.defineClass("flash.filters.BitmapFilter", BitmapFilter);

@@ -845,7 +845,7 @@ function linkTranslated() {
     phoenix._.library.symbols.forEach(function (s) { if (s.linkage) names.push(s.linkage); });
     (movie.sounds || []).concat(movie.images || []).forEach(function (item) { if (item.linkage) names.push(item.linkage); });
     names.forEach(function (name) {
-        if (!lib.isDefined(name))
+        if (!phoenix.isDefined(name))
             return;
         var cls;
         try {

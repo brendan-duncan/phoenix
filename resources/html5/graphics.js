@@ -218,7 +218,7 @@ class Graphics {
             smooth: !!smooth}});
         this._stroke = {k: "s", line: this._line, cmds: []};
     }
-    lineShaderStyle(shader, matrix) {}
+    lineShaderStyle(shader, matrix) { phoenix.unsupported("Graphics.lineShaderStyle"); }
     _finishStroke() {
         if (this._stroke && this._stroke.cmds.some(function (c) { return c[0] !== "M"; })) {
             if (this._fill)

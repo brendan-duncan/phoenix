@@ -407,7 +407,24 @@ class Loader extends flash.display.DisplayObjectContainer {
         };
         image.src = request.url;
     }
-    loadBytes(bytes, context) {}
+    /// Pictures' bytes (PNG, JPEG, GIF) as pictures loaded by URL are; an
+    /// SWF's are not loaded.
+    loadBytes(bytes, context) {
+        if (typeof Blob === "undefined" || typeof URL === "undefined" || !bytes) {
+            phoenix.unsupported("Loader.loadBytes", "is not supported here");
+            return;
+        }
+        // A ByteArray (as3.js's) gives its bytes by index.
+        var view = new Uint8Array(bytes.length >>> 0);
+        for (var i = 0; i < view.length; ++i)
+            view[i] = bytes[i];
+        if (view[0] === 0x46 || view[0] === 0x43 || view[0] === 0x5a) {
+            phoenix.unsupported("Loader.loadBytes of an SWF", "is not supported: nothing is loaded");
+            return;
+        }
+        var url = URL.createObjectURL(new Blob([view]));
+        this.load({url: url}, context);
+    }
     unload() {
         if (this._content && this._content._parent === this)
             this.removeChild(this._content);

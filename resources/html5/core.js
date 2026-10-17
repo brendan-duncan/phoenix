@@ -85,9 +85,20 @@ function define(qualifiedName, value) {
     ns(dot < 0 ? "" : qualifiedName.slice(0, dot))[dot < 0 ? qualifiedName : qualifiedName.slice(dot + 1)] = value;
     return value;
 }
+/// Whether as3 has  name, asked without the resolver below telling of
+/// one it does not have (the runtime asks before translated code loads).
+var probing = false;
+function isDefined(name) {
+    probing = true;
+    try {
+        return as3.isDefined(name);
+    } finally {
+        probing = false;
+    }
+}
 function classByName(qualifiedName) {
     var name = String(qualifiedName).replace("::", ".");
-    if (as3 && as3.isDefined(name)) {
+    if (as3 && isDefined(name)) {
         var defined = as3.use(name);
         return typeof defined === "function" ? defined : null;
     }
@@ -211,6 +222,7 @@ phoenix.root = as3 ? global : root;
 phoenix.defineClass = defineClass;
 phoenix.define = define;
 phoenix.adoptClass = adoptClass;
+phoenix.isDefined = function (name) { return as3 ? isDefined(name) : !!classByName(name); };
 /// Whether as3.js is there, with the language's classes.
 phoenix.as3Runtime = !!as3;
 phoenix.classByName = classByName;
@@ -237,5 +249,26 @@ if (as3) {
     // is the movie's.
     as3.output = function (text) { trace(text); };
     as3.clock = function () { return now() - started; };
+    // A flash.* class or function the runtime does not have: said once in
+    // the console; as3.js then stands in for it with what throws
+    // ReferenceError #1065 when it is used, as a player without it would.
+    as3.resolvers.push(function (name) {
+        if (!probing && /^(flash|fl)\./.test(name))
+            unsupported(name, "is not in Phoenix's HTML5 runtime: using it throws");
+        return undefined;
+    });
 }
+
+/// What the runtime does not do, said in the console once each, so that a
+/// movie that leans on it shows why: unsupported("Video") or
+/// unsupported("BitmapData.applyFilter with a ShaderFilter", "draws nothing").
+var told = new Set();
+function unsupported(what, consequence) {
+    if (told.has(what))
+        return;
+    told.add(what);
+    if (global.console && global.console.warn)
+        global.console.warn("Phoenix HTML5: " + what + " " + (consequence || "is not supported: it does nothing") + ".");
+}
+phoenix.unsupported = unsupported;
 })(typeof globalThis !== "undefined" ? globalThis : this);

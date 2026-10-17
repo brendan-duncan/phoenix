@@ -314,7 +314,10 @@ class Transform {
         return box ? new Rectangle(box[0], box[1], box[2] - box[0], box[3] - box[1]) : new Rectangle();
     }
     get matrix3D() { return null; }
-    set matrix3D(value) {}
+    set matrix3D(value) {
+        if (value)
+            phoenix.unsupported("Transform.matrix3D", "is not supported: objects stay flat");
+    }
     get perspectiveProjection() { return null; }
     set perspectiveProjection(value) {}
 }
