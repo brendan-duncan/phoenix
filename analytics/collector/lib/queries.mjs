@@ -368,10 +368,10 @@ export class Queries {
 
     // Headings reached, per page: visits that brought each heading into view.
     const wh = this.where(range, filters, "name = 'section'");
-    const sections = this.db.prepare(`SELECT path, json_extract(props, '$.id') id, MIN(json_extract(props, '$.n')) n,
+    const sections = this.db.prepare(`SELECT path, json_extract(props, '$.id') hid, MIN(json_extract(props, '$.n')) n,
         MAX(json_extract(props, '$.level')) level, COUNT(DISTINCT sid) visits
-      FROM events WHERE ${wh.sql} GROUP BY path, id ORDER BY path, n LIMIT 2000`).all(...wh.params)
-      .map((r) => ({ path: String(r.path), id: r.id === null ? '' : String(r.id), n: num(r.n),
+      FROM events WHERE ${wh.sql} GROUP BY path, hid ORDER BY path, n LIMIT 2000`).all(...wh.params)
+      .map((r) => ({ path: String(r.path), id: r.hid === null ? '' : String(r.hid), n: num(r.n),
         level: num(r.level) || 2, visits: num(r.visits) }));
 
     // The search box: how often it is used and whether it finds something.

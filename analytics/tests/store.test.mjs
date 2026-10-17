@@ -120,6 +120,9 @@ describe('Store + Queries', () => {
       row({ ts: T0 + 5001, name: 'tutorial-open', path: '/tutorial-masks', sid: 'd', visitor: 'v4', props: { tutorial: 'tutorial-masks', from: '/tutorials' } }),
       row({ ts: T0 + 5002, name: 'search', path: '/tutorial-masks', sid: 'd', visitor: 'v4', props: { len: 3, words: 1, results: 0, chosen: false } }),
       row({ ts: T0 + 5003, name: 'theme', path: '/tutorial-masks', sid: 'd', visitor: 'v4', props: { to: 'dark' } }),
+      // A second visit reaches the timeline's first heading, twice in one visit.
+      row({ ts: T0 + 7000, name: 'section', path: '/timeline', sid: 'f', visitor: 'v6', props: { id: 'layers', n: 1, of: 3, level: 2 } }),
+      row({ ts: T0 + 7001, name: 'section', path: '/timeline', sid: 'f', visitor: 'v6', props: { id: 'layers', n: 1, of: 3, level: 2 } }),
     ]);
     const r = q.reading(all, {});
     const timeline = r.pages.find((p) => p.path === '/timeline');
@@ -128,7 +131,7 @@ describe('Store + Queries', () => {
     assert.equal(timeline.avgSec, 40);
     assert.equal(timeline.avgDepth, 60);
     assert.deepEqual(r.sections.filter((s) => s.path === '/timeline'), [
-      { path: '/timeline', id: 'layers', n: 1, level: 2, visits: 1 },
+      { path: '/timeline', id: 'layers', n: 1, level: 2, visits: 2 },
       { path: '/timeline', id: 'frames', n: 2, level: 3, visits: 1 },
     ]);
     assert.equal(r.search.count, 2);
