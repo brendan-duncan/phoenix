@@ -205,7 +205,8 @@ set(PHOENIX_CORE_PYTHON_SOURCES
     python/python_keywords.cpp
 )
 
-# Playing movies with their ActionScript (Control > Test Movie): libas3.
+# Playing movies with their ActionScript (Control > Test Movie), and
+# publishing them with it compiled (SWF): libas3.
 set(PHOENIX_CORE_PLAY_SOURCES
     play/movie_runtime.cpp
     play/display/bitmap_data.cpp
@@ -229,6 +230,7 @@ set(PHOENIX_CORE_PLAY_SOURCES
     play/script/bindings.cpp
     play/script/class_path.cpp
     play/script/png_reader.cpp
+    edit/swf_movie.cpp
 )
 
 # phoenix_add_core(<target> <src dir> [FILES] [JSFL] [PYTHON] [PLAY]): the core
