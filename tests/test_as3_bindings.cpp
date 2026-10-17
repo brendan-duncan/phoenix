@@ -11,9 +11,12 @@
 #include "../src/play/display/display_object.h"
 #include "../src/play/display/stage.h"
 #include "../src/play/display/text_field.h"
+#include "../src/parser/swf_import.h"
 #include "../src/play/movie_runtime.h"
 #include "../src/play/script/class_path.h"
 #include "../src/util/png_writer.h"
+
+#include "abc/abc.h"
 
 #include <cstdio>
 #include <filesystem>
@@ -706,6 +709,106 @@ TEST(as3_listeners_hear_the_stage_pointer_and_keys)
     played.showErrors();
     CHECK(played.errors.empty());
     const std::string expected = "550 24 true true\ndown on stage true\nclick 10 20 110 box\nkey 65 97\n";
+    CHECK(played.output() == expected);
+    if (played.output() != expected)
+        std::printf("%s", played.output().c_str());
+}
+
+TEST(as3_compiled_scripts_run_from_a_published_movie)
+{
+    // A movie as one is published: its main timeline's class and a symbol's
+    // class compiled to ABC (with libas3's compiler, as a player's movie
+    // has them), in a DoABC tag, the main timeline's class in SymbolClass.
+    as3::abc::Timeline main;
+    main.className = as3::abc::timelineClassName("movie");
+    main.instances = {{"hat", "flash.display.MovieClip"}};
+    main.frames = {{0,
+                       "import game.Star;\n"
+                       "import fl.text.RuntimeManager;\n"
+                       "import flash.geom.Rectangle;\n"
+                       "var star:Star = new Star();\n"
+                       "addChild(star);\n"
+                       "trace('frame 1', hat != null, star.lit, star.totalFrames, star is MovieClip);\n"
+                       "RuntimeManager.getSingleton().addInstance(this, 'label', new Rectangle(5, 5, 90, 20),\n"
+                       "  new XML('<tlfTextObject type=\"Point\"><TextFlow><p><span color=\"#ff0000\" fontSize=\"14\">'\n"
+                       "  + 'Hi there</span></p></TextFlow></tlfTextObject>'), null, undefined, 0, 1);\n"
+                       "trace(TextField(getChildByName('label')).text);\n"},
+        {1, "stop();\ntrace('frame 2', star.currentFrame);\n"}};
+    const as3::abc::Output compiled = as3::abc::compile(
+        {{"package game {\n"
+          "  import flash.display.MovieClip;\n"
+          "  public class Star extends MovieClip {\n"
+          "    public var lit:Boolean;\n"
+          "    public function Star() { lit = true; stop(); }\n"
+          "  }\n"
+          "}\n",
+            "Star.as"}},
+        {main});
+    CHECK(compiled.ok);
+    if (!compiled.ok)
+    {
+        std::printf("%s", compiled.errorText().c_str());
+        return;
+    }
+
+    // The movie: DoABC, SymbolClass naming the main timeline's class, and
+    // one frame.
+    std::vector<uint8_t> tags;
+    const auto tag = [&tags](int code, const std::vector<uint8_t>& body) {
+        const uint16_t header = static_cast<uint16_t>(code << 6 | 0x3F);
+        tags.push_back(header & 0xFF);
+        tags.push_back(header >> 8);
+        for (int i = 0; i < 4; ++i)
+            tags.push_back(static_cast<uint8_t>(body.size() >> (8 * i)));
+        tags.insert(tags.end(), body.begin(), body.end());
+    };
+    tag(69, {0x08, 0, 0, 0}); // FileAttributes: ActionScript 3
+    std::vector<uint8_t> doAbc = {1, 0, 0, 0, 0}; // lazy, no name
+    doAbc.insert(doAbc.end(), compiled.abc.begin(), compiled.abc.end());
+    tag(82, doAbc);
+    std::vector<uint8_t> symbols = {1, 0, 0, 0};
+    for (char c : main.className)
+        symbols.push_back(static_cast<uint8_t>(c));
+    symbols.push_back(0);
+    tag(76, symbols);
+    tag(1, {});
+    tag(0, {});
+    // A 550 by 400 stage (a RECT of 15-bit values), 24 frames a second.
+    std::vector<uint8_t> swf = {'F', 'W', 'S', 10, 0, 0, 0, 0, 0x78, 0x00, 0x05, 0x5F, 0x00, 0x00, 0x0F, 0xA0, 0x00,
+        0x00, 0x18, 0x01, 0x00};
+    swf.insert(swf.end(), tags.begin(), tags.end());
+    for (int i = 0; i < 4; ++i)
+        swf[4 + i] = static_cast<uint8_t>(swf.size() >> (8 * i));
+
+    // Imported, it keeps the ABC and says to run it with that class.
+    std::map<std::string, std::vector<uint8_t>> files;
+    std::string error;
+    CHECK(SwfImport::convert(swf, files, error));
+    CHECK(files.count("bin/abc/1.abc") == 1);
+    CHECK(files["bin/abc/1.abc"] == compiled.abc);
+    const std::string settings(files["PublishSettings.xml"].begin(), files["PublishSettings.xml"].end());
+    CHECK(settings.find("<ActionScriptVersion>3</ActionScriptVersion>") != std::string::npos);
+    CHECK(settings.find("<DocumentClass>movie_fla.MainTimeline</DocumentClass>") != std::string::npos);
+
+    // Played: the main timeline is an instance of its compiled class, its
+    // frame scripts those addFrameScript gave, Star a symbol's class.
+    Movie movie;
+    fla::Symbol* star = movie.symbol("Star", fla::SymbolType::MovieClip, 3);
+    star->extraAttributes.emplace_back("linkageClassName", "game.Star");
+    fla::Symbol* hat = movie.symbol("Hat", fla::SymbolType::MovieClip, 1);
+    fla::Layer* art = movie.layer(*movie.root, "art");
+    movie.place(*movie.frame(*art, 0, 2), *hat, "hat");
+    movie.frame(*movie.actions, 0, 2);
+    Played played(movie);
+    played.runtime.setLibrary({star, hat}, {}, {});
+    played.runtime.setClasses({}, "movie_fla.MainTimeline");
+    played.runtime.setCompiledScripts({files["bin/abc/1.abc"]});
+    played.runtime.start();
+    played.runtime.step();
+    played.runtime.step();
+    played.showErrors();
+    CHECK(played.errors.empty());
+    const std::string expected = "frame 1 true true 3 true\nHi there\nframe 2 1\n";
     CHECK(played.output() == expected);
     if (played.output() != expected)
         std::printf("%s", played.output().c_str());

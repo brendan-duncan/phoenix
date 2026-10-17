@@ -901,10 +901,34 @@ public:
         _main = std::make_shared<TimelineData>();
         readTags(in, *_main, true);
         finish(files);
+        keepActionScript3(files);
         return true;
     }
 
 private:
+    /// The movie's ActionScript 3 as it was compiled (each DoABC tag's
+    /// abcFile) and its main timeline's class: kept with the document so
+    /// that Test Movie runs them, as publish settings saying so.
+    std::vector<std::vector<uint8_t>> _abcFiles;
+    std::string _rootClass;
+
+    void keepActionScript3(std::map<std::string, std::vector<uint8_t>>& files)
+    {
+        if (_abcFiles.empty())
+            return;
+        for (size_t i = 0; i < _abcFiles.size(); ++i)
+            files["bin/abc/" + std::to_string(i + 1) + ".abc"] = _abcFiles[i];
+        if (files.count("PublishSettings.xml"))
+            return;
+        std::string settings = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<flash_profiles>\n"
+                               "<flash_profile version=\"1.0\" name=\"Default\" current=\"true\">\n"
+                               "<PublishFlashProperties enabled=\"true\">\n"
+                               "<ActionScriptVersion>3</ActionScriptVersion>\n";
+        if (!_rootClass.empty())
+            settings += "<DocumentClass>" + _rootClass + "</DocumentClass>\n";
+        settings += "</PublishFlashProperties>\n</flash_profile>\n</flash_profiles>\n";
+        files["PublishSettings.xml"].assign(settings.begin(), settings.end());
+    }
     Options _options;
     int _version = 10;
     double _frameRate = 24.0;
@@ -1099,8 +1123,15 @@ private:
                 ++_scripts;
                 break;
             case 72:
-            case 82: // DoABC
+            case 82: // DoABC: (flags and a name, then) the abcFile
                 ++_abc;
+                if (code == 82)
+                {
+                    tag.u32();
+                    tag.string();
+                }
+                if (tag.left() > 0)
+                    _abcFiles.emplace_back(tag.data() + tag.position(), tag.data() + tag.position() + tag.left());
                 break;
             case 15: // StartSound
             case 89: // StartSound2
@@ -1599,6 +1630,8 @@ private:
                 const std::string name = tag.string();
                 if (id != 0)
                     _exportNames[id] = name;
+                else if (code == 76)
+                    _rootClass = name; // the main timeline's class
             }
             return true;
         }

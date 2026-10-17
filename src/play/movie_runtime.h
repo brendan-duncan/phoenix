@@ -16,6 +16,9 @@ class BytecodeFunction;
 class Value;
 class VM;
 using ValuePtr = std::shared_ptr<Value>;
+namespace abc {
+class Domain;
+}
 }
 
 #include "script/class_path.h"
@@ -247,6 +250,11 @@ public:
     /// The library bitmaps scripts reach by their linkage (BitmapData
     /// classes). Set before start().
     void setLibraryBitmaps(const std::vector<const Bitmap*>& bitmaps) { _bitmaps = bitmaps; }
+    /// ActionScript 3 as a published movie has it compiled (each DoABC
+    /// tag's abcFile): its classes are found before any class file, the
+    /// document class and the symbols' classes among them. Set before
+    /// start().
+    void setCompiledScripts(std::vector<std::vector<uint8_t>> abcFiles) { _abcFiles = std::move(abcFiles); }
     /// Finds an ActionScript 3 class's source by its qualified name: the
     /// movie's class path (see ClassPath). The classes setClasses gave are
     /// looked in first.
@@ -574,6 +582,9 @@ private:
     mutable std::map<const Element*, std::unique_ptr<SymbolInstance>> _components;
     mutable std::map<const SymbolInstance*, std::string> _componentParameters;
     std::unique_ptr<script::Bindings> _bindings;
+    /// The compiled scripts, and what runs them on the VM.
+    std::vector<std::vector<uint8_t>> _abcFiles;
+    std::unique_ptr<as3::abc::Domain> _abcDomain;
     /// The clip the pointer was last sent over (pointerOver) and pressed
     /// on, for the display list's events when the stage does not send them.
     std::weak_ptr<display::DisplayObject> _pointerOver;
