@@ -2,7 +2,7 @@
 
 What changed in each release of Phoenix, newest first.
 
-## Unreleased
+## 0.18.0
 
 - Strokes drawn with FLA files' art and pattern paint brushes draw on the stage and in exports and SWF movies, and save as they were; the Paint Brush can draw with the file's brushes, listed under Brushes in this document
 - Brush Library (Window menu): brushes to paint with in any document, by category, with pictures; Phoenix comes with brushes of its own, and Import Brushes from Document adds a document's brushes to your library
