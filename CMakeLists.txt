@@ -18,7 +18,7 @@ endif()
 FetchContent_Declare(
     libas3
     GIT_REPOSITORY https://github.com/brendan-duncan/libas3
-    GIT_TAG 6a5667491911d136944649254bf0d2e1c7809762
+    GIT_TAG 50f0aa200b731933be1c470621660f34c9e3f0c3
 )
 FetchContent_MakeAvailable(libas3)
 
