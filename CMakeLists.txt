@@ -613,13 +613,6 @@ if(PHOENIX_TUTORIAL_FILES)
     qt_add_resources(Phoenix "tutorials" PREFIX "/" BASE "${CMAKE_SOURCE_DIR}/resources"
         FILES ${PHOENIX_TUTORIAL_FILES})
 endif()
-# Phoenix's own ActionScript 3 classes (resources/as3), in the app as
-# :/as3: what a movie's class path does not have is looked for there last.
-file(GLOB_RECURSE PHOENIX_AS3_FILES CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/resources/as3/*.as")
-if(PHOENIX_AS3_FILES)
-    qt_add_resources(Phoenix "as3" PREFIX "/" BASE "${CMAKE_SOURCE_DIR}/resources"
-        FILES ${PHOENIX_AS3_FILES})
-endif()
 # The CSInterface shim HTML extension panels start with (cep_panel.cpp).
 qt_add_resources(Phoenix "cep" PREFIX "/" BASE "${CMAKE_SOURCE_DIR}/resources"
     FILES "${CMAKE_SOURCE_DIR}/resources/cep/adobe_cep.js")

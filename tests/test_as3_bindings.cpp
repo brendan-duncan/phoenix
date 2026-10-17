@@ -105,6 +105,11 @@ struct Played
         : runtime(*movie.root, frameRate)
     {
         runtime.setActionScriptVersion(3);
+        // Phoenix's own classes (fl.*), from the source tree as the app has
+        // them built in.
+        fla::play::ClassPath library;
+        library.addRoot(std::filesystem::path(__FILE__).parent_path().parent_path() / "resources" / "as3");
+        runtime.findClass = [library](const std::string& name) { return library.find(name); };
         runtime.trace = [this](const std::string& line) { traced.push_back(line); };
         runtime.error = [this](const std::string& line) { errors.push_back(line); };
     }
