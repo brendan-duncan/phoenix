@@ -1,0 +1,73 @@
+<DOMDocument xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://ns.adobe.com/xfl/2008/" width="400" height="300" frameRate="24" currentTimeline="1" xflVersion="23.0" creatorInfo="Phoenix" platform="Windows" nextSceneIdentifier="2" playOptionsPlayLoop="false" playOptionsPlayPages="false" playOptionsPlayFrameActions="false" fileGUID="5D1A0C3B2E4F4A7B9C8D7E6F5A4B3C2D" canvasTestUnknown="kept">
+     <symbols>
+          <Include href="Ball.xml" loadImmediate="false" itemID="6a0b0c01-00000001" lastModified="1773589179"/>
+     </symbols>
+     <timelines>
+          <DOMTimeline name="Scene 1">
+               <layers>
+                    <DOMLayer name="Actions" color="#FF4FFF" current="true" isSelected="true">
+                         <frames>
+                              <DOMFrame index="0" keyMode="9728">
+                                   <Actionscript>
+                                        <script><![CDATA[this.stop();
+var root = this;
+this.score = 0;
+this.ball.cursor = "pointer";
+this.ball.addEventListener("click", function (e) {
+	root.score++;
+	root.score_txt.text = "Score: " + root.score;
+	console.log("click", root.score, e.currentTarget === root.ball);
+	e.currentTarget.gotoAndStop(1);
+});
+this.on("tick", function () {
+	if (createjs.Ticker.getTicks() === 12)
+		console.log("ball at", Math.round(this.ball.x));
+});
+createjs.Tween.get(this.ball, {loop: true}).to({x: 300}, 1000).to({x: 100}, 1000);
+console.log("Canvas ready", this.totalFrames, this.ball.totalFrames, this.ball.currentFrame);]]></script>
+                                   </Actionscript>
+                                   <elements/>
+                              </DOMFrame>
+                         </frames>
+                    </DOMLayer>
+                    <DOMLayer name="Text" color="#4FFF4F">
+                         <frames>
+                              <DOMFrame index="0" keyMode="9728">
+                                   <elements>
+                                        <DOMDynamicText name="score_txt" width="200" height="22" fontRenderingMode="device">
+                                             <matrix>
+                                                  <Matrix tx="10" ty="10"/>
+                                             </matrix>
+                                             <textRuns>
+                                                  <DOMTextRun>
+                                                       <characters>Score: 0</characters>
+                                                       <textAttrs>
+                                                            <DOMTextAttrs face="Arial" size="16" fillColor="#000000"/>
+                                                       </textAttrs>
+                                                  </DOMTextRun>
+                                             </textRuns>
+                                        </DOMDynamicText>
+                                   </elements>
+                              </DOMFrame>
+                         </frames>
+                    </DOMLayer>
+                    <DOMLayer name="Ball" color="#4FFFFF">
+                         <frames>
+                              <DOMFrame index="0" keyMode="9728">
+                                   <elements>
+                                        <DOMSymbolInstance libraryItemName="Ball" name="ball">
+                                             <matrix>
+                                                  <Matrix tx="100" ty="100"/>
+                                             </matrix>
+                                             <transformationPoint>
+                                                  <Point x="20" y="20"/>
+                                             </transformationPoint>
+                                        </DOMSymbolInstance>
+                                   </elements>
+                              </DOMFrame>
+                         </frames>
+                    </DOMLayer>
+               </layers>
+          </DOMTimeline>
+     </timelines>
+</DOMDocument>

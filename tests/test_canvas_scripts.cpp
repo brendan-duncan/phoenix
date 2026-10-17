@@ -399,8 +399,9 @@ TEST(canvas_errors_are_told_with_their_line_and_play_goes_on)
         CHECK(played.errors[2].find("Scene 1, frame 3") == 0 && played.errors[2].find("SyntaxError") != std::string::npos);
         CHECK(played.errors[3].find("new createjs.Shape()") != std::string::npos);
     }
-    for (const std::string& error : played.errors)
-        std::printf("    (told) %s\n", error.c_str());
+    if (played.errors.size() != 4)
+        for (const std::string& error : played.errors)
+            std::printf("    (told) %s\n", error.c_str());
     // Each error knows its keyframe, for the Actions panel.
     CHECK(played.located.size() == 4 && played.located[0].source == movie.root->layers[0]->frames[0] &&
         played.located[0].line == 2);

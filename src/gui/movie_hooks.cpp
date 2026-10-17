@@ -2,6 +2,7 @@
 
 #include "../data/document.h"
 #include "../data/fla_document.h"
+#include "../edit/canvas_document.h"
 #include "../play/movie_runtime.h"
 #include "../play/script/class_path.h"
 
@@ -37,6 +38,8 @@ void connectMovie(fla::play::MovieRuntime& movie, const fla::FLADocument& docume
         return;
     const fla::Document& data = *document.document;
     movie.setActionScriptVersion(fla::play::actionScriptVersion(data));
+    // An HTML5 Canvas document's scripts are JavaScript.
+    movie.setJavaScript(fla::canvas::isCanvasDocument(data));
 
     // Where the movie is: what its scripts load from, and its address.
     const QFileInfo info(file);

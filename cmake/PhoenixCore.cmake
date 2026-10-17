@@ -159,6 +159,7 @@ set(PHOENIX_CORE_FILE_SOURCES
     edit/postscript_import.cpp
     edit/postscript_interpreter.cpp
     edit/shortcut_sets.cpp
+    edit/canvas_document.cpp
     edit/publish_settings.cpp
     util/swf_writer.cpp
     util/lzma.cpp

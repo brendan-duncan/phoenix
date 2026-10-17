@@ -14,7 +14,8 @@ class MovieRuntime;
 } // namespace fla
 
 /// Gives a movie played with its scripts (Test Movie, the command line's
-/// play) what Phoenix has for them: the document's ActionScript version and
+/// play) what Phoenix has for them: the document's script language (an
+/// HTML5 Canvas document's JavaScript), its ActionScript version and
 /// class path (its folder, its publish settings' source paths, the extra
 /// paths in Preferences, and Phoenix's own classes), images read with Qt,
 /// the web, and a folder for SharedObjects. \a file is the document's path,

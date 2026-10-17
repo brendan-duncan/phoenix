@@ -316,6 +316,7 @@ set(HEADERS
     src/edit/brush_presets.h
     src/edit/shortcut_sets.h
     src/edit/publish_settings.h
+    src/edit/canvas_document.h
     src/edit/brush_texture.h
     src/edit/camera.h
     src/edit/motion_object.h
