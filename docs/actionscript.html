@@ -4,11 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ActionScript and Test Movie · Phoenix User Guide</title>
-<meta name="description" content="Write ActionScript 1, 2 and 3 in the Actions panel, and play a movie's scripts, buttons and games in Test Movie.">
+<meta name="description" content="Write ActionScript 1, 2 and 3, and HTML5 Canvas JavaScript, in the Actions panel, and play a movie's scripts, buttons and games in Test Movie.">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Phoenix">
 <meta property="og:title" content="ActionScript and Test Movie · Phoenix User Guide">
-<meta property="og:description" content="Write ActionScript 1, 2 and 3 in the Actions panel, and play a movie's scripts, buttons and games in Test Movie.">
+<meta property="og:description" content="Write ActionScript 1, 2 and 3, and HTML5 Canvas JavaScript, in the Actions panel, and play a movie's scripts, buttons and games in Test Movie.">
 <meta property="og:url" content="https://phoenixanimate.com/actionscript.html">
 <meta property="og:image" content="https://phoenixanimate.com/assets/shots/hero.webp">
 <meta property="og:image:type" content="image/webp">
@@ -17,7 +17,7 @@
 <meta property="og:image:alt" content="The Phoenix window with three flower characters on the stage, the timeline below and the Properties panel on the right">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:image" content="https://phoenixanimate.com/assets/shots/hero.webp">
-<meta name="keywords" content="actionscript as2 as3 as1 actions panel F9 script navigator pin code hints snippets insert target path check syntax test movie ctrl+enter game interactive button on release onClipEvent addEventListener MouseEvent click keyboard Key.isDown text field input dynamic startDrag hitTest attachMovie sound getTimer output panel trace error play command">
+<meta name="keywords" content="actionscript as2 as3 as1 actions panel F9 script navigator pin code hints snippets insert target path check syntax test movie ctrl+enter game interactive button on release onClipEvent addEventListener MouseEvent click keyboard Key.isDown text field input dynamic startDrag hitTest attachMovie sound getTimer output panel trace error play command html5 canvas javascript createjs exportRoot tween ticker console.log">
 <link rel="icon" href="assets/img/logo.png">
 <link rel="stylesheet" href="assets/site.css">
 <script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
@@ -29,7 +29,7 @@
 
 <p class="eyebrow">Animation</p>
 <h1>ActionScript and Test Movie</h1>
-<p class="lead">ActionScript is the scripting language of Flash movies and games: buttons that answer clicks, clips that follow the keys, scores kept in text fields. Phoenix writes it in the <strong>Actions panel</strong> and plays it in <strong>Test Movie</strong>, ActionScript 1 and 2 as older movies have it and ActionScript 3 frame scripts with their event listeners.</p>
+<p class="lead">ActionScript is the scripting language of Flash movies and games: buttons that answer clicks, clips that follow the keys, scores kept in text fields. Phoenix writes it in the <strong>Actions panel</strong> and plays it in <strong>Test Movie</strong>, ActionScript 1 and 2 as older movies have it and ActionScript 3 frame scripts with their event listeners. HTML5 Canvas documents' JavaScript plays there too.</p>
 
 <h2 id="where-scripts-go">Where scripts go</h2>
 
@@ -57,8 +57,8 @@
 
 <ul>
   <li><strong>Code hints.</strong> Type a dot and what can follow it is offered: a clip's methods and properties, <code>MouseEvent.</code>'s events, <code>Key.</code>'s keys. <kbd>Ctrl</kbd>+<kbd>Space</kbd> offers every word that fits what you have begun, the instance names on the timeline among them. Arrow to one and press <kbd>Enter</kbd> or <kbd>Tab</kbd>; <kbd>Esc</kbd> closes them.</li>
-  <li><strong>Snippets</strong> puts in ready-made code for what movies often do: stop at a frame, go to a frame on a click, show or hide, drag and drop, move with the arrow keys, count clicks in a text field, play a library sound. Those for ActionScript 2 go in a button's or clip's script; those for ActionScript 3 in a frame's. A snippet that works on an instance asks which.</li>
-  <li><strong>Target</strong> (Insert Target Path) lists the named movie clips and buttons the script can reach, those inside them too, and types the path to the one you pick at the caret: <code>this.hat.bow</code>, or from the root (<code>_root.hat.bow</code>) for a script on a scene's timeline. Only instances with a name are listed.</li>
+  <li><strong>Snippets</strong> puts in ready-made code for what movies often do: stop at a frame, go to a frame on a click, show or hide, drag and drop, move with the arrow keys, count clicks in a text field, play a library sound. Those for ActionScript 2 go in a button's or clip's script; those for ActionScript 3, and the JavaScript ones for <a href="#canvas">HTML5 Canvas</a> documents, in a frame's. A snippet that works on an instance asks which.</li>
+  <li><strong>Target</strong> (Insert Target Path) lists the named movie clips and buttons the script can reach, those inside them too, and types the path to the one you pick at the caret: <code>this.hat.bow</code>, or from the root (<code>_root.hat.bow</code>, or <code>exportRoot.hat.bow</code> in an HTML5 Canvas document) for a script on a scene's timeline. Only instances with a name are listed.</li>
   <li><strong>Find</strong> (<kbd>Ctrl</kbd>+<kbd>F</kbd>) finds, and <kbd>Ctrl</kbd>+<kbd>H</kbd> replaces. <kbd>Ctrl</kbd>+<kbd>G</kbd> goes to a line, and <kbd>Ctrl</kbd>+<kbd>/</kbd> comments the selected lines out or back in.</li>
   <li><kbd>Tab</kbd> and <kbd>Shift</kbd>+<kbd>Tab</kbd> indent and outdent the selected lines. A new line keeps the indent, one step deeper after an opening brace, and a closing brace steps back.</li>
 </ul>
@@ -122,6 +122,22 @@
 </ul>
 
 <p>A class that does not compile shows its file and line in the Output panel, as a frame script does.</p>
+
+<h2 id="canvas">HTML5 Canvas JavaScript</h2>
+
+<p>An HTML5 Canvas document's scripts are JavaScript, written for CreateJS, the library its published web page plays with. Make one with <span class="menu-path">File &rsaquo; New</span>, choosing <strong>HTML5 Canvas</strong> as the Platform; a Canvas document made elsewhere opens as one, and keeps its publish settings when saved. The Actions panel edits and checks its scripts as JavaScript, with JavaScript snippets, the Document Info in the Properties panel shows its Platform, and Test Movie runs it:</p>
+
+<ul>
+  <li><strong>Frame scripts</strong> run as their keyframes are reached, on the main timeline and in every movie clip, each as a function of its own: <code>this</code> is the timeline, and what a script declares with <code>var</code> is its own, so keep what later frames need on the timeline (<code>this.score = 0</code>).</li>
+  <li><strong>Timelines.</strong> <code>stop()</code>, <code>play()</code>, <code>gotoAndPlay()</code> and <code>gotoAndStop()</code> by frame number or label. Frames count from 0 in JavaScript: <code>this.gotoAndStop(0)</code> goes to the first frame. <code>currentFrame</code> (from 0 too), <code>totalFrames</code>, <code>currentLabel</code>, <code>labels</code>, <code>paused</code>, and <code>loop = false</code> to stop on the last frame.</li>
+  <li><strong>Instances</strong> by name: <code>this.ball</code>, with <code>x</code>, <code>y</code>, <code>rotation</code>, <code>scaleX</code>, <code>scaleY</code>, <code>alpha</code>, <code>visible</code>, <code>name</code>, <code>parent</code>, <code>children</code>, <code>mouseEnabled</code> and <code>cursor = "pointer"</code> (a hand over it); <code>localToGlobal</code>, <code>globalToLocal</code>, <code>getBounds</code> and <code>hitTest</code>. Text fields: <code>this.score_txt.text = "Score: " + score</code>. <code>exportRoot</code> is the main timeline and <code>stage</code> the stage, with <code>mouseX</code>, <code>mouseY</code> and <code>canvas.width</code>.</li>
+  <li><strong>Events.</strong> <code>addEventListener</code>, <code>removeEventListener</code>, <code>on()</code> (with its scope, once and data) and <code>off()</code>, and <code>dispatchEvent</code> for events of your own. Clips hear <code>click</code>, <code>dblclick</code>, <code>mousedown</code>, <code>mouseup</code>, <code>mouseover</code>, <code>mouseout</code>, <code>rollover</code>, <code>rollout</code>, <code>pressmove</code>, <code>pressup</code> and <code>tick</code>; the stage <code>stagemousedown</code>, <code>stagemouseup</code> and <code>stagemousemove</code>; <code>window</code> and <code>document</code> hear <code>keydown</code> and <code>keyup</code>. Mouse events go up from the clip under the pointer to the main timeline, and <code>stopPropagation()</code> stops them. <code>function () { ... }.bind(this)</code> works as in a browser.</li>
+  <li><strong>Time.</strong> <code>createjs.Ticker</code> (<code>framerate</code>, <code>getTicks()</code>, <code>getTime()</code> and its <code>tick</code> event); <code>createjs.Tween.get(this.ball).to({x: 300}, 1000, createjs.Ease.quadOut)</code>, with <code>wait</code>, <code>call</code>, <code>set</code> and <code>loop</code>, and the <code>createjs.Ease</code> curves; <code>setTimeout</code> and <code>setInterval</code>. All of them keep the movie's time.</li>
+  <li><strong>The library.</strong> <code>new lib.Ball()</code> makes a clip of a library symbol, by its linkage or its name, and <code>addChild</code> puts it on a timeline. <code>createjs.Sound.play("linkage")</code> plays a library sound.</li>
+  <li><code>console.log()</code> and <code>alert()</code> write to the Output panel, as <code>trace()</code> does.</li>
+</ul>
+
+<p>What Test Movie does not have yet, such as drawing from scripts (<code>createjs.Shape</code> and <code>Graphics</code>), new <code>Text</code> and <code>Bitmap</code> objects, filters and caching, says so in the Output panel when a script asks for it: that script stops there, and the movie plays on. A script that runs for more than five seconds (a loop that never ends) is stopped the same way.</p>
 
 <h2 id="games">What games use</h2>
 

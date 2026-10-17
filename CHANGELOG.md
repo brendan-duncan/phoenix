@@ -2,6 +2,10 @@
 
 What changed in each release of Phoenix, newest first.
 
+## Unreleased
+
+- HTML5 Canvas documents: make one with File > New (Platform), open and save them with their publish settings kept, and play their JavaScript in Test Movie with CreateJS's timelines, mouse and key events, Ticker, Tween, setTimeout, `console.log` and `alert`; the Actions panel checks their scripts as JavaScript
+
 ## 0.16.1
 
 - Parented layers from Animate files play as Animate shows them: a child turns with its parent but keeps its own size, so arms and legs rigged with layer parenting no longer shrink or flip
