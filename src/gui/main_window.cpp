@@ -163,6 +163,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <numeric>
 #include <optional>
 #include <algorithm>
 
@@ -9297,7 +9298,25 @@ bool MainWindow::exportSwf(const QString& path, const QSize& size, QString& erro
         return false;
     }
     _swfNotes.clear();
-    const int frames = std::max(1, _phoenixView->frameCount());
+    // The movie with its structure (movie clips, buttons, names, scripts)
+    // has every scene in a row; unless Phoenix draws something there a
+    // player cannot: then the scene shown, as frames of shapes.
+    const std::string flat = fla::swfmovie::unstructured(*document);
+    const bool structured = flat.empty();
+    std::vector<int> sceneLengths;
+    if (structured)
+        for (const fla::Timeline* scene : document->timelines)
+        {
+            int length = 1;
+            for (const fla::Layer* layer : scene ? scene->layers : std::vector<fla::Layer*>())
+                if (layer)
+                    length = std::max(length, fla::timeline::layerEnd(*layer));
+            if (scene)
+                sceneLengths.push_back(length);
+        }
+    const int frames = structured && !sceneLengths.empty()
+        ? std::accumulate(sceneLengths.begin(), sceneLengths.end(), 0)
+        : std::max(1, _phoenixView->frameCount());
     swf::Writer writer(size.width(), size.height(), document->frameRate,
         swf::Color{document->backgroundColor[0], document->backgroundColor[1], document->backgroundColor[2], 255});
     // Shapes and bitmaps written once and placed in every frame they show in.
@@ -9309,8 +9328,24 @@ bool MainWindow::exportSwf(const QString& path, const QSize& size, QString& erro
     bool streaming = false;
     if (_timelineAudio && publish.soundCompression != "none")
     {
-        // Event, start and stop sounds go in as events (below), streams mixed.
-        const std::vector<float> mixed = _timelineAudio->mixdown(0, frames - 1, false);
+        // Event, start and stop sounds go in as events (below), streams mixed:
+        // every scene's in a row for the movie with its structure, as it
+        // plays them.
+        std::vector<float> mixed;
+        if (structured && sceneLengths.size() > 1)
+        {
+            fla::Document* scenes = _flaDocument->document;
+            const int shown = scenes->currentSceneIndex();
+            for (size_t i = 0; i < sceneLengths.size(); ++i)
+            {
+                scenes->setCurrentScene(static_cast<int>(i));
+                const std::vector<float> part = _timelineAudio->mixdown(0, sceneLengths[i] - 1, false);
+                mixed.insert(mixed.end(), part.begin(), part.end());
+            }
+            scenes->setCurrentScene(shown);
+        }
+        else
+            mixed = _timelineAudio->mixdown(0, frames - 1, false);
         const bool audible = std::any_of(mixed.begin(), mixed.end(), [](float sample) { return sample != 0.0f; });
         if (audible)
         {
@@ -9346,34 +9381,31 @@ bool MainWindow::exportSwf(const QString& path, const QSize& size, QString& erro
             writer.soundStream(sound.codec, sound.rate, sound.stereo, sound.samplesPerFrame, sound.latency);
         }
     }
-    // Event, start and stop sounds, the scene's and its movie clips': each
-    // sound defined once (DefineSound), as its library item or the Publish
-    // Settings say, and started on its frame (StartSound).
+    // Event, start and stop sounds: each sound defined once (DefineSound),
+    // as its library item or the Publish Settings say, and started on its
+    // frame (StartSound): on the timeline it is on in the movie with its
+    // structure, so a clip stopped starts none; else the scene's and its
+    // movie clips' on the scene's frames.
     fla::SwfEventSounds events(*document, publish,
         [](const std::vector<float>& samples, int rate, int channels, int kbps, std::vector<uint8_t>& mp3) {
             QString mp3Error;
             return MovieExport::canEncodeMp3() && MovieExport::encodeMp3(samples, rate, channels, kbps, mp3, mp3Error);
         });
-    events.define(writer, frames);
-    if (events.mp3Missing())
-        statusBar()->showMessage("MP3 is not available here: the SWF's event sounds are ADPCM.", 6000);
+    if (!structured)
+        events.define(writer, frames);
     QProgressDialog progress("Exporting SWF...", "Cancel", 0, frames, this);
     progress.setWindowModality(Qt::WindowModal);
     progress.setMinimumDuration(400);
-    // This frame's part of the soundtrack and its event sounds, for frame
-    // \a frame of the scene.
+    // This frame's part of the soundtrack and, in the movie of frames, its
+    // event sounds, for frame \a frame of the movie.
     const auto sounds = [&](int frame) {
         if (streaming && frame >= 0 && static_cast<size_t>(frame) < sound.blocks.size())
             writer.soundBlock(sound.blocks[static_cast<size_t>(frame)]);
-        if (frame >= 0 && frame < frames)
+        if (!structured && frame >= 0 && frame < frames)
             events.frame(writer, frame);
     };
 
-    // The movie with its structure (movie clips, buttons, names, scripts)
-    // unless Phoenix draws something there a player cannot: then frames of
-    // shapes, as Phoenix draws them, with no scripts.
-    const std::string flat = fla::swfmovie::unstructured(*document);
-    if (flat.empty())
+    if (structured)
     {
         SwfViewDrawer drawer(*_phoenixView, art);
         fla::swfmovie::Options options;
@@ -9406,17 +9438,19 @@ bool MainWindow::exportSwf(const QString& path, const QSize& size, QString& erro
         };
         options.scaleX = document->width > 0 ? size.width() / document->width : 1.0;
         options.scaleY = document->height > 0 ? size.height() / document->height : 1.0;
+        options.eventSound = [&](const fla::Frame& key, int& id, swf::SoundInfo& info) {
+            return events.keySound(writer, key, id, info);
+        };
         fla::swfmovie::Movie movie(*document, writer, drawer, options);
-        const int start = movie.sceneStart(document->currentScene());
         bool cancelled = false;
         movie.write([&](int frame) {
-            progress.setValue(std::clamp(frame - start, 0, frames));
+            progress.setValue(std::clamp(frame, 0, frames));
             if (progress.wasCanceled())
             {
                 cancelled = true;
                 return false;
             }
-            sounds(frame - start);
+            sounds(frame);
             return true;
         });
         if (cancelled)
@@ -9453,6 +9487,8 @@ bool MainWindow::exportSwf(const QString& path, const QSize& size, QString& erro
         }
     }
     progress.setValue(frames);
+    if (events.mp3Missing())
+        statusBar()->showMessage("MP3 is not available here: the SWF's event sounds are ADPCM.", 6000);
     if (!_swfNotes.isEmpty())
         statusBar()->showMessage(_swfNotes.size() == 1 ? _swfNotes.front()
                                                        : QString("%1 (and %2 more)").arg(_swfNotes.front()).arg(_swfNotes.size() - 1),
