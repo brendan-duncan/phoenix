@@ -2,6 +2,10 @@
 
 What changed in each release of Phoenix, newest first.
 
+## Unreleased
+
+- HTML panels that ask for Node.js get it: `require` of their own files and packages, `fs`, `path`, `child_process`, `http` and `https`, `events`, `Buffer`, `zlib`, `crypto` and more, written into Phoenix; `cep.process` runs programs for any panel
+
 ## 0.17.1
 
 - Publish Settings is laid out in two columns, where and what to publish beside the formats' options, so it fits a laptop's screen

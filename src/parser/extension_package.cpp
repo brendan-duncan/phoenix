@@ -535,8 +535,8 @@ bool install(const std::string& path, const std::string& configFolder, const std
         for (const Package::Panel& panel : package.panels)
             nodeJs = nodeJs || panel.nodeJs;
         if (nodeJs)
-            notes.push_back("Its panels ask for Node.js, which Phoenix's panels do not have; the parts of them that "
-                            "use it will not work.");
+            notes.push_back("Its panels ask for Node.js: Phoenix gives them Node's modules for files, processes, "
+                            "events and the web, but not native add-ons, servers or sockets.");
     }
     if (flashPanels)
         notes.push_back("Its SWF panels and effects are kept, but Phoenix does not run them; its JSFL commands and "

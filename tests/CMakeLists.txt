@@ -137,7 +137,7 @@ endif()
 
 if(PHOENIX_TESTS_HAVE_JSFL)
     list(APPEND TEST_SOURCES test_jsfl.cpp test_jsfl_e4x.cpp test_jsfl_xul.cpp test_jsfl_extensions.cpp test_jsfl_document.cpp
-        test_jsfl_native.cpp)
+        test_jsfl_native.cpp test_cep_node.cpp)
 endif()
 
 # Playing movies with their scripts, and publishing them, with libas3 in the
