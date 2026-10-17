@@ -2,6 +2,10 @@
 
 What changed in each release of Phoenix, newest first.
 
+## 0.16.0
+
+- Updates and downloads now come through phoenixanimate.com, and Help > Phoenix Help opens the guide there
+
 ## 0.15.1
 
 - Node graphs, adjustment layers and layer modes work on the stage alone in the view, as in an export: Vignette, ramps, wipes and other effects that go by the edges follow the stage's edges, not the window's, and art off the stage shows without them
