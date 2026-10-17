@@ -17,6 +17,7 @@
 
 #include <QCache>
 #include <QCheckBox>
+#include <QColorDialog>
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QPainter>
@@ -55,6 +56,39 @@
 namespace {
 
 using Attributes = std::vector<std::pair<std::string, std::string>>;
+
+/// A color setting: a text setting its label says is written #RRGGBB, as
+/// effects' colors are.
+bool isColorSetting(const fla::behaviors::ParamSpec& spec)
+{
+    return spec.type == "text" && spec.label.find("#RRGGBB") != std::string::npos;
+}
+
+/// A color setting's label without the #RRGGBB the swatch makes plain:
+/// "Color (#RRGGBB)" is "Color", "Glow color (#RRGGBB, empty for its own)"
+/// is "Glow color (empty for its own)".
+QString colorLabel(const std::string& label)
+{
+    QString text = QString::fromStdString(label);
+    text.replace(" (#RRGGBB)", "");
+    text.replace("(#RRGGBB, ", "(");
+    return text;
+}
+
+QIcon colorSwatch(const QColor& color)
+{
+    QPixmap pixmap(34, 18);
+    pixmap.fill(Qt::transparent);
+    QPainter painter(&pixmap);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    painter.setPen(QPen(theme::color("swatchBorder"), 1.0));
+    painter.setBrush(color.isValid() ? QBrush(color) : QBrush(Qt::NoBrush));
+    painter.drawRoundedRect(QRectF(0.5, 0.5, 33, 17), 4, 4);
+    if (!color.isValid())
+        painter.drawLine(QPointF(4.0, 14.0), QPointF(30.0, 4.0));
+    painter.end();
+    return QIcon(pixmap);
+}
 
 /// Folds a run of changes to the same setting into one step.
 constexpr int kMergeSetting = 7301;
@@ -846,7 +880,8 @@ void BehaviorsPanel::fillSettings()
     {
         // Keyed settings show their value on the frame shown.
         const std::string current = applied.valueAt(spec.name, now, spec.text);
-        const QString label = QString::fromStdString(spec.label);
+        const bool color = isColorSetting(spec);
+        const QString label = color ? colorLabel(spec.label) : QString::fromStdString(spec.label);
         const std::string name = spec.name;
         // The key button: filled with a key on this frame, hollow when keyed
         // on other frames, and plain when not keyed.
@@ -887,6 +922,39 @@ void BehaviorsPanel::fillSettings()
             connect(combo, &QComboBox::currentTextChanged, this,
                 [this, row, name](const QString& text) { setParam(row, name, text.toStdString(), false); });
             addRow(combo);
+        }
+        else if (color)
+        {
+            // A swatch that opens the color picker, and the value to type;
+            // some colors may be left empty.
+            QWidget* holder = new QWidget(_settings);
+            QHBoxLayout* line = new QHBoxLayout(holder);
+            line->setContentsMargins(0, 0, 0, 0);
+            QToolButton* swatch = new QToolButton(holder);
+            swatch->setAutoRaise(true);
+            swatch->setIconSize(QSize(34, 18));
+            swatch->setIcon(colorSwatch(QColor(QString::fromStdString(current))));
+            swatch->setToolTip("Pick the color");
+            QLineEdit* field = new QLineEdit(QString::fromStdString(current), holder);
+            field->setPlaceholderText("#RRGGBB");
+            line->addWidget(swatch);
+            line->addWidget(field, 1);
+            connect(field, &QLineEdit::editingFinished, this, [this, row, name, field, swatch]() {
+                const QString typed = field->text().trimmed();
+                swatch->setIcon(colorSwatch(QColor(typed)));
+                setParam(row, name, typed.toStdString(), false);
+            });
+            connect(swatch, &QToolButton::clicked, this, [this, row, name, field, swatch, label]() {
+                const QColor was(field->text().trimmed());
+                const QColor chosen = QColorDialog::getColor(was.isValid() ? was : QColor(Qt::white), this, label);
+                if (!chosen.isValid())
+                    return;
+                const QString hex = chosen.name().toUpper();
+                field->setText(hex);
+                swatch->setIcon(colorSwatch(chosen));
+                setParam(row, name, hex.toStdString(), false);
+            });
+            addRow(holder);
         }
         else if (spec.type == "object" || spec.type == "controller" || spec.type == "text")
         {

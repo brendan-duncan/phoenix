@@ -5,6 +5,7 @@ What changed in each release of Phoenix, newest first.
 ## Unreleased
 
 - Parented layers from Animate files play as Animate shows them: a child turns with its parent but keeps its own size, so arms and legs rigged with layer parenting no longer shrink or flip
+- Color settings of effects, text animators and behaviors have a swatch that opens the color picker, beside the value to type
 
 ## 0.16.0
 
