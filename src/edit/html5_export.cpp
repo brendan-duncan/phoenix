@@ -7,6 +7,7 @@
 #include "layer_commands.h"
 #include "motion_object.h"
 #include "swf_actionscript3.h"
+#include "script_edit.h"
 #include "three_d.h"
 #include "timeline_edit.h"
 
@@ -385,8 +386,10 @@ public:
         // shows them, as scripts make them by name.
         if (_document.symbolList)
             for (const Symbol* symbol : _document.symbolList->symbols)
-                if (symbol && (_options.allSymbols || !attributeOf(symbol->extraAttributes, "linkageClassName").empty()))
+                if (symbol && (_options.allSymbols || !attributeOf(symbol->extraAttributes, "linkageClassName").empty() ||
+                                  (_options.actionScript2 && !attributeOf(symbol->extraAttributes, "linkageIdentifier").empty())))
                     indexOf(symbol);
+        _timelineName.clear();
         const std::string root = timelineJson(scenes, true);
         std::vector<std::string> symbols;
         while (symbols.size() < _symbols.size())
@@ -453,6 +456,10 @@ private:
         const std::string linkage = attributeOf(symbol.extraAttributes, "linkageClassName");
         if (!linkage.empty())
             out += ",\"linkage\":" + quoted(linkage);
+        // ActionScript 2's name for attachMovie.
+        const std::string identifier = attributeOf(symbol.extraAttributes, "linkageIdentifier");
+        if (!identifier.empty() && _options.actionScript2)
+            out += ",\"ident\":" + quoted(identifier);
         const std::string base = attributeOf(symbol.extraAttributes, "linkageBaseClass");
         if (!base.empty())
             out += ",\"base\":" + quoted(base);
@@ -460,6 +467,7 @@ private:
             out += ",\"scale9\":[" + number(symbol.scaleGridLeft) + "," + number(symbol.scaleGridTop) + "," +
                 number(symbol.scaleGridRight) + "," + number(symbol.scaleGridBottom) + "]";
         std::vector<const Timeline*> timelines;
+        _timelineName = symbol.name;
         if (!symbol.timelines.empty() && symbol.timelines.front())
             timelines.push_back(symbol.timelines.front());
         out += ",\"timeline\":" + timelineJson(timelines, false) + "}";
@@ -582,6 +590,11 @@ private:
                         std::string& joined = code[at];
                         joined += (joined.empty() ? "" : "\n") + frame->actionScript->code;
                     }
+                    else if (_options.actionScript2)
+                        _options.actionScript2->frames.push_back({_timelineName, at, frame->actionScript->code,
+                            scene ? timeline.name : std::string(),
+                            (_timelineName.empty() ? timeline.name : _timelineName) + ", layer " + layer->name + ", frame " +
+                                std::to_string(frame->index + 1)});
                     else
                         actionScript = true;
                 }
@@ -711,6 +724,12 @@ private:
             }
             else if (!instance.name.empty())
                 out += ",\"n\":" + quoted(instance.name);
+            if (type != SymbolType::Graphic && _options.actionScript2)
+            {
+                const int handlers = instanceScriptId(original ? *original : element, instance);
+                if (handlers >= 0)
+                    out += ",\"h\":" + std::to_string(handlers);
+            }
             const std::string color = colorJson(instance.colorTransform);
             if (!color.empty())
                 out += ",\"ct\":" + color;
@@ -797,6 +816,27 @@ private:
         return out + masks() + "}";
     }
 
+    /// The id of an instance's on() and onClipEvent() handlers, or -1
+    /// when it has none.
+    int instanceScriptId(const Element& element, const SymbolInstance& instance)
+    {
+        const auto known = _scriptIds.find(&element);
+        if (known != _scriptIds.end())
+            return known->second;
+        const std::string code = scripts::instanceScript(element);
+        int id = -1;
+        if (!code.empty())
+        {
+            id = static_cast<int>(_options.actionScript2->instances.size());
+            const std::string what = instance.symbolType == SymbolType::Button ? "button " : "movie clip ";
+            _options.actionScript2->instances.push_back({id, code,
+                (_timelineName.empty() ? std::string("main timeline") : _timelineName) + ", " + what +
+                    (instance.name.empty() ? instance.libraryItemName : instance.name)});
+        }
+        _scriptIds[&element] = id;
+        return id;
+    }
+
     int artIndex(const Element& element)
     {
         const auto known = _artByElement.find(&element);
@@ -848,6 +888,12 @@ private:
             out += ",\"max\":" + std::to_string(std::atoi(maxChars.c_str()));
         if (text.autoExpand)
             out += ",\"auto\":\"left\"";
+        // A variable it shows (ActionScript 1 and 2), and whether as HTML.
+        const std::string variable = attributeOf(text.extraAttributes, "variableName");
+        if (!variable.empty())
+            out += ",\"var\":" + quoted(variable);
+        if (attributeOf(text.extraAttributes, "renderAsHTML") == "true")
+            out += ",\"html\":1";
         out += ",\"runs\":[";
         for (size_t i = 0; i < text.runs.size(); ++i)
         {
@@ -899,6 +945,10 @@ private:
     std::vector<std::string> _texts;
     std::map<std::string, int> _textIndex;
     std::map<const RawElement*, swfmovie::Component> _components;
+    /// The timeline being walked: "" for the main one, else its symbol's
+    /// name; and the ids of instances' handlers (ActionScript 2).
+    std::string _timelineName;
+    std::map<const Element*, int> _scriptIds;
 };
 
 } // namespace

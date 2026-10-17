@@ -56,5 +56,8 @@ QByteArray actionScript(const fla::Document& document, const QString& source, co
     QStringList& notes);
 /// The CreateJS layer HTML5 Canvas documents' scripts run on.
 QByteArray createJs();
+/// What ActionScript 1 and 2 translated to JavaScript runs on: libas3's
+/// avm1.js, then the runtime's as2.js (phoenix-as2.js beside the page).
+QByteArray actionScript2Runtime();
 
 } // namespace Html5Publish

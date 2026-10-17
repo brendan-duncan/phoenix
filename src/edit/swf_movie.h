@@ -83,6 +83,12 @@ std::string unstructured(const Document& document);
 /// Whether \a document has scripts: frame scripts or handlers on instances.
 bool hasScripts(const Document& document);
 
+/// The ActionScript 2 classes \a document's scripts and linkage reach, by
+/// qualified name, with their sources: the names its scripts mention that
+/// \a findClass finds on the class path, and the classes those mention.
+std::map<std::string, std::string> actionScript2Classes(const Document& document,
+    const std::function<std::optional<std::string>(const std::string& qualifiedName)>& findClass);
+
 /// A dynamic or input text field's instance name, or empty.
 std::string fieldName(const StaticText& text);
 
