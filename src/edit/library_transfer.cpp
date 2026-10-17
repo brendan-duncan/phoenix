@@ -3,6 +3,7 @@
 #include "element_clone.h"
 #include "library_commands.h"
 #include "library_media.h"
+#include "paint_brushes.h"
 
 #include "../data/bitmap.h"
 #include "../data/bitmap_fill.h"
@@ -236,6 +237,9 @@ public:
     /// A target symbol and a symbol holding the contents it swaps with.
     std::vector<std::pair<Symbol*, Symbol*>> _symbolSwaps;
     std::vector<std::pair<Bitmap*, Bitmap*>> _bitmapSwaps;
+    /// The paint brushes the copied symbols draw with that the target
+    /// lacked, added with them.
+    CommandPtr _brushes;
 
     void redo() override { apply(true); }
     void undo() override { apply(false); }
@@ -276,6 +280,13 @@ private:
         if (add == _applied)
             return;
         _applied = add;
+        if (_brushes)
+        {
+            if (add)
+                _brushes->redo();
+            else
+                _brushes->undo();
+        }
         if (!_target.symbolList)
             _target.symbolList = new SymbolList(&_target);
         SymbolList& library = *_target.symbolList;
@@ -520,6 +531,29 @@ CommandPtr copyItems(Document& target, const Document& source, const std::vector
         *renamedOut = renamed;
     if (!any)
         return nullptr;
+    // The paint brushes the copies' strokes draw with come along, each
+    // once by its guid, the strokes pointed at them as the target numbers
+    // them.
+    std::vector<Symbol*> copies = command->_symbols;
+    for (const auto& swap : command->_symbolSwaps)
+        copies.push_back(swap.second);
+    std::vector<const Element*> drawn;
+    for (Symbol* copy : copies)
+        walk(*copy, [&drawn](Element& element) { drawn.push_back(&element); }, [](Frame&) {});
+    const std::vector<PaintBrushDefinition> brushes = paintBrushesFor(source, drawn);
+    if (!brushes.empty())
+    {
+        std::map<int, int> indexes;
+        command->_brushes = adoptPaintBrushes(target, brushes, indexes);
+        for (Symbol* copy : copies)
+            walk(*copy,
+                [&indexes](Element& element) {
+                    // Groups' members are walked to on their own.
+                    if (element.elementType() != Element::Type::Group)
+                        remapPaintBrushes(element, indexes);
+                },
+                [](Frame&) {});
+    }
     // The folders what came in sits in, that the target lacks.
     std::set<std::string> folders;
     const auto addFolders = [&](const std::string& name) {
