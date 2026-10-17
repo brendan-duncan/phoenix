@@ -2,6 +2,10 @@
 
 What changed in each release of Phoenix, newest first.
 
+## Unreleased
+
+- SWF export and Publish keep the movie's structure and its ActionScript 1 and 2: movie clips, buttons, instance names, masks, labels and text fields go in as they are, and frame scripts, button and clip handlers and ActionScript 2 classes are compiled in, so published movies run in any player
+
 ## 0.16.1
 
 - Parented layers from Animate files play as Animate shows them: a child turns with its parent but keeps its own size, so arms and legs rigged with layer parenting no longer shrink or flip
