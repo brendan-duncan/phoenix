@@ -4,6 +4,7 @@ What changed in each release of Phoenix, newest first.
 
 ## Unreleased
 
+- Publish to HTML5: a web page that plays the movie in any current browser with Phoenix's own player, no SWF needed, with its symbols, tweens, masks, filters, blend modes, text, bitmaps and sounds; HTML5 Canvas documents' scripts run with CreateJS's API. Also from the command line with `--out page.html`
 - The HTML page Publish writes for an SWF movie plays it in today's browsers with Ruffle, loaded from the web
 - HTML5 Canvas documents: make one with File > New (Platform), open and save them with their publish settings kept, and play their JavaScript in Test Movie with CreateJS's timelines, mouse and key events, Ticker, Tween, setTimeout, `console.log` and `alert`; the Actions panel checks their scripts as JavaScript
 
