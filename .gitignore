@@ -16,3 +16,6 @@ tools/deploy_site.ini
 
 # Working copies Claude Code makes for its agents
 .claude/worktrees/
+
+# Local analytics collector data (database, geo.db)
+analytics/collector/data/
