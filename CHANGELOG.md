@@ -2,6 +2,10 @@
 
 What changed in each release of Phoenix, newest first.
 
+## Unreleased
+
+- SWF movies with ActionScript 1 and 2 run their scripts when opened: Test Movie and `Phoenix play` run the compiled frame actions, `#initclip` actions, button `on()` and movie clip `onClipEvent()` handlers, with prototypes, ActionScript 2 classes, `Object.registerClass`, `onEnterFrame` and `setInterval`
+
 ## 0.17.1
 
 - Publish Settings is laid out in two columns, where and what to publish beside the formats' options, so it fits a laptop's screen

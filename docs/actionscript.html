@@ -133,6 +133,8 @@
   <li>Saved as a document, the movie keeps its compiled code (in <code>bin/abc</code>) and still runs it in Test Movie; the code itself cannot be edited.</li>
 </ul>
 
+<p>A movie published with ActionScript 1 or 2 keeps that compiled too, and Test Movie and <code>Phoenix play</code> run it as a player would: each frame's actions when the frame is reached, a symbol's <code>#initclip</code> actions before the frame that first needs it, buttons' <code>on()</code> handlers (key presses among them) and movie clips' <code>onClipEvent()</code> handlers. The frames that had scripts carry a comment saying so, as the code cannot be turned back into source. Prototypes, <code>Object.registerClass</code>, ActionScript 2 classes, <code>onEnterFrame</code>, <code>setInterval</code> and the oldest actions (<code>tellTarget</code>, slash paths such as <code>/hat:size</code>, <code>getProperty</code>) all run; names are found whatever their case in movies published for player 6 and before, as they were then. Loading other movies and variables (<code>loadMovie</code>, <code>loadVariables</code>) is not done.</p>
+
 <h2 id="canvas">HTML5 Canvas JavaScript</h2>
 
 <p>An HTML5 Canvas document's scripts are JavaScript, written for CreateJS, the library its published web page plays with. Make one with <span class="menu-path">File &rsaquo; New</span>, choosing <strong>HTML5 Canvas</strong> as the Platform; a Canvas document made elsewhere opens as one, and keeps its publish settings when saved. The Actions panel edits and checks its scripts as JavaScript, with JavaScript snippets, the Document Info in the Properties panel shows its Platform, and Test Movie runs it:</p>
@@ -177,7 +179,7 @@
 
 <div class="callout">
   <span class="label">Not yet</span>
-  <p>Loading other movies (SWF files), video, the microphone and camera, sockets, <code>ByteArray</code>'s <code>readObject</code> and <code>writeObject</code>, and the <code>DataGrid</code>, <code>TileList</code>, <code>ScrollPane</code>, <code>UILoader</code> and <code>ProgressBar</code> components. Published SWF files carry their ActionScript compiled, ActionScript 3 with the same classes Test Movie loads (see <a href="export.html#swf">SWF movies</a>). ActionScript 1 and 2 compiled into a movie you open does not run in Test Movie (its artwork plays).</p>
+  <p>Loading other movies (SWF files), video, the microphone and camera, sockets, <code>ByteArray</code>'s <code>readObject</code> and <code>writeObject</code>, and the <code>DataGrid</code>, <code>TileList</code>, <code>ScrollPane</code>, <code>UILoader</code> and <code>ProgressBar</code> components. Published SWF files carry their ActionScript compiled, ActionScript 3 with the same classes Test Movie loads (see <a href="export.html#swf">SWF movies</a>).</p>
 </div>
 
 </article>
