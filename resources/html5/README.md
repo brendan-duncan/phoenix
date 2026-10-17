@@ -21,11 +21,11 @@ For a page `movie.html`:
 | File | What it is |
 |---|---|
 | `movie.html` | The page: a `<div id="phoenix-stage">`, the scripts, and `phoenix.start(...)` |
-| `phoenix.js` | The runtime: this folder's files joined in this order: `core.js`, `geom.js`, `events.js`, `display.js`, `graphics.js`, `filters.js`, `render.js`, `bitmap.js`, `timeline.js`, `text.js`, `media.js`, `utils.js`, `player.js` |
+| `phoenix.js` | The runtime: libas3's `as3.js` (see "Translated ActionScript"), then this folder's files joined in this order: `core.js`, `geom.js`, `events.js`, `display.js`, `graphics.js`, `filters.js`, `render.js`, `bitmap.js`, `timeline.js`, `text.js`, `media.js`, `utils.js`, `player.js` |
 | `phoenix-createjs.js` | `createjs.js`, for an HTML5 Canvas document only: CreateJS over the runtime, for the document's JavaScript frame scripts |
 | `movie.content.js` | The movie: `phoenix.content({...})` with its symbols, timelines, shapes and text (see "Content") |
 | `movie_assets/` | Its pictures (`imageN.png` or `.jpg`) and sounds (`soundN.mp3`, or `.wav` where Phoenix has no MP3 encoder) |
-| `movie.as.js` | Not written by Publish: the movie's ActionScript translated to JavaScript, which the page loads when it is there (see "Translated ActionScript") |
+| `movie.as.js` | An ActionScript 3 movie's scripts translated to JavaScript (see "Translated ActionScript"), and `movie.as.js.map`, its source map back to the `.as` files and frames. Not there for a movie without ActionScript, whose page asks for none |
 
 The page works from a web server or opened from the disk. From the disk,
 sounds play through audio elements, as Web Audio cannot read local files,
@@ -47,7 +47,8 @@ phoenix.start({container: "phoenix-stage", scale: "fit", actionscript: "movie.as
 - `scale`: `"fit"` (the stage fills the container, keeping its shape, as
   the stage's `scaleMode` asks) or `"none"` (the stage at its own size).
 - `actionscript`: a translated ActionScript file to load before the movie
-  starts (`false` for none). A file that is not there is no error.
+  starts (left out or `false` for none). A file that is not there is no
+  error.
 - `frame`: play to that frame (from 1) at once and hold it there.
 - `trace`: an element (or id) to write `trace` output, console output and
   errors into.
@@ -57,13 +58,15 @@ The page's address can ask for the same things: `#frame=12`, `#trace`,
 with Phoenix's render of the same frame in a headless browser.
 
 `phoenix.player` has `tick()` (one frame and draw), `pause()`, `play()`,
-`frame`, `stage`, `root`, `draw()` and `errors()`.
+`frame`, `stage`, `root`, `draw()`, `errors()` and `pagePoint(x, y)` (where
+a point of the stage is on the page, for tests that send the pointer
+there).
 
 ## The runtime
 
 | File | Holds |
 |---|---|
-| `core.js` | The package tree (`phoenix.ns`), class registration (`phoenix.defineClass`), `trace`, `getTimer` |
+| `core.js` | The package tree (`phoenix.ns`, as3.js's), class registration (`phoenix.defineClass`, `phoenix.define` for functions), `trace`, `getTimer`, `phoenix.unsupported` |
 | `geom.js` | `Point`, `Rectangle`, `Matrix`, `ColorTransform`, `Transform` |
 | `events.js` | `EventDispatcher` (capture, target and bubble phases; priorities; weak references accepted), `Event`, `MouseEvent`, `KeyboardEvent`, `FocusEvent`, `TextEvent`, `ErrorEvent`, `IOErrorEvent`, `TimerEvent`, `ProgressEvent` |
 | `display.js` | `DisplayObject`, `InteractiveObject`, `DisplayObjectContainer`, `Sprite`, `Shape`, `Stage`, `LoaderInfo` and the constant classes (`BlendMode`, `StageScaleMode`...) |
@@ -91,17 +94,65 @@ pixel ratio, so it is sharp on any screen. Vector art is drawn with the
 canvas's paths; a color transform goes into the colors themselves, so
 only filters, masks and blend modes need a layer of their own.
 
-Not there yet: `ByteArray`, `Dictionary` and the other classes of the
-language itself, which belong with the translator; `Loader` for SWF files;
-3D (`z`, `rotationX`, `rotationY` are accepted and ignored); `Video`;
-`DisplacementMapFilter` and shaders; text selection with the pointer.
+The language's own classes (`int` and `uint`, `Vector`, `Dictionary`,
+`ByteArray`, `XML`, the errors, `is` and `as`, `getDefinitionByName`,
+`getQualifiedClassName`, `describeType`) are as3.js's, which comes first in
+`phoenix.js`; the runtime keeps `flash.utils`' timers and `getTimer` so that
+what they call is reported and the stage draws after it.
+
+Not there yet: `Loader` for SWF files; 3D (`z`, `rotationX`, `rotationY`,
+`matrix3D`); `Video`; `DisplacementMapFilter` and shaders; text selection
+with the pointer. What the runtime does not do is said once in the console
+(`phoenix.unsupported(what, consequence)`, "Phoenix HTML5: ..."), and a
+`flash.*` or `fl.*` class it does not have at all is said when translated
+code first asks for it; using it then throws ReferenceError #1065, as a
+player without the class would.
 
 ## Translated ActionScript
 
-A translated file calls `phoenix.actionscript(module)` once or more. Each
-`module(as3)` runs after the movie's content has loaded and before its
-main timeline is made, so the classes it registers are the ones the
-timelines make their objects with.
+Publish translates an ActionScript 3 movie's scripts with libas3
+(`as3::js::translate`, from the classes SWF publishing compiles: the
+document class, the classes the library links to and what they reach,
+Phoenix's own `fl.*` components, each timeline with frame scripts as a
+class, the components' inspector parameters) into `movie.as.js`:
+
+```js
+// libas3's bundle: each class defined when first used.
+as3.define("com.studio.Hat", () => { ... class Hat extends MovieClip { ... } ... });
+as3.define("movie_fla.MainTimeline", () => { ... });
+as3.runScripts();
+
+// The movie's classes: its main timeline's, and its symbols'.
+phoenix.actionscript(function (movie) {
+    movie.documentClass(as3.use("movie_fla.MainTimeline"));
+    movie.linkClass("Hat", as3.use("com.studio.Hat"));   // by library name
+});
+//# sourceMappingURL=movie.as.js.map
+```
+
+The translated classes follow libas3's construction protocol, and so do
+the runtime's: a JavaScript constructor only makes the object (a display
+object's symbol and first frame included), and `$construct(...args)` is
+the ActionScript constructor, run for the class actually made; a
+subclass's `super(...)` is `super.$construct(...)`. The runtime's classes
+whose state is their own properties (events, geometry, filters, text
+formats) get a `$construct` that makes one with the arguments and takes
+its properties (`phoenix.adoptClass`, which `phoenix.defineClass` applies);
+`EventDispatcher`, `Bitmap`, `SimpleButton`, `Sound`, `Timer` and
+`URLLoader` have their own. Every class the runtime defines is registered
+with as3.js (`as3.register`), so translated code finds it by name, and
+`getQualifiedClassName` names it.
+
+After the modules run, every library item whose linkage class translated
+code defines (a symbol, a sound, a bitmap) is made as that class, unless a
+module bound the symbol to a class under it (its frame scripts' class).
+
+A translated file (or any other script) calls `phoenix.actionscript(module)`
+once or more. Each `module(as3)` runs after the movie's content has loaded
+and before its main timeline is made, so the classes it registers are the
+ones the timelines make their objects with. The object it is given has
+as3.js's `as3` as its prototype, so code inside a module that names its
+parameter `as3` still finds `as3.define` and `as3.use`.
 
 ```js
 phoenix.actionscript(function (as3) {
@@ -188,8 +239,9 @@ How the classes behave, as ActionScript has them:
   (to the console, and to the trace element) and the movie goes on.
 
 The ActionScript top level that is not `flash.*` (`int`, `uint`,
-`Vector`, `XML`, `Dictionary`, `ByteArray`, `is` and `as`, `trace` aside)
-is the translator's to provide.
+`Vector`, `XML`, `Dictionary`, `ByteArray`, `is` and `as`) is as3.js's;
+`trace` from translated code goes through `as3.output`, which the runtime
+sends where its own `trace` goes.
 
 ## Content
 
