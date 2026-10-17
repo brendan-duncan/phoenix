@@ -11,9 +11,11 @@
 #include "../data/symbol_instance.h"
 #include "../data/symbol_list.h"
 #include "../data/timeline.h"
+#include "../edit/canvas_document.h"
 #include "../edit/command_stack.h"
 #include "../edit/frame_commands.h"
 #include "../edit/script_edit.h"
+#include "../play/canvas/scripts.h"
 #include "../play/movie_runtime.h"
 
 #include <QDialog>
@@ -156,6 +158,28 @@ const Snippet kActionScript3Snippets[] = {
         "$instance.addEventListener(Event.ENTER_FRAME, function(event:Event):void {\n    $instance.rotation += 5;\n});\n"},
 };
 
+/// For an HTML5 Canvas document's frames: JavaScript, with CreateJS's API.
+const Snippet kCanvasSnippets[] = {
+    {"Stop at This Frame", "this.stop();\n"},
+    {"Click to Go to a Frame and Stop",
+        "this.$instance.addEventListener(\"click\", function () {\n    this.gotoAndStop(1);\n}.bind(this));\n"},
+    {"Click to Show or Hide",
+        "this.$instance.on(\"click\", function () {\n    this.$instance.visible = !this.$instance.visible;\n}, this);\n"},
+    {"Drag and Drop",
+        "this.$instance.on(\"pressmove\", function (event) {\n"
+        "    var at = this.globalToLocal(event.stageX, event.stageY);\n"
+        "    this.$instance.x = at.x;\n    this.$instance.y = at.y;\n}, this);\n"},
+    {"Count Clicks in a Text Field",
+        "var clicks = 0;\nthis.$instance.on(\"click\", function () {\n"
+        "    clicks++;\n    this.count_txt.text = \"Clicks: \" + clicks;\n}, this);\n"},
+    {"Click to Play a Library Sound",
+        "this.$instance.on(\"click\", function () {\n    createjs.Sound.play(\"sound_linkage\");\n});\n"},
+    {"Every Tick, Turn a Clip", "this.on(\"tick\", function () {\n    this.$instance.rotation += 5;\n});\n"},
+    {"Tween a Clip", "createjs.Tween.get(this.$instance, {loop: true})\n"
+                     "    .to({x: this.$instance.x + 200}, 1000, createjs.Ease.quadInOut)\n"
+                     "    .to({x: this.$instance.x}, 1000, createjs.Ease.quadInOut);\n"},
+};
+
 bool canHoldScript(const fla::Element* element)
 {
     if (!element || element->elementType() != fla::Element::Type::SymbolInstance)
@@ -223,6 +247,8 @@ ActionsPanel::ActionsPanel(const ActionsLinks& links, QWidget* parent)
         std::end(kActionScript2Snippets));
     addSnippets(snippets->addMenu("ActionScript &3 (on a Frame)"), std::begin(kActionScript3Snippets),
         std::end(kActionScript3Snippets));
+    addSnippets(snippets->addMenu("&JavaScript (HTML5 Canvas, on a Frame)"), std::begin(kCanvasSnippets),
+        std::end(kCanvasSnippets));
     snippetsButton->setMenu(snippets);
     bar->addWidget(snippetsButton);
     auto* findButton = new QToolButton(this);
@@ -381,6 +407,12 @@ bool ActionsPanel::stillThere(const Target& target) const
     return target.element && reachable.count(target.element);
 }
 
+bool ActionsPanel::canvas() const
+{
+    const fla::Document* document = _links.document ? _links.document() : nullptr;
+    return document && fla::canvas::isCanvasDocument(*document);
+}
+
 QString ActionsPanel::describe(const Target& target) const
 {
     if (target.kind == Target::Kind::None)
@@ -441,9 +473,11 @@ void ActionsPanel::show(const Target& target)
     else
     {
         _editor->setReadOnly(false);
+        // An HTML5 Canvas document's scripts are JavaScript.
+        _editor->setLanguage(canvas() ? CodeEditor::Language::JavaScript : CodeEditor::Language::ActionScript);
         _editor->setPlaceholderText(target.kind == Target::Kind::Instance
                 ? "on (release) {\n    gotoAndPlay(2);\n}"
-                : "stop();");
+                : canvas() ? "this.stop();" : "stop();");
         const QString code = codeOf(target);
         if (changed)
         {
@@ -517,7 +551,9 @@ void ActionsPanel::check()
     }
     int line = 0;
     std::string message;
-    if (fla::play::checkSyntax(code.toStdString(), line, message))
+    const bool ok = canvas() ? fla::play::canvas::checkSyntax(code.toStdString(), line, message)
+                             : fla::play::checkSyntax(code.toStdString(), line, message);
+    if (ok)
     {
         _editor->setErrorLine(0);
         _status->setText("No syntax errors");
@@ -598,8 +634,10 @@ void ActionsPanel::insertTargetPath()
         layout->addWidget(new QLabel("No movie clip or button here has an instance name yet: name one in the "
                                      "Properties panel to reach it from a script.",
             &dialog));
+    // An HTML5 Canvas movie's main timeline is exportRoot.
+    const QString root = canvas() ? "exportRoot" : "_root";
     auto* relative = new QRadioButton("Relative (this.)", &dialog);
-    auto* absolute = new QRadioButton("Absolute (_root.)", &dialog);
+    auto* absolute = new QRadioButton("Absolute (" + root + ".)", &dialog);
     relative->setChecked(true);
     absolute->setEnabled(onScene);
     if (!onScene)
@@ -621,7 +659,7 @@ void ActionsPanel::insertTargetPath()
     QStringList names;
     for (QTreeWidgetItem* item = tree->currentItem(); item && item != here; item = item->parent())
         names.prepend(item->data(0, Qt::UserRole).toString());
-    names.prepend(absolute->isChecked() ? "_root" : "this");
+    names.prepend(absolute->isChecked() ? root : "this");
     _editor->insertPlainText(names.join('.'));
     focusEditor();
 }

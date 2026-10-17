@@ -125,6 +125,7 @@ NewDocumentDialog::NewDocumentDialog(QWidget* parent)
     , _width(new HotSpinBox(this))
     , _height(new HotSpinBox(this))
     , _frameRate(new QComboBox(this))
+    , _platform(new QComboBox(this))
     , _swatch(new QToolButton(this))
     , _summary(new QLabel(this))
 {
@@ -182,6 +183,11 @@ NewDocumentDialog::NewDocumentDialog(QWidget* parent)
     _swatch->setFixedSize(36, 22);
     _swatch->setToolTip("Stage color");
     form->addRow("Stage color", _swatch);
+    _platform->addItem("ActionScript 3.0");
+    _platform->addItem("HTML5 Canvas");
+    _platform->setToolTip("What the document's scripts are written in: ActionScript, or JavaScript with "
+                          "CreateJS's API for an HTML5 Canvas document");
+    form->addRow("Platform", _platform);
     detailsLayout->addLayout(form);
     _summary->setWordWrap(true);
     _summary->setEnabled(false);
@@ -230,6 +236,7 @@ NewDocumentDialog::NewDocumentDialog(QWidget* parent)
     _stageColor = QColor(settings.value("newDocument/stageColor", "#FFFFFF").toString());
     if (!_stageColor.isValid())
         _stageColor = Qt::white;
+    _platform->setCurrentIndex(settings.value("newDocument/canvas", false).toBool() ? 1 : 0);
     const QList<QListWidgetItem*> found = _categories->findItems(category, Qt::MatchExactly);
     _categories->setCurrentItem(found.isEmpty() ? _categories->item(0) : found.front());
     _applying = true;
@@ -331,5 +338,11 @@ void NewDocumentDialog::accept()
     settings.setValue("newDocument/height", documentHeight());
     settings.setValue("newDocument/frameRate", frameRate());
     settings.setValue("newDocument/stageColor", _stageColor.name());
+    settings.setValue("newDocument/canvas", canvas());
     QDialog::accept();
+}
+
+bool NewDocumentDialog::canvas() const
+{
+    return _platform->currentIndex() == 1;
 }

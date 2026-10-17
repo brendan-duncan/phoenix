@@ -6,6 +6,7 @@
 #include "start_dialog.h"
 #include "stage_controls.h"
 #include "safe_zones_dialog.h"
+#include "../edit/canvas_document.h"
 #include "../edit/motion_blur.h"
 #include "../edit/safe_zones.h"
 #include "tutorial_lesson.h"
@@ -2791,7 +2792,8 @@ void MainWindow::newFile()
     if (dialog.exec() != QDialog::Accepted)
         return;
     makeRoomForDocument();
-    createNewDocument(dialog.documentWidth(), dialog.documentHeight(), dialog.frameRate(), dialog.stageColor());
+    createNewDocument(dialog.documentWidth(), dialog.documentHeight(), dialog.frameRate(), dialog.stageColor(),
+        dialog.canvas());
 }
 
 bool MainWindow::offerRecovery()
@@ -2952,11 +2954,14 @@ void MainWindow::showStartDialog()
     }
 }
 
-void MainWindow::createNewDocument(int width, int height, double frameRate, const QColor& stage)
+void MainWindow::createNewDocument(int width, int height, double frameRate, const QColor& stage, bool canvas)
 {
     fla::FLADocument* document = fla::createEmptyDocument(width, height, frameRate);
     if (document && document->document)
     {
+        // An HTML5 Canvas document: its publish profile says so.
+        if (canvas)
+            fla::canvas::makeCanvasDocument(*document->document, "Untitled");
         document->document->backgroundColor[0] = static_cast<uint8_t>(stage.red());
         document->document->backgroundColor[1] = static_cast<uint8_t>(stage.green());
         document->document->backgroundColor[2] = static_cast<uint8_t>(stage.blue());

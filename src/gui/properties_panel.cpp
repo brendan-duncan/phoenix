@@ -1,6 +1,7 @@
 #include "properties_panel.h"
 #include "script_tool.h"
 
+#include "../edit/canvas_document.h"
 #include "../edit/motion_blur.h"
 #include "../edit/filter_presets.h"
 #include "text_layout.h"
@@ -4159,8 +4160,15 @@ void PropertiesPanel::rebuildDocTab()
     blur->addLong(1, "", how);
 
     PropertySection* about = addSection(page, "Document Info");
-    about->addLong(0, "Version", fieldLabel(QString::fromStdString(doc->xflVersion), this));
-    about->addLong(1, "Made with", fieldLabel(QString::fromStdString(doc->creatorInfo), this));
+    // What its scripts are: ActionScript, or an HTML5 Canvas document's
+    // JavaScript.
+    QLabel* type = fieldLabel(QString::fromStdString(fla::canvas::documentType(*doc)), this);
+    type->setToolTip(fla::canvas::isCanvasDocument(*doc)
+            ? "Its scripts are JavaScript, run with CreateJS's API in Test Movie"
+            : "Its scripts are ActionScript");
+    about->addLong(0, "Platform", type);
+    about->addLong(1, "Version", fieldLabel(QString::fromStdString(doc->xflVersion), this));
+    about->addLong(2, "Made with", fieldLabel(QString::fromStdString(doc->creatorInfo), this));
 }
 
 QComboBox* PropertiesPanel::textureChoice(const std::string& current)

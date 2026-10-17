@@ -1212,8 +1212,8 @@ private:
     QStringList _recentFiles;
 
     /// A new, empty document of that size, rate and stage color, in place
-    /// of the one open.
-    void createNewDocument(int width, int height, double frameRate, const QColor& stage);
+    /// of the one open; an HTML5 Canvas one with \a canvas.
+    void createNewDocument(int width, int height, double frameRate, const QColor& stage, bool canvas = false);
     QString _lastDirectory;
     bool _highQualityAntiAliasing = true;
 };

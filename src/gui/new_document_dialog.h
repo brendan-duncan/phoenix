@@ -17,7 +17,8 @@ class QToolButton;
 /// (Character Animation, Social, Game, Education, Ads, Web, Advanced), the
 /// presets of the chosen category as tiles, and the details of the document
 /// to make on the right: width, height, frame rate and stage color, which a
-/// preset fills in and which can be changed before creating it. The last
+/// preset fills in and which can be changed before creating it, and its
+/// platform (ActionScript 3.0, or HTML5 Canvas with JavaScript). The last
 /// choice is remembered for the next time.
 class NewDocumentDialog : public QDialog
 {
@@ -30,6 +31,8 @@ public:
     int documentHeight() const;
     double frameRate() const;
     QColor stageColor() const { return _stageColor; }
+    /// Whether the document is to be an HTML5 Canvas one.
+    bool canvas() const;
 
     /// One preset: a name, a stage size and a frame rate.
     struct Preset
@@ -61,6 +64,7 @@ private:
     HotSpinBox* _width;
     HotSpinBox* _height;
     QComboBox* _frameRate;
+    QComboBox* _platform;
     QToolButton* _swatch;
     QLabel* _summary;
     QColor _stageColor = Qt::white;

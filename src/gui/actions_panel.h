@@ -39,7 +39,8 @@ struct ActionsLinks
 /// current layer, or of the button or movie clip instance selected on the
 /// stage, edited as it is typed (each pause in typing one step to undo).
 /// The script navigator lists every script in the document; the pin keeps
-/// one script in the panel while the selection moves on.
+/// one script in the panel while the selection moves on. An HTML5 Canvas
+/// document's scripts are edited and checked as JavaScript.
 class ActionsPanel : public QWidget
 {
     Q_OBJECT
@@ -86,6 +87,8 @@ private:
 
     Target followed() const;
     bool stillThere(const Target& target) const;
+    /// Whether the document is an HTML5 Canvas one: its scripts JavaScript.
+    bool canvas() const;
     QString describe(const Target& target) const;
     QString codeOf(const Target& target) const;
     void show(const Target& target);
