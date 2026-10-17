@@ -464,6 +464,7 @@ std::shared_ptr<DisplayHost> Bindings::attach(const Val& self, std::shared_ptr<d
 void Bindings::attachSymbol(const Val& self, const Symbol& symbol)
 {
     Clip* made = runtime.makeClip(nullptr, symbol, std::string());
+    keepFirstFrame(*made, self->cls.get());
     made->object = self;
     made->classed = true;
     self->host = std::make_shared<DisplayHost>(*this, made->display, made->life);
@@ -474,6 +475,17 @@ void Bindings::attachSymbol(const Val& self, const Symbol& symbol)
     runtime.syncChildren(*made, entered);
     for (Clip* child : entered)
         runtime._madeToEnter.push_back(child);
+}
+
+void Bindings::keepFirstFrame(Clip& clip, const as3::ClassInfo* cls)
+{
+    // A symbol whose class is a Sprite and not a MovieClip (a component's)
+    // has no timeline to play: its first frame is all it shows.
+    const std::shared_ptr<as3::ClassInfo> movieClip = classNamed("flash.display.MovieClip");
+    if (clip.button || !cls || !movieClip || cls->isSubclassOf(movieClip.get()))
+        return;
+    clip.playing = false;
+    clip.length = 1;
 }
 
 void Bindings::goToNow(Clip& clip, int frame, bool play)
@@ -789,6 +801,7 @@ Val Bindings::clipObject(Clip& clip)
     if (!cls || !cls->isSubclassOf(wanted.get()))
         cls = classNamed(fallback);
     Val made = vm.newInstance(cls);
+    keepFirstFrame(clip, cls.get());
     made->host = std::make_shared<DisplayHost>(*this, clip.display, clip.life);
     clip.object = made;
     clip.classed = true;

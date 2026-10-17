@@ -1950,6 +1950,8 @@ void MovieRuntime::syncDisplay(Clip& clip)
                     made->timelineRevision = made->layoutRevision();
                     object = made;
                 }
+                // Where the frame puts it: its box is in its own space.
+                object->setPlacedMatrix(toMatrix(text->transform));
             }
             else
             {

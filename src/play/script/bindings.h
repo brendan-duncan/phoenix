@@ -239,6 +239,9 @@ public:
     /// Gives a new script object of a library symbol's class a clip of the
     /// symbol, off the stage until it is added.
     void attachSymbol(const as3::Val& self, const Symbol& symbol);
+    /// A clip of a symbol whose class is not a MovieClip: held on its first
+    /// frame, as it has no timeline in ActionScript 3.
+    void keepFirstFrame(Clip& clip, const as3::ClassInfo* cls);
     /// A display object's graphics object (Shape, Sprite).
     as3::Val graphicsOf(const as3::Val& self);
     /// Moves \a clip to \a frame now, as gotoAndStop does in ActionScript 3:

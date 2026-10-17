@@ -908,6 +908,24 @@ int play(const QStringList& args)
         };
         show(movie.root(), 0);
     }
+    if (args.contains("--display-list"))
+    {
+        // The display list as scripts left it: each object's kind, name,
+        // and box on the stage.
+        static const char* kinds[] = {"Shape", "Sprite", "MovieClip", "SimpleButton", "Bitmap", "TextField", "Stage",
+            "TimelineArt"};
+        std::function<void(const fla::display::DisplayObject&, int)> show = [&](const fla::display::DisplayObject& object,
+                                                                               int depth) {
+            const fla::display::Rect box = object.getBounds(&movie.stage());
+            std::printf("%*s%s \"%s\" %.0f,%.0f %.0fx%.0f%s\n", depth * 2, "", kinds[static_cast<int>(object.kind())],
+                object.name().c_str(), box.x, box.y, box.width, box.height, object.visible() ? "" : " hidden");
+            if (object.isContainer())
+                for (const auto& child : static_cast<const fla::display::DisplayObjectContainer&>(object).children())
+                    if (child)
+                        show(*child, depth + 1);
+        };
+        show(movie.stage(), 0);
+    }
     if (args.contains("--click-all"))
     {
         // The buttons there are now, by the keys that lead to them; clicking
