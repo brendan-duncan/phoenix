@@ -84,6 +84,9 @@ struct Painted
     std::optional<Gradient> gradient;
     std::optional<Color> stroke;
     double strokeWidth = 1.0;
+    /// Whether the fill covers what an even number of subpaths encloses
+    /// (fill-rule evenodd) rather than what they wind around.
+    bool evenOdd = false;
     /// The clipping paths in force, each an area (its subpaths, filled by
     /// nesting) the paint is cut to; empty when nothing clips it.
     std::vector<std::vector<Subpath>> clips;
