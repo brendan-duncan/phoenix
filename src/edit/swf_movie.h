@@ -83,6 +83,9 @@ std::string unstructured(const Document& document);
 /// Whether \a document has scripts: frame scripts or handlers on instances.
 bool hasScripts(const Document& document);
 
+/// A dynamic or input text field's instance name, or empty.
+std::string fieldName(const StaticText& text);
+
 struct Options
 {
     /// An ActionScript 2 class's source by its qualified name, or none: the

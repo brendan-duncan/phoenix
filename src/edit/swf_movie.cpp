@@ -5,6 +5,7 @@
 #include "../data/frame.h"
 #include "../data/group.h"
 #include "../data/layer.h"
+#include "../data/raw_element.h"
 #include "../data/static_text.h"
 #include "../data/symbol.h"
 #include "../data/symbol_instance.h"
@@ -12,6 +13,7 @@
 #include "../data/timeline.h"
 #include "../play/script/class_path.h"
 #include "phoenix_features.h"
+#include "swf_actionscript3.h"
 #include "script_edit.h"
 #include "timeline_edit.h"
 
@@ -163,6 +165,13 @@ std::string filtersKey(const std::vector<swf::Filter>& filters)
 }
 
 } // namespace
+
+std::string fieldName(const StaticText& text)
+{
+    if (!text.instanceName.empty())
+        return text.instanceName;
+    return attributeOf(text.extraAttributes, "name");
+}
 
 bool Drawer::shows(const Timeline& timeline, const Layer& layer) const
 {
@@ -427,6 +436,10 @@ struct Movie::State
     std::map<const Symbol*, std::vector<uint8_t>> initActions;
     /// Element features that change the art frame by frame without a tween.
     bool animatedArt = false;
+    /// An ActionScript 3 movie's components, placed as instances of their
+    /// symbols for their classes to make.
+    std::map<const RawElement*, Component> components;
+    std::map<const RawElement*, std::unique_ptr<SymbolInstance>> componentInstances;
 
     State(const Document& d, swf::Writer& w, Drawer& dr, const Options& o)
         : document(d)
@@ -668,6 +681,45 @@ struct Movie::State
                 return false;
         }
         return true;
+    }
+
+    /// The components on  layer's frame  frame added to its pieces, as
+    /// movie clips.
+    void addComponents(const Layer& layer, int frame, std::vector<Piece>& pieces)
+    {
+        const Frame* key = components.empty() ? nullptr : keyframeAt(layer, frame);
+        for (size_t i = 0; key && i < key->elements.size(); ++i)
+        {
+            const Element* element = key->elements[i];
+            if (!element || element->elementType() != Element::Type::Raw)
+                continue;
+            const auto* raw = static_cast<const RawElement*>(element);
+            const auto found = components.find(raw);
+            if (found == components.end())
+                continue;
+            std::unique_ptr<SymbolInstance>& instance = componentInstances[raw];
+            if (!instance)
+            {
+                const auto symbol = document.symbolList ? document.symbolList->symbolMap.find(found->second.symbol)
+                                                        : std::map<std::string, Symbol*>::const_iterator();
+                if (!document.symbolList || symbol == document.symbolList->symbolMap.end() || !symbol->second)
+                {
+                    problem("component " + found->second.name + ": its symbol " + found->second.symbol +
+                        " is not in the library, left out");
+                    continue;
+                }
+                instance = std::make_unique<SymbolInstance>(raw->parent);
+                instance->symbol = symbol->second;
+                instance->libraryItemName = symbol->second->name;
+                instance->symbolType = SymbolType::MovieClip;
+                instance->name = found->second.name;
+            }
+            Piece piece;
+            piece.element = static_cast<int>(i);
+            piece.instance = instance.get();
+            piece.matrix = found->second.matrix;
+            pieces.push_back(piece);
+        }
     }
 
     /// Art of several shapes, or of one faded or blended: a clip of them.
@@ -1027,7 +1079,7 @@ struct Movie::State
         {
             shown.character = fieldFor(*piece.text);
             shown.identity = piece.text;
-            shown.name = piece.text->instanceName;
+            shown.name = fieldName(*piece.text);
             shown.matrix = piece.matrix;
         }
         else
@@ -1201,7 +1253,10 @@ struct Movie::State
                     if (sameAsBefore(*layer, frame))
                         captured[i][static_cast<size_t>(frame)] = captured[i][static_cast<size_t>(frame) - 1];
                     else if (frame < timeline::layerEnd(*layer))
+                    {
                         captured[i][static_cast<size_t>(frame)] = drawer.layerFrame(*layer, frame, writer);
+                        addComponents(*layer, frame, captured[i][static_cast<size_t>(frame)]);
+                    }
                 }
             }
             const std::vector<Band> bands = plan(*timeline, captured, true);
@@ -1398,7 +1453,10 @@ int Movie::write(const std::function<bool(int frame)>& beforeShow)
     if (state.actionScript3)
     {
         if (state.options.actionScript3)
+        {
             state.writer.setActionScript3(true);
+            state.components = components(document);
+        }
         else if (hasScripts(document))
             state.problem("ActionScript 3 is not compiled into SWF movies yet: the movie goes out without its scripts");
     }
@@ -1423,9 +1481,24 @@ int Movie::write(const std::function<bool(int frame)>& beforeShow)
                 for (const Timeline* timeline : symbol->timelines)
                     for (const Layer* layer : timeline ? timeline->layers : std::vector<Layer*>())
                         for (const Frame* frame : layer ? layer->frames : std::vector<Frame*>())
+                        {
                             scripted = scripted || (frame && frame->actionScript && !frame->actionScript->code.empty());
-                if (scripted && symbol->symbolType == SymbolType::MovieClip)
+                            // Components' parameters are set by its class.
+                            for (const Element* element : frame ? frame->elements : std::vector<Element*>())
+                                scripted = scripted ||
+                                    (element && element->elementType() == Element::Type::Raw &&
+                                        state.components.count(static_cast<const RawElement*>(element)));
+                        }
+                if (!scripted)
+                    continue;
+                // A button with a class: the button as it is without handlers.
+                if (symbol->symbolType == SymbolType::MovieClip)
+                {
                     if (const int id = state.spriteFor(symbol))
+                        classed[symbol] = id;
+                }
+                else if (!className.empty())
+                    if (const int id = state.buttonFor(symbol, std::string(), "button " + symbol->name))
                         classed[symbol] = id;
                 continue;
             }
