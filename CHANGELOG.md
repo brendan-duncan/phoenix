@@ -4,6 +4,7 @@ What changed in each release of Phoenix, newest first.
 
 ## Unreleased
 
+- Strokes drawn with FLA files' art and pattern paint brushes draw on the stage and in exports and SWF movies, and save as they were; the Paint Brush can draw with the file's brushes, listed under Brushes in this document
 - SWF movies keep the movie clips, buttons and text fields inside graphic symbols as real clips scripts reach by name, the graphic's frames placed into the timeline as it loops, plays once or holds a frame
 - SWF movies: shape tweens go in as morph shapes the player blends, buttons keep their masks, and buttons play the sounds on their Up, Over, Down and Hit frames
 - SWF movies: the soundtrack covers every scene, played in a row, and event sounds start on the timeline they are on, so a movie clip a script stops starts no more of its sounds
