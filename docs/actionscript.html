@@ -123,6 +123,16 @@
 
 <p>A class that does not compile shows its file and line in the Output panel, as a frame script does.</p>
 
+<h3 id="published-movies">Published movies</h3>
+
+<p>An SWF movie opened in Phoenix keeps the ActionScript 3 compiled into it, and Test Movie runs it: the main timeline is an instance of the movie's own main timeline class, each symbol linked to a class is that class, and the frame scripts are the ones that class gives its frames. The classes compiled into the movie come first, so a movie built with the components runs its own copies of them rather than Phoenix's. A movie that loads shared libraries before it starts (a preloader for text layout framework text) plays the movie it would load.</p>
+
+<ul>
+  <li>The compiled code runs as published, with no source to show: an error names the class and method it stopped in, with the place in the method's code.</li>
+  <li>Text layout framework text, which comes from a shared library rather than the movie, shows as plain text in its box, in the font, size and color of its first run.</li>
+  <li>Saved as a document, the movie keeps its compiled code (in <code>bin/abc</code>) and still runs it in Test Movie; the code itself cannot be edited.</li>
+</ul>
+
 <h2 id="canvas">HTML5 Canvas JavaScript</h2>
 
 <p>An HTML5 Canvas document's scripts are JavaScript, written for CreateJS, the library its published web page plays with. Make one with <span class="menu-path">File &rsaquo; New</span>, choosing <strong>HTML5 Canvas</strong> as the Platform; a Canvas document made elsewhere opens as one, and keeps its publish settings when saved. The Actions panel edits and checks its scripts as JavaScript, with JavaScript snippets, the Document Info in the Properties panel shows its Platform, and Test Movie runs it:</p>
@@ -167,7 +177,7 @@
 
 <div class="callout">
   <span class="label">Not yet</span>
-  <p>Loading other movies (SWF files), video, the microphone and camera, sockets, <code>ByteArray</code>'s <code>readObject</code> and <code>writeObject</code>, and the <code>DataGrid</code>, <code>TileList</code>, <code>ScrollPane</code>, <code>UILoader</code> and <code>ProgressBar</code> components. Published SWF files carry ActionScript 1 and 2, compiled (see <a href="export.html#swf">SWF movies</a>), but not yet ActionScript 3.</p>
+  <p>Loading other movies (SWF files), video, the microphone and camera, sockets, <code>ByteArray</code>'s <code>readObject</code> and <code>writeObject</code>, and the <code>DataGrid</code>, <code>TileList</code>, <code>ScrollPane</code>, <code>UILoader</code> and <code>ProgressBar</code> components. Published SWF files carry ActionScript 1 and 2, compiled (see <a href="export.html#swf">SWF movies</a>), but not yet ActionScript 3. ActionScript 1 and 2 compiled into a movie you open does not run in Test Movie (its artwork plays).</p>
 </div>
 
 </article>

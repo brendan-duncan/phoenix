@@ -15,6 +15,9 @@
 #include <QStringList>
 #include <QUrl>
 
+#include <algorithm>
+#include <cstdlib>
+
 #ifdef PHOENIX_NETWORK
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
@@ -62,6 +65,19 @@ void connectMovie(fla::play::MovieRuntime& movie, const fla::FLADocument& docume
     };
     movie.findClass = [path](const std::string& name) { return path.find(name); };
     movie.setClasses({}, fla::play::documentClassOf(data));
+
+    // A published movie's compiled ActionScript 3, as importing it kept it
+    // (bin/abc/1.abc, 2.abc... in the order of its DoABC tags).
+    std::vector<std::pair<int, std::vector<uint8_t>>> compiled;
+    for (const auto& [path, bytes] : data.extraFiles)
+        if (path.rfind("bin/abc/", 0) == 0 && path.size() > 12 && path.compare(path.size() - 4, 4, ".abc") == 0)
+            compiled.emplace_back(std::atoi(path.c_str() + 8), bytes.get());
+    std::sort(compiled.begin(), compiled.end(),
+        [](const auto& a, const auto& b) { return a.first < b.first; });
+    std::vector<std::vector<uint8_t>> abcFiles;
+    for (auto& [order, bytes] : compiled)
+        abcFiles.push_back(std::move(bytes));
+    movie.setCompiledScripts(std::move(abcFiles));
 
     // Images in any format Qt reads.
     movie.decodeImage = [](const std::vector<uint8_t>& bytes, int& width, int& height, std::vector<uint32_t>& pixels) {

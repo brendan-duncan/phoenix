@@ -20,6 +20,7 @@
 #include "display/text_field.h"
 #include "script/bindings.h"
 
+#include "abc/abc_domain.h"
 #include "bytecode/compiler.h"
 #include "bytecode/vm.h"
 #include "parser/parser.h"
@@ -577,6 +578,7 @@ MovieRuntime::~MovieRuntime()
     // The script objects first, while the VM they belong to is about.
     _bindings.reset();
     _canvas.reset();
+    _abcDomain.reset();
 }
 
 bool MovieRuntime::mouseHidden() const
@@ -664,6 +666,7 @@ void MovieRuntime::start()
     // The last run's script objects go before the VM they belong to.
     _bindings.reset();
     _canvas.reset();
+    _abcDomain.reset();
     _vm = std::make_unique<as3::VM>();
     if (!_stage)
         _stage = std::make_shared<display::Stage>();
@@ -704,6 +707,32 @@ void MovieRuntime::start()
         _bindings = std::make_unique<script::Bindings>(*this, *_vm);
         setupActionScript3();
         _bindings->install();
+        // A published movie's compiled classes: found before class files,
+        // their scripts run as they are first needed.
+        if (!_abcFiles.empty())
+        {
+            // Classes Phoenix has in place of the movie's copies, which
+            // need what the movie does not have (the text layout framework
+            // of a shared library): defined first, so they are found first.
+            for (const char* name : {"fl.text.RuntimeManager"})
+            {
+                try
+                {
+                    _vm->findDefinition(name);
+                }
+                catch (as3::ScriptException& exception)
+                {
+                    _bindings->report(exception, name);
+                }
+            }
+            _abcDomain = std::make_unique<as3::abc::Domain>(*_vm);
+            for (const std::vector<uint8_t>& abc : _abcFiles)
+            {
+                std::string error;
+                if (!_abcDomain->load(abc, error))
+                    tell("The movie's compiled ActionScript cannot be read: " + error, nullptr, 0);
+            }
+        }
         syncChildren(*_root, entered);
         runClass(*_root);
         enter(entered);

@@ -5,6 +5,8 @@
 #include "../../data/symbol.h"
 #include "../display/stage.h"
 
+#include "abc/abc_domain.h"
+
 #include <tinyxml2.h>
 
 #include <algorithm>
@@ -404,6 +406,13 @@ void Bindings::report(const as3::ScriptException& exception, const std::string& 
     }
     if (stack == "undefined")
         stack.clear();
+    // Where in the movie's compiled scripts it came from.
+    if (runtime._abcDomain)
+    {
+        std::string compiled = runtime._abcDomain->takeErrorStack();
+        if (stack.empty())
+            stack = std::move(compiled);
+    }
     std::string text = where;
     if (exception.line >= 0)
         text += ", line " + std::to_string(exception.line);

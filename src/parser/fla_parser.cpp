@@ -140,6 +140,14 @@ fla::FLADocument* FLAParser::parseUnguarded(const std::string& filePath)
 
     if (!fromBinary)
         keepUnreadFiles(zipReader, *flaDocument->document);
+    else if (fromSwf)
+    {
+        // A published movie's compiled ActionScript 3, and the publish
+        // settings that have Test Movie run it.
+        for (const std::string& name : zipReader.getFileList())
+            if (name == "PublishSettings.xml" || name.rfind("bin/abc/", 0) == 0)
+                flaDocument->document->extraFiles.emplace_back(name, zipReader.lazyFile(name));
+    }
     return flaDocument;
 }
 

@@ -7,6 +7,7 @@ What changed in each release of Phoenix, newest first.
 - The HTML page Publish writes for an SWF movie plays it in today's browsers with Ruffle, loaded from the web
 - HTML5 Canvas documents: make one with File > New (Platform), open and save them with their publish settings kept, and play their JavaScript in Test Movie with CreateJS's timelines, mouse and key events, Ticker, Tween, setTimeout, `console.log` and `alert`; the Actions panel checks their scripts as JavaScript
 - SWF export and Publish keep the movie's structure and its ActionScript 1 and 2: movie clips, buttons, instance names, masks, labels and text fields go in as they are, and frame scripts, button and clip handlers and ActionScript 2 classes are compiled in, so published movies run in any player
+- Published SWF movies run their ActionScript 3 in Test Movie: the classes compiled into the movie, its components among them, play as they were published, and a movie behind a preloader plays the movie it loads
 
 ## 0.16.1
 
