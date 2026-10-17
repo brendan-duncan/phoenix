@@ -143,7 +143,7 @@ function buildHeader() {
   header.className = "site-header";
   header.innerHTML = `
     <button class="icon-button menu-button" aria-label="Open navigation">${ICONS.menu}</button>
-    <a class="brand" href="index.html"><img src="assets/img/logo.png" alt=""> Phoenix <span>User Guide ${VERSION}</span></a>
+    <a class="brand" href="index.html"><img src="assets/img/logo.png" alt=""> Phoenix <span>Animation ${VERSION}</span></a>
     <div class="header-spacer"></div>
     <div class="search">
       ${ICONS.search}
