@@ -198,6 +198,7 @@ set(HEADERS
     src/gui/brush_properties_dialog.h
     src/gui/publish_dialog.h
     src/gui/paint_recorder.h
+    src/gui/swf_export.h
     src/gui/render_queue.h
     src/gui/stage_controls.h
     src/gui/app_identity.h
@@ -489,6 +490,7 @@ set(SOURCES
     src/gui/brush_properties_dialog.cpp
     src/gui/publish_dialog.cpp
     src/gui/paint_recorder.cpp
+    src/gui/swf_export.cpp
     src/gui/render_queue.cpp
     src/gui/stage_controls.cpp
     src/gui/app_identity.cpp

@@ -666,6 +666,73 @@ std::vector<RecordedItem> PhoenixView::recordFrame(int frame, const QSize& size)
     return recorder.items;
 }
 
+std::vector<PhoenixView::CapturedPiece> PhoenixView::captureLayerFrame(const fla::Layer* layer, int frame)
+{
+    if (!layer || !_flaDocument || !_flaDocument->document)
+        return {};
+    // Drawn in the timeline's own space, nothing culled. A symbol's art is
+    // about its origin, off any stage, so the device reaches far either
+    // way of it: what is drawn as a picture (an instance with a filter or
+    // a color effect) is cut to the device.
+    constexpr int kReach = 8192;
+    PaintRecorder recorder(QSize(2 * kReach, 2 * kReach));
+    QPainter painter(&recorder);
+    const QTransform toDevice = QTransform::fromTranslate(kReach, kReach);
+    painter.setTransform(toDevice);
+    const QTransform savedView = viewTransform;
+    const QRectF savedVisible = _visibleRect;
+    const int savedOverride = _frameOverride;
+    viewTransform = toDevice;
+    _visibleRect = QRectF(-kReach, -kReach, 2 * kReach, 2 * kReach);
+    _frameOverride = std::max(0, frame);
+    _exporting = true;
+    _vectorMasks = true;
+    Capture capture;
+    capture.recorder = &recorder;
+    _capture = &capture;
+    drawLayer(painter, layer, fla::LoopType::SingleFrame, std::max(0, frame), nullptr);
+    _capture = nullptr;
+    _vectorMasks = false;
+    _exporting = false;
+    _frameOverride = savedOverride;
+    viewTransform = savedView;
+    _visibleRect = savedVisible;
+    painter.end();
+    // Back from the device to the timeline's space.
+    const QTransform back = QTransform::fromTranslate(-kReach, -kReach);
+    for (CapturedPiece& piece : capture.pieces)
+    {
+        piece.matrix = piece.matrix * back;
+        for (RecordedItem& item : piece.art)
+        {
+            item.path = back.map(item.path);
+            if (item.clipped)
+                item.clip = back.map(item.clip);
+            item.imageTransform = item.imageTransform * back;
+            if (item.brush.style() != Qt::NoBrush && item.brush.style() != Qt::SolidPattern)
+                item.brush.setTransform(item.brush.transform() * back);
+        }
+    }
+    return std::move(capture.pieces);
+}
+
+void PhoenixView::takeCapturedArt()
+{
+    if (!_capture || !_capture->recorder)
+        return;
+    std::vector<RecordedItem>& items = _capture->recorder->items;
+    if (_capture->mark < items.size())
+    {
+        CapturedPiece piece;
+        piece.element = _capture->element;
+        piece.art.assign(std::make_move_iterator(items.begin() + static_cast<std::ptrdiff_t>(_capture->mark)),
+            std::make_move_iterator(items.end()));
+        items.resize(_capture->mark);
+        _capture->pieces.push_back(std::move(piece));
+    }
+    _capture->mark = items.size();
+}
+
 QImage PhoenixView::renderElements(const std::vector<const fla::Element*>& elements, double scale)
 {
     QRectF bounds;
@@ -4540,7 +4607,7 @@ void PhoenixView::drawFrame(QPainter& painter, const fla::Frame* frame, const fl
             driven = true;
             break;
         }
-    const bool culling = !nextTweenFrame && !moving && !driven && painter.device()->width() > 0;
+    const bool culling = !nextTweenFrame && !moving && !driven && painter.device()->width() > 0 && !_capture;
 
     NestingGuard nesting(_nesting);
     if (!nesting.ok)
@@ -4643,7 +4710,16 @@ void PhoenixView::drawFrame(QPainter& painter, const fla::Frame* frame, const fl
                         _overrideFilters = motion->filtersAt(motionState->offset + _subframe, rate, instance->filters);
                     }
                 }
+                // Captured for an SWF: the layer's own elements, one by one.
+                const bool capturing = _capture && _frameDepth == 1;
+                if (capturing)
+                {
+                    _capture->element = nextElementIndex;
+                    _capture->mark = _capture->recorder->items.size();
+                }
                 drawElement(painter, element, nextElement, tweenProgress);
+                if (capturing)
+                    takeCapturedArt();
                 _overrideElement = nullptr;
                 _overrideStyleElement = nullptr;
             }
@@ -5258,6 +5334,22 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
                 }
             }
 
+            // Captured for an SWF: a movie clip or button on the layer itself
+            // is left for the movie to draw, where it is and as it shows now.
+            if (_capture && _frameDepth == 1 && !_maskPass && instance->symbolType != fla::SymbolType::Graphic)
+            {
+                takeCapturedArt();
+                CapturedPiece piece;
+                piece.element = _capture->element;
+                piece.instance = instance;
+                piece.matrix = painter.transform();
+                piece.color = color;
+                piece.filters = filters;
+                _capture->pieces.push_back(std::move(piece));
+                painter.restore();
+                return;
+            }
+
             // Its effects (the adjustment layers' blurs, glows, distortions
             // and wipes) work on its own picture, after its color effect
             // and before its filters. Keyed settings are keyed on the frames
@@ -5607,6 +5699,25 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
         }
 
         const auto* text = static_cast<const fla::StaticText*>(element);
+        // Captured for an SWF: a field scripts reach (an input field, or a
+        // dynamic one with a name or a variable) goes in as a text field.
+        if (_capture && _frameDepth == 1 && !_maskPass &&
+            (text->textType == fla::StaticText::TextType::Input ||
+                (text->textType == fla::StaticText::TextType::Dynamic &&
+                    (!text->instanceName.empty() ||
+                        std::any_of(text->extraAttributes.begin(), text->extraAttributes.end(), [](const auto& a) {
+                            return a.first == "variableName" && !a.second.empty();
+                        })))))
+        {
+            takeCapturedArt();
+            CapturedPiece piece;
+            piece.element = _capture->element;
+            piece.text = text;
+            piece.matrix = painter.transform();
+            _capture->pieces.push_back(std::move(piece));
+            painter.restore();
+            return;
+        }
         // In a movie playing, a field shows what its scripts put in it, in
         // the style of its first run; an input field is where a click puts
         // the typing, with a caret while it has it.

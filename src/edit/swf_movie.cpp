@@ -21,6 +21,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstring>
+#include <iterator>
 #include <set>
 #include <sstream>
 
@@ -83,6 +84,45 @@ int keyCode(const std::string& event)
         if (key == name)
             return code;
     return key.empty() ? 0 : static_cast<unsigned char>(key[0]);
+}
+
+/// Whether a document's scripts look like ActionScript 3 (\a three) or like
+/// ActionScript 1 and 2, by what only each writes, as Test Movie tells.
+bool scriptsLookLike(const Document& document, bool three)
+{
+    static const char* const older[] = {"setProperty(", "getProperty(", "tellTarget", "ifFrameLoaded", "onClipEvent",
+        "_root.", "_parent.", "._visible", "._x", "attachMovie("};
+    static const char* const newer[] = {"import flash.", "import fl.", "addEventListener", ":void", "package ",
+        "MouseEvent.", "Event.ENTER_FRAME", "new Sprite(", "new MovieClip("};
+    const auto marked = [three](const std::string& code) {
+        const char* const* marks = three ? newer : older;
+        const size_t count = three ? std::size(newer) : std::size(older);
+        for (size_t i = 0; i < count; ++i)
+            if (code.find(marks[i]) != std::string::npos)
+                return true;
+        return false;
+    };
+    std::vector<const Timeline*> timelines(document.timelines.begin(), document.timelines.end());
+    if (document.symbolList)
+        for (const auto& [name, symbol] : document.symbolList->symbolMap)
+            if (symbol)
+                timelines.insert(timelines.end(), symbol->timelines.begin(), symbol->timelines.end());
+    for (const Timeline* timeline : timelines)
+        for (const Layer* layer : timeline ? timeline->layers : std::vector<Layer*>())
+            for (const Frame* frame : layer ? layer->frames : std::vector<Frame*>())
+            {
+                if (!frame)
+                    continue;
+                if (frame->actionScript && marked(frame->actionScript->code))
+                    return true;
+                // Scripts on instances are ActionScript 1 and 2's alone.
+                if (!three)
+                    for (const Element* element : frame->elements)
+                        if (element && element->elementType() == Element::Type::SymbolInstance &&
+                            !scripts::instanceScript(*element).empty())
+                            return true;
+            }
+    return false;
 }
 
 bool sameMatrix(const swf::Matrix& a, const swf::Matrix& b)
@@ -1324,7 +1364,12 @@ Movie::Movie(const Document& document, swf::Writer& writer, Drawer& drawer, cons
         _state->compileOptions.scenes[scene->name] = start;
         start += timelineLength(scene);
     }
-    _state->actionScript3 = play::actionScriptVersion(document) == 3;
+    // As Test Movie decides: what the publish settings say, unless the
+    // scripts are plainly of the other kind (a file saved again with new
+    // settings).
+    const int version = play::actionScriptVersion(document);
+    _state->actionScript3 = version == 3 ? !scriptsLookLike(document, false) || scriptsLookLike(document, true)
+                                         : version == 0 && scriptsLookLike(document, true);
     for (const features::Use& use : features::used(document))
         if (use.feature && (std::strcmp(use.feature->id, "shape-operators") == 0 ||
                                std::strcmp(use.feature->id, "text-animators") == 0))
@@ -1352,8 +1397,9 @@ int Movie::write(const std::function<bool(int frame)>& beforeShow)
     const Document& document = state.document;
     if (state.actionScript3)
     {
-        state.writer.setActionScript3(true);
-        if (!state.options.actionScript3)
+        if (state.options.actionScript3)
+            state.writer.setActionScript3(true);
+        else if (hasScripts(document))
             state.problem("ActionScript 3 is not compiled into SWF movies yet: the movie goes out without its scripts");
     }
     else
