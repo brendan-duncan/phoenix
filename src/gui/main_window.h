@@ -516,9 +516,10 @@ private slots:
     /// Behaviors, shape operators and text animators on every timeline
     /// baked into keyframes for a copy being written or published; undo()
     /// of what is returned puts them back (null when there were none).
-    /// \a errors gets what a behavior's script said went wrong.
+    /// \a errors gets what a behavior's script said went wrong; without
+    /// \a shapes, shapes with operators are left as they are.
     std::unique_ptr<fla::EditFramesCommand> bakeBehaviorsForCopy(std::shared_ptr<std::vector<std::string>> errors,
-        int* bakedLayers);
+        int* bakedLayers, bool shapes);
     /// How big words and symbols are drawn, for placing pinned parts in a
     /// copy with template values written in.
     fla::otherapps::Measure measureForCopies();
@@ -528,7 +529,7 @@ private slots:
     /// The shapes with operators on frames \a first to \a last of
     /// \a layer, baked: a keyframe a frame, each shape left as drawing
     /// objects as its operators make it there. Returns how many were baked.
-    int bakeShapeOperators(fla::Layer& layer, int first, int last);
+    int bakeShapeOperators(fla::Layer& layer, int first, int last, bool shapes = true);
     /// The frames of \a layer whose keyframes hold shapes with operators,
     /// as runs (first and last frame).
     static std::vector<std::pair<int, int>> shapeOperatorRuns(const fla::Layer& layer);

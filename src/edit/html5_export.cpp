@@ -12,10 +12,12 @@
 #include "motion_object.h"
 #include "node_graph.h"
 #include "other_apps.h"
+#include "shape_operators.h"
 #include "swf_actionscript3.h"
 #include "script_edit.h"
 #include "three_d.h"
 #include "timeline_edit.h"
+#include "vector_import.h"
 
 #include "../data/bitmap.h"
 #include "../data/bitmap_instance.h"
@@ -23,6 +25,7 @@
 #include "../data/frame.h"
 #include "../data/layer.h"
 #include "../data/raw_element.h"
+#include "../data/shape.h"
 #include "../data/static_text.h"
 #include "../data/symbol.h"
 #include "../data/symbol_instance.h"
@@ -408,6 +411,20 @@ std::vector<BakedRun> bakedRuns(const Timeline& timeline)
     };
     if (nodegraph::active(timeline))
         add(0, n, "a node graph");
+    // Instances turned in 3D, which Phoenix draws in perspective, lit,
+    // shadowed and sorted by depth across their layers: all those layers.
+    int first3d = n, last3d = -1;
+    for (int i = 0; i < n; ++i)
+        if (plain(i))
+            for (const Frame* frame : layers[static_cast<size_t>(i)]->frames)
+                for (const Element* element : frame ? frame->elements : std::vector<Element*>())
+                    if (element && element->elementType() == Element::Type::SymbolInstance &&
+                        !threed::of(*static_cast<const SymbolInstance*>(element)).flat())
+                    {
+                        first3d = std::min(first3d, i);
+                        last3d = std::max(last3d, i);
+                    }
+    add(first3d, last3d + 1, "3D rotation");
     for (int i = 0; i < n; ++i)
     {
         const Layer* layer = layers[static_cast<size_t>(i)];
@@ -457,6 +474,13 @@ std::vector<BakedRun> bakedRuns(const Timeline& timeline)
         }
         if (motionblur::on(*layer) || motionblur::layerTimeOf(*layer).any())
             add(i, i + 1, "motion blur, echo or posterize time");
+        bool operated = false;
+        for (const Frame* frame : layer->frames)
+            for (const Element* element : frame ? frame->elements : std::vector<Element*>())
+                operated = operated || (element && element->elementType() == Element::Type::Shape &&
+                                           shapeops::any(*static_cast<const Shape*>(element)));
+        if (operated)
+            add(i, i + 1, "shape operators");
         if (uncarriedEffects(*layer))
             add(i, i + 1, "effects on instances no filter carries");
     }
@@ -1134,12 +1158,28 @@ private:
         for (size_t i = 0; i < text.runs.size(); ++i)
         {
             const TextRun& run = text.runs[i];
-            out += std::string(i ? "," : "") + "{\"t\":" + quoted(run.text) + ",\"f\":" +
-                quoted(run.face.empty() ? std::string("Times New Roman") : run.face) + ",\"s\":" +
+            // A face written as its PostScript name carries its style:
+            // Arial-BoldMT is Arial, bold.
+            std::string face = run.face.empty() ? std::string("Times New Roman") : run.face;
+            bool bold = attributeOf(run.extraAttributes, "bold") == "true";
+            bool italic = attributeOf(run.extraAttributes, "italic") == "true";
+            const auto endsWith = [&face](const char* end) {
+                const size_t n = std::strlen(end);
+                return face.size() > n && face.compare(face.size() - n, n, end) == 0;
+            };
+            if (face.find('-') != std::string::npos || endsWith("MT") || endsWith("PS"))
+            {
+                bool styledBold = false, styledItalic = false;
+                const std::string written = face;
+                vectors::splitFontName(written, face, styledBold, styledItalic);
+                bold = bold || styledBold;
+                italic = italic || styledItalic;
+            }
+            out += std::string(i ? "," : "") + "{\"t\":" + quoted(run.text) + ",\"f\":" + quoted(face) + ",\"s\":" +
                 number(run.size > 0.0 ? run.size : 12.0, 2) + ",\"c\":" + std::to_string(rgbOf(run.fillColor));
-            if (attributeOf(run.extraAttributes, "bold") == "true")
+            if (bold)
                 out += ",\"b\":1";
-            if (attributeOf(run.extraAttributes, "italic") == "true")
+            if (italic)
                 out += ",\"i\":1";
             switch (run.alignment)
             {

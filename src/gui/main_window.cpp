@@ -5483,7 +5483,7 @@ std::vector<std::pair<int, int>> MainWindow::shapeOperatorRuns(const fla::Layer&
     return runs;
 }
 
-int MainWindow::bakeShapeOperators(fla::Layer& layer, int first, int last)
+int MainWindow::bakeShapeOperators(fla::Layer& layer, int first, int last, bool shapes)
 {
     if (!_phoenixView)
         return 0;
@@ -5529,7 +5529,7 @@ int MainWindow::bakeShapeOperators(fla::Layer& layer, int first, int last)
                 continue;
             }
             auto* shape = dynamic_cast<fla::Shape*>(frame->elements[i]);
-            if (!shape || !fla::shapeops::any(*shape))
+            if (!shapes || !shape || !fla::shapeops::any(*shape))
                 continue;
             std::vector<fla::Shape*> made = _phoenixView->bakedShape(*shape, frame->index);
             frame->elements.erase(frame->elements.begin() + static_cast<std::ptrdiff_t>(i));
@@ -5695,7 +5695,7 @@ void MainWindow::bakeNodeGraphs(fla::Document& copy, std::vector<std::string>& n
 }
 
 std::unique_ptr<fla::EditFramesCommand> MainWindow::bakeBehaviorsForCopy(std::shared_ptr<std::vector<std::string>> errors,
-    int* bakedLayers)
+    int* bakedLayers, bool shapes)
 {
     fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
     if (bakedLayers)
@@ -5716,17 +5716,32 @@ std::unique_ptr<fla::EditFramesCommand> MainWindow::bakeBehaviorsForCopy(std::sh
         for (fla::Symbol* symbol : document->symbolList->symbols)
             for (fla::Timeline* timeline : symbol ? symbol->timelines : std::vector<fla::Timeline*>())
                 collect(timeline);
+    // Layers holding controls (Slider, Angle, Point, Color, Checkbox
+    // Control) last: baking takes behaviors off, and the instances linked
+    // to a control read it while they are baked.
+    const auto holdsControls = [](const fla::Layer* layer) {
+        for (const fla::Frame* frame : layer->frames)
+            for (const fla::Element* element : frame ? frame->elements : std::vector<fla::Element*>())
+                if (element && element->elementType() == fla::Element::Type::SymbolInstance)
+                    for (const fla::behaviors::Applied& applied :
+                        fla::behaviors::of(*static_cast<const fla::SymbolInstance*>(element)))
+                        if (applied.type != "linkcontrol" && applied.type.size() > 7 &&
+                            applied.type.compare(applied.type.size() - 7, 7, "control") == 0)
+                            return true;
+        return false;
+    };
+    std::stable_partition(layers.begin(), layers.end(), [&](const fla::Layer* layer) { return !holdsControls(layer); });
     const double rate = document->frameRate;
     std::unique_ptr<fla::EditFramesCommand> baked;
     if (!layers.empty())
     {
         _selection.clear();
-        baked.reset(new fla::EditFramesCommand(layers, "Bake Behaviors", [this, layers, rate, errors](std::vector<fla::Frame*>&) {
+        baked.reset(new fla::EditFramesCommand(layers, "Bake Behaviors", [this, layers, rate, errors, shapes](std::vector<fla::Frame*>&) {
             for (fla::Layer* layer : layers)
             {
                 fla::behaviors::bakeAll(BehaviorLibrary::instance().engine(), *layer, rate, errors.get());
                 for (const auto& [first, last] : shapeOperatorRuns(*layer))
-                    bakeShapeOperators(*layer, first, last);
+                    bakeShapeOperators(*layer, first, last, shapes);
             }
         }));
         baked->redo();
@@ -5766,7 +5781,9 @@ bool MainWindow::publishHtml5(const Html5Publish::Settings& settings, QStringLis
     // Behaviors, shape operators and text animators go out as the
     // keyframes they make, put back afterward.
     auto errors = std::make_shared<std::vector<std::string>>();
-    std::unique_ptr<fla::EditFramesCommand> baked = bakeBehaviorsForCopy(errors, nullptr);
+    // Shapes with operators are left for the publish to draw as pictures,
+    // which keeps them exactly as Phoenix draws them.
+    std::unique_ptr<fla::EditFramesCommand> baked = bakeBehaviorsForCopy(errors, nullptr, false);
     bool published = false;
     if (fla::otherapps::needsTemplateBaking(*document))
     {
@@ -5818,7 +5835,7 @@ bool MainWindow::writeForOtherApps(const QString& path, QString& error, int* bak
     }
     fla::Document* document = _flaDocument->document;
     auto errors = std::make_shared<std::vector<std::string>>();
-    std::unique_ptr<fla::EditFramesCommand> baked = bakeBehaviorsForCopy(errors, bakedLayers);
+    std::unique_ptr<fla::EditFramesCommand> baked = bakeBehaviorsForCopy(errors, bakedLayers, true);
     bool written = false;
     std::vector<std::string> notes;
     // Node graphs are baked into pictures in the copy too.

@@ -72,7 +72,8 @@ struct BakedRun
 /// layer and the layer it works on; a track matte and its matte; a mask
 /// with a feathered, grown or inverted edge, or a layer under several
 /// masks, with the masks and all they mask; motion blur, echo and posterize
-/// time; effects on instances that no filter carries.
+/// time; shape operators; effects on instances that no filter carries; the
+/// layers with instances turned in 3D.
 std::vector<BakedRun> bakedRuns(const Timeline& timeline);
 
 /// A movie's ActionScript 1 and 2, gathered while its content is made, for
