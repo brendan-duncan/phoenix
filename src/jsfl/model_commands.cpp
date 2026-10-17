@@ -84,6 +84,11 @@ void describeDocumentCommands(ClassDef<Document>& def)
         runCommand(d, "convertLinesToFills", false);
         return Value();
     });
+    // The selection drawn into a new library bitmap that takes its place.
+    def.method("convertSelectionToBitmap", 0, [](Document& d, const Args&) {
+        runCommand(d, "convertSelectionToBitmap", false);
+        return Value();
+    });
     def.prop("livePreview",
         [](Document& d) {
             const auto found = livePreviews().find(d.document);

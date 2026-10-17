@@ -155,8 +155,9 @@ public:
         return false;
     }
     /// Runs one of Phoenix's own commands on \a document: "testMovie" (once
-    /// the script has ended) or "convertLinesToFills" (on the selection).
-    /// False with \a error when this host cannot.
+    /// the script has ended), or "convertLinesToFills" and
+    /// "convertSelectionToBitmap" (on the selection). False with \a error
+    /// when this host cannot.
     virtual bool runCommand(fla::FLADocument* document, const std::string& name, std::string& error)
     {
         (void)document;
