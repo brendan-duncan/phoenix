@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<flash_profiles>
+<flash_profile version="1.0" name="Default" current="true">
+  <PublishFormatProperties enabled="true">
+    <defaultNames>1</defaultNames>
+    <flash>1</flash>
+    <html>1</html>
+  </PublishFormatProperties>
+  <PublishFlashProperties enabled="true">
+    <Version>6</Version>
+    <ExternalPlayer>FlashPlayer6</ExternalPlayer>
+    <ActionScriptVersion>1</ActionScriptVersion>
+    <PackageExportFrame>1</PackageExportFrame>
+    <PackagePaths></PackagePaths>
+  </PublishFlashProperties>
+</flash_profile>
+</flash_profiles>

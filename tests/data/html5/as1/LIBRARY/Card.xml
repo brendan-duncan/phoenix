@@ -1,0 +1,20 @@
+<DOMSymbolItem xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://ns.adobe.com/xfl/2008/" name="Card" linkageExportForAS="true" linkageIdentifier="card">
+  <timeline>
+    <DOMTimeline name="Card">
+      <layers>
+        <DOMLayer name="art" color="#00FFFF">
+          <frames>
+            <DOMFrame index="0" keyMode="9728">
+              <elements>
+                <DOMShape>
+                  <fills><FillStyle index="1"><SolidColor color="#CC4444"/></FillStyle><FillStyle index="2"><SolidColor color="#FFFFFF"/></FillStyle></fills>
+                  <edges><Edge fillStyle1="1" edges="!0 0|1200 0!1200 0|1200 800!1200 800|0 800!0 800|0 0"/></edges>
+                </DOMShape>
+              </elements>
+            </DOMFrame>
+          </frames>
+        </DOMLayer>
+      </layers>
+    </DOMTimeline>
+  </timeline>
+</DOMSymbolItem>

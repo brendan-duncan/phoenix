@@ -67,18 +67,18 @@ struct Published
     std::vector<std::string> notes;
 };
 
-std::unique_ptr<Published> publish()
+std::unique_ptr<Published> publish(const char* movie = "as2")
 {
     auto out = std::make_unique<Published>();
     FLAParser parser;
-    out->file.reset(parser.parse((kData / "html5" / "as2").string()));
+    out->file.reset(parser.parse((kData / "html5" / movie).string()));
     if (!out->file || !out->file->document)
         return nullptr;
     FakeArt art;
     fla::html5::Options options;
     options.actionScript2 = &out->scripts;
     out->content = fla::html5::content(*out->file->document, art, options, &out->notes);
-    const fs::path folder = kData / "html5" / "as2";
+    const fs::path folder = kData / "html5" / movie;
     out->translated = fla::html5as2::translate(*out->file->document, out->scripts,
         [folder](const std::string& name) -> std::optional<std::string> {
             const fs::path path = folder / (name + ".as");
@@ -236,4 +236,46 @@ phoenix.start({}).then(function (player) {
     CHECK(has(out, "after: frame 3, box at 2, ball1 72, score_txt frames 4, true"));
     if (out.find("after:") == std::string::npos)
         std::printf("%s\n", out.c_str());
+}
+
+TEST(html5_as1_movie_runs_case_blind_across_scenes)
+{
+    const std::unique_ptr<Published> published = publish("as1");
+    CHECK(published != nullptr);
+    if (!published)
+        return;
+    CHECK(fla::html5as2::swfVersion(*published->file->document) == 6);
+    CHECK(has(published->translated.code, "$.version = 6;"));
+    Runtime js;
+    CHECK(js.ok);
+    CHECK(js.eval("phoenix.content(" + published->content + ");", "content"));
+    CHECK(js.eval(published->translated.code, "movie.as.js"));
+    // getURL opens nothing here: open is a stand-in that notes the call.
+    CHECK(js.eval(R"JS(
+var opened = [];
+globalThis.open = function (url, target) { opened.push(url + " " + target); };
+phoenix.start({}).then(function (player) {
+    player.pause();
+    player.tick();
+    var stage = player.stage;
+    var KeyboardEvent = flash.events.KeyboardEvent;
+    stage.dispatchEvent(new KeyboardEvent("keyDown", true, false, 32, 32));
+    stage.dispatchEvent(new KeyboardEvent("keyUp", true, false, 32, 32));
+    stage.dispatchEvent(new KeyboardEvent("keyDown", true, false, 0, 39));
+    var root = phoenix.as2Face(player.root);
+    console.log("after: frame " + root._currentframe + ", card0 " + root.card0._x + " depth " + root.card0.getDepth() +
+        ", opened " + opened.join());
+});
+)JS", "<test>"));
+    const std::string out = js.output();
+    CHECK(has(out, "tally 6 total 5 0"));
+    CHECK(has(out, "depths 3 1 top card0"));
+    CHECK(has(out, "scene 2, frame 3 of 3"));
+    // One keyPress handler call for one key.
+    CHECK(out.find("space on _level0\nspace on") == std::string::npos);
+    CHECK(has(out, "space on _level0"));
+    CHECK(has(out, "right, card0 at 30"));
+    CHECK(has(out, "after: frame 3, card0 30 depth 3, opened http://example.com/ _blank"));
+    if (out.find("after:") == std::string::npos)
+        std::printf("%s\n%s\n", out.c_str(), js.error.c_str());
 }

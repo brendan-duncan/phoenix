@@ -1,0 +1,129 @@
+<DOMDocument xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://ns.adobe.com/xfl/2008/" width="400" height="300" frameRate="12" currentTimeline="1" xflVersion="2.0" creatorInfo="Phoenix" platform="Windows" backgroundColor="#EEF4FF">
+     <symbols>
+          <Include href="Card.xml" loadImmediate="false"/>
+          <Include href="Btn.xml" loadImmediate="false"/>
+     </symbols>
+     <timelines>
+          <DOMTimeline name="Scene 1">
+               <layers>
+                    <DOMLayer name="actions" color="#FF4FFF">
+                         <frames>
+                              <DOMFrame index="0" duration="2" keyMode="9728">
+                                   <Actionscript>
+                                        <script><![CDATA[// ActionScript 1, published for Flash Player 6: names whatever their case.
+_global.Total = 0;
+function Counter(start) {
+    this.n = start;
+}
+Counter.prototype.add = function (k) {
+    this.n += k;
+    total += k;
+    return this;
+};
+var tally = new Counter(1);
+tally.add(2).add(3);
+trace("tally " + TALLY.n + " total " + TOTAL + " " + _global.total);
+
+for (var i = 0; i < 3; i++) {
+    var card = attachMovie("card", "card" + i, i + 1);
+    card._x = 20 + i * 70;
+    card._y = 40;
+}
+card0.swapDepths(card2);
+trace("depths " + card0.getDepth() + " " + card2.getDepth() + " top " + getInstanceAtDepth(3)._name);
+card1.onPress = function () {
+    this.startDrag(false);
+    trace("drag " + this._name);
+};
+card1.onRelease = card1.onReleaseOutside = function () {
+    this.stopDrag();
+    trace("drop " + this._name + " at " + this._x + "," + this._y);
+};
+card2.onRollOver = function () {
+    this._alpha = 50;
+    trace("over " + this._name);
+};
+card2.onRollOut = function () {
+    this._alpha = 100;
+    trace("out " + this._name);
+};
+
+var vars = new LoadVars();
+vars.onLoad = function (ok) {
+    trace("vars " + ok + " " + this.greeting + " " + this.count);
+};
+vars.load("vars.txt");
+var doc = new XML();
+doc.ignoreWhite = true;
+doc.onLoad = function (ok) {
+    trace("xml " + ok + " " + this.firstChild.nodeName + " " + this.firstChild.childNodes.length);
+};
+doc.load("data.xml");
+var loader = new MovieClipLoader();
+loader.addListener({onLoadInit: function (target) {
+    trace("picture in " + target._name + " " + Math.round(target._width));
+}});
+createEmptyMovieClip("pic", 50);
+pic._x = 250;
+pic._y = 150;
+loader.loadClip("pic.png", pic);
+getURL("http://example.com/", "_blank");
+fscommand("fullscreen", "true");
+gotoAndPlay("Scene 2", 1);]]></script>
+                                   </Actionscript>
+                                   <elements/>
+                              </DOMFrame>
+                         </frames>
+                    </DOMLayer>
+               </layers>
+          </DOMTimeline>
+          <DOMTimeline name="Scene 2">
+               <layers>
+                    <DOMLayer name="actions" color="#FF4FFF">
+                         <frames>
+                              <DOMFrame index="0" keyMode="9728">
+                                   <Actionscript>
+                                        <script><![CDATA[stop();
+trace("scene 2, frame " + _currentframe + " of " + _totalframes);
+Key.addListener({onKeyDown: function () {
+    if (Key.isDown(Key.RIGHT)) {
+        card0._x += 10;
+        trace("right, card0 at " + card0._x);
+    }
+}});]]></script>
+                                   </Actionscript>
+                                   <elements/>
+                              </DOMFrame>
+                         </frames>
+                    </DOMLayer>
+                    <DOMLayer name="stage" color="#4FFF4F">
+                         <frames>
+                              <DOMFrame index="0" keyMode="9728">
+                                   <elements>
+                                        <DOMSymbolInstance libraryItemName="Btn" name="btn" symbolType="button">
+                                             <matrix><Matrix tx="300" ty="240"/></matrix>
+                                             <Actionscript>
+                                                  <script><![CDATA[on (rollOver) {
+    trace("btn over");
+}
+on (keyPress "<Space>") {
+    trace("space on " + this);
+}]]></script>
+                                             </Actionscript>
+                                        </DOMSymbolInstance>
+                                        <DOMSymbolInstance libraryItemName="Card" name="watcher">
+                                             <matrix><Matrix tx="20" ty="240"/></matrix>
+                                             <Actionscript>
+                                                  <script><![CDATA[onClipEvent (mouseDown) {
+    trace("watcher saw the mouse at " + _root._xmouse + "," + _root._ymouse);
+}]]></script>
+                                             </Actionscript>
+                                        </DOMSymbolInstance>
+                                   </elements>
+                              </DOMFrame>
+                         </frames>
+                    </DOMLayer>
+               </layers>
+          </DOMTimeline>
+     </timelines>
+</DOMDocument>

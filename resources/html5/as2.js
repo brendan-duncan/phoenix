@@ -1540,6 +1540,8 @@ function keyDown(event) {
     lastAscii = event.charCode;
     keysDown.add(event.keyCode);
     eachClip(function (d) {
+        if (!(d instanceof display.Sprite))
+            return;
         clipEvent(d, "keyDown");
         (d._as2Handlers || []).forEach(function (h) {
             if (h.events.some(function (e) { return keyPressMatches(e, lastKey, lastAscii); }))
