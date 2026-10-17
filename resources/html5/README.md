@@ -23,6 +23,7 @@ For a page `movie.html`:
 | `movie.html` | The page: a `<div id="phoenix-stage">`, the scripts, and `phoenix.start(...)` |
 | `phoenix.js` | The runtime: this folder's files joined in this order: `core.js`, `geom.js`, `events.js`, `display.js`, `graphics.js`, `filters.js`, `render.js`, `bitmap.js`, `timeline.js`, `text.js`, `media.js`, `utils.js`, `player.js` |
 | `phoenix-createjs.js` | `createjs.js`, for an HTML5 Canvas document only: CreateJS over the runtime, for the document's JavaScript frame scripts |
+| `phoenix-as2.js` | For a movie whose scripts are ActionScript 1 or 2: libas3's `avm1.js` then `as2.js` (see "ActionScript 1 and 2") |
 | `movie.content.js` | The movie: `phoenix.content({...})` with its symbols, timelines, shapes and text (see "Content") |
 | `movie_assets/` | Its pictures (`imageN.png` or `.jpg`) and sounds (`soundN.mp3`, or `.wav` where Phoenix has no MP3 encoder) |
 | `movie.as.js` | Not written by Publish: the movie's ActionScript translated to JavaScript, which the page loads when it is there (see "Translated ActionScript") |
@@ -77,6 +78,7 @@ with Phoenix's render of the same frame in a headless browser.
 | `utils.js` | `Timer`, `flash.utils` functions, `Keyboard`, `Mouse`, `URLRequest`, `URLLoader`, `navigateToURL`, `SharedObject` (local storage), `Capabilities`, `ExternalInterface`, `Loader` (pictures) |
 | `player.js` | Loading, the frame loop, the pointer and keys, the canvas's layout, input fields, frame sounds, and the hooks for translated ActionScript |
 | `createjs.js` | CreateJS for HTML5 Canvas documents (not part of `phoenix.js`) |
+| `as2.js` | ActionScript 1 and 2's classes over the runtime (not part of `phoenix.js`; in `phoenix-as2.js`) |
 
 Each frame runs as Flash Player runs one: every playing MovieClip on the
 stage moves on a frame; `enterFrame` goes to every object listening (on
@@ -191,6 +193,42 @@ The ActionScript top level that is not `flash.*` (`int`, `uint`,
 `Vector`, `XML`, `Dictionary`, `ByteArray`, `is` and `as`, `trace` aside)
 is the translator's to provide.
 
+## ActionScript 1 and 2
+
+A movie whose scripts are ActionScript 1 or 2 has them translated by libas3
+(`as3::js::as2`, see its README) into `movie.as.js`, one module:
+`avm1.movie(function ($, movie) {...})`, its frame scripts, instances'
+handlers, `#initclip` code and classes. `phoenix-as2.js` is what it runs on:
+libas3's `avm1.js` (the language as the first ActionScript virtual machine
+has it: conversions, the scope chain, target paths, the global functions)
+and `as2.js`, which gives the runtime's display objects their ActionScript 2
+face and is the host `avm1.js` asks:
+
+- Each movie clip, button and text field a script reaches has an
+  ActionScript 2 object (`phoenix.as2Face(displayObject)`, and back with
+  `phoenix.as2DisplayOf`): a proxy whose own properties are the timeline's
+  variables and whose named children are found by name, its prototype
+  `MovieClip.prototype` (or the class `Object.registerClass` linked to its
+  symbol's identifier, which is called on it once it is made), `Button`'s or
+  `TextField`'s. `_x`, `_alpha` (0 to 100), `gotoAndPlay` (frames counted
+  through the scenes), `attachMovie` and the rest work on the display
+  object; depths made by scripts go above the timeline's objects.
+- `as2.js` registers the translated frame scripts with `as3.frameScripts`,
+  and hooks the runtime where display objects come and go
+  (`DisplayObjectContainer.prototype._insert` and `_removeAt`): a newcomer
+  gets its instance's handlers (the entry's `h`), its class and `onLoad`.
+  On the stage it listens for `enterFrame` (`onEnterFrame`,
+  `onClipEvent(enterFrame)`, text fields showing variables), the pointer
+  (button events on the outermost clip or button with handlers under it,
+  `onMouseDown`, `Mouse` listeners) and the keys (`Key`, `keyPress`
+  handlers).
+- `_global` has `MovieClip`, `Button`, `TextField`, `TextFormat`, `Key`,
+  `Mouse`, `Stage`, `Selection`, `System`, `Color`, `Sound`, `LoadVars`,
+  `XML`, `XMLNode`, `SharedObject` (in `localStorage`), `MovieClipLoader`
+  (pictures) and `flash` (the runtime's packages, for `flash.filters` and
+  `flash.geom`). `getURL` opens a window, `trace` writes as the runtime's
+  `trace` does; `fscommand` and SWF files to load are noted in the console.
+
 ## Content
 
 `movie.content.js` is `phoenix.content(movie)`, `movie` being JSON:
@@ -210,9 +248,11 @@ is the translator's to provide.
 ```
 
 **Symbol**: `{"name", "type": "mc" | "graphic" | "button", "linkage"?,
-"base"?, "scale9"?: [left, top, right, bottom], "timeline": Timeline}`. The
-symbols published are those the scenes show, at any depth, and those
-exported for ActionScript.
+"ident"?, "base"?, "scale9"?: [left, top, right, bottom], "timeline":
+Timeline}`. The symbols published are those the scenes show, at any depth,
+and those exported for ActionScript. `ident` is an ActionScript 1 and 2
+movie's linkage identifier, the name `attachMovie` makes the symbol by
+(`linkage` is then its ActionScript 2 class).
 
 **Timeline**: `{"n": frames, "labels"?: [[frame, name]], "scenes"?:
 [{"name", "at", "n"}], "sounds"?: [Sound], "js"?: [[frame, code]],
@@ -251,6 +291,8 @@ bodies. `once` stops the main timeline at its end.
 - `v`: 0 when it is hidden; `cab`: 1 for cache as bitmap.
 - `mk`, `mb`: a timeline mask: `mk` on the mask layer's objects, `mb` on
   those it masks, with the same number.
+- `h`: in an ActionScript 1 and 2 movie, the id of the instance's `on()` and
+  `onClipEvent()` handlers in the translated movie (`movie.handlers(id, ...)`).
 
 **Shape**: `{"o": [Op, ...], "b": [x0, y0, x1, y1]}`, its ops drawn in
 order in the shape's own space:
@@ -274,7 +316,8 @@ does; a picture `{"b": image, "m": matrix, "r": 1 to repeat}`.
 
 **TextField**: `{"x", "y", "w", "h", "type": "input"?, "ml": multiline,
 "wrap", "pw": password, "border", "sel": 0 when not selectable, "max":
-characters, "auto": autoSize, "runs": [{"t": text, "f": font, "s": size,
+characters, "auto": autoSize, "var": the variable it shows (ActionScript 1
+and 2), "html": 1 to show it as HTML, "runs": [{"t": text, "f": font, "s": size,
 "c": color, "b": bold, "i": italic, "a": align, "ls": letter spacing,
 "ld": leading, "u": URL}]}`.
 
