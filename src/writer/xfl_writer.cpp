@@ -316,9 +316,33 @@ void XFLWriter::note(const std::string& description)
 
 std::string XFLWriter::symbolHref(const Symbol& symbol)
 {
-    if (!symbol.href.empty())
-        return symbol.href;
-    return symbol.name + ".xml";
+    return fileSafeHref(symbol.href.empty() ? symbol.name + ".xml" : symbol.href);
+}
+
+std::string XFLWriter::fileSafeHref(const std::string& href)
+{
+    std::string out = href;
+    for (char& c : out)
+    {
+        const unsigned char u = static_cast<unsigned char>(c);
+        if (u < 0x20 || std::strchr("<>:\"\\|?*", c))
+            c = '_';
+    }
+    // Each part of the path may not end with a dot or a space ("." and
+    // ".." aside).
+    size_t start = 0;
+    while (start <= out.size())
+    {
+        size_t end = out.find('/', start);
+        if (end == std::string::npos)
+            end = out.size();
+        const std::string part = out.substr(start, end - start);
+        if (part != "." && part != "..")
+            for (size_t i = end; i > start && (out[i - 1] == '.' || out[i - 1] == ' '); --i)
+                out[i - 1] = '_';
+        start = end + 1;
+    }
+    return out;
 }
 
 void XFLWriter::writeFillStyle(const FillStyle& fill, XMLElement* parent)
@@ -1396,7 +1420,7 @@ std::string XFLWriter::writeDocument(const Document& document)
                 setString(node, "sourceLastImported", std::to_string(bitmap->sourceLastImported));
             setBool(node, "allowSmoothing", bitmap->allowSmoothing, false);
             setInt(node, "quality", bitmap->quality, 0);
-            setString(node, "href", bitmap->href);
+            setString(node, "href", bitmap->href.empty() ? bitmap->href : fileSafeHref(bitmap->href));
             setString(node, "bitmapDataHRef", bitmap->bitmapDataHRef);
             setInt(node, "frameRight", bitmap->frameRight, 0);
             setInt(node, "frameBottom", bitmap->frameBottom, 0);

@@ -142,7 +142,7 @@ bool XFLContent::buildUnguarded(const Document& document, const std::string& pro
         if (!bitmap->imageData.empty())
         {
             XFLEntry entry;
-            entry.path = "LIBRARY/" + bitmap->href;
+            entry.path = "LIBRARY/" + XFLWriter::fileSafeHref(bitmap->href);
             entry.binary = &bitmap->imageData.get();
             entries.push_back(std::move(entry));
         }

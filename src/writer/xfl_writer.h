@@ -62,8 +62,14 @@ public:
 
     /// Path of a symbol's file relative to LIBRARY/. Uses the href the symbol
     /// was read with, falling back to its name plus ".xml" for symbols created
-    /// in this session.
+    /// in this session. Characters no file name can hold are made safe
+    /// (fileSafeHref); the symbol keeps its own name in its file.
     static std::string symbolHref(const Symbol& symbol);
+
+    /// \a href with what Windows forbids in a file name (<>:"\|?*, control
+    /// characters, and a dot or space ending a folder or file name) as
+    /// underscores. Folders stay folders.
+    static std::string fileSafeHref(const std::string& href);
 
     /// Descriptions of content this writer could not represent, accumulated
     /// across calls since the last clearUnsupported().
