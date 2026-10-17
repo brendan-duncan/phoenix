@@ -1,0 +1,24 @@
+<DOMSymbolItem xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://ns.adobe.com/xfl/2008/" name="Hat" linkageExportForAS="true" linkageClassName="com.studio.Hat">
+  <timeline>
+    <DOMTimeline name="Hat">
+      <layers>
+        <DOMLayer name="Text" color="#00FFFF">
+          <frames>
+            <DOMFrame index="0" duration="2" keyMode="9728">
+              <elements>
+                <DOMDynamicText name="label_txt" width="80" height="20" lineType="multiline">
+                  <textRuns>
+                    <DOMTextRun>
+                      <characters>Hat</characters>
+                      <textAttrs><DOMTextAttrs face="Arial" size="14" fillColor="#112233" bold="true" alignment="center"/></textAttrs>
+                    </DOMTextRun>
+                  </textRuns>
+                </DOMDynamicText>
+              </elements>
+            </DOMFrame>
+          </frames>
+        </DOMLayer>
+      </layers>
+    </DOMTimeline>
+  </timeline>
+</DOMSymbolItem>

@@ -54,22 +54,30 @@ phoenix._.initTimeline = function (object, cls) {
     if (def && def.scale9)
         object._scale9Grid = new flash.geom.Rectangle(def.scale9[0], def.scale9[1], def.scale9[2] - def.scale9[0], def.scale9[3] - def.scale9[1]);
     if (def) {
-        applyFrame(object, 0);
+        // Its frame script runs before those of the children it makes.
         if (object instanceof MovieClip)
             phoenix._.queueScript && phoenix._.queueScript(object);
+        applyFrame(object, 0);
     }
 };
 
-/// The class to make a symbol's object with.
-function classOf(def) {
-    var linked = phoenix._.classForSymbol.get(def.index);
+/// The class to make a symbol's object with, for an instance that behaves
+/// as \a type (its own, which may not be its symbol's).
+function classOf(def, type) {
+    type = type || def.type;
+    var linked = type === def.type ? phoenix._.classForSymbol.get(def.index) : null;
     if (linked)
         return linked;
-    if (def.type === "graphic")
+    if (type === "graphic")
         return Graphic;
-    if (def.type === "button")
+    if (type === "button")
         return display.SimpleButton;
     return display.MovieClip;
+}
+/// What an entry places, to tell whether an object already there is the
+/// one it means: the kind, the library item, and how an instance behaves.
+function characterOf(entry) {
+    return entry.t + entry.id + (entry.it || "");
 }
 /// A new object for a timeline's entry: a symbol's, a shape, a text
 /// field or a bitmap.
@@ -81,7 +89,8 @@ function makeObject(entry) {
         var def = lib.symbols[entry.id];
         if (!def)
             return null;
-        var Cls = classOf(def);
+        var type = entry.it || def.type;
+        var Cls = classOf(def, type);
         phoenix._.pending = {name: entry.n || null, m: entry.m || null, def: def};
         try {
             object = new Cls();
@@ -89,7 +98,7 @@ function makeObject(entry) {
             phoenix._.pending = null;
             phoenix._.reportError(error, "constructing " + (def.linkage || def.name));
             phoenix._.pending = {name: entry.n || null, m: entry.m || null, def: def};
-            object = def.type === "graphic" ? new Graphic() : def.type === "button" ? new display.SimpleButton() : new MovieClip();
+            object = type === "graphic" ? new Graphic() : type === "button" ? new display.SimpleButton() : new MovieClip();
         }
         phoenix._.pending = null;
         break;
@@ -116,7 +125,7 @@ function makeObject(entry) {
         return null;
     }
     phoenix._.pending = null;
-    object._character = entry.t + entry.id;
+    object._character = characterOf(entry);
     if (entry.n)
         object._name = entry.n;
     return object;
@@ -194,7 +203,7 @@ function applyState(object, index) {
     var gone = [];
     object._timelineChildren.forEach(function (child, key) {
         var entry = wanted.get(key);
-        if (!entry || child._character !== entry.t + entry.id)
+        if (!entry || child._character !== characterOf(entry))
             gone.push(key);
     });
     gone.forEach(function (key) {
@@ -382,9 +391,9 @@ class MovieClip extends display.Sprite {
         var from = this._frame;
         this._frame = frame;
         this._scriptFrame = -1;
+        phoenix._.queueScript && phoenix._.queueScript(this);
         applyFrame(this, frame);
         phoenix._.frameEntered && phoenix._.frameEntered(this, from, frame);
-        phoenix._.queueScript && phoenix._.queueScript(this);
         phoenix._.afterGoTo && phoenix._.afterGoTo();
     }
     /// The playhead moves on a frame (the player's first step each frame);
@@ -408,9 +417,9 @@ class MovieClip extends display.Sprite {
         var from = this._advancedFrom;
         this._advancedFrom = undefined;
         this._scriptFrame = -1;
+        phoenix._.queueScript && phoenix._.queueScript(this);
         applyFrame(this, this._frame);
         phoenix._.frameEntered && phoenix._.frameEntered(this, from, this._frame);
-        phoenix._.queueScript && phoenix._.queueScript(this);
     }
     addFrameScript() {
         if (!this._frameScripts)
