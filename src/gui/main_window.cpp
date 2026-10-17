@@ -29,6 +29,7 @@
 #include "video_import.h"
 #include "frame_picker_panel.h"
 #include "color_panel.h"
+#include "color_well.h"
 #include "arrange_panels.h"
 #include "behavior_library.h"
 #include "behaviors_panel.h"
@@ -10507,6 +10508,17 @@ void MainWindow::setupToolBar()
             _toolsDock->setFeatures(_toolsDock->features() & ~QDockWidget::DockWidgetVerticalTitleBar);
         _toolbox->setFloating(floating);
     });
+    // Too short for its columns (or narrow for its rows), the panel takes
+    // more, its minimum size pushing the dock out; given room again, the
+    // dock goes back to the columns chosen. Queued, so the dock is not
+    // resized while it lays out.
+    connect(_toolbox, &Toolbox::preferredSizeChanged, this, [this]() {
+        if (_toolsDock->isFloating() || !_toolsDock->isVisible())
+            return;
+        const QSize size = _toolbox->sizeHint();
+        const bool vertical = _toolbox->orientation() == Qt::Vertical;
+        resizeDocks({_toolsDock}, {vertical ? size.width() : size.height()}, vertical ? Qt::Horizontal : Qt::Vertical);
+    }, Qt::QueuedConnection);
     addDockWidget(Qt::LeftDockWidgetArea, _toolsDock);
     splitDockWidget(_toolsDock, _outlinerDock, Qt::Horizontal);
     Toolbox::Layout defaultTools;
@@ -10777,39 +10789,15 @@ void MainWindow::setupToolBar()
     const auto addExtra = [&extras](QWidget* widget) { extras << widget; };
     const auto addExtraLine = [&extras]() { extras << nullptr; };
 
-    // Black and White, and Swap Colors: small, side by side, above the
-    // swatches.
-    QWidget* colorButtons = new QWidget(toolBar);
-    QHBoxLayout* colorButtonsLayout = new QHBoxLayout(colorButtons);
-    colorButtonsLayout->setContentsMargins(0, 0, 0, 0);
-    colorButtonsLayout->setSpacing(0);
-    const auto smallButton = [colorButtons](const QString& tip, const std::function<void(QPainter&)>& draw) {
-        QToolButton* button = new QToolButton(colorButtons);
-        theme::themedIcon(button, [draw]() {
-            QPixmap pixmap(16, 16);
-            pixmap.fill(Qt::transparent);
-            QPainter painter(&pixmap);
-            painter.setRenderHint(QPainter::Antialiasing, true);
-            draw(painter);
-            painter.end();
-            return QIcon(pixmap);
-        });
-        button->setIconSize(QSize(12, 12));
-        // Small and fixed: every toolbox cell is as large as its largest
-        // item, so the pair must fit inside a tool button's cell.
-        button->setFixedSize(16, 16);
-        button->setAutoRaise(true);
-        button->setToolTip(tip);
-        return button;
-    };
-    QToolButton* blackWhite = smallButton("Black and white", [](QPainter& p) {
-        p.setPen(QColor(150, 150, 150));
-        p.setBrush(Qt::white);
-        p.drawRect(QRectF(5.5, 5.5, 9, 9));
-        p.setBrush(Qt::black);
-        p.drawRect(QRectF(1.5, 1.5, 9, 9));
-    });
-    connect(blackWhite, &QToolButton::clicked, this, [this]() {
+    // The stroke and fill colors as one unit across the panel: the
+    // stroke a ring, the fill solid, so the two never read as each other,
+    // with Black and White and Swap beside them.
+    _colorWell = new ColorWell(toolBar);
+    _colorWell->strokeSwatch()->setObjectName("toolboxStroke");
+    _colorWell->fillSwatch()->setObjectName("toolboxFill");
+    connect(_colorWell, &ColorWell::strokeClicked, this, [this]() { chooseStyleColor(true); });
+    connect(_colorWell, &ColorWell::fillClicked, this, [this]() { chooseStyleColor(false); });
+    connect(_colorWell, &ColorWell::blackWhiteClicked, this, [this]() {
         const uint8_t black[4] = {0, 0, 0, 255};
         const uint8_t white[4] = {255, 255, 255, 255};
         std::copy(black, black + 4, _drawingStyle.strokeColor);
@@ -10822,17 +10810,7 @@ void MainWindow::setupToolBar()
         if (_propertiesPanel)
             _propertiesPanel->refresh();
     });
-    colorButtonsLayout->addWidget(blackWhite);
-    QToolButton* swap = smallButton("Swap stroke and fill colors", [](QPainter& p) {
-        p.setPen(QPen(theme::color("icon"), 1.4));
-        p.setBrush(Qt::NoBrush);
-        p.drawArc(QRectF(2.5, 2.5, 11, 11), 0, 90 * 16);
-        p.setBrush(theme::color("icon"));
-        p.setPen(Qt::NoPen);
-        p.drawPolygon(QPolygonF({QPointF(8, 0.5), QPointF(8, 5.5), QPointF(5, 3)}));
-        p.drawPolygon(QPolygonF({QPointF(15.5, 8), QPointF(10.5, 8), QPointF(13, 11)}));
-    });
-    connect(swap, &QToolButton::clicked, this, [this]() {
+    connect(_colorWell, &ColorWell::swapClicked, this, [this]() {
         uint8_t held[4];
         std::copy(_drawingStyle.strokeColor, _drawingStyle.strokeColor + 4, held);
         std::copy(_drawingStyle.fillColor, _drawingStyle.fillColor + 4, _drawingStyle.strokeColor);
@@ -10844,29 +10822,8 @@ void MainWindow::setupToolBar()
         if (_propertiesPanel)
             _propertiesPanel->refresh();
     });
-    colorButtonsLayout->addWidget(swap);
-    addExtra(colorButtons);
-
-    // The stroke and fill colors, under the tools:
-    // the stroke drawn as an outline, the fill solid, so the two never
-    // read as each other.
-    _toolboxStrokeSwatch = new QToolButton(toolBar);
-    _toolboxStrokeSwatch->setObjectName("toolboxStroke");
-    _toolboxStrokeSwatch->setIcon(PropertiesPanel::strokeSwatchIcon(_drawingStyle.strokeColor));
-    _toolboxStrokeSwatch->setIconSize(QSize(20, 20));
-    _toolboxStrokeSwatch->setAutoRaise(true);
-    _toolboxStrokeSwatch->setToolTip("Stroke color");
-    connect(_toolboxStrokeSwatch, &QToolButton::clicked, this, [this]() { chooseStyleColor(true); });
-    addExtra(_toolboxStrokeSwatch);
-
-    _toolboxFillSwatch = new QToolButton(toolBar);
-    _toolboxFillSwatch->setObjectName("toolboxFill");
-    _toolboxFillSwatch->setIcon(PropertiesPanel::swatchIcon(_drawingStyle.fillColor));
-    _toolboxFillSwatch->setIconSize(QSize(20, 20));
-    _toolboxFillSwatch->setAutoRaise(true);
-    _toolboxFillSwatch->setToolTip("Fill color");
-    connect(_toolboxFillSwatch, &QToolButton::clicked, this, [this]() { chooseStyleColor(false); });
-    addExtra(_toolboxFillSwatch);
+    addExtra(_colorWell);
+    refreshStyleSwatches();
 
     addExtraLine();
 
@@ -11628,6 +11585,10 @@ void MainWindow::setupPropertiesPanel()
             // Text being typed takes the color on its selection too.
             if (key == "fillColor" && _textTool)
                 _textTool->applyColor(_drawingStyle.fillColor);
+        }
+        else if (key == "hasFill" || key == "hasStroke")
+        {
+            refreshStyleSwatches();
         }
         else if (key == "textFace")
         {
@@ -12870,10 +12831,33 @@ void MainWindow::refreshStyleSwatches()
 {
     if (_propertiesPanel)
         _propertiesPanel->refreshStyleSwatches();
-    if (_toolboxStrokeSwatch)
-        _toolboxStrokeSwatch->setIcon(PropertiesPanel::strokeSwatchIcon(_drawingStyle.strokeColor));
-    if (_toolboxFillSwatch)
-        _toolboxFillSwatch->setIcon(PropertiesPanel::swatchIcon(_drawingStyle.fillColor));
+    if (!_colorWell)
+        return;
+    const auto colorOf = [](const uint8_t rgba[4]) { return QColor(rgba[0], rgba[1], rgba[2], rgba[3]); };
+    _colorWell->setStroke(_drawingStyle.hasStroke ? QBrush(colorOf(_drawingStyle.strokeColor)) : QBrush());
+    // The fill as new art gets it: a gradient drawn as one.
+    QBrush fill;
+    if (_drawingStyle.hasFill)
+    {
+        using Kind = fla::DrawingStyle::FillKind;
+        QGradient gradient;
+        if (_drawingStyle.fillKind == Kind::Linear)
+            gradient = QLinearGradient(0.0, 0.0, 1.0, 0.0);
+        else if (_drawingStyle.fillKind == Kind::Radial)
+            gradient = QRadialGradient(0.5, 0.5, 0.5);
+        if (gradient.type() != QGradient::NoGradient && !_drawingStyle.gradient.empty())
+        {
+            gradient.setCoordinateMode(QGradient::ObjectBoundingMode);
+            for (const fla::DrawingStyle::Stop& stop : _drawingStyle.gradient)
+                gradient.setColorAt(std::clamp(stop.ratio, 0.0, 1.0), colorOf(stop.color));
+            fill = QBrush(gradient);
+        }
+        else
+        {
+            fill = QBrush(colorOf(_drawingStyle.fillColor));
+        }
+    }
+    _colorWell->setFill(fill);
 }
 
 void MainWindow::selectAll()

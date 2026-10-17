@@ -746,7 +746,10 @@ void PropertiesPanel::buildToolTab()
     });
     QCheckBox* fillEnabled = new QCheckBox("Fill", fillRow);
     fillEnabled->setChecked(style.hasFill);
-    connect(fillEnabled, &QCheckBox::toggled, this, [this](bool on) { _links.style->hasFill = on; });
+    connect(fillEnabled, &QCheckBox::toggled, this, [this](bool on) {
+        _links.style->hasFill = on;
+        emit toolSettingChanged("hasFill");
+    });
     fillLayout->addWidget(_fillSwatch);
     fillLayout->addWidget(fillEnabled);
     fillLayout->addStretch();
@@ -772,7 +775,10 @@ void PropertiesPanel::buildToolTab()
     });
     QCheckBox* strokeEnabled = new QCheckBox("Stroke", strokeRow);
     strokeEnabled->setChecked(style.hasStroke);
-    connect(strokeEnabled, &QCheckBox::toggled, this, [this](bool on) { _links.style->hasStroke = on; });
+    connect(strokeEnabled, &QCheckBox::toggled, this, [this](bool on) {
+        _links.style->hasStroke = on;
+        emit toolSettingChanged("hasStroke");
+    });
     strokeLayout->addWidget(_strokeSwatch);
     strokeLayout->addWidget(strokeEnabled);
     strokeLayout->addStretch();

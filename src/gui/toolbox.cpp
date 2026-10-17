@@ -1,11 +1,15 @@
 #include "toolbox.h"
 
+#include "color_well.h"
+#include "toolbox_flow.h"
+
 #include <QAction>
 #include <QContextMenuEvent>
 #include <QFrame>
 #include <QJsonArray>
 #include <QMenu>
 #include <QPainter>
+#include <QTimer>
 #include <QToolButton>
 
 #include <algorithm>
@@ -175,6 +179,9 @@ void Toolbox::setOrientation(Qt::Orientation orientation)
     for (const Item& item : _items)
         if (item.line)
             item.line->setFrameShape(_orientation == Qt::Vertical ? QFrame::HLine : QFrame::VLine);
+    // Whether it needs more rows or columns waits for the size the dock
+    // gives it there.
+    _forced = 0;
     updateGeometry();
     place(0, true);
 }
@@ -184,6 +191,8 @@ void Toolbox::setFloating(bool floating)
     _floating = floating;
     if (!floating)
         return;
+    // Floating, it is the shape it is left, with nothing taken to fit.
+    updateForced();
     setOrientation(width() > height() * 2 ? Qt::Horizontal : Qt::Vertical);
 }
 
@@ -199,27 +208,32 @@ QFrame* Toolbox::makeLine()
 
 int Toolbox::cell() const
 {
-    // Every item sits in a square cell the size of the largest.
+    // Every item sits in a square cell the size of the largest; the color
+    // well spans the panel instead.
     int size = 24;
     for (const Item& item : _items)
-        if (item.widget)
+        if (item.widget && !qobject_cast<ColorWell*>(item.widget))
             size = std::max({size, item.widget->sizeHint().width(), item.widget->sizeHint().height()});
     return size;
 }
 
-namespace {
+using toolboxflow::kMargin;
 
-constexpr int kMargin = 3;
-/// The room a line between sections takes along the flow.
-constexpr int kLineRoom = 7;
-
-} // namespace
+std::vector<toolboxflow::Kind> Toolbox::kinds() const
+{
+    std::vector<toolboxflow::Kind> kinds;
+    for (const Item& item : _items)
+        kinds.push_back(item.line ? toolboxflow::Kind::Line
+                : qobject_cast<ColorWell*>(item.widget) ? toolboxflow::Kind::Span
+                                                       : toolboxflow::Kind::Cell);
+    return kinds;
+}
 
 int Toolbox::place(int across, bool move)
 {
     // Down a side, items fill rows as wide as the panel; along the top or
     // bottom, columns as tall as it. A line ends the row or column and
-    // runs across the panel.
+    // runs across the panel, and so does the color well.
     const bool vertical = _orientation == Qt::Vertical;
     const int c = cell();
     const int room = (vertical ? width() : height()) - 2 * kMargin;
@@ -227,45 +241,31 @@ int Toolbox::place(int across, bool move)
         across = std::max(1, room / c);
     // The cells sit in the middle of the panel's breadth.
     const int start = kMargin + std::max(0, (room - across * c) / 2);
-    int along = kMargin;
-    int index = 0;
-    for (const Item& item : _items)
+    const Qt::Orientation flow = _orientation;
+    std::vector<toolboxflow::Box> boxes;
+    const int length = toolboxflow::place(kinds(), across, c, start, vertical,
+        [flow](int breadth) { return ColorWell::lengthFor(breadth, flow); }, move ? &boxes : nullptr);
+    if (!move)
+        return length;
+    for (size_t i = 0; i < _items.size() && i < boxes.size(); ++i)
     {
+        const Item& item = _items[i];
+        const toolboxflow::Box& box = boxes[i];
         if (item.line)
         {
-            if (index > 0)
-            {
-                along += c;
-                index = 0;
-            }
-            if (move)
-            {
-                const int breadth = std::max(c, across * c);
-                if (vertical)
-                    item.line->setGeometry(start, along + kLineRoom / 2, breadth, 1);
-                else
-                    item.line->setGeometry(along + kLineRoom / 2, start, 1, breadth);
-            }
-            along += kLineRoom;
+            item.line->setGeometry(box.x, box.y, box.width, box.height);
             continue;
         }
-        if (move)
+        if (qobject_cast<ColorWell*>(item.widget))
         {
-            const QSize size = item.widget->sizeHint().boundedTo(QSize(c, c));
-            const int x = vertical ? start + index * c : along;
-            const int y = vertical ? along : start + index * c;
-            item.widget->setGeometry(x + (c - size.width()) / 2, y + (c - size.height()) / 2, size.width(),
-                size.height());
+            item.widget->setGeometry(box.x, box.y, box.width, box.height);
+            continue;
         }
-        if (++index == across)
-        {
-            index = 0;
-            along += c;
-        }
+        const QSize size = item.widget->sizeHint().boundedTo(QSize(c, c));
+        item.widget->setGeometry(box.x + (c - size.width()) / 2, box.y + (c - size.height()) / 2, size.width(),
+            size.height());
     }
-    if (index > 0)
-        along += c;
-    return along + kMargin;
+    return length;
 }
 
 int Toolbox::widthFor(int columns) const
@@ -273,21 +273,64 @@ int Toolbox::widthFor(int columns) const
     return std::max(columns, 1) * cell() + 2 * kMargin;
 }
 
+int Toolbox::acrossFor(int length) const
+{
+    const Qt::Orientation flow = _orientation;
+    return toolboxflow::acrossNeeded(kinds(), cell(), length, _orientation == Qt::Vertical ? _layout.columns : 1,
+        [flow](int breadth) { return ColorWell::lengthFor(breadth, flow); });
+}
+
+int Toolbox::preferredAcross() const
+{
+    return std::max(_orientation == Qt::Vertical ? _layout.columns : 1, _forced);
+}
+
 QSize Toolbox::sizeHint() const
 {
     Toolbox* self = const_cast<Toolbox*>(this);
+    const int across = preferredAcross();
     if (_orientation == Qt::Vertical)
-        return QSize(widthFor(_layout.columns), self->place(_layout.columns, false));
-    return QSize(self->place(1, false), cell() + 2 * kMargin);
+        return QSize(widthFor(across), self->place(across, false));
+    return QSize(self->place(across, false), widthFor(across));
 }
 
 QSize Toolbox::minimumSizeHint() const
 {
-    // One cell across; along the flow, it can be cut short.
+    // One cell across, or as many as the tools need to fit; along the
+    // flow, it can be cut short.
     const int c = cell();
+    const int across = widthFor(std::max(_forced, 1));
     if (_orientation == Qt::Vertical)
-        return QSize(c + 2 * kMargin, 3 * c);
-    return QSize(3 * c, c + 2 * kMargin);
+        return QSize(across, 3 * c);
+    return QSize(3 * c, across);
+}
+
+bool Toolbox::updateForced()
+{
+    // Docked and too short (or narrow) for the columns (or rows) chosen,
+    // the panel takes as many more as it needs, so no tool is cut off;
+    // given the room again, it goes back.
+    int forced = 0;
+    if (!_floating && isVisible())
+    {
+        const int length = _orientation == Qt::Vertical ? height() : width();
+        const int needed = acrossFor(length);
+        if (needed > (_orientation == Qt::Vertical ? _layout.columns : 1))
+            forced = needed;
+    }
+    if (forced == _forced)
+        return false;
+    // Going back, the panel is still as wide as it was made until the
+    // window narrows it again; those columns are not the user's either.
+    if (forced == 0)
+    {
+        _returning = true;
+        QTimer::singleShot(400, this, [this]() { _returning = false; });
+    }
+    _forced = forced;
+    updateGeometry();
+    emit preferredSizeChanged();
+    return true;
 }
 
 void Toolbox::resizeEvent(QResizeEvent* event)
@@ -297,14 +340,24 @@ void Toolbox::resizeEvent(QResizeEvent* event)
         setOrientation(width() > height() * 2 ? Qt::Horizontal : Qt::Vertical);
     place(0, true);
     // The columns it was given down a side are kept, for next time and in
-    // workspaces.
+    // workspaces; not the ones it took to fit a short window, nor while it
+    // goes back from those.
+    if (updateForced() || _forced > 0)
+        return;
     if (_orientation == Qt::Vertical && !_floating && isVisible())
     {
-        const int columns = std::clamp((width() - 2 * kMargin) / cell(), 1, 8);
+        const int columns = std::clamp((width() - 2 * kMargin) / cell(), 1, toolboxflow::kMostAcross);
+        if (_returning)
+        {
+            if (columns == _layout.columns)
+                _returning = false;
+            return;
+        }
         if (columns != _layout.columns)
         {
             _layout.columns = columns;
             emit layoutChanged();
+            updateForced();
         }
     }
 }
@@ -370,6 +423,7 @@ void Toolbox::rebuild()
     }
     updateGeometry();
     place(0, true);
+    updateForced();
 }
 
 void Toolbox::contextMenuEvent(QContextMenuEvent* event)

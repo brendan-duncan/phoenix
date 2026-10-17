@@ -153,7 +153,8 @@ signals:
     /// typed or the text fields selected.
     void textStyleRequested(const QString& key, const QString& value);
     /// A Tool tab setting was changed; \a key names it ("fillColor",
-    /// "textFace", "textSize", "textType", "transformMode", "faucet").
+    /// "hasFill", "hasStroke", "textFace", "textSize", "textType",
+    /// "transformMode", "faucet").
     void toolSettingChanged(const QString& key);
 
     /// Brush Properties was asked for, from a brush's Tool tab.

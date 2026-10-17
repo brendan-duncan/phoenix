@@ -764,7 +764,7 @@ private:
     void refreshStyleSwatches();
 
     /// The toolbox's own stroke and fill swatches, under the tools.
-    QToolButton* _toolboxStrokeSwatch = nullptr;
+    class ColorWell* _colorWell = nullptr;
 
     /// Each tool's toolbox action, so a tool can be chosen as a click on
     /// it would: checked, and shown in its slot.
@@ -817,8 +817,6 @@ private:
     /// The tool to go back to when the pen is turned back from its eraser
     /// end.
     Tool* _toolBeforeEraserPen = nullptr;
-    QToolButton* _toolboxFillSwatch = nullptr;
-
     /// Opens the color dialog for the stroke or the fill and applies the
     /// choice everywhere the color shows.
     void chooseStyleColor(bool stroke);
