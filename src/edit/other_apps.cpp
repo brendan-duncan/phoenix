@@ -1538,6 +1538,38 @@ bool needsBaking(const Document& document)
     return false;
 }
 
+bool needsTemplateBaking(const Document& document)
+{
+    Document& editable = const_cast<Document&>(document);
+    for (Timeline* timeline : allTimelines(editable))
+    {
+        bool found = false;
+        eachElement(*timeline, [&](Element* element) {
+            found = found || (element->elementType() == Element::Type::SymbolInstance &&
+                                 (templates::any(*static_cast<SymbolInstance*>(element)) ||
+                                     responsive(*static_cast<SymbolInstance*>(element))));
+        });
+        if (found)
+            return true;
+    }
+    return false;
+}
+
+void bakeTemplates(Document& document, std::vector<std::string>& notes, const Measure* measure)
+{
+    TemplateBaker baker{document, {}, measure, {}};
+    const int templated = bakeTemplates(baker);
+    if (templated > 0)
+        notes.push_back(std::to_string(templated) + " template instance" + (templated == 1 ? "" : "s") +
+            " now show symbols with their words and colors written in.");
+    const int stretched = bakeResponsive(document);
+    if (stretched > 0)
+        notes.push_back(std::to_string(stretched) + " instance" + (stretched == 1 ? "" : "s") +
+            " of graphics with responsive time now show copies with their frames laid out for the span they are on.");
+    if (measure)
+        bakePins(baker);
+}
+
 void bakeCompositing(Document& document, std::vector<std::string>& notes, const Renderer& render,
     const Measure* measure)
 {

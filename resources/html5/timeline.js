@@ -190,6 +190,18 @@ function applyFrame(object, frame) {
         return;
     var index = timeline.map ? timeline.map[Math.min(frame, timeline.map.length - 1)] : frame;
     applyState(object, index === undefined ? -1 : index);
+    // A scene's camera colors the whole picture.
+    if (timeline.cc && !object._scriptColor) {
+        var c = timeline.cc[Math.min(frame, timeline.cc.length - 1)] || C.identity;
+        var t = object._colorTransform;
+        if (t.redMultiplier !== c[0] || t.greenMultiplier !== c[1] || t.blueMultiplier !== c[2] ||
+            t.alphaMultiplier !== c[3] || t.redOffset !== c[4] || t.greenOffset !== c[5] || t.blueOffset !== c[6] ||
+            t.alphaOffset !== c[7]) {
+            t.redMultiplier = c[0]; t.greenMultiplier = c[1]; t.blueMultiplier = c[2]; t.alphaMultiplier = c[3];
+            t.redOffset = c[4]; t.greenOffset = c[5]; t.blueOffset = c[6]; t.alphaOffset = c[7];
+            object._changed();
+        }
+    }
 }
 function applyState(object, index) {
     if (index === object._stateIndex)

@@ -44,6 +44,17 @@ function lineOf(json) {
         joints: json.join || "round", miter: json.ml || 3, scaleMode: json.sm || "normal"};
 }
 
+/// A published picture that is a part of a sheet (one file holding the
+/// pictures of many frames) as a canvas of its own; anything else as it is.
+phoenix._.drawable = function (source) {
+    if (!source || !source._sheet)
+        return source;
+    var part = source._part;
+    var canvas = phoenix.makeCanvas(part[2], part[3]);
+    canvas.getContext("2d").drawImage(source._sheet, part[0], part[1], part[2], part[3], 0, 0, part[2], part[3]);
+    return canvas;
+};
+
 /// The canvas source of a bitmap a style or an image op names: a
 /// published image (by index) or a BitmapData.
 function sourceOf(bitmap) {
@@ -711,12 +722,17 @@ function drawGraphics(ctx, graphics, m, c, r) {
                     ctx.fillStyle = maskStyle();
                     ctx.fillRect(0, 0, source.width, source.height);
                 } else {
-                    if (c && !C.alphaOnly(c) && phoenix._.tinted)
-                        source = phoenix._.tinted(source, c);
+                    var tint = c && !C.alphaOnly(c) && phoenix._.tinted;
+                    if (tint)
+                        source = phoenix._.tinted(phoenix._.drawable(source), c);
                     else if (c)
                         ctx.globalAlpha = ctx.globalAlpha * phoenix.clamp(c[3], 0, 1);
                     ctx.imageSmoothingEnabled = op.smooth !== false;
-                    ctx.drawImage(source, 0, 0);
+                    if (source._sheet) {
+                        var part = source._part;
+                        ctx.drawImage(source._sheet, part[0], part[1], part[2], part[3], 0, 0, part[2], part[3]);
+                    } else
+                        ctx.drawImage(source, 0, 0);
                 }
                 ctx.restore();
             }

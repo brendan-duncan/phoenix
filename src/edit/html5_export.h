@@ -8,6 +8,7 @@ namespace fla {
 class Bitmap;
 class Document;
 class Element;
+class Timeline;
 
 /// Publishing to HTML5: a document as the JavaScript runtime in
 /// resources/html5 plays it. This part walks the document into the movie's
@@ -36,10 +37,43 @@ public:
     /// The library sound \a name as an index into sounds(); -1 when it
     /// cannot be written.
     virtual int sound(const std::string& name) = 0;
+    /// What Phoenix draws of layers \a from to \a to - 1 of \a timeline on
+    /// its frame \a frame (from 0), compositing and all, as a published
+    /// shape's JSON holding the one picture, placed in the timeline's
+    /// space; empty when nothing shows or it cannot be drawn. For what the
+    /// runtime has nothing like (Phoenix's own compositing): it goes out as
+    /// a picture a frame, frames that look alike sharing one.
+    virtual std::string picture(const Timeline& timeline, int from, int to, int frame)
+    {
+        (void)timeline;
+        (void)from;
+        (void)to;
+        (void)frame;
+        return std::string();
+    }
     /// The JSON arrays of the pictures and sounds handed out so far.
     virtual std::string images() = 0;
     virtual std::string sounds() = 0;
 };
+
+/// A run of a timeline's layers (\a from to \a to - 1, from the top) that
+/// Phoenix's own compositing draws as one, which the runtime has nothing
+/// like, so it is published as pictures: what it is, for the notes.
+struct BakedRun
+{
+    int from = 0;
+    int to = 0;
+    std::string why;
+};
+
+/// The runs of \a timeline's layers published as pictures: a node graph's
+/// whole timeline; an adjustment layer or a layer mode (Stencil,
+/// Silhouette, Preserve Transparency) and every layer under it; an effect
+/// layer and the layer it works on; a track matte and its matte; a mask
+/// with a feathered, grown or inverted edge, or a layer under several
+/// masks, with the masks and all they mask; motion blur, echo and posterize
+/// time; effects on instances that no filter carries.
+std::vector<BakedRun> bakedRuns(const Timeline& timeline);
 
 /// A movie's ActionScript 1 and 2, gathered while its content is made, for
 /// translating to JavaScript (fla::html5as2): each keyframe's script, and

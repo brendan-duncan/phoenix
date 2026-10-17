@@ -109,6 +109,15 @@ struct Measure
 void bakeCompositing(Document& document, std::vector<std::string>& notes, const Renderer& render = Renderer(),
     const Measure* measure = nullptr);
 
+/// Whether \a document has template values or graphics with responsive
+/// time, which bakeTemplates writes in.
+bool needsTemplateBaking(const Document& document);
+
+/// Only the first part of bakeCompositing: template values, pinned parts
+/// (with \a measure) and responsive time, for a copy published to HTML5,
+/// whose runtime does the compositing its own way.
+void bakeTemplates(Document& document, std::vector<std::string>& notes, const Measure* measure = nullptr);
+
 /// The filters and color effect \a effects make on \a frame, added to
 /// \a filters and \a color: Blur, Directional Blur along an axis and Lens
 /// Blur with no highlight boost as Blur; Color Correction and

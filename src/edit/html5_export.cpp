@@ -1,11 +1,17 @@
 #include "html5_export.h"
 
+#include "adjustments.h"
+#include "camera.h"
 #include "deformers.h"
 #include "frame_bake.h"
 #include "frame_sound.h"
 #include "graphic_loop.h"
 #include "layer_commands.h"
+#include "layer_effects.h"
+#include "motion_blur.h"
 #include "motion_object.h"
+#include "node_graph.h"
+#include "other_apps.h"
 #include "swf_actionscript3.h"
 #include "script_edit.h"
 #include "three_d.h"
@@ -360,6 +366,154 @@ Shown shownAt(const Frame& span, const Layer& layer, int framesIn, double frameR
     return shown;
 }
 
+/// Whether \a layer has effects on instances that no filter carries on
+/// some frame they show.
+bool uncarriedEffects(const Layer& layer)
+{
+    for (const Frame* frame : layer.frames)
+        for (const Element* element : frame ? frame->elements : std::vector<Element*>())
+        {
+            if (!element || element->elementType() != Element::Type::SymbolInstance ||
+                !compositing::hasInstanceEffects(*element))
+                continue;
+            const std::vector<behaviors::Applied> effects = compositing::instanceEffectsOf(*element);
+            for (int f = frame->index; f < frame->index + std::max(1, frame->duration); ++f)
+            {
+                std::vector<Filter> filters;
+                ColorTransform color = static_cast<const SymbolInstance*>(element)->colorTransform;
+                if (!otherapps::carryEffects(effects, f, filters, color))
+                    return true;
+            }
+        }
+    return false;
+}
+
+} // namespace
+
+std::vector<BakedRun> bakedRuns(const Timeline& timeline)
+{
+    const std::vector<Layer*>& layers = timeline.layers;
+    const int n = static_cast<int>(layers.size());
+    std::vector<BakedRun> runs;
+    const auto add = [&runs](int from, int to, const std::string& why) {
+        if (from < to)
+            runs.push_back({from, to, why});
+    };
+    const auto plain = [&layers](int i) {
+        return layers[static_cast<size_t>(i)] && layers[static_cast<size_t>(i)]->layerType != Layer::Type::Folder;
+    };
+    const auto indexOf = [&layers](const Layer* layer) {
+        const auto found = std::find(layers.begin(), layers.end(), layer);
+        return found == layers.end() ? -1 : static_cast<int>(found - layers.begin());
+    };
+    if (nodegraph::active(timeline))
+        add(0, n, "a node graph");
+    for (int i = 0; i < n; ++i)
+    {
+        const Layer* layer = layers[static_cast<size_t>(i)];
+        if (!plain(i))
+            continue;
+        if (compositing::isAdjustment(*layer))
+            add(i, n, "an adjustment layer");
+        else if (compositing::layerModeOf(*layer) != compositing::LayerMode::Normal)
+            add(i, n, "a layer mode");
+        if (effects::isEffect(*layer))
+        {
+            // It works on the first layer under it that is not an effect.
+            int target = i + 1;
+            while (target < n && (!plain(target) || effects::isEffect(*layers[static_cast<size_t>(target)])))
+                ++target;
+            add(i, std::min(n, target + 1), "an effect layer");
+        }
+        if (layer->layerType == Layer::Type::Normal && compositing::matteOf(*layer) != compositing::Matte::None)
+        {
+            int source = i - 1;
+            while (source >= 0 && !plain(source))
+                --source;
+            add(std::max(0, source), i + 1, "a track matte");
+        }
+        if (layer->layerType == Layer::Type::Mask)
+        {
+            bool soft = !compositing::maskEdgeOf(*layer).plain();
+            for (const Frame* frame : layer->frames)
+                for (const Element* element : frame ? frame->elements : std::vector<Element*>())
+                    soft = soft || (element && compositing::elementFeatherOf(*element, 0.0) > 0.0);
+            if (soft)
+                add(i, i + 1, "a mask with a soft, grown or inverted edge");
+        }
+        const std::vector<compositing::MoreMask> more = compositing::moreMasksOf(*layer);
+        if (!more.empty())
+        {
+            int from = i, to = i + 1;
+            for (const compositing::MoreMask& mask : more)
+                for (int j = 0; j < n; ++j)
+                    if (plain(j) && layers[static_cast<size_t>(j)]->layerType == Layer::Type::Mask &&
+                        layers[static_cast<size_t>(j)]->name == mask.layer)
+                    {
+                        from = std::min(from, j);
+                        to = std::max(to, j + 1);
+                    }
+            add(from, to, "several masks");
+        }
+        if (motionblur::on(*layer) || motionblur::layerTimeOf(*layer).any())
+            add(i, i + 1, "motion blur, echo or posterize time");
+        if (uncarriedEffects(*layer))
+            add(i, i + 1, "effects on instances no filter carries");
+    }
+    if (runs.empty())
+        return runs;
+    // A mask goes with all it masks, and what is masked with its mask, so
+    // the runtime's masks are never cut in two; overlapping runs are one.
+    bool grew = true;
+    while (grew)
+    {
+        grew = false;
+        std::sort(runs.begin(), runs.end(), [](const BakedRun& a, const BakedRun& b) { return a.from < b.from; });
+        std::vector<BakedRun> merged;
+        for (const BakedRun& run : runs)
+        {
+            if (!merged.empty() && run.from < merged.back().to)
+            {
+                merged.back().to = std::max(merged.back().to, run.to);
+                if (merged.back().why.find(run.why) == std::string::npos)
+                    merged.back().why += ", " + run.why;
+                grew = true;
+            }
+            else
+                merged.push_back(run);
+        }
+        runs = merged;
+        for (BakedRun& run : runs)
+            for (int i = run.from; i < run.to; ++i)
+            {
+                if (!plain(i))
+                    continue;
+                const Layer* layer = layers[static_cast<size_t>(i)];
+                const Layer* mask = layer->layerType == Layer::Type::Mask ? layer
+                    : layer->layerType == Layer::Type::Masked                ? layer->parentLayer
+                                                                             : nullptr;
+                if (!mask)
+                    continue;
+                const int m = indexOf(mask);
+                if (m >= 0 && m < run.from)
+                {
+                    run.from = m;
+                    grew = true;
+                }
+                for (int j = 0; j < n; ++j)
+                    if (plain(j) && layers[static_cast<size_t>(j)]->parentLayer == mask && (j < run.from || j >= run.to))
+                    {
+                        run.from = std::min(run.from, j);
+                        run.to = std::max(run.to, j + 1);
+                        grew = true;
+                    }
+            }
+    }
+    return runs;
+}
+
+namespace {
+
 class Walker
 {
 public:
@@ -484,6 +638,9 @@ private:
         std::vector<std::string> sounds;
         std::vector<std::pair<int, std::string>> scripts;
         std::string scenes;
+        // The camera's color effect on each frame ("0" for none).
+        std::vector<std::string> cameraColors;
+        bool toned = false;
         int offset = 0;
         for (size_t s = 0; s < timelines.size(); ++s)
         {
@@ -493,8 +650,14 @@ private:
                 scenes += std::string(scenes.empty() ? "" : ",") + "{\"name\":" + quoted(timeline.name) + ",\"at\":" +
                     std::to_string(offset) + ",\"n\":" + std::to_string(length) + "}";
             gatherFrameData(timeline, offset, scene, labels, sounds, scripts);
+            const bool filmed = scene && camera::cameraOf(timeline);
             for (int frame = 0; frame < length; ++frame)
             {
+                const std::string tone = filmed
+                    ? colorJson(camera::stateAt(timeline, frame, _document.width, _document.height).color)
+                    : std::string();
+                cameraColors.push_back(tone.empty() ? "0" : tone);
+                toned = toned || !tone.empty();
                 const std::string state = stateJson(timeline, frame, scene, "S" + std::to_string(s));
                 const auto found = stateIndex.find(state);
                 if (found != stateIndex.end())
@@ -541,6 +704,13 @@ private:
             out += ",\"js\":[";
             for (size_t i = 0; i < scripts.size(); ++i)
                 out += std::string(i ? "," : "") + "[" + std::to_string(scripts[i].first) + "," + quoted(scripts[i].second) + "]";
+            out += "]";
+        }
+        if (toned)
+        {
+            out += ",\"cc\":[";
+            for (size_t i = 0; i < cameraColors.size(); ++i)
+                out += (i ? "," : "") + cameraColors[i];
             out += "]";
         }
         out += ",\"states\":[";
@@ -616,11 +786,38 @@ private:
             return found == layers.end() ? -1 : static_cast<int>(found - layers.begin());
         };
         const auto shown = [scene](const Layer& layer) { return !scene || layer.isVisible(); };
+        _frame = frame;
+        // A scene's multiplane camera: each layer framed by it at its
+        // depth, its color effect on the whole picture (the timeline's
+        // "cc").
+        const bool filmed = scene && camera::cameraOf(timeline);
+        const camera::State shot =
+            filmed ? camera::stateAt(timeline, frame, _document.width, _document.height) : camera::State();
+        const std::vector<BakedRun>& runs = runsOf(timeline);
         std::string out;
         for (int li = static_cast<int>(layers.size()) - 1; li >= 0; --li)
         {
             const Layer* layer = layers[static_cast<size_t>(li)];
+            // Layers Phoenix's compositing draws together: one picture, in
+            // the place of the run's bottom layer.
+            const auto run = std::find_if(runs.begin(), runs.end(),
+                [li](const BakedRun& each) { return li >= each.from && li < each.to; });
+            if (run != runs.end())
+            {
+                if (li != run->to - 1)
+                    continue;
+                const std::string json = _source.picture(timeline, run->from, run->to, frame);
+                const int art = json.empty() ? -1 : artIndexOf(json);
+                if (art >= 0)
+                    out += std::string(out.empty() ? "" : ",") + "{\"k\":" + quoted(prefix + "B" + std::to_string(run->from)) +
+                        ",\"d\":" + std::to_string((static_cast<int>(layers.size()) - li) * 65536) + ",\"t\":\"a\",\"id\":" +
+                        std::to_string(art) + "}";
+                continue;
+            }
             if (!layer || layer->layerType == Layer::Type::Folder || layer->layerType == Layer::Type::Guide || !shown(*layer))
+                continue;
+            Transform view;
+            if (filmed && !camera::view(shot, camera::depthOf(*layer), _document.width, _document.height, view))
                 continue;
             int maskGroup = -1, maskedBy = -1;
             if (layer->layerType == Layer::Type::Mask)
@@ -633,7 +830,9 @@ private:
                 continue;
             const int framesIn = frame - span->index;
             Shown here = shownAt(*span, *layer, framesIn, _rate);
-            const Transform parent = parentTransform(timeline, *layer, *span, frame, here, 0);
+            Transform parent = parentTransform(timeline, *layer, *span, frame, here, 0);
+            if (filmed)
+                parent = followedBy(parent, view);
             for (size_t ei = 0; ei < here.elements.size(); ++ei)
             {
                 const Element* element = here.elements[ei];
@@ -730,10 +929,22 @@ private:
                 if (handlers >= 0)
                     out += ",\"h\":" + std::to_string(handlers);
             }
-            const std::string color = colorJson(instance.colorTransform);
+            // Phoenix's effects on the instance, as filters before its own
+            // and its color effect (those no filter carries make its layer
+            // a picture a frame: see bakedRuns).
+            ColorTransform colorEffect = instance.colorTransform;
+            std::vector<Filter> filterList = instance.filters;
+            const Element& own = original ? *original : element;
+            if (compositing::hasInstanceEffects(own))
+            {
+                std::vector<Filter> carried;
+                otherapps::carryEffects(compositing::instanceEffectsOf(own), _frame, carried, colorEffect);
+                filterList.insert(filterList.begin(), carried.begin(), carried.end());
+            }
+            const std::string color = colorJson(colorEffect);
             if (!color.empty())
                 out += ",\"ct\":" + color;
-            const std::string filters = filtersJson(instance.filters);
+            const std::string filters = filtersJson(filterList);
             if (!filters.empty())
                 out += ",\"f\":" + filters;
             if (!instance.blendMode.empty() && instance.blendMode != "normal")
@@ -843,19 +1054,7 @@ private:
         if (known != _artByElement.end())
             return known->second;
         const std::string json = _source.art(element);
-        int index = -1;
-        if (!json.empty())
-        {
-            const auto found = _artIndex.find(json);
-            if (found != _artIndex.end())
-                index = found->second;
-            else
-            {
-                index = static_cast<int>(_art.size());
-                _artIndex[json] = index;
-                _art.push_back(json);
-            }
-        }
+        const int index = json.empty() ? -1 : artIndexOf(json);
         // Copies a tween makes come and go; only the document's own
         // elements are remembered by address.
         if (element.parent && dynamic_cast<const Frame*>(element.parent) &&
@@ -864,6 +1063,43 @@ private:
                 static_cast<const Frame*>(element.parent)->elements.end())
             _artByElement[&element] = index;
         return index;
+    }
+
+    /// A shape's index in the content's art, the same shape once.
+    int artIndexOf(const std::string& json)
+    {
+        const auto found = _artIndex.find(json);
+        if (found != _artIndex.end())
+            return found->second;
+        const int index = static_cast<int>(_art.size());
+        _artIndex[json] = index;
+        _art.push_back(json);
+        return index;
+    }
+
+    /// The runs of \a timeline's layers published as pictures, each noted
+    /// once.
+    const std::vector<BakedRun>& runsOf(const Timeline& timeline)
+    {
+        const auto known = _runs.find(&timeline);
+        if (known != _runs.end())
+            return known->second;
+        std::vector<BakedRun>& runs = _runs[&timeline];
+        runs = bakedRuns(timeline);
+        const std::string where = _timelineName.empty() ? timeline.name : _timelineName;
+        for (const BakedRun& run : runs)
+        {
+            std::string names;
+            for (int i = run.from; i < run.to; ++i)
+            {
+                const Layer* layer = timeline.layers[static_cast<size_t>(i)];
+                if (layer && layer->layerType != Layer::Type::Folder)
+                    names += (names.empty() ? "" : ", ") + layer->name;
+            }
+            note(where + ": " + (run.to - run.from == 1 ? "layer " : "layers ") + names + " (" + run.why +
+                ") published as a picture a frame, which scripts cannot reach into.");
+        }
+        return runs;
     }
 
     /// A dynamic or input text field's description.
@@ -941,6 +1177,9 @@ private:
     std::map<const Symbol*, int> _symbolIndex;
     std::vector<std::string> _art;
     std::map<std::string, int> _artIndex;
+    std::map<const Timeline*, std::vector<BakedRun>> _runs;
+    /// The frame of the timeline being walked.
+    int _frame = 0;
     std::map<const Element*, int> _artByElement;
     std::vector<std::string> _texts;
     std::map<std::string, int> _textIndex;

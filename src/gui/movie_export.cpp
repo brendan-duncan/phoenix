@@ -402,8 +402,11 @@ bool canEncodeMp3()
     return known == 1;
 }
 
-bool encodeMp3(const std::vector<float>& samples, int rate, int channels, int kbps, std::vector<uint8_t>& mp3,
-    QString& error)
+/// \a samples through ffmpeg with \a arguments (the codec and its settings,
+/// then the output's format), into \a encoded; \a what names the format for
+/// an error.
+static bool encodeSound(const std::vector<float>& samples, const QStringList& arguments, const QString& suffix,
+    const QString& what, std::vector<uint8_t>& encoded, QString& error)
 {
     const QString ffmpeg = ffmpegPath();
     if (ffmpeg.isEmpty())
@@ -412,7 +415,7 @@ bool encodeMp3(const std::vector<float>& samples, int rate, int channels, int kb
         return false;
     }
     QTemporaryFile wav(QDir::temp().filePath("phoenix_soundXXXXXX.wav"));
-    QTemporaryFile out(QDir::temp().filePath("phoenix_soundXXXXXX.mp3"));
+    QTemporaryFile out(QDir::temp().filePath("phoenix_soundXXXXXX." + suffix));
     if (!wav.open() || !writeWav(wav, samples, PcmBuffer::kRate) || !out.open())
     {
         error = "Could not write the sound to a temporary file.";
@@ -421,14 +424,12 @@ bool encodeMp3(const std::vector<float>& samples, int rate, int channels, int kb
     wav.close();
     out.close();
     QProcess process;
-    process.start(ffmpeg, {"-y", "-hide_banner", "-loglevel", "error", "-i", wav.fileName(), "-c:a", "libmp3lame",
-                              "-ar", QString::number(rate), "-ac", QString::number(channels), "-b:a",
-                              QString("%1k").arg(kbps), "-write_xing", "0", "-id3v2_version", "0", "-f", "mp3",
-                              out.fileName()});
+    process.start(ffmpeg, QStringList{"-y", "-hide_banner", "-loglevel", "error", "-i", wav.fileName()} + arguments +
+                              QStringList{out.fileName()});
     if (!process.waitForFinished(600000) || process.exitStatus() != QProcess::NormalExit || process.exitCode() != 0)
     {
         const QString said = QString::fromLocal8Bit(process.readAllStandardError()).trimmed();
-        error = said.isEmpty() ? QString("ffmpeg could not encode MP3.") : said;
+        error = said.isEmpty() ? QString("ffmpeg could not encode %1.").arg(what) : said;
         return false;
     }
     QFile file(out.fileName());
@@ -438,8 +439,26 @@ bool encodeMp3(const std::vector<float>& samples, int rate, int channels, int kb
         return false;
     }
     const QByteArray bytes = file.readAll();
-    mp3.assign(bytes.begin(), bytes.end());
+    encoded.assign(bytes.begin(), bytes.end());
     return true;
+}
+
+bool encodeMp3(const std::vector<float>& samples, int rate, int channels, int kbps, std::vector<uint8_t>& mp3,
+    QString& error)
+{
+    return encodeSound(samples,
+        {"-c:a", "libmp3lame", "-ar", QString::number(rate), "-ac", QString::number(channels), "-b:a",
+            QString("%1k").arg(kbps), "-write_xing", "0", "-id3v2_version", "0", "-f", "mp3"},
+        "mp3", "MP3", mp3, error);
+}
+
+bool encodeAac(const std::vector<float>& samples, int rate, int channels, int kbps, std::vector<uint8_t>& m4a,
+    QString& error)
+{
+    return encodeSound(samples,
+        {"-c:a", "aac", "-ar", QString::number(rate), "-ac", QString::number(channels), "-b:a", QString("%1k").arg(kbps),
+            "-movflags", "+faststart", "-f", "ipod"},
+        "m4a", "AAC", m4a, error);
 }
 
 bool runOne(const MovieExportSettings& settings, PhoenixView& view, TimelineAudio* audio, double frameRate,

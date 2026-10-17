@@ -166,3 +166,60 @@ TEST(html5_publish_settings_round_trip)
     CHECK(written.find("Phoenix/HTML5") == std::string::npos);
     CHECK(!fla::publish::read(written, "game").html5);
 }
+
+namespace {
+
+/// FakeArt that also draws pictures: one small one for any run of layers,
+/// noting which run and frame.
+class PictureArt : public FakeArt
+{
+public:
+    std::vector<std::string> drawn;
+
+    std::string picture(const fla::Timeline&, int from, int to, int frame) override
+    {
+        drawn.push_back(std::to_string(from) + "-" + std::to_string(to) + "@" + std::to_string(frame));
+        return "{\"o\":[{\"i\":" + std::to_string(from) + ",\"m\":[1,0,0,1,0,0],\"b\":[0,0,1,1]}],\"b\":[0,0,1,1]}";
+    }
+};
+
+} // namespace
+
+TEST(html5_phoenix_effects_are_native_or_pictures)
+{
+    const std::unique_ptr<fla::FLADocument> file = read(kData / "html5" / "effects");
+    CHECK(file && file->document && !file->document->timelines.empty());
+    if (!file || !file->document || file->document->timelines.empty())
+        return;
+    // Layers from the top: Camera, Glow, Ball, Matte, Stripes, Wiggle,
+    // Soft, Cards, Back. The effect layer goes with the layer under it
+    // (which has motion blur too), the matte with its matted layer, the
+    // ripple no filter carries alone; the blur a filter carries stays.
+    const std::vector<fla::html5::BakedRun> runs = fla::html5::bakedRuns(*file->document->timelines.front());
+    CHECK(runs.size() == 3);
+    if (runs.size() == 3)
+    {
+        CHECK(runs[0].from == 1 && runs[0].to == 3);
+        CHECK(runs[0].why.find("an effect layer") != std::string::npos);
+        CHECK(runs[0].why.find("motion blur") != std::string::npos);
+        CHECK(runs[1].from == 3 && runs[1].to == 5 && runs[1].why == "a track matte");
+        CHECK(runs[2].from == 7 && runs[2].to == 8);
+    }
+    PictureArt art;
+    std::vector<std::string> notes;
+    const std::string content = fla::html5::content(*file->document, art, fla::html5::Options(), &notes);
+    // A picture a frame for each run, in the place of its bottom layer.
+    CHECK(art.drawn.size() == 3 * 24);
+    CHECK(has(content, "{\"k\":\"S0B1\",\"d\":458752,\"t\":\"a\",\"id\":"));
+    CHECK(has(content, "{\"k\":\"S0B7\",\"d\":131072,\"t\":\"a\",\"id\":"));
+    CHECK(notes.size() == 3);
+    CHECK(!notes.empty() && notes.front().find("Scene 1: layers Glow, Ball") == 0);
+    // The blur on the soft card as its filter.
+    CHECK(has(content, "\"k\":\"S0L6E0\""));
+    CHECK(has(content, "\"f\":[{\"t\":\"blur\",\"bx\":6,\"by\":6,\"q\":3}]"));
+    // The camera: at rest on frame 0, the back layer as drawn; its tint
+    // over the whole picture, frame by frame.
+    CHECK(has(content, "{\"k\":\"S0L8E0\",\"d\":65537,\"t\":\"a\",\"id\":0}"));
+    CHECK(has(content, "\"cc\":[0,["));
+    CHECK(has(content, "[0.65,0.65,0.65,1,89.25,47.6,0,0]]"));
+}

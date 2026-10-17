@@ -49,6 +49,9 @@
 #include <QToolButton>
 
 #include "../edit/editable_path.h"
+#include "../edit/other_apps.h"
+#include "../edit/timeline_edit.h"
+#include "html5_publish.h"
 
 #include <functional>
 #include <QMenuBar>
@@ -510,6 +513,18 @@ private slots:
     /// they composited kept as guides.
     void bakeNodeGraphs(fla::Document& copy, std::vector<std::string>& notes);
     bool writeForOtherApps(const QString& path, QString& error, int* bakedLayers);
+    /// Behaviors, shape operators and text animators on every timeline
+    /// baked into keyframes for a copy being written or published; undo()
+    /// of what is returned puts them back (null when there were none).
+    /// \a errors gets what a behavior's script said went wrong.
+    std::unique_ptr<fla::EditFramesCommand> bakeBehaviorsForCopy(std::shared_ptr<std::vector<std::string>> errors,
+        int* bakedLayers);
+    /// How big words and symbols are drawn, for placing pinned parts in a
+    /// copy with template values written in.
+    fla::otherapps::Measure measureForCopies();
+    /// The document published as HTML5 (Html5Publish::run), behaviors and
+    /// template values baked in for it and the document left as it was.
+    bool publishHtml5(const Html5Publish::Settings& settings, QStringList& written, QStringList& notes, QString& error);
     /// The shapes with operators on frames \a first to \a last of
     /// \a layer, baked: a keyframe a frame, each shape left as drawing
     /// objects as its operators make it there. Returns how many were baked.

@@ -163,6 +163,10 @@ bool canEncodeMp3();
 /// ffmpeg is missing or cannot.
 bool encodeMp3(const std::vector<float>& samples, int rate, int channels, int kbps, std::vector<uint8_t>& mp3,
     QString& error);
+/// The same as AAC in an MP4 audio file (.m4a), which every current browser
+/// plays; ffmpeg's own encoder, so any build of it can.
+bool encodeAac(const std::vector<float>& samples, int rate, int channels, int kbps, std::vector<uint8_t>& m4a,
+    QString& error);
 
 /// Writes the movie, showing progress over \a parent and letting it be
 /// cancelled. False with \a error set when it could not be written; false
