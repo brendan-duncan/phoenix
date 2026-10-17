@@ -19,8 +19,10 @@ added and overwritten; --mirror also removes those no longer in docs/. Either
 way the folders the server keeps for itself (updates/, download/) are left
 alone.
 
-The guide's What's New page, docs/changelog.html, is made again from
-CHANGELOG.md first (tools/build_changelog.py), so the site has every release.
+First the guide is brought up to date: the version CMakeLists.txt sets goes
+wherever the pages show it (tools/sync_docs_version.py), and the What's New
+page, docs/changelog.html, is made again from CHANGELOG.md
+(tools/build_changelog.py), so the site has every release.
 
 The site analytics client, analytics/phoenix_analytics.js, goes up with it as
 assets/analytics.js, stamped with the commit it was deployed from. The
@@ -151,7 +153,9 @@ def main():
     args = parser.parse_args()
 
     config = load_config()
-    # What's New, made from CHANGELOG.md, so it is never behind.
+    # The version and What's New, from CMakeLists.txt and CHANGELOG.md, so
+    # neither is ever behind.
+    subprocess.run([sys.executable, str(ROOT / "tools" / "sync_docs_version.py")], check=True)
     subprocess.run([sys.executable, str(ROOT / "tools" / "build_changelog.py")], check=True)
     files = list(site_files())
     if not files:
