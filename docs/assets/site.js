@@ -91,7 +91,6 @@ const NAV = [
     { href: "changelog.html", title: "What's new" },
   ] },
   { group: "Developers", pages: [
-    { href: "building.html", title: "Building from source" },
     { href: "phx-format.html", title: "The Phoenix document format" },
     { href: "fla-format.html", title: "The FLA and XFL format" },
     { href: "binary-fla-format.html", title: "The binary FLA format" },

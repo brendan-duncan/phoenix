@@ -22,7 +22,6 @@ DOCS = ROOT / "docs"
 SITE = "https://phoenixanimate.com/"
 # The notes that were Markdown, as Pages named them, and the pages they became.
 FORMER_NOTES = {
-    "BUILDING.html": "building.html",
     "PHOENIX_FORMAT.html": "phx-format.html",
     "FLA_FORMAT.html": "fla-format.html",
     "BINARY_FLA_FORMAT.html": "binary-fla-format.html",
