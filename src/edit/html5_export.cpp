@@ -5,7 +5,9 @@
 #include "frame_sound.h"
 #include "graphic_loop.h"
 #include "layer_commands.h"
+#include "motion_object.h"
 #include "three_d.h"
+#include "timeline_edit.h"
 
 #include "../data/bitmap.h"
 #include "../data/bitmap_instance.h"
@@ -328,6 +330,20 @@ Shown shownAt(const Frame& span, const Layer& layer, int framesIn, double frameR
         if (element)
             sources.push_back(element);
     const std::vector<Element*> made = frames::elementsAt(span, next, framesIn, frameRate, const_cast<Frame*>(&span));
+    // A motion tween's color and filter curves, as the stage draws them.
+    if (span.otherTweenType == "motion object")
+    {
+        MotionObject motion;
+        std::string* xml = timeline::motionOf(const_cast<Frame&>(span));
+        if (xml && motion.parse(*xml) && (motion.animatesColor() || motion.animatesFilters()))
+            for (Element* element : made)
+                if (element && element->elementType() == Element::Type::SymbolInstance)
+                {
+                    auto* instance = static_cast<SymbolInstance*>(element);
+                    instance->colorTransform = motion.colorAt(framesIn, frameRate, instance->colorTransform);
+                    instance->filters = motion.filtersAt(framesIn, frameRate, instance->filters);
+                }
+    }
     const bool reshaping = span.tweenType == TweenType::Shape;
     for (size_t i = 0; i < made.size(); ++i)
     {
