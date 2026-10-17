@@ -12,6 +12,7 @@
 #include "../src/edit/new_document.h"
 #include "../src/edit/publish_settings.h"
 #include "../src/parser/fla_parser.h"
+#include "../src/phx/phx_document.h"
 #include "../src/play/movie_runtime.h"
 #include "../src/writer/fla_writer.h"
 #include "../src/writer/xfl_folder_writer.h"
@@ -181,4 +182,11 @@ TEST(canvas_new_document_publishes_canvas)
     FLAParser parser;
     std::unique_ptr<fla::FLADocument> again(parser.parse(fla));
     CHECK(again && again->document && fla::canvas::isCanvasDocument(*again->document));
+    // And in Phoenix's own format, which new documents save as.
+    const std::string phxPath = (scratch.path / "new.phx").string();
+    std::string error, warning;
+    bool readOnly = false;
+    CHECK(phx::save(document, phxPath, phx::SaveOptions(), error));
+    std::unique_ptr<fla::FLADocument> opened(phx::load(phxPath, error, warning, readOnly));
+    CHECK(opened && opened->document && fla::canvas::isCanvasDocument(*opened->document));
 }
