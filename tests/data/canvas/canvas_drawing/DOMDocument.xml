@@ -1,0 +1,130 @@
+<DOMDocument xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://ns.adobe.com/xfl/2008/" width="550" height="400" frameRate="24" currentTimeline="1" xflVersion="23.0" creatorInfo="Phoenix" platform="Windows" nextSceneIdentifier="2" playOptionsPlayLoop="false" playOptionsPlayPages="false" playOptionsPlayFrameActions="false" fileGUID="7E2B1D4C3F5A4B8C9D0E1F2A3B4C5D6E">
+     <media>
+          <DOMBitmapItem name="tile.png" itemID="6a0b0c01-00000002" linkageExportForAS="true" linkageClassName="Tile" sourceLastImported="1773589179" allowSmoothing="true" href="tile.png" frameRight="1280" frameBottom="320"/>
+     </media>
+     <symbols>
+          <Include href="Ball.xml" loadImmediate="false" itemID="6a0b0c01-00000001" lastModified="1773589179"/>
+     </symbols>
+     <timelines>
+          <DOMTimeline name="Scene 1">
+               <layers>
+                    <DOMLayer name="Actions" color="#FF4FFF" current="true" isSelected="true">
+                         <frames>
+                              <DOMFrame index="0" duration="5" keyMode="9728">
+                                   <Actionscript>
+                                        <script><![CDATA[var root = this;
+if (!this.built) {
+this.built = true;
+// Drawing: shapes of every kind, chained, in the tiny API too.
+var s = new createjs.Shape();
+s.graphics.beginFill("#ff0000").drawRect(10, 10, 80, 50)
+	.beginFill("rgba(0,128,255,0.7)").drawCircle(150, 35, 25)
+	.beginFill("gold").setStrokeStyle(3, "round").beginStroke("#333").drawRoundRect(200, 10, 80, 50, 12)
+	.endStroke().beginFill("purple").drawPolyStar(330, 35, 28, 5, 0.6, -90)
+	.beginLinearGradientFill(["#f00", "#00f"], [0, 1], 370, 0, 450, 0).drawRect(370, 10, 80, 50)
+	.beginRadialGradientFill(["#fff", "#080"], [0, 1], 500, 35, 0, 500, 35, 30).drawCircle(500, 35, 30)
+	.endFill().setStrokeStyle(4).beginStroke("green").moveTo(10, 100).arc(60, 100, 30, Math.PI, 0).lineTo(130, 100)
+	.moveTo(150, 120).arcTo(200, 70, 250, 120, 30).endStroke()
+	.f("#0a0").de(260, 75, 60, 40)
+	.f("#e80").rc(350, 75, 80, 40, 0, 15, 0, 15);
+this.addChild(s);
+var pulse = new createjs.Shape();
+var dot = pulse.graphics.f("#c00").dc(0, 0, 10).command;
+pulse.x = 500; pulse.y = 100;
+this.addChild(pulse);
+createjs.Ticker.on("tick", function () { dot.radius = 10 + 5 * Math.sin(createjs.Ticker.getTicks() / 3); });
+// Text.
+var t = new createjs.Text("Canvas text, centered", "bold 22px Arial", "#203060");
+t.textAlign = "center"; t.x = 275; t.y = 135;
+this.addChild(t);
+var w = new createjs.Text("Wrapped text in a line 120 wide that goes on", "16px Georgia", "#555");
+w.lineWidth = 120; w.x = 10; w.y = 165;
+this.addChild(w);
+console.log("text", Math.round(t.getMeasuredWidth()) > 100, w.getMeasuredHeight() > 30);
+// Bitmaps: the library's by its class, a part of one by its name, a sprite
+// sheet's frames, a bitmap fill.
+var b = new lib.Tile(); b.x = 150; b.y = 170;
+this.addChild(b);
+var b2 = new createjs.Bitmap("tile.png"); b2.sourceRect = new createjs.Rectangle(16, 0, 16, 16);
+b2.x = 230; b2.y = 170;
+this.addChild(b2);
+var sheet = new createjs.SpriteSheet({images: [images.tile], frames: {width: 16, height: 16}, animations: {spin: [0, 3]}, framerate: 6});
+var sp = new createjs.Sprite(sheet, "spin"); sp.x = 260; sp.y = 170; sp.scaleX = sp.scaleY = 2;
+this.addChild(sp);
+var tiled = new createjs.Shape(); tiled.graphics.beginBitmapFill(images.tile).drawRect(0, 0, 96, 48);
+tiled.x = 310; tiled.y = 170;
+this.addChild(tiled);
+// Filters (shown once cached), a shadow, a mask, a blend mode.
+var blur = new createjs.Shape(); blur.graphics.f("#06c").dr(0, 0, 60, 40); blur.x = 420; blur.y = 170;
+blur.filters = [new createjs.BlurFilter(5, 5, 2)]; blur.cache(-10, -10, 80, 60);
+this.addChild(blur);
+var gray = new createjs.Bitmap(images.tile); gray.x = 490; gray.y = 230;
+gray.filters = [new createjs.ColorMatrixFilter(new createjs.ColorMatrix(0, 0, -100, 0))]; gray.cache(0, 0, 64, 16);
+this.addChild(gray);
+var shadowed = new createjs.Shape(); shadowed.graphics.f("#fc0").dc(0, 0, 25); shadowed.x = 40; shadowed.y = 300;
+shadowed.shadow = new createjs.Shadow("rgba(0,0,0,0.6)", 6, 6, 8);
+this.addChild(shadowed);
+var masked = new createjs.Shape(); masked.graphics.lf(["#f0f", "#0ff"], [0, 1], 0, 0, 100, 0).dr(0, 0, 100, 60);
+masked.x = 90; masked.y = 270;
+var m = new createjs.Shape(); m.graphics.f("#000").dc(140, 300, 28); masked.mask = m;
+this.addChild(masked);
+var mult = new createjs.Shape(); mult.graphics.f("#0f0").dr(0, 0, 50, 50); mult.x = 165; mult.y = 280;
+mult.compositeOperation = "multiply";
+this.addChild(mult);
+// A clip made by script, its timeline tweened; the timeline's ball skewed
+// about its registration point.
+var mc = new createjs.MovieClip();
+var sq = new createjs.Shape(); sq.graphics.f("#a0f").dr(-15, -15, 30, 30);
+mc.timeline.addTween(createjs.Tween.get(sq).to({x: 100, rotation: 180}, 12).to({x: 0, rotation: 0}, 12));
+mc.x = 250; mc.y = 300;
+this.addChild(mc);
+this.ball.regX = 20; this.ball.regY = 20; this.ball.skewX = 20; this.ball.x = 420; this.ball.y = 300;
+// An instance whose frame is still to come.
+console.log("late", this.late !== undefined, this.late.parent);
+this.late.on("click", function () { console.log("late clicked", root.late.currentFrame); });
+}
+]]></script>
+                                   </Actionscript>
+                                   <elements/>
+                              </DOMFrame>
+                              <DOMFrame index="5" keyMode="9728">
+                                   <Actionscript>
+                                        <script><![CDATA[this.stop();
+console.log("late placed", this.late.parent === this);
+]]></script>
+                                   </Actionscript>
+                                   <elements/>
+                              </DOMFrame>
+                         </frames>
+                    </DOMLayer>
+                    <DOMLayer name="Ball" color="#4FFFFF">
+                         <frames>
+                              <DOMFrame index="0" duration="5" keyMode="9728">
+                                   <elements>
+                                        <DOMSymbolInstance libraryItemName="Ball" name="ball">
+                                             <matrix>
+                                                  <Matrix tx="400" ty="280"/>
+                                             </matrix>
+                                        </DOMSymbolInstance>
+                                   </elements>
+                              </DOMFrame>
+                              <DOMFrame index="5" keyMode="9728">
+                                   <elements>
+                                        <DOMSymbolInstance libraryItemName="Ball" name="ball">
+                                             <matrix>
+                                                  <Matrix tx="400" ty="280"/>
+                                             </matrix>
+                                        </DOMSymbolInstance>
+                                        <DOMSymbolInstance libraryItemName="Ball" name="late">
+                                             <matrix>
+                                                  <Matrix tx="480" ty="330"/>
+                                             </matrix>
+                                        </DOMSymbolInstance>
+                                   </elements>
+                              </DOMFrame>
+                         </frames>
+                    </DOMLayer>
+               </layers>
+          </DOMTimeline>
+     </timelines>
+</DOMDocument>

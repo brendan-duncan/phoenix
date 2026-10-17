@@ -567,16 +567,14 @@ function warnOnce(what) {
         P.print("Warning: " + what + " is not available in Test Movie");
     }
 }
-var finalizer = typeof FinalizationRegistry === "function"
-    ? new FinalizationRegistry(function (id) { made.delete(id); held.delete(id); P.release(id); }) : null;
 function own(object, kind) {
     if (Object.prototype.hasOwnProperty.call(object, "__id"))
         return object.__id;
     var id = P.create(kind);
     hidden(object, "__id", id);
+    // Let go of by the scripts (and on no display list, so held by
+    // nothing), it is let go of by the native side as the scripts sync.
     made.set(id, typeof WeakRef === "function" ? new WeakRef(object) : { deref: function () { return object; } });
-    if (finalizer)
-        finalizer.register(object, id);
     return id;
 }
 function hold(child) {
@@ -2932,9 +2930,10 @@ global.__phoenixForget = function (id) {
 global.__phoenixSync = function () {
     made.forEach(function (ref, id) {
         var object = ref.deref();
-        if (!object)
+        if (!object) {
             made.delete(id);
-        else if (object._sync)
+            P.release(id);
+        } else if (object._sync)
             object._sync();
     });
     effected.forEach(function (id) {
