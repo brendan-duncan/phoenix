@@ -4,7 +4,9 @@
 #include "media_import.h"
 #include "main_window.h"
 #include "output_panel.h"
+#include "phoenix_view.h"
 #include "script_api.h"
+#include "toolbox.h"
 #include "xul_dialog.h"
 
 #include "../data/document.h"
@@ -52,6 +54,7 @@
 #include <QPushButton>
 #include <QSettings>
 #include <QStandardPaths>
+#include <QPointer>
 #include <QTimer>
 #include <QUrl>
 #include <QUuid>
@@ -509,6 +512,65 @@ public:
     // Drawing.
     fla::DrawingStyle* drawingStyle() override { return &_window._drawingStyle; }
     void copyText(const std::string& value) override { QApplication::clipboard()->setText(qtext(value)); }
+
+    // The toolbox and the view.
+    std::vector<std::string> tools() override
+    {
+        std::vector<std::string> names;
+        if (_window._toolbox)
+        {
+            for (const QString& id : _window._toolbox->toolIds())
+                names.push_back(text(id));
+        }
+        return names;
+    }
+    std::string activeTool() override
+    {
+        return _window._phoenixView ? text(_window.toolName(_window._phoenixView->activeTool())) : std::string();
+    }
+    bool selectTool(const std::string& name) override
+    {
+        QAction* action = _window._toolbox ? _window._toolbox->tool(qtext(name)) : nullptr;
+        if (!action)
+            return false;
+        action->trigger();
+        return true;
+    }
+    bool runCommand(fla::FLADocument* document, const std::string& name, std::string& error) override
+    {
+        if (document != _window._flaDocument || !_window._phoenixView)
+        {
+            error = name + " works on the document shown.";
+            return false;
+        }
+        if (name == "testMovie")
+        {
+            // Once the script is done: Test Movie holds the document still.
+            QPointer<MainWindow> window(&_window);
+            QTimer::singleShot(0, &_window, [window]() {
+                if (window)
+                    window->testMovie();
+            });
+            return true;
+        }
+        if (name == "convertLinesToFills")
+        {
+            _window.convertLinesToFillsSelection();
+            return true;
+        }
+        error = "Phoenix has no command called " + name + ".";
+        return false;
+    }
+    double zoom(fla::FLADocument* document) override
+    {
+        return document == _window._flaDocument && _window._phoenixView ? _window._phoenixView->zoom() : 1.0;
+    }
+    void setZoom(fla::FLADocument* document, double zoom) override
+    {
+        if (document == _window._flaDocument && _window._phoenixView)
+            _window._phoenixView->setZoomLevel(zoom);
+    }
+
     jsfl::Rect bounds(fla::FLADocument*, const fla::Element* element) override
     {
         PhoenixView* view = _window._phoenixView;

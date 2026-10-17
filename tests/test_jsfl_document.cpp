@@ -131,23 +131,27 @@ TEST(jsfl_library_sounds_rename_delete_export)
                 "lib.newFolder('Sounds'); lib.moveToFolder('Sounds', 'Beep');\n"
                 "lib.selectItem('Sounds/Beep'); fl.trace(lib.renameItem('Boop') + ' ' + lib.itemExists('Sounds/Boop'));\n"
                 "fl.trace(lib.items[lib.findItemIndex('Sounds/Boop')].exportToFile(base + 'out.wav'));\n"
-                "var frame = fl.getDocumentDOM().getTimeline().layers[0].frames[0];\n"
-                "frame.soundName = 'Sounds/Boop';\n"
-                "try { lib.deleteItem('Sounds/Boop'); } catch (e) { fl.trace('used'); }\n"
-                "frame.soundName = '';\n"
-                "fl.trace(lib.deleteItem('Sounds/Boop') + ' ' + lib.itemExists('Sounds/Boop'));\n")
+                "fl.getDocumentDOM().getTimeline().layers[0].frames[0].soundName = 'Sounds/Boop';\n")
               .ok);
-    expectOutput(f, "Beep true false\ntrue true\ntrue\nused\ntrue false\n");
-    CHECK(f.data().sounds.empty() && f.data().extraMedia.empty());
-    CHECK(f.data().extraFiles.size() + 1 == files);
+    expectOutput(f, "Beep true false\ntrue true\ntrue\n");
     // A WAV of the 8 silent samples: 44.1 kHz, 16-bit, mono.
     const std::string wav = readFile(folder + "/out.wav");
     CHECK(wav.size() == 44 + 16 && wav.compare(0, 4, "RIFF") == 0 && wav.compare(8, 4, "WAVE") == 0);
-    // Undone, the sound is back under its first name, with its data.
+    // Deleted while a keyframe plays it: the keyframe lets it go.
+    CHECK(f.run("var lib = fl.getDocumentDOM().library;\n"
+                "fl.trace(lib.deleteItem('Sounds/Boop') + ' ' + lib.itemExists('Sounds/Boop') + ' [' +\n"
+                "    fl.getDocumentDOM().getTimeline().layers[0].frames[0].soundName + ']');\n")
+              .ok);
+    expectOutput(f, "true false []\n");
+    CHECK(f.data().sounds.empty() && f.data().extraMedia.empty());
+    CHECK(f.data().extraFiles.size() + 1 == files);
+    // Undone, the sound is back, with its data, and the keyframe plays it.
     f.host.history(f.document).undo();
-    CHECK(f.data().sounds.size() == 1 && f.data().sounds[0].name == "beep.wav");
+    CHECK(f.data().sounds.size() == 1 && f.data().sounds[0].name == "Sounds/Boop");
     CHECK(f.data().extraFiles.size() == files && f.data().extraMedia.size() == 1);
-    CHECK(f.data().extraMedia[0].find("name=\"beep.wav\"") != std::string::npos);
+    CHECK(f.data().extraMedia[0].find("name=\"Sounds/Boop\"") != std::string::npos);
+    CHECK(f.run("fl.trace(fl.getDocumentDOM().getTimeline().layers[0].frames[0].soundName);").ok);
+    expectOutput(f, "Sounds/Boop\n");
 }
 
 TEST(jsfl_library_videos_rename_delete)
@@ -172,13 +176,21 @@ TEST(jsfl_library_videos_rename_delete)
     CHECK(f.run("var lib = fl.getDocumentDOM().library;\n"
                 "lib.items[lib.findItemIndex('clip.flv')].name = 'Intro';\n"
                 "fl.trace(lib.itemExists('Intro') + ' ' + lib.getItemType('Intro'));\n"
-                "try { lib.deleteItem('Intro'); } catch (e) { fl.trace('used'); }\n"
                 "fl.trace(lib.deleteItem('spare.flv') + ' ' + lib.itemExists('spare.flv'));\n")
               .ok);
-    expectOutput(f, "true video\nused\ntrue false\n");
+    expectOutput(f, "true video\ntrue false\n");
     CHECK(raw->videoItem == "Intro" && raw->xml.find("libraryItemName=\"Intro\"") != std::string::npos);
     CHECK(data.videos.size() == 1 && data.extraMedia.size() == 1 && data.extraFiles.size() == 1);
     CHECK(data.extraMedia[0].find("name=\"Intro\"") != std::string::npos);
+    // Deleted while on the stage: its instance goes with it.
+    CHECK(f.run("var lib = fl.getDocumentDOM().library;\n"
+                "fl.trace(lib.deleteItem('Intro') + ' ' + lib.itemExists('Intro') + ' ' +\n"
+                "    fl.getDocumentDOM().getTimeline().layers[0].frames[0].elements.length);\n")
+              .ok);
+    expectOutput(f, "true false 0\n");
+    CHECK(data.videos.empty() && frame->elements.empty());
+    f.host.history(f.document).undo();
+    CHECK(data.videos.size() == 1 && frame->elements.size() == 1 && frame->elements[0] == raw);
     f.host.history(f.document).undo();
     CHECK(raw->videoItem == "clip.flv" && data.videos.size() == 2 && data.extraFiles.size() == 2);
 }

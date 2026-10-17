@@ -409,6 +409,7 @@ const ClassInfo& Flash::classInfo() const
         });
         def.get("xmlui", [](Flash& fl) { return Value(makeXmlUI(fl.session)); });
         describeFlashPublishing(def);
+        describeFlashTools(def);
         return info;
     }();
     return info;

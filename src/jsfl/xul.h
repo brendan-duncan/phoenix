@@ -103,6 +103,9 @@ public:
     /// The <dialog> element.
     const Node& root() const { return *_root; }
     std::string title;
+    /// The folder the XML was read from, for the files it names (an
+    /// embedded SWF panel); empty for XML from a string.
+    std::string folder;
     /// The buttons along the bottom, in order: "accept", "cancel".
     std::vector<std::string> buttons;
 
@@ -178,7 +181,7 @@ class Session;
 /// fl.xmlPanelFromString: shows the dialog and returns its result. With no
 /// one to ask (the command line, an offscreen window), it is accepted
 /// with each control's default value and a note traced.
-Value showXmlPanel(Session& session, const std::string& xml);
+Value showXmlPanel(Session& session, const std::string& xml, const std::string& folder = std::string());
 /// fl.xmlPanel and document.xmlPanel: the XML read from a file:/// URI.
 Value showXmlPanelFile(Session& session, const std::string& uri);
 /// fl.xmlui.

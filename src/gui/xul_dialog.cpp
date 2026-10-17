@@ -1,12 +1,18 @@
 #include "xul_dialog.h"
 
+#include "test_movie_window.h"
+
+#include "../data/fla_document.h"
 #include "../jsfl/flfile.h"
 #include "../jsfl/xul.h"
+#include "../parser/fla_parser.h"
 
 #include <QButtonGroup>
 #include <QCheckBox>
 #include <QColorDialog>
 #include <QComboBox>
+#include <QDir>
+#include <QFileInfo>
 #include <QDialogButtonBox>
 #include <QFileDialog>
 #include <QFontMetrics>
@@ -152,6 +158,8 @@ XulDialog::~XulDialog()
 {
     _dialog.changed = nullptr;
     _dialog.closedByScript = nullptr;
+    // The SWF panels' players go before the movies they play.
+    qDeleteAll(findChildren<TestMovieWindow*>());
 }
 
 void XulDialog::accept()
@@ -234,7 +242,9 @@ QWidget* XulDialog::make(const Node& node)
         applyWidth(label, node, false);
         return label;
     }
-    if (node.is("flash") || node.is("image") || node.is("iframe") || node.is("html"))
+    if (node.is("flash"))
+        return makeMovie(node);
+    if (node.is("image") || node.is("iframe") || node.is("html"))
     {
         auto* label = new QLabel("(Embedded content is not shown.)", this);
         label->setEnabled(false);
@@ -263,6 +273,45 @@ QWidget* XulDialog::make(const Node& node)
     holder->setLayout(box);
     fill(node, box);
     applyWidth(holder, node, false);
+    return holder;
+}
+
+QWidget* XulDialog::makeMovie(const jsfl::xul::Node& node)
+{
+    // An SWF panel: played as Test Movie plays a movie, at the size the
+    // XML gives. Its ActionScript runs, but cannot call JSFL (MMExecute).
+    const QString source = qtext(node.attr("src"));
+    QString path = source;
+    if (path.startsWith("file:", Qt::CaseInsensitive))
+        path = qtext(jsfl::uri::toPath(text(path)));
+    else if (QFileInfo(path).isRelative() && !_dialog.folder.empty())
+        path = QDir(qtext(_dialog.folder)).filePath(path);
+    std::unique_ptr<fla::FLADocument> movie;
+    if (QFileInfo(path).isFile())
+    {
+        FLAParser parser;
+        movie.reset(parser.parse(path.toStdString()));
+    }
+    if (!movie || !movie->document)
+    {
+        auto* label = new QLabel(QString("(The SWF panel %1 could not be read.)").arg(QFileInfo(source).fileName()), this);
+        label->setEnabled(false);
+        return label;
+    }
+    auto* holder = new QWidget(this);
+    auto* layout = new QVBoxLayout(holder);
+    layout->setContentsMargins(0, 0, 0, 0);
+    auto* player = new TestMovieWindow(*movie, QFileInfo(path).fileName(), [](const QString&) {},
+        [](const QString&, const fla::DOMElement*, int) {}, holder, path);
+    player->setWindowFlags(Qt::Widget);
+    const int width = number(node, "width", 0), height = number(node, "height", 0);
+    if (width > 0 && height > 0)
+        player->setMinimumSize(width, height);
+    layout->addWidget(player, 1);
+    auto* note = new QLabel("This panel's scripts cannot call Phoenix's JSFL.", holder);
+    note->setEnabled(false);
+    layout->addWidget(note);
+    _movies.push_back(std::move(movie));
     return holder;
 }
 
@@ -484,11 +533,17 @@ QWidget* XulDialog::makeControl(Control& control)
     }
     case Kind::TargetList:
     {
-        auto* edit = new QLineEdit(this);
-        edit->setPlaceholderText("Instance path");
-        connect(edit, &QLineEdit::textEdited, this, [&dialog, c](const QString& typed) { dialog.edit(*c, text(typed)); });
-        applyWidth(edit, node, false);
-        widget = edit;
+        // The named instances of the timeline being edited, by their
+        // paths, to pick from or type over.
+        auto* combo = new QComboBox(this);
+        combo->setEditable(true);
+        combo->lineEdit()->setPlaceholderText("Instance path");
+        connect(combo, &QComboBox::editTextChanged, this, [this, &dialog, c](const QString& typed) {
+            if (!_refreshing)
+                dialog.edit(*c, text(typed));
+        });
+        applyWidth(combo, node, true);
+        widget = combo;
         break;
     }
     case Kind::Button:
@@ -601,8 +656,14 @@ void XulDialog::refresh(Control& control)
             edit->setText(qtext(control.text));
         break;
     case Kind::TargetList:
-        static_cast<QLineEdit*>(widget)->setText(qtext(control.text));
+    {
+        auto* combo = static_cast<QComboBox*>(widget);
+        combo->clear();
+        for (const jsfl::xul::Item& item : control.items)
+            combo->addItem(qtext(item.label));
+        combo->setEditText(qtext(control.text));
         break;
+    }
     case Kind::Label:
         static_cast<QLabel*>(widget)->setText(qtext(control.text));
         break;

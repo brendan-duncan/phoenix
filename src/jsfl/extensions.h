@@ -4,6 +4,8 @@
 
 namespace fla {
 struct Filter;
+class FillStyle;
+class StrokeStyle;
 }
 
 /// Parts of the object model kept in files of their own, added to the
@@ -35,6 +37,34 @@ void setParentLayer(Layer& layer, const Value& parent);
 /// A filter as the plain object scripts read and write (model_element.cpp).
 Value filterToValue(const fla::Filter& filter);
 fla::Filter filterFromValue(const Value& value);
+
+/// The fill and stroke (model_style.cpp): the toolbar's and the selected
+/// shapes', set and read by setFillColor, setStroke, setStrokeStyle,
+/// setCustomStroke and their kin.
+void describeDocumentStyle(ClassDef<Document>& def);
+/// A fill or stroke as the plain object scripts read (model_shape.cpp);
+/// null gives "noFill" or "noStroke".
+Value fillToValue(const fla::FillStyle* fill);
+Value strokeToValue(const fla::StrokeStyle* stroke);
+
+/// The toolbox and the view (model_view.cpp): fl.selectTool, what
+/// fl.tools reads outside a tool's script, and document.zoomFactor.
+void describeFlashTools(ClassDef<Flash>& def);
+void describeDocumentView(ClassDef<Document>& def);
+
+/// Importing (model_import.cpp): document.importFile, documents and
+/// movies among what it takes, and importEmbeddedSWF.
+void describeDocumentImport(ClassDef<Document>& def);
+
+/// Publish profiles (model_profiles.cpp): publishProfiles,
+/// currentPublishProfile, adding, renaming and deleting them, exporting
+/// and importing them as XML, asVersion and docClass.
+void describeDocumentProfiles(ClassDef<Document>& def);
+
+/// More of the document (model_commands.cpp): testMovie, testScene,
+/// convertLinesToFills, livePreview, primitive rectangles and ovals, and
+/// setTextRectangle.
+void describeDocumentCommands(ClassDef<Document>& def);
 
 /// Publishing (model_publish.cpp): document.exportSWF, document.publish,
 /// fl.publishDocument and FLfile.runCommandLine.

@@ -1049,7 +1049,44 @@ const ClassInfo& Frame::classInfo() const
                 const int ease = std::clamp(v.toInt(), -100, 100);
                 f.push(fla::CommandPtr(new fla::SetPropertyCommand<int>(frame.acceleration, frame.acceleration, ease, "Ease")), false);
             });
-        def.get("hasCustomEase", [](Frame& f) { return Value(f.get().hasCustomEase); });
+        def.prop("hasCustomEase", [](Frame& f) { return Value(f.get().hasCustomEase); },
+            [](Frame& f, const Value& v) {
+                fla::Frame& frame = f.get();
+                f.push(fla::CommandPtr(new fla::SetPropertyCommand<bool>(frame.hasCustomEase, frame.hasCustomEase, v.toBool(), "Ease")),
+                    false);
+            });
+        // One curve eases every property here: getCustomEase gives it for
+        // any property asked, and setCustomEase sets it.
+        def.prop("useSingleEaseCurve", [](Frame&) { return Value(true); }, [](Frame&, const Value&) {});
+        def.method("getCustomEase", 1, [](Frame& f, const Args&) {
+            Value points = Value::array();
+            for (const fla::Point& point : f.get().customEase)
+            {
+                Value p = Value::map();
+                p.set("x", point.x);
+                p.set("y", point.y);
+                points.items.push_back(p);
+            }
+            return points;
+        });
+        def.method("setCustomEase", 2, [](Frame& f, const Args& args) {
+            const Value& curve = given(args, 1) ? arg(args, 1) : arg(args, 0);
+            if (curve.type != Value::Type::Array)
+                throw Error("setCustomEase takes the property and an array of points.");
+            std::vector<fla::Point> points;
+            for (const Value& item : curve.items)
+            {
+                const Value* x = item.field("x");
+                const Value* y = item.field("y");
+                points.emplace_back(x ? x->toNumber() : 0.0, y ? y->toNumber() : 0.0);
+            }
+            fla::Frame& frame = f.get();
+            f.push(fla::CommandPtr(new fla::SetPropertyCommand<std::vector<fla::Point>>(frame.customEase, frame.customEase, points, "Ease")),
+                false);
+            f.push(fla::CommandPtr(new fla::SetPropertyCommand<bool>(frame.hasCustomEase, frame.hasCustomEase, !points.empty(), "Ease")),
+                false);
+            return Value();
+        });
         def.prop("motionTweenRotate",
             [](Frame& f) {
                 const std::string& rotate = f.get().motionTweenRotate;

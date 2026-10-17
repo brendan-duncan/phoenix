@@ -4,6 +4,15 @@
 #include "session.h"
 #include "xul.h"
 
+#include "../data/document.h"
+#include "../data/fla_document.h"
+#include "../data/frame.h"
+#include "../data/layer.h"
+#include "../data/symbol.h"
+#include "../data/symbol_instance.h"
+#include "../data/timeline.h"
+
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <sstream>
@@ -183,14 +192,66 @@ bool readText(const std::string& path, std::string& text)
     return true;
 }
 
+/// The named movie clip and button instances of \a timeline and, by
+/// their paths, those inside them: what a targetlist offers.
+void targetsIn(const fla::Timeline* timeline, const std::string& prefix, int depth, std::vector<std::string>& out)
+{
+    if (!timeline || depth > 8)
+        return;
+    std::vector<std::string> seen;
+    for (const fla::Layer* layer : timeline->layers)
+    {
+        for (const fla::Frame* frame : layer ? layer->frames : std::vector<fla::Frame*>())
+        {
+            for (const fla::Element* element : frame ? frame->elements : std::vector<fla::Element*>())
+            {
+                const auto* instance = dynamic_cast<const fla::SymbolInstance*>(element);
+                if (!instance || instance->name.empty() || instance->symbolType == fla::SymbolType::Graphic)
+                    continue;
+                const std::string path = prefix + "." + instance->name;
+                if (std::find(seen.begin(), seen.end(), path) != seen.end())
+                    continue;
+                seen.push_back(path);
+                out.push_back(path);
+                if (instance->symbol && !instance->symbol->timelines.empty())
+                    targetsIn(instance->symbol->timelines.front(), path, depth + 1, out);
+            }
+        }
+    }
+}
+
+/// Each targetlist's items: the instances of the timeline being edited, as
+/// paths from it ("this.car.wheel").
+void fillTargets(Session& session, xul::Dialog& dialog)
+{
+    std::vector<std::string> targets;
+    bool wanted = false;
+    for (const auto& control : dialog.controls())
+        wanted = wanted || control->kind == xul::Kind::TargetList;
+    if (!wanted)
+        return;
+    if (fla::FLADocument* document = session.host().activeDocument())
+        targetsIn(session.host().editedTimeline(document), "this", 0, targets);
+    for (const auto& control : dialog.controls())
+    {
+        if (control->kind != xul::Kind::TargetList)
+            continue;
+        control->items.clear();
+        for (const std::string& target : targets)
+            control->items.push_back(xul::Item{target, target, nullptr});
+    }
+}
+
 } // namespace
 
-Value showXmlPanel(Session& session, const std::string& xml)
+Value showXmlPanel(Session& session, const std::string& xml, const std::string& folder)
 {
     xul::Dialog dialog;
     std::string error;
     if (!dialog.load(xml, error))
         throw Error("xmlPanel: " + error);
+    dialog.folder = folder;
+    fillTargets(session, dialog);
     dialog.run = [&session](const std::string& code) {
         if (!session.evaluate)
             return;
@@ -224,7 +285,8 @@ Value showXmlPanelFile(Session& session, const std::string& uri)
     std::string text;
     if (!readText(path, text))
         throw Error("xmlPanel: could not read " + path + ".");
-    return showXmlPanel(session, text);
+    const auto folder = std::filesystem::u8path(path).parent_path().u8string();
+    return showXmlPanel(session, text, std::string(folder.begin(), folder.end()));
 }
 
 ObjectPtr makeXmlUI(Session& session)

@@ -141,6 +141,40 @@ public:
     virtual fla::DrawingStyle* drawingStyle() { return nullptr; }
     /// Puts the text on the system clipboard.
     virtual void copyText(const std::string& text) { (void)text; }
+
+    // The toolbox and the view.
+    /// The tools by the names the toolbox gives them ("Selection", "Oval",
+    /// a JSFL tool's own name), in toolbox order.
+    virtual std::vector<std::string> tools() { return {}; }
+    /// The tool in use, by its toolbox name; empty when none is known.
+    virtual std::string activeTool() { return {}; }
+    /// Picks the tool of toolbox name \a name; false when there is none.
+    virtual bool selectTool(const std::string& name)
+    {
+        (void)name;
+        return false;
+    }
+    /// Runs one of Phoenix's own commands on \a document: "testMovie" (once
+    /// the script has ended) or "convertLinesToFills" (on the selection).
+    /// False with \a error when this host cannot.
+    virtual bool runCommand(fla::FLADocument* document, const std::string& name, std::string& error)
+    {
+        (void)document;
+        error = name == "testMovie" ? "Test Movie needs the Phoenix window." : name + " needs the Phoenix window.";
+        return false;
+    }
+    /// The stage's magnification for \a document (1 is 100%), and setting
+    /// it.
+    virtual double zoom(fla::FLADocument* document)
+    {
+        (void)document;
+        return 1.0;
+    }
+    virtual void setZoom(fla::FLADocument* document, double zoom)
+    {
+        (void)document;
+        (void)zoom;
+    }
     /// \a element's bounds in its timeline, as the stage draws it.
     virtual Rect bounds(fla::FLADocument* document, const fla::Element* element) = 0;
     /// The pixels of library bitmap \a item, straight RGBA, top row first;

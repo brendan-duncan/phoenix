@@ -887,6 +887,16 @@ const ClassInfo& ContourPart::classInfo() const
 
 } // namespace
 
+Value fillToValue(const fla::FillStyle* fill)
+{
+    return fillValue(fill);
+}
+
+Value strokeToValue(const fla::StrokeStyle* stroke)
+{
+    return strokeValue(stroke);
+}
+
 void forgetShapes(const Session& session)
 {
     caches().erase(&session);

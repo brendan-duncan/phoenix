@@ -5,6 +5,10 @@ What changed in each release of Phoenix, newest first.
 ## Unreleased
 
 - HTML panels that ask for Node.js get it: `require` of their own files and packages, `fs`, `path`, `child_process`, `http` and `https`, `events`, `Buffer`, `zlib`, `crypto` and more, written into Phoenix; `cep.process` runs programs for any panel
+- More of JSFL: the selection's stroke and fill (`setStroke`, `setStrokeStyle` and their kin), `fl.selectTool` and `fl.tools`, `zoomFactor`, publish profiles with `asVersion` and `docClass`, custom eases, primitive rectangles and ovals, and `testMovie`
+- Import takes FLA and XFL documents and SWF movies: their library, and their main timeline as a movie clip; scripts' `importFile` and `importEmbeddedSWF` too
+- Deleting a sound or video still in use takes it off its frames, as one step to undo
+- Script dialogs: a target list offers the timeline's named instances, and an embedded SWF panel plays in the dialog
 
 ## 0.17.1
 
