@@ -10,6 +10,11 @@
 #include "phoenix_view.h"
 #include "player.h"
 #include "publish_dialog.h"
+#include "brush_library_dialog.h"
+#include "brush_library_store.h"
+#include "document_brushes_dialog.h"
+#include "stroke_style_dialog.h"
+#include "../edit/paint_brushes.h"
 #include "theme.h"
 #include "../jsfl/behavior_frames.h"
 #include "../jsfl/native_extensions.h"
@@ -124,9 +129,14 @@ const char* const kHelp =
     "      date from their masters (what they use comes too), --save writes the\n"
     "      file back. batch <folder> --update-links --save does every shot.\n"
     "\n"
-    "  capture-dialog publish-settings <file> --out <png> [--theme <name>]\n"
+    "  capture-dialog <dialog> <file> --out <png> [--theme <name>]\n"
     "      Draws a dialog as it opens for the file, with no window, for the\n"
-    "      guide's pictures; in the Dark theme unless another is named.\n"
+    "      guide's pictures; in the Dark theme unless another is named. The\n"
+    "      dialogs: publish-settings; stroke-style [--brush <name>] [--kind\n"
+    "      <solid|hairline|dashed|dotted|ragged|stipple|hatched|paint-brush>]\n"
+    "      (Custom Stroke Style, for a stroke drawn with the file's brush);\n"
+    "      brush-library [--category <name>] (the file's brushes added to a\n"
+    "      library kept only for the picture); document-brushes.\n"
     "\n"
     "  run-script <script.jsfl|script.py> [document ...] [--timeout SECONDS]\n"
     "             [--no-native-extensions]\n"
@@ -1029,12 +1039,15 @@ int play(const QStringList& args)
 
 /// capture-dialog <dialog> <file> --out <png> [--theme <name>]: a dialog
 /// drawn as it opens for \a file, with no window, for the guide's pictures
-/// (Dark unless another theme is named). Only publish-settings for now.
+/// (Dark unless another theme is named): publish-settings, stroke-style,
+/// brush-library or document-brushes.
 int captureDialog(const QStringList& args)
 {
-    if (args.size() < 2 || args.at(0) != "publish-settings")
+    const QStringList dialogs{"publish-settings", "stroke-style", "brush-library", "document-brushes"};
+    if (args.size() < 2 || !dialogs.contains(args.at(0)))
     {
-        std::fprintf(stderr, "capture-dialog: publish-settings <file> --out <png> [--theme <name>]\n");
+        std::fprintf(stderr, "capture-dialog: %s <file> --out <png> [--theme <name>]\n",
+            qPrintable(dialogs.join('|')));
         return 1;
     }
     const int outAt = args.indexOf("--out");
@@ -1053,6 +1066,67 @@ int captureDialog(const QStringList& args)
         return 1;
     }
     theme::preview(theme::load(themeAt >= 0 && themeAt + 1 < args.size() ? args.at(themeAt + 1) : QString("Dark")));
+    const auto written = [&](QWidget& dialog, const char* name) {
+        if (!dialog.grab().save(out))
+        {
+            std::fprintf(stderr, "Could not write %s\n", qPrintable(out));
+            return 1;
+        }
+        std::printf("Drew %s for %s to %s\n", name, qPrintable(args.at(1)), qPrintable(out));
+        return 0;
+    };
+    fla::Document& document = *file->document;
+    const auto brushes = fla::paintBrushesOf(document);
+    if (args.at(0) == "stroke-style")
+    {
+        // A stroke drawn with the file's brush (the one named, or its
+        // first), or of the kind named.
+        fla::StrokeLook look;
+        const QString brushName = option(args, "--brush");
+        if (brushes)
+            for (const fla::PaintBrushDefinition& definition : brushes->definitions)
+                if (brushName.isEmpty() || QString::fromStdString(definition.name) == brushName)
+                {
+                    look.kind = fla::StrokeStyle::Style::PaintBrush;
+                    look.paintBrush = definition.index;
+                    look.paintBrushGuid = definition.guid();
+                    break;
+                }
+        const QString kind = option(args, "--kind");
+        const std::map<QString, fla::StrokeStyle::Style> kinds{{"solid", fla::StrokeStyle::Style::Solid},
+            {"hairline", fla::StrokeStyle::Style::Solid}, {"dashed", fla::StrokeStyle::Style::Dashed},
+            {"dotted", fla::StrokeStyle::Style::Dotted}, {"ragged", fla::StrokeStyle::Style::Ragged},
+            {"stipple", fla::StrokeStyle::Style::Stipple}, {"hatched", fla::StrokeStyle::Style::Hatched},
+            {"paint-brush", fla::StrokeStyle::Style::PaintBrush}};
+        if (kinds.count(kind))
+        {
+            look.kind = kinds.at(kind);
+            look.hairline = kind == "hairline";
+        }
+        StrokeStyleDialog dialog(look, 20.0, QColor(30, 30, 30), &document, nullptr);
+        dialog.adjustSize();
+        return written(dialog, "Custom Stroke Style");
+    }
+    if (args.at(0) == "brush-library")
+    {
+        // Phoenix's own brushes and the file's, as Import Brushes from
+        // Document adds them, in a library kept only for the picture.
+        BrushLibraryStore store{QString()};
+        if (brushes)
+            store.add(brushes->definitions);
+        BrushLibraryDialog::Hooks hooks;
+        hooks.document = [&document]() -> const fla::Document* { return &document; };
+        BrushLibraryDialog dialog(store, hooks, nullptr);
+        const QString category = option(args, "--category");
+        if (!category.isEmpty())
+            dialog.chooseCategory(category);
+        return written(dialog, "Brush Library");
+    }
+    if (args.at(0) == "document-brushes")
+    {
+        DocumentBrushesDialog dialog(document, DocumentBrushesDialog::Hooks(), nullptr);
+        return written(dialog, "Document Brushes");
+    }
     std::string xml;
     for (const auto& [path, bytes] : file->document->extraFiles)
         if (path == "PublishSettings.xml")

@@ -36,6 +36,27 @@ int addToBrushLibrary(std::vector<BrushLibraryEntry>& library, const std::vector
 /// The entry of \a library with \a guid; null when none has it.
 const BrushLibraryEntry* findInBrushLibrary(const std::vector<BrushLibraryEntry>& library, const std::string& guid);
 
+/// A brush a document's strokes are drawn with, as Window > Document
+/// Brushes lists it: one of the document's paint brushes, or a graphic
+/// symbol of its library drawn along strokes (stretched, or repeated as a
+/// pattern).
+struct DocumentBrush
+{
+    std::string name;
+    bool paintBrush = false;
+    /// A paint brush's definition.
+    PaintBrushDefinition definition;
+    /// A symbol brush's symbol.
+    std::string symbol;
+    bool pattern = false;
+    /// How many strokes, in the scenes and the symbols, draw with it.
+    int strokes = 0;
+};
+
+/// \a document's brushes: its paint brushes in order, used or not, then
+/// the symbols its strokes are drawn with, by name.
+std::vector<DocumentBrush> documentBrushes(const Document& document);
+
 /// Phoenix's own brushes: art and pattern brushes drawn for Phoenix (a
 /// tapered stroke, a ribbon, an arrow, dash-dot, a vine, a rope; dots,
 /// chain, stitches, scallops, zigzag), so the library has brushes to draw

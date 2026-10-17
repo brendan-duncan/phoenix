@@ -809,3 +809,122 @@ TEST(paint_brush_width_follows_pressure_within_the_brush_range)
     const Box kept = boxOf(fla::layPaintBrush(bar, art, {{0, 0}, {200, 0}}, false, 30.0, {0, 0, 0, 255}, wide));
     CHECK(near(kept.top, -15.0, 1e-6));
 }
+
+TEST(document_brushes_lists_paint_brushes_and_symbols_with_their_strokes)
+{
+    fla::Document document(nullptr);
+    fillScene(document, {2, 2});
+    const fla::PaintBrushDefinition bar = named(kArtJson, 1, "AAAAAAAA-0000-4000-8000-000000000001", "Bar");
+    const fla::PaintBrushDefinition squares = named(kPatternJson, 2, "AAAAAAAA-0000-4000-8000-000000000002", "Squares");
+    fla::setPaintBrushDefinitions(document, {bar, squares}, "Brushes")->redo();
+    // A stroke drawn with a graphic symbol, repeated.
+    fla::Frame* frame = document.timelines[0]->layers[0]->frames[0];
+    fla::Shape* shape = new fla::Shape(frame);
+    fla::SolidStroke* stroke = new fla::SolidStroke(shape);
+    stroke->extraAttributes = {{"phoenixBrush", "Leaf"}, {"phoenixBrushPattern", "true"}};
+    shape->strokes.push_back(stroke);
+    frame->elements.push_back(shape);
+
+    const std::vector<fla::DocumentBrush> brushes = fla::documentBrushes(document);
+    CHECK(brushes.size() == 3);
+    if (brushes.size() != 3)
+        return;
+    // Unused brushes are listed too, with no strokes.
+    CHECK(brushes[0].paintBrush && brushes[0].name == "Bar" && brushes[0].strokes == 0 && !brushes[0].pattern);
+    CHECK(brushes[1].paintBrush && brushes[1].name == "Squares" && brushes[1].strokes == 2 && brushes[1].pattern);
+    CHECK(!brushes[2].paintBrush && brushes[2].symbol == "Leaf" && brushes[2].strokes == 1 && brushes[2].pattern);
+}
+
+TEST(custom_stroke_style_offers_each_kind_of_brush_its_own_options)
+{
+    // An art brush's, then a pattern brush's, as the definitions spell them.
+    const auto keys = [](bool pattern) {
+        std::vector<std::string> out;
+        for (const fla::PaintBrushOption& option : fla::paintBrushOptions(pattern))
+            out.push_back(option.key);
+        return out;
+    };
+    const std::vector<std::string> art = keys(false);
+    const std::vector<std::string> pattern = keys(true);
+    CHECK(std::find(art.begin(), art.end(), "scaleOptionm") != art.end());
+    CHECK(std::find(art.begin(), art.end(), "foldAdjust") != art.end());
+    CHECK(std::find(art.begin(), art.end(), "cornerValue") == art.end());
+    CHECK(std::find(pattern.begin(), pattern.end(), "cornerValue") != pattern.end());
+    CHECK(std::find(pattern.begin(), pattern.end(), "spacing") != pattern.end());
+    CHECK(std::find(pattern.begin(), pattern.end(), "maximumWidthPercentage") != pattern.end());
+
+    // Values as the definition has them, or the fallback; set, they read
+    // back into the definition's settings.
+    const fla::PaintBrushDefinition squares = fla::paintBrushDefinition(2, kPatternJson);
+    for (const fla::PaintBrushOption& option : fla::paintBrushOptions(true))
+    {
+        const std::string value = fla::paintBrushOptionValue(squares, option);
+        CHECK(!value.empty());
+        if (option.kind != fla::PaintBrushOption::Kind::Percent)
+        {
+            // Every choice is one the option offers.
+            bool offered = false;
+            for (const auto& choice : option.choices)
+                offered = offered || choice.first == value;
+            CHECK(offered);
+        }
+    }
+    const fla::PaintBrushOption* fit = nullptr;
+    const fla::PaintBrushOption* spacing = nullptr;
+    for (const fla::PaintBrushOption& option : fla::paintBrushOptions(true))
+    {
+        if (option.key == "adjustment")
+            fit = &option;
+        if (option.key == "spacing")
+            spacing = &option;
+    }
+    CHECK(fit && spacing);
+    if (!fit || !spacing)
+        return;
+    const fla::PaintBrushDefinition spaced =
+        fla::withParam(fla::withParam(squares, fit->key, fit->choices[1].first), spacing->key, "50");
+    CHECK(spaced.fit == fla::PaintBrushDefinition::Fit::AddSpace && near(spaced.spacing, 0.5));
+    CHECK(fla::paintBrushOptionValue(spaced, *spacing) == "50");
+    // The art and the rest are as they were.
+    CHECK(spaced.params.at("svgData") == squares.params.at("svgData") && spaced.name == squares.name);
+}
+
+TEST(paint_brush_width_from_a_pen_is_saved_with_the_stroke)
+{
+    const fs::path folder = writeSample("pressure");
+    FLAParser parser;
+    std::unique_ptr<fla::FLADocument> original(parser.parse(folder.string()));
+    CHECK(original && original->document);
+    if (!original || !original->document)
+        return;
+    // The first stroke as a pen would leave it: narrow, then full.
+    const std::vector<const fla::StrokeStyle*> strokes = strokesOf(*original->document);
+    CHECK(strokes.size() == 2);
+    if (strokes.size() != 2)
+        return;
+    const_cast<fla::StrokeStyle*>(strokes[0])->widthProfile = {{0.0, 0.1, 0.1, false}, {1.0, 0.5, 0.5, false}};
+
+    const fs::path out = fs::temp_directory_path() / "phoenix_paint_brush_tests" / "pressure_written";
+    fs::remove_all(out);
+    fla::XFLFolderWriter writer;
+    CHECK(writer.write(*original->document, out.string()));
+    CHECK(readText(out / "DOMDocument.xml").find("<WidthMarker position=\"0\" left=\"0.1\" right=\"0.1\"/>") !=
+        std::string::npos);
+    FLAParser again;
+    std::unique_ptr<fla::FLADocument> back(again.parse(out.string()));
+    CHECK(back && back->document);
+    if (!back || !back->document)
+        return;
+    const std::vector<const fla::StrokeStyle*> read = strokesOf(*back->document);
+    CHECK(read.size() == 2 && read[0]->widthProfile == strokes[0]->widthProfile && read[1]->widthProfile.empty());
+
+    // Changed again, the profile written is the new one, once.
+    const_cast<fla::StrokeStyle*>(read[0])->widthProfile = {{0.0, 0.5, 0.5, false}, {0.5, 0.2, 0.2, true}};
+    const fs::path twice = fs::temp_directory_path() / "phoenix_paint_brush_tests" / "pressure_twice";
+    fs::remove_all(twice);
+    CHECK(writer.write(*back->document, twice.string()));
+    const std::string dom = readText(twice / "DOMDocument.xml");
+    const size_t first = dom.find("<VariablePointWidth");
+    CHECK(first != std::string::npos && dom.find("<VariablePointWidth", first + 1) == std::string::npos);
+    CHECK(dom.find("<WidthMarker position=\"0.5\" left=\"0.2\" right=\"0.2\" type=\"corner\"/>") != std::string::npos);
+}

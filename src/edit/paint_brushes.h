@@ -7,6 +7,7 @@
 
 #include <array>
 #include <cstdint>
+#include <functional>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -207,6 +208,40 @@ std::string withJsonMember(const std::string& json, const std::string& key, cons
 /// \a definition with the setting \a key set to \a value, read anew.
 PaintBrushDefinition withParam(const PaintBrushDefinition& definition, const std::string& key, const std::string& value);
 
+/// One of a brush's settings as the Custom Stroke Style dialog offers it:
+/// the key definitions keep it under, what it is called, and the values
+/// it takes. The settings are the brush's, so a change to one changes
+/// every stroke drawn with it.
+struct PaintBrushOption
+{
+    enum class Kind
+    {
+        /// One of \a choices.
+        Choice,
+        /// Off or on: \a choices holds the two values as the file spells
+        /// them, off first.
+        Flag,
+        /// A percentage, written with \a decimals places.
+        Percent
+    };
+    std::string key;
+    std::string label;
+    Kind kind = Kind::Choice;
+    /// Each value as the file spells it, and its name.
+    std::vector<std::pair<std::string, std::string>> choices;
+    /// The value when the definition has none.
+    std::string fallback;
+    int decimals = 2;
+    std::string tip;
+};
+
+/// The settings an art brush (or with \a pattern, a pattern brush) offers,
+/// in the order the dialog shows them.
+const std::vector<PaintBrushOption>& paintBrushOptions(bool pattern);
+
+/// \a option's value in \a definition, or its fallback.
+std::string paintBrushOptionValue(const PaintBrushDefinition& definition, const PaintBrushOption& option);
+
 /// A new brush identity, as definitions spell their guid
 /// (8-4-4-4-12 upper-case hex digits).
 std::string newPaintBrushGuid();
@@ -247,6 +282,10 @@ void paintBrushesUsedBy(const Element& element, std::set<int>& used);
 /// Points the strokes of \a element (inside groups too) at other brushes:
 /// each index found in \a indexes becomes the one it maps to.
 void remapPaintBrushes(Element& element, const std::map<int, int>& indexes);
+
+/// Every stroke of \a document, in its scenes and its symbols, inside
+/// groups too.
+void forEachStroke(const Document& document, const std::function<void(const StrokeStyle&)>& visit);
 
 /// How many strokes of \a document, in its scenes and its symbols, are
 /// drawn with each brush, by index.

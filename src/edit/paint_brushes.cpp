@@ -1064,6 +1064,66 @@ PaintBrushDefinition withParam(const PaintBrushDefinition& definition, const std
     return paintBrushDefinition(definition.index, withJsonMember(definition.json, key, value));
 }
 
+const std::vector<PaintBrushOption>& paintBrushOptions(bool pattern)
+{
+    using Kind = PaintBrushOption::Kind;
+    const auto widths = [](std::vector<PaintBrushOption>& options) {
+        options.push_back({"minimumWidthPercentage", "Width, lightest touch", Kind::Percent, {}, "1.00", 2,
+            "How narrow a light touch of the pen, or a width profile, draws the stroke, as a share of its weight"});
+        options.push_back({"maximumWidthPercentage", "Width, pressing hard", Kind::Percent, {}, "100.00", 2,
+            "How wide pressing hard, or a width profile, draws the stroke, as a share of its weight"});
+        options.push_back({"minimumTiltWidthPercentage", "Width, pen leaning", Kind::Percent, {}, "1.00", 2,
+            "How narrow the stroke draws with the pen leaning all the way over"});
+        options.push_back({"maximumTiltWidthPercentage", "Width, pen upright", Kind::Percent, {}, "100.00", 2,
+            "How wide the stroke draws with the pen upright"});
+    };
+    static const std::vector<PaintBrushOption> art = [&widths]() {
+        std::vector<PaintBrushOption> options{
+            {"artDirection", "Art runs", Kind::Choice,
+                {{"0", "Left to right"}, {"1", "Right to left"}, {"2", "Top to bottom"}, {"3", "Bottom to top"}}, "0", 0,
+                "Which way the art runs along the stroke, from the stroke's start"},
+            {"scaleOptionm", "Fit", Kind::Choice,
+                {{"0", "Scale proportionately"}, {"1", "Stretch to fit"}, {"2", "Stretch between guides"}}, "1", 0,
+                "How the art is fitted to the stroke's length"},
+            {"leftEdgePercentage", "Left guide", Kind::Percent, {}, "0.00", 2,
+                "Stretching between guides: where the part that keeps its proportions at the start ends"},
+            {"rightEdgePercentage", "Right guide", Kind::Percent, {}, "100.00", 2,
+                "Stretching between guides: where the part that keeps its proportions at the end begins"},
+            {"flipArt", "Flip across", Kind::Flag, {{"false", "Off"}, {"true", "On"}}, "false", 0,
+                "Turn the art over from one side of the stroke to the other"},
+            {"foldAdjust", "Bend round corners", Kind::Flag, {{"0", "Off"}, {"1", "On"}}, "1", 0,
+                "Bend the art round a sharp turn of the stroke rather than folding it over itself there"},
+        };
+        widths(options);
+        return options;
+    }();
+    static const std::vector<PaintBrushOption> patterns = [&widths]() {
+        std::vector<PaintBrushOption> options{
+            {"adjustment", "Fit", Kind::Choice,
+                {{"0", "Stretch tiles to fit"}, {"1", "Add space to fit"}, {"2", "Approximate path"}}, "0", 0,
+                "How a whole number of tiles is fitted to the stroke's length"},
+            {"spacing", "Spacing", Kind::Percent, {}, "0", 0, "Space between the tiles, as a share of a tile"},
+            {"cornerValue", "Corners", Kind::Choice,
+                {{"0", "Auto-centered"}, {"1", "Auto-between"}, {"2", "Auto-sliced"}, {"3", "Auto-overlap"}}, "2", 0,
+                "How the tiles turn a sharp corner: a tile folded round it, tiles folded into it, tiles cut along "
+                "its bisector, or tiles running on to overlap there"},
+            {"FlipAlong", "Flip along", Kind::Flag, {{"0", "Off"}, {"1", "On"}}, "0", 0,
+                "Turn each tile end for end"},
+            {"FlipAcross", "Flip across", Kind::Flag, {{"0", "Off"}, {"1", "On"}}, "0", 0,
+                "Turn each tile over from one side of the stroke to the other"},
+        };
+        widths(options);
+        return options;
+    }();
+    return pattern ? patterns : art;
+}
+
+std::string paintBrushOptionValue(const PaintBrushDefinition& definition, const PaintBrushOption& option)
+{
+    const auto found = definition.params.find(option.key);
+    return found != definition.params.end() && !found->second.empty() ? found->second : option.fallback;
+}
+
 std::string newPaintBrushGuid()
 {
     static std::mutex mutex;
@@ -1202,10 +1262,16 @@ void remapPaintBrushes(Element& element, const std::map<int, int>& indexes)
 std::map<int, int> paintBrushUses(const Document& document)
 {
     std::map<int, int> uses;
-    const auto count = [&uses](StrokeStyle& stroke) {
+    forEachStroke(document, [&uses](const StrokeStyle& stroke) {
         if (stroke.style() == StrokeStyle::Style::PaintBrush)
             ++uses[stroke.paintBrushDefinition];
-    };
+    });
+    return uses;
+}
+
+void forEachStroke(const Document& document, const std::function<void(const StrokeStyle&)>& visit)
+{
+    const auto count = [&visit](StrokeStyle& stroke) { visit(stroke); };
     std::vector<const Timeline*> timelines(document.timelines.begin(), document.timelines.end());
     if (document.symbolList)
         for (const Symbol* symbol : document.symbolList->symbols)
@@ -1217,7 +1283,6 @@ std::map<int, int> paintBrushUses(const Document& document)
                 for (Element* element : frame ? frame->elements : std::vector<Element*>())
                     if (element)
                         strokesOf(*element, count);
-    return uses;
 }
 
 std::vector<PaintBrushDefinition> paintBrushesFor(const Document& source, const std::vector<const Element*>& elements)

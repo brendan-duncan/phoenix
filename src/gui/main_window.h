@@ -45,6 +45,7 @@
 #include <QMainWindow>
 
 #include "../edit/font_items.h"
+#include "../edit/paint_brushes.h"
 #include <QPointer>
 #include <QToolButton>
 
@@ -367,10 +368,18 @@ private slots:
     /// Every shape in the document, its scenes and its symbols, in groups too.
     std::vector<fla::Shape*> allShapes() const;
 
-    /// Window > Document Brushes: the art and pattern brushes the
-    /// document's strokes are drawn with, how many strokes use each, and
-    /// taking one off them or drawing with it.
+    /// Window > Document Brushes: the paint brushes the document keeps and
+    /// the symbols its strokes are drawn with, how many strokes use each,
+    /// and drawing with, selecting, renaming, taking off or removing them.
     void manageBrushes();
+
+    /// Window > Brush Library: brushes to draw with in any document, by
+    /// category, Phoenix's own and those added from documents.
+    void showBrushLibrary();
+
+    /// The Paint Brush tool, drawing with \a definition: the document's
+    /// brush, or the brush library's, copied in with the first stroke.
+    void drawWithPaintBrush(const fla::PaintBrushDefinition& definition);
 
     /// The library's bitmap and sound items: their settings, reading a
     /// bitmap again from its file, and editing one in another program.
@@ -699,6 +708,10 @@ private:
     QPointer<class BrushPropertiesDialog> _brushProperties;
     /// Window > Render Queue, made when first asked for and kept.
     QPointer<class RenderQueue> _renderQueue;
+    QPointer<class BrushLibraryDialog> _brushLibrary;
+    /// The brush definitions the stage last laid strokes out with, so an
+    /// edit or an undo that changes them draws the strokes again.
+    const void* _paintBrushesShown = nullptr;
     void openBrushProperties();
     std::unique_ptr<EraserTool> _eraserTool;
     std::unique_ptr<PaintBucketTool> _paintBucketTool;
@@ -1213,6 +1226,9 @@ private:
     /// The media type the system clipboard carries copied elements under,
     /// as an XFL document, between Phoenix windows.
     static constexpr const char* kElementsMime = "application/x-phoenix-xfl-elements";
+    /// And the paint brushes their strokes draw with, as a
+    /// PaintBrushDefinitions.xml, for the document they are pasted into.
+    static constexpr const char* kPaintBrushesMime = "application/x-phoenix-paint-brushes";
 
     /// Puts what Copy took on the system clipboard as well.
     void putOnSystemClipboard();

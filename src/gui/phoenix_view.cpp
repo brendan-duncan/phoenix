@@ -1,5 +1,6 @@
 #include "phoenix_view.h"
 #include "behavior_library.h"
+#include "brush_library_store.h"
 #include "../edit/motion_blur.h"
 #include "../edit/shape_operators.h"
 #include "../edit/adjustments.h"
@@ -7870,36 +7871,8 @@ std::shared_ptr<const std::vector<std::pair<QPainterPath, QColor>>> PhoenixView:
     const auto art = definition ? library->art(definition->index) : nullptr;
     if (!art)
         return nullptr;
-    const QColor penColor = pen.brush().color();
-    const fla::PaintBrushArt::Color color{static_cast<uint8_t>(penColor.red()), static_cast<uint8_t>(penColor.green()),
-        static_cast<uint8_t>(penColor.blue()), static_cast<uint8_t>(penColor.alpha())};
-    auto laid = std::make_shared<std::vector<std::pair<QPainterPath, QColor>>>();
-    // Each run of the stroke on its own, closed where it comes back round.
-    for (const QPolygonF& polygon : centerline.toSubpathPolygons())
-    {
-        std::vector<fla::PaintBrushArt::Point> points;
-        points.reserve(polygon.size());
-        for (const QPointF& point : polygon)
-            points.push_back({point.x(), point.y()});
-        const bool closed = polygon.size() > 2 && polygon.isClosed();
-        for (const fla::PaintBrushArt::Piece& piece :
-            fla::layPaintBrush(*definition, *art, points, closed, stroke.weight, color))
-        {
-            QPainterPath area;
-            area.setFillRule(piece.evenOdd ? Qt::OddEvenFill : Qt::WindingFill);
-            for (const auto& ring : piece.rings)
-            {
-                QPolygonF outline;
-                outline.reserve(static_cast<int>(ring.size()));
-                for (const fla::PaintBrushArt::Point& point : ring)
-                    outline << QPointF(point.x, point.y);
-                area.addPolygon(outline);
-                area.closeSubpath();
-            }
-            laid->emplace_back(area, QColor(piece.color[0], piece.color[1], piece.color[2], piece.color[3]));
-        }
-    }
-    return laid;
+    return std::make_shared<std::vector<std::pair<QPainterPath, QColor>>>(
+        layPaintBrushPath(*definition, *art, centerline, stroke.weight, pen.brush().color(), stroke.widthProfile));
 }
 
 void PhoenixView::drawBrushStroke(QPainter& painter, const PathCacheEntry& entry, const fla::Symbol& brush)

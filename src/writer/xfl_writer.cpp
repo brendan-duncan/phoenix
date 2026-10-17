@@ -26,6 +26,7 @@
 
 #include "../third_party/tinyxml2/tinyxml2.h"
 
+#include <algorithm>
 #include <cstdint>
 #include <cmath>
 #include <cstdio>
@@ -559,8 +560,59 @@ void XFLWriter::writeStrokeStyle(const StrokeStyle& stroke, XMLElement* parent)
         writeFillStyle(*stroke.fill, fillNode);
         node->InsertEndChild(fillNode);
     }
+    // The width profile as it is now, from the Width tool or a pen's
+    // pressure, in place of the one read.
+    const auto isProfile = [](const std::string& xml) {
+        const size_t start = xml.find_first_not_of(" \t\r\n");
+        return start != std::string::npos && xml.compare(start, 19, "<VariablePointWidth") == 0;
+    };
+    // The profile as read, while it is unchanged, is written as it came.
+    const auto unchanged = [&stroke](const std::string& xml) {
+        XMLDocument read;
+        if (read.Parse(xml.c_str(), xml.size()) != tinyxml2::XML_SUCCESS || !read.RootElement())
+            return false;
+        std::vector<StrokeStyle::WidthMarker> markers;
+        for (const XMLElement* marker = read.RootElement()->FirstChildElement("WidthMarker"); marker;
+             marker = marker->NextSiblingElement("WidthMarker"))
+        {
+            StrokeStyle::WidthMarker point;
+            point.position = marker->DoubleAttribute("position", 0.0);
+            point.left = marker->DoubleAttribute("left", 0.5);
+            point.right = marker->DoubleAttribute("right", 0.5);
+            const char* type = marker->Attribute("type");
+            point.corner = type && std::strcmp(type, "corner") == 0;
+            markers.push_back(point);
+        }
+        std::stable_sort(markers.begin(), markers.end(),
+            [](const StrokeStyle::WidthMarker& a, const StrokeStyle::WidthMarker& b) { return a.position < b.position; });
+        return markers == stroke.widthProfile;
+    };
+    bool kept = false;
     for (const std::string& xml : stroke.extraChildren)
+    {
+        if (isProfile(xml))
+        {
+            if (kept || !unchanged(xml))
+                continue;
+            kept = true;
+        }
         appendRawXml(xml, node);
+    }
+    if (!kept && !stroke.widthProfile.empty())
+    {
+        XMLElement* profile = doc->NewElement("VariablePointWidth");
+        for (const StrokeStyle::WidthMarker& marker : stroke.widthProfile)
+        {
+            XMLElement* point = doc->NewElement("WidthMarker");
+            point->SetAttribute("position", formatDouble(marker.position).c_str());
+            point->SetAttribute("left", formatDouble(marker.left).c_str());
+            point->SetAttribute("right", formatDouble(marker.right).c_str());
+            if (marker.corner)
+                point->SetAttribute("type", "corner");
+            profile->InsertEndChild(point);
+        }
+        node->InsertEndChild(profile);
+    }
 
     parent->InsertEndChild(node);
 }

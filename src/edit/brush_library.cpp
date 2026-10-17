@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <map>
 
 namespace fla {
 
@@ -90,6 +91,52 @@ int addToBrushLibrary(std::vector<BrushLibraryEntry>& library, const std::vector
         ++added;
     }
     return added;
+}
+
+std::vector<DocumentBrush> documentBrushes(const Document& document)
+{
+    std::vector<DocumentBrush> brushes;
+    const std::map<int, int> uses = paintBrushUses(document);
+    if (const auto library = paintBrushesOf(document))
+        for (const PaintBrushDefinition& definition : library->definitions)
+        {
+            DocumentBrush brush;
+            brush.name = definition.name;
+            brush.paintBrush = true;
+            brush.definition = definition;
+            brush.pattern = definition.pattern;
+            const auto found = uses.find(definition.index);
+            brush.strokes = found != uses.end() ? found->second : 0;
+            brushes.push_back(std::move(brush));
+        }
+    // Symbols drawn along strokes, as Phoenix keeps them on the stroke.
+    std::map<std::string, std::pair<int, bool>> symbols;
+    forEachStroke(document, [&symbols](const StrokeStyle& stroke) {
+        std::string name;
+        bool pattern = false;
+        for (const auto& [key, value] : stroke.extraAttributes)
+        {
+            if (key == "phoenixBrush")
+                name = value;
+            else if (key == "phoenixBrushPattern")
+                pattern = value == "true" || value == "1";
+        }
+        if (name.empty())
+            return;
+        auto& entry = symbols[name];
+        ++entry.first;
+        entry.second = entry.second || pattern;
+    });
+    for (const auto& [name, use] : symbols)
+    {
+        DocumentBrush brush;
+        brush.name = name;
+        brush.symbol = name;
+        brush.strokes = use.first;
+        brush.pattern = use.second;
+        brushes.push_back(std::move(brush));
+    }
+    return brushes;
 }
 
 const BrushLibraryEntry* findInBrushLibrary(const std::vector<BrushLibraryEntry>& library, const std::string& guid)

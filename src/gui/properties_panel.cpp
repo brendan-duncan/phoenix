@@ -72,6 +72,7 @@
 #include <QMenu>
 #include <QPainter>
 #include <QPainterPath>
+#include "brush_library_store.h"
 #include "stroke_style_dialog.h"
 #include <QPushButton>
 #include <QSignalBlocker>
@@ -791,7 +792,12 @@ void PropertiesPanel::buildToolTab()
     ++row;
 
     for (const auto& fields : addStrokeLookFields(_colorSection, row, style.strokeLook,
-             [this](const fla::StrokeLook& look) { _links.style->strokeLook = look; }))
+             [this](const fla::StrokeLook& look) { _links.style->strokeLook = look; },
+             [this, weight](double value) {
+                 _links.style->strokeWeight = value;
+                 weight->setValue(value);
+             },
+             style.strokeWeight, true))
         _toolRows.push_back({fields.first, fields.second, strokeTools});
 
     // --- Tool Options ---
@@ -1437,9 +1443,37 @@ void PropertiesPanel::addPositionAndSize(QVBoxLayout* layout, const std::vector<
 }
 
 std::vector<std::pair<QWidget*, QWidget*>> PropertiesPanel::addStrokeLookFields(PropertySection* section, int& row,
-    const fla::StrokeLook& look, std::function<void(const fla::StrokeLook&)> apply)
+    const fla::StrokeLook& look, std::function<void(const fla::StrokeLook&)> setLook,
+    std::function<void(double)> applyWeight, double weight, bool forTool)
 {
     std::vector<std::pair<QWidget*, QWidget*>> rows;
+    // A paint brush named by guid: the document's by its index there; one
+    // of the brush library's copied in first for the selection's strokes,
+    // or when the tool first draws with it.
+    const auto apply = [this, setLook, forTool](fla::StrokeLook chosen) {
+        fla::Document* doc = document();
+        const bool named = chosen.kind == fla::StrokeStyle::Style::PaintBrush && !chosen.paintBrushGuid.empty();
+        if (!named || !doc || !_links.editContext)
+        {
+            setLook(chosen);
+            return;
+        }
+        if (forTool)
+        {
+            chosen.paintBrush = 0;
+            if (const auto own = fla::paintBrushesOf(*doc))
+                for (const fla::PaintBrushDefinition& definition : own->definitions)
+                    if (definition.guid() == chosen.paintBrushGuid)
+                        chosen.paintBrush = definition.index;
+            setLook(chosen);
+            return;
+        }
+        fla::CommandStack& stack = _links.editContext->commandStack();
+        stack.beginMacro("Stroke Style");
+        chosen.paintBrush = paintBrushIndexFor(*doc, stack, chosen.paintBrushGuid);
+        setLook(chosen);
+        stack.endMacro();
+    };
     const auto add = [&](const QString& text, QWidget* field) {
         QLabel* label = fieldLabel(text, this);
         section->grid()->addWidget(label, row, 0);
@@ -1478,18 +1512,77 @@ std::vector<std::pair<QWidget*, QWidget*>> PropertiesPanel::addStrokeLookFields(
     styleLayout->addWidget(style, 1);
     QToolButton* custom = new QToolButton(styleRow);
     custom->setText("...");
-    custom->setToolTip("Custom Stroke Style: dash and gap, dot spacing, and the ragged, stipple and hatched choices");
+    custom->setToolTip("Custom Stroke Style: the stroke's kind and weight, dash and gap, dot spacing, the ragged, "
+                       "stipple and hatched choices, and a brush and its options");
     styleLayout->addWidget(custom);
     connect(custom, &QToolButton::clicked, this, [=]() {
         const QColor color = _links.style ? QColor(_links.style->strokeColor[0], _links.style->strokeColor[1],
                                                 _links.style->strokeColor[2])
                                           : QColor(Qt::black);
-        const double weight = _links.style ? _links.style->strokeWeight : 1.0;
-        StrokeStyleDialog dialog(*current, weight, color, this);
+        const double shownWeight = forTool && _links.style ? _links.style->strokeWeight : weight;
+        StrokeStyleDialog dialog(*current, shownWeight, color, document(), this);
         if (dialog.exec() != QDialog::Accepted)
             return;
-        *current = dialog.look();
-        apply(*current);
+        fla::StrokeLook chosen = dialog.look();
+        fla::Document* doc = document();
+        fla::CommandStack* stack = _links.editContext ? &_links.editContext->commandStack() : nullptr;
+        if (stack)
+            stack->beginMacro("Stroke Style");
+        if (dialog.brushEdited() && doc && stack)
+        {
+            // The brush's options: the document's copy takes them, or with
+            // Keep as a New Brush, a copy of the brush of their own.
+            fla::PaintBrushDefinition edited = dialog.brush();
+            std::map<int, int> indexes;
+            if (dialog.keepAsNewBrush())
+            {
+                edited = fla::withParam(edited, "guid", fla::newPaintBrushGuid());
+                edited = fla::withParam(edited, "name", edited.name + " copy");
+                edited.index = -1;
+                if (fla::CommandPtr command = fla::adoptPaintBrushes(*doc, {edited}, indexes, "Add Brush"))
+                    stack->push(std::move(command));
+                chosen.paintBrush = indexes[-1];
+            }
+            else
+            {
+                const auto own = fla::paintBrushesOf(*doc);
+                std::vector<fla::PaintBrushDefinition> definitions =
+                    own ? own->definitions : std::vector<fla::PaintBrushDefinition>();
+                bool found = false;
+                for (fla::PaintBrushDefinition& definition : definitions)
+                {
+                    const bool same = edited.guid().empty() ? definition.index == chosen.paintBrush
+                                                            : definition.guid() == edited.guid();
+                    if (!same)
+                        continue;
+                    const int index = definition.index;
+                    definition = edited;
+                    definition.index = index;
+                    chosen.paintBrush = index;
+                    found = true;
+                }
+                if (found)
+                {
+                    if (fla::CommandPtr command = fla::setPaintBrushDefinitions(*doc, definitions, "Brush Options"))
+                        stack->push(std::move(command));
+                }
+                else
+                {
+                    edited.index = -1;
+                    if (fla::CommandPtr command = fla::adoptPaintBrushes(*doc, {edited}, indexes, "Add Brush"))
+                        stack->push(std::move(command));
+                    chosen.paintBrush = indexes[-1];
+                }
+            }
+            chosen.paintBrushGuid = edited.guid();
+        }
+        if (applyWeight && dialog.weight() != shownWeight)
+            applyWeight(dialog.weight());
+        *current = chosen;
+        apply(chosen);
+        if (stack)
+            stack->endMacro();
+        emit documentEdited();
     });
     add("Style", styleRow);
 
@@ -1592,7 +1685,8 @@ std::vector<std::pair<QWidget*, QWidget*>> PropertiesPanel::addStrokeLookFields(
     QHBoxLayout* brushLayout = new QHBoxLayout(brushRow);
     brushLayout->setContentsMargins(0, 0, 0, 0);
     QComboBox* brush = new QComboBox(brushRow);
-    brush->setToolTip("A graphic symbol drawn along the stroke instead of a line");
+    brush->setToolTip("A brush whose art is drawn along the stroke instead of a line: one of the document's or "
+                      "the brush library's paint brushes, or a graphic symbol of the library");
     brush->addItem("None");
     QStringList names;
     if (const fla::Document* doc = document())
@@ -1606,23 +1700,62 @@ std::vector<std::pair<QWidget*, QWidget*>> PropertiesPanel::addStrokeLookFields(
     if (!look.brush.empty() && !names.contains(QString::fromStdString(look.brush)))
         names << QString::fromStdString(look.brush);
     brush->addItems(names);
-    // The document's own paint brushes, by the index strokes keep.
+    // The document's own paint brushes, by the index strokes keep and their
+    // guid; then the brush library's, by guid, which come into the document
+    // when first used.
+    const auto heading = [brush](const QString& text) {
+        brush->insertSeparator(brush->count());
+        brush->addItem(text);
+        if (auto* model = qobject_cast<QStandardItemModel*>(brush->model()))
+            model->item(brush->count() - 1)->setEnabled(false);
+    };
+    constexpr int kGuidRole = Qt::UserRole + 1;
+    brush->setIconSize(QSize(48, 14));
+    const QColor ink = palette().color(QPalette::Text);
     std::shared_ptr<const fla::PaintBrushLibrary> paintBrushes;
     if (const fla::Document* doc = document())
         paintBrushes = fla::paintBrushesOf(*doc);
+    std::vector<std::string> inDocument;
     if (paintBrushes && !paintBrushes->definitions.empty())
     {
-        brush->insertSeparator(brush->count());
-        brush->addItem("Brushes in this document");
-        if (auto* model = qobject_cast<QStandardItemModel*>(brush->model()))
-            model->item(brush->count() - 1)->setEnabled(false);
+        heading("Brushes in this document");
         for (const fla::PaintBrushDefinition& definition : paintBrushes->definitions)
-            brush->addItem(QString::fromStdString(definition.name), definition.index);
+        {
+            brush->addItem(QIcon(paintBrushPreview(definition, QSize(48, 14), ink)),
+                QString::fromStdString(definition.name), definition.index);
+            brush->setItemData(brush->count() - 1, QString::fromStdString(definition.guid()), kGuidRole);
+            inDocument.push_back(definition.guid());
+        }
+    }
+    QString category;
+    for (const fla::BrushLibraryEntry& entry : BrushLibraryStore::shared().entries())
+    {
+        const std::string guid = entry.definition.guid();
+        if (std::find(inDocument.begin(), inDocument.end(), guid) != inDocument.end())
+            continue;
+        if (QString::fromStdString(entry.category) != category)
+        {
+            category = QString::fromStdString(entry.category);
+            heading(QString("Brush library: %1").arg(category));
+        }
+        brush->addItem(QIcon(paintBrushPreview(entry.definition, QSize(48, 14), ink)),
+            QString::fromStdString(entry.definition.name));
+        brush->setItemData(brush->count() - 1, QString::fromStdString(guid), kGuidRole);
     }
     const bool paintBrush = look.kind == fla::StrokeStyle::Style::PaintBrush;
-    brush->setCurrentIndex(paintBrush        ? std::max(brush->findData(look.paintBrush), 0)
-                           : look.brush.empty() ? 0
-                                                : brush->findText(QString::fromStdString(look.brush)));
+    int chosenBrush = 0;
+    if (paintBrush)
+    {
+        chosenBrush = look.paintBrushGuid.empty() ? -1
+                                                  : brush->findData(QString::fromStdString(look.paintBrushGuid), kGuidRole);
+        if (chosenBrush < 0)
+            chosenBrush = std::max(brush->findData(look.paintBrush), 0);
+    }
+    else if (!look.brush.empty())
+    {
+        chosenBrush = brush->findText(QString::fromStdString(look.brush));
+    }
+    brush->setCurrentIndex(chosenBrush);
     QComboBox* mode = new QComboBox(brushRow);
     mode->addItems({"Stretch", "Repeat"});
     mode->setToolTip("Stretch the symbol from end to end (an art brush), or repeat it along the stroke (a pattern brush)");
@@ -1630,12 +1763,14 @@ std::vector<std::pair<QWidget*, QWidget*>> PropertiesPanel::addStrokeLookFields(
     mode->setEnabled(!look.brush.empty());
     connect(brush, &QComboBox::currentIndexChanged, this, [=](int index) {
         const QVariant definition = brush->itemData(index);
-        if (definition.isValid())
+        const QVariant guid = brush->itemData(index, kGuidRole);
+        if (definition.isValid() || guid.isValid())
         {
             // A paint brush: the stroke becomes one that draws with it.
             current->kind = fla::StrokeStyle::Style::PaintBrush;
             current->hairline = false;
-            current->paintBrush = definition.toInt();
+            current->paintBrush = definition.isValid() ? definition.toInt() : 0;
+            current->paintBrushGuid = guid.toString().toStdString();
             current->brush.clear();
             mode->setEnabled(false);
             apply(*current);
@@ -1645,6 +1780,7 @@ std::vector<std::pair<QWidget*, QWidget*>> PropertiesPanel::addStrokeLookFields(
         {
             current->kind = fla::StrokeStyle::Style::Solid;
             current->paintBrush = 0;
+            current->paintBrushGuid.clear();
         }
         current->brush = index <= 0 ? std::string() : brush->itemText(index).toStdString();
         mode->setEnabled(index > 0);
@@ -1839,11 +1975,19 @@ void PropertiesPanel::addPrimitiveSections(QVBoxLayout* layout, fla::Element* el
             section->addField(row, 0, "Stroke", swatch);
         }
         section->addField(row++, 1, "Size", bindDouble(stroke->weight, 0.1, 200.0, 2, QString(), "Stroke Size"));
-        addStrokeLookFields(section, row, fla::StrokeLook::of(*stroke), [=](const fla::StrokeLook& look) {
-            push(std::unique_ptr<fla::Command>(new fla::ReplaceOwnedCommand<fla::StrokeStyle>(
-                *strokeSlot, look.applyTo(**strokeSlot, element), "Stroke Style")));
-            emit documentEdited();
-        });
+        addStrokeLookFields(
+            section, row, fla::StrokeLook::of(*stroke),
+            [=](const fla::StrokeLook& look) {
+                push(std::unique_ptr<fla::Command>(new fla::ReplaceOwnedCommand<fla::StrokeStyle>(
+                    *strokeSlot, look.applyTo(**strokeSlot, element), "Stroke Style")));
+                emit documentEdited();
+            },
+            [=](double value) {
+                push(std::unique_ptr<fla::Command>(
+                    new fla::SetPropertyCommand<double>((*strokeSlot)->weight, (*strokeSlot)->weight, value, "Stroke Size")));
+                emit documentEdited();
+            },
+            stroke->weight);
     }
     if (row == 0)
         section->addWide(row++, fieldLabel("No fill or stroke", this));
@@ -1963,7 +2107,8 @@ void PropertiesPanel::addShapeSections(QVBoxLayout* layout, fla::Shape* shape)
         strokeLayout->addWidget(weight);
         section->addWide(row++, strokeRow);
 
-        addStrokeLookFields(section, row, fla::StrokeLook::of(*stroke), [=](const fla::StrokeLook& look) {
+        addStrokeLookFields(section, row, fla::StrokeLook::of(*stroke),
+            [=](const fla::StrokeLook& look) {
             restyle("Stroke Style", [&](fla::Shape& after) {
                 // Each stroke made anew in the look, kept where edges find it.
                 for (fla::StrokeStyle*& style : after.strokes)
@@ -1980,7 +2125,15 @@ void PropertiesPanel::addShapeSections(QVBoxLayout* layout, fla::Shape* shape)
                     style = restyled;
                 }
             });
-        });
+            },
+            [=](double value) {
+                restyle("Stroke Size", [&](fla::Shape& after) {
+                    for (fla::StrokeStyle* style : after.strokes)
+                        if (style)
+                            style->weight = value;
+                });
+            },
+            stroke->weight);
     }
 
     // A gradient or bitmap fill: what it is, and Edit to take it to the

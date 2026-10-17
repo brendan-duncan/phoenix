@@ -42,6 +42,11 @@ struct StrokeLook
     /// For a paint brush stroke (kind PaintBrush), the document's paint
     /// brush definition it draws with, by index.
     int paintBrush = 0;
+    /// The paint brush new strokes are drawn with, by its guid: one of the
+    /// document's, or one of the brush library's that is copied into the
+    /// document when a stroke first uses it. Empty to go by paintBrush.
+    /// Not part of a stroke, nor of comparing looks.
+    std::string paintBrushGuid;
     /// The kind's own settings (Custom Stroke Style): a dashed stroke's
     /// dash and gap, a dotted one's spacing, and a ragged, stipple or
     /// hatched one's choices by attribute name, as the file spells them.

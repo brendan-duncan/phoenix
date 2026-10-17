@@ -3,6 +3,8 @@
 #include "tool.h"
 
 #include "../data/point.h"
+#include "../data/stroke_style.h"
+#include "../edit/brush_stroke.h"
 #include "../edit/curve_fit.h"
 #include "../edit/editable_path.h"
 
@@ -69,7 +71,19 @@ private:
     fla::EditablePath fitted(PhoenixView& view) const;
 
     /// Builds the shape for a fitted stroke. The caller owns the result.
-    fla::Element* createShape(fla::Frame* frame, const fla::EditablePath& path) const;
+    /// A Paint Brush stroke draws with the document's brush \a paintBrush
+    /// (0 for the style's), its width varying as \a profile says.
+    fla::Element* createShape(fla::Frame* frame, const fla::EditablePath& path, int paintBrush = 0,
+        const std::vector<fla::StrokeStyle::WidthMarker>& profile = {}) const;
+
+    /// For the Paint Brush, the document's index of the brush to draw
+    /// with: the style's, found by its guid among the document's brushes or
+    /// copied in from the brush library (pushed as a step of its own,
+    /// inside the stroke's). 0 to draw as the style says.
+    int paintBrushIndex(PhoenixView& view);
+
+    /// The pen's readings since the last were taken, while it is down.
+    void takePen(PhoenixView& view);
 
     fla::Selection& _selection;
     fla::CommandStack& _commandStack;
@@ -78,6 +92,9 @@ private:
 
     /// Raw cursor positions, in document space, in the order they arrived.
     std::vector<fla::Point> _points;
+    /// A pen's readings along the stroke, with pressure and tilt, for the
+    /// Paint Brush's width; empty from a mouse.
+    std::vector<fla::BrushSample> _pen;
     /// With shift held, the stroke keeps to one direction once it has one:
     /// 1 across, 2 down.
     int _axis = 0;
