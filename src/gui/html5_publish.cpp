@@ -835,7 +835,8 @@ QByteArray actionScript(const fla::Document& document, const QString& source, co
 QByteArray actionScript2Runtime()
 {
     return "// avm1.js (libas3): ActionScript 1 and 2's semantics for translated scripts.\n" +
-        QByteArray::fromStdString(fla::html5as2::avm1Runtime()) + "\n// as2.js\n" + resource("as2.js");
+        QByteArray::fromStdString(fla::html5as2::avm1Runtime()) + "\n// as2.js\n" + resource("as2.js") +
+        "\n// as2components.js\n" + resource("as2components.js");
 }
 
 bool run(const Settings& settings, PhoenixView& view, TimelineAudio* audio, const fla::Document& document,

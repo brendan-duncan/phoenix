@@ -91,7 +91,7 @@ function makeObject(entry) {
             return null;
         var type = entry.it || def.type;
         var Cls = classOf(def, type);
-        phoenix._.pending = {name: entry.n || null, m: entry.m || null, def: def};
+        phoenix._.pending = {name: entry.n || null, m: entry.m || null, def: def, cp: entry.cp || null};
         try {
             object = new Cls();
         } catch (error) {

@@ -1005,6 +1005,19 @@ private:
                 const auto found = _document.symbolList->symbolMap.find(component->second.symbol);
                 symbol = found == _document.symbolList->symbolMap.end() ? nullptr : found->second;
             }
+            // An ActionScript 2 component the runtime has its own of
+            // (as2components.js): its class, and a symbol standing in for
+            // its own when the library has none of it.
+            std::string as2Class;
+            if (component != _components.end() && _options.actionScript2)
+            {
+                as2Class = symbol ? attributeOf(symbol->extraAttributes, "linkageClassName")
+                                  : componentClass(component->second.symbol);
+                if (!isAs2Component(as2Class))
+                    as2Class.clear();
+                if (!symbol && !as2Class.empty())
+                    symbol = standIn(component->second.symbol, as2Class);
+            }
             if (!symbol)
             {
                 // What it is, by its tag: a video, a TLF text field...
@@ -1033,6 +1046,8 @@ private:
                 out += ",\"it\":\"mc\"";
             out += placed(own);
             out += ",\"n\":" + quoted(component->second.name);
+            if (!as2Class.empty())
+                out += ",\"cp\":" + parametersJson(component->second.parameters);
             return out + masks() + "}";
         }
         default:
@@ -1087,6 +1102,109 @@ private:
                 static_cast<const Frame*>(element.parent)->elements.end())
             _artByElement[&element] = index;
         return index;
+    }
+
+    /// The class of the component library item \a name: its linkage where
+    /// the file keeps the item (a compiled clip, say), else the ActionScript
+    /// 2 component of that name.
+    std::string componentClass(const std::string& name) const
+    {
+        for (const std::string& item : _document.extraMedia)
+        {
+            tinyxml2::XMLDocument xml;
+            if (item.find(name) == std::string::npos || xml.Parse(item.c_str(), item.size()) != tinyxml2::XML_SUCCESS ||
+                !xml.RootElement())
+                continue;
+            const char* itemName = xml.RootElement()->Attribute("name");
+            const char* linkage = xml.RootElement()->Attribute("linkageClassName");
+            if (itemName && name == itemName && linkage && *linkage)
+                return linkage;
+        }
+        const size_t slash = name.find_last_of('/');
+        return "mx.controls." + (slash == std::string::npos ? name : name.substr(slash + 1));
+    }
+
+    static bool isAs2Component(const std::string& cls)
+    {
+        static const char* const known[] = {"Button", "CheckBox", "RadioButton", "TextInput", "TextArea", "Label",
+            "ComboBox", "List", "NumericStepper"};
+        for (const char* each : known)
+            if (cls == std::string("mx.controls.") + each)
+                return true;
+        return false;
+    }
+
+    /// A symbol for a component the library has none of: empty, linked to
+    /// \a cls, which draws it.
+    const Symbol* standIn(const std::string& name, const std::string& cls)
+    {
+        for (const auto& made : _standIns)
+            if (made->name == name)
+                return made.get();
+        auto symbol = std::make_unique<Symbol>(nullptr);
+        symbol->name = name;
+        symbol->symbolType = SymbolType::MovieClip;
+        symbol->extraAttributes.emplace_back("linkageClassName", cls);
+        _standIns.push_back(std::move(symbol));
+        return _standIns.back().get();
+    }
+
+    /// A component's parameters (its parametersAsXML) as a JSON object of
+    /// their values, by their types.
+    static std::string parametersJson(const std::string& parameters)
+    {
+        tinyxml2::XMLDocument xml;
+        const std::string wrapped = "<parameters>" + parameters + "</parameters>";
+        if (parameters.empty() || xml.Parse(wrapped.c_str(), wrapped.size()) != tinyxml2::XML_SUCCESS)
+            return "{}";
+        std::string out;
+        for (const tinyxml2::XMLElement* property = xml.RootElement()->FirstChildElement("property"); property;
+             property = property->NextSiblingElement("property"))
+        {
+            const tinyxml2::XMLElement* inspectable = property->FirstChildElement("Inspectable");
+            if (!inspectable)
+                continue;
+            const char* variable = inspectable->Attribute("variable");
+            const char* named = inspectable->Attribute("name");
+            const std::string name = variable && *variable ? variable : named ? named : "";
+            const std::string value = inspectable->Attribute("defaultValue") ? inspectable->Attribute("defaultValue") : "";
+            const std::string type = inspectable->Attribute("type") ? inspectable->Attribute("type") : "String";
+            if (name.empty())
+                continue;
+            std::string json;
+            if (type == "Boolean")
+                json = value == "true" ? "true" : "false";
+            else if (type == "Number")
+            {
+                char* end = nullptr;
+                const double n = std::strtod(value.c_str(), &end);
+                json = !value.empty() && end && *end == '\0' ? number(n, 6) : "null";
+            }
+            else if (type == "Color")
+                json = std::to_string(std::strtoul(value.c_str() + (!value.empty() && value[0] == '#' ? 1 : 0), nullptr, 16));
+            else if (type == "Array")
+            {
+                // "[a,b]" or "a,b".
+                std::string list = value;
+                if (list.size() >= 2 && list.front() == '[' && list.back() == ']')
+                    list = list.substr(1, list.size() - 2);
+                json = "[";
+                size_t at = 0;
+                while (!list.empty() && at <= list.size())
+                {
+                    const size_t comma = std::min(list.find(',', at), list.size());
+                    json += (json.size() > 1 ? "," : "") + quoted(list.substr(at, comma - at));
+                    at = comma + 1;
+                }
+                json += "]";
+            }
+            else if (type == "Collection" || type == "Object")
+                continue;
+            else
+                json = quoted(value);
+            out += (out.empty() ? "" : ",") + quoted(name) + ":" + json;
+        }
+        return "{" + out + "}";
     }
 
     /// A shape's index in the content's art, the same shape once.
@@ -1224,6 +1342,7 @@ private:
     std::vector<std::string> _texts;
     std::map<std::string, int> _textIndex;
     std::map<const RawElement*, swfmovie::Component> _components;
+    std::vector<std::unique_ptr<Symbol>> _standIns;
     /// The timeline being walked: "" for the main one, else its symbol's
     /// name; and the ids of instances' handlers (ActionScript 2).
     std::string _timelineName;

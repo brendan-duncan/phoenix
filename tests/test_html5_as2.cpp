@@ -108,7 +108,8 @@ public:
             "bitmap", "timeline", "text", "media", "utils", "player"};
         for (const char* file : files)
             ok = ok && eval(readFile(kRuntime / (std::string(file) + ".js")), file);
-        ok = ok && eval(fla::html5as2::avm1Runtime(), "avm1.js") && eval(readFile(kRuntime / "as2.js"), "as2.js");
+        ok = ok && eval(fla::html5as2::avm1Runtime(), "avm1.js") && eval(readFile(kRuntime / "as2.js"), "as2.js") &&
+            eval(readFile(kRuntime / "as2components.js"), "as2components.js");
     }
     ~Runtime()
     {
@@ -276,6 +277,59 @@ phoenix.start({}).then(function (player) {
     CHECK(has(out, "space on _level0"));
     CHECK(has(out, "right, card0 at 30"));
     CHECK(has(out, "after: frame 3, card0 30 depth 3, opened http://example.com/ _blank"));
+    if (out.find("after:") == std::string::npos)
+        std::printf("%s\n%s\n", out.c_str(), js.error.c_str());
+}
+
+TEST(html5_as2_components_work_with_their_parameters)
+{
+    const std::unique_ptr<Published> published = publish("as2forms");
+    CHECK(published != nullptr);
+    if (!published)
+        return;
+    // The Button's own symbol, and stand-ins for the components the library
+    // has none of, each placed with its parameters.
+    CHECK(has(published->content, "{\"name\":\"Button\",\"type\":\"mc\",\"linkage\":\"mx.controls.Button\""));
+    CHECK(has(published->content, "{\"name\":\"ComboBox\",\"type\":\"mc\",\"linkage\":\"mx.controls.ComboBox\""));
+    CHECK(has(published->content, "\"n\":\"go\",\"cp\":{\"label\":\"Go\",\"toggle\":false}"));
+    CHECK(has(published->content, "\"cp\":{\"labels\":[\"Red\",\"Green\",\"Blue\"],\"data\":[\"r\",\"g\",\"b\"],"
+                                   "\"editable\":false}"));
+    CHECK(published->notes.empty());
+    for (const std::string& note : published->notes)
+        std::printf("    note: %s\n", note.c_str());
+    Runtime js;
+    CHECK(js.ok);
+    CHECK(js.eval("phoenix.content(" + published->content + ");", "content"));
+    CHECK(js.eval(published->translated.code, "movie.as.js"));
+    CHECK(js.eval(R"JS(
+phoenix.start({}).then(function (player) {
+    player.pause();
+    player.tick();
+    var root = phoenix.as2Face(player.root);
+    var MouseEvent = flash.events.MouseEvent;
+    // The box unchecked, then clicks on the button, the big radio button
+    // and the stepper's up arrow twice; the combo box's second item chosen.
+    root.agree.selected = false;
+    phoenix._.as2.displayOf(root.go).dispatchEvent(new MouseEvent("click", true));
+    phoenix._.as2.displayOf(root.big).dispatchEvent(new MouseEvent("click", true));
+    root.color.selectedIndex = 1;
+    root.color.dispatchEvent({type: "change"});
+    var count = phoenix._.as2.displayOf(root.count);
+    count._c.arrows.dispatchEvent(new MouseEvent("click", true));
+    count._c.arrows.dispatchEvent(new MouseEvent("click", true));
+    console.log("after: " + root.small.selected + " " + root.big.selected + " " + root.count.value + " " +
+        root.caption.text + " " + root.who.text);
+});
+)JS", "<test>"));
+    const std::string out = js.output();
+    CHECK(has(out, "start Go true 0 r Ann 3 3 12x10 false"));
+    CHECK(has(out, "picks 4 Fourth"));
+    CHECK(has(out, "clicked go Go false"));
+    // Delegate calls the function on the root, which has no name.
+    CHECK(has(out, "color Green g \ncount 4"));
+    // The stepper stops at its maximum.
+    CHECK(has(out, "count 4\ncount 5"));
+    CHECK(has(out, "after: false true 5 Pick one Ann"));
     if (out.find("after:") == std::string::npos)
         std::printf("%s\n%s\n", out.c_str(), js.error.c_str());
 }
