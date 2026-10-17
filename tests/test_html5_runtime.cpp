@@ -394,3 +394,32 @@ phoenix.start({}).then(function (player) {
         "true 2 1"));
     CHECK(same(js.output(), "true 0 worn true 3 com.studio::Hat\nheard 3 true\n10 1 1 3 true"));
 }
+
+TEST(html5_runtime_lets_the_pointer_through_what_does_not_take_it)
+{
+    // A component's label over its button: off for the mouse, the button
+    // under it takes the press, as Phoenix's player has it.
+    Runtime js;
+    CHECK(same(js.run(std::string(kMovie) + R"JS(
+phoenix.content(movie);
+phoenix.start({}).then(function (player) {
+    player.pause();
+    var Sprite = flash.display.Sprite;
+    var box = new Sprite(), button = new Sprite(), label = new Sprite();
+    button.name = "button";
+    label.name = "label";
+    [button, label].forEach(function (s) { s.graphics.beginFill(0); s.graphics.drawRect(0, 0, 50, 20); });
+    box.addChild(button);
+    box.addChild(label);
+    box.y = 50;
+    player.stage.addChild(box);
+    var parts = [phoenix._.targetAt(10, 60).name];
+    label.mouseEnabled = label.mouseChildren = false;
+    parts.push(phoenix._.targetAt(10, 60).name);
+    button.mouseEnabled = false;
+    parts.push(phoenix._.targetAt(10, 60) === null);
+    __result = parts.join(" ");
+});
+)JS"),
+        "label button true"));
+}

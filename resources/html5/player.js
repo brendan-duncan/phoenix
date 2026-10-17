@@ -291,12 +291,14 @@ function toStage(event) {
 }
 /// What the pointer finds at a point on the stage: the deepest object that
 /// takes the mouse, or null where there is only the stage. A shape or
-/// bitmap hit passes the hit up to its container.
+/// bitmap hit passes the hit up to its container; an object that does not
+/// take the mouse (mouseEnabled false) lets it through to what is under.
 function pick(object, x, y) {
     if (!object._visible || object._maskOwner || object._maskGroup !== null)
         return null;
+    var enabled = object instanceof display.InteractiveObject && object._mouseEnabled && !(object instanceof display.Stage);
     if (object instanceof display.SimpleButton) {
-        if (!object._mouseEnabled || !object._hitStageButton(x, y))
+        if (!enabled || !object._hitStageButton(x, y))
             return null;
         return {target: object};
     }
@@ -310,9 +312,15 @@ function pick(object, x, y) {
     }
     if (object instanceof display.DisplayObjectContainer) {
         if (object._hitArea) {
-            if (!object._hitArea._hitStage(x, y, true))
+            if (!enabled || !object._hitArea._hitStage(x, y, true))
                 return null;
-            return {target: object._mouseEnabled ? object : null};
+            return {target: object};
+        }
+        // Its children are not looked into: it takes the pointer whole.
+        if (!object._mouseChildren) {
+            if (!enabled || !object._hitStage(x, y, true))
+                return null;
+            return {target: object};
         }
         var children = object._children;
         for (var i = children.length - 1; i >= 0; --i) {
@@ -329,21 +337,24 @@ function pick(object, x, y) {
             var found = pick(child, x, y);
             if (!found)
                 continue;
-            if (!object._mouseChildren)
-                return {target: object._mouseEnabled ? object : null};
             if (found.target)
                 return found;
-            return {target: object._mouseEnabled && !(object instanceof display.Stage) ? object : null};
+            // A plain shape in it: it takes the pointer, unless it does not
+            // take the mouse, when the pointer goes on to what is under.
+            if (enabled)
+                return {target: object};
+            if (object instanceof display.Stage)
+                return {target: null};
         }
         var self = object._hitOwn && object._hitOwn.apply(object, object._globalToLocal(x, y).concat([true]));
-        if (self)
-            return {target: object._mouseEnabled && !(object instanceof display.Stage) ? object : null};
+        if (self && enabled)
+            return {target: object};
         return null;
     }
     if (!object._hitStage(x, y, true))
         return null;
     if (object instanceof display.InteractiveObject)
-        return {target: object._mouseEnabled ? object : null};
+        return enabled ? {target: object} : null;
     return {target: null};
 }
 display.SimpleButton.prototype._hitStageButton = function (x, y) {
@@ -373,6 +384,7 @@ function targetAt(x, y) {
     var found = pick(stage, x, y);
     return found && found.target ? found.target : null;
 }
+phoenix._.targetAt = targetAt;
 /// The pointer moved, or what is under it did: over, out and roll events
 /// for what it is over now, and buttons' states.
 function hover(event) {
