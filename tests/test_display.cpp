@@ -9,6 +9,7 @@
 #include "../src/play/display/stage.h"
 #include "../src/play/display/text_field.h"
 
+#include <algorithm>
 #include <chrono>
 #include <cstdio>
 #include <memory>

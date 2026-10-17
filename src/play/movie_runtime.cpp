@@ -2858,7 +2858,7 @@ as3::ValuePtr MovieRuntime::property(Clip& clip, const std::string& name)
     if (name == "_droptarget" || name == "dropTarget")
     {
         const as3::ValuePtr under = objectFor(clip)->properties.count("__dropTarget")
-            ? objectFor(clip)->properties["__dropTarget"]
+            ? as3::ValuePtr(objectFor(clip)->properties["__dropTarget"])
             : Value::makeNull();
         if (name == "dropTarget")
             return under;
