@@ -28,6 +28,7 @@ set(TEST_SOURCES
     test_intersect.cpp
     test_new_document.cpp
     test_nine_slice.cpp
+    test_toolbox_flow.cpp
     test_planar_map.cpp
     test_selection.cpp
     test_region_split.cpp

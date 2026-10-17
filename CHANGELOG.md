@@ -2,6 +2,11 @@
 
 What changed in each release of Phoenix, newest first.
 
+## Unreleased
+
+- The Tools panel's colors are one unit: overlapping fill and stroke squares, the one last clicked on top, with Black and White and Swap beside them, growing to fit a wider panel; a red line shows no fill or no stroke
+- The Tools panel adds columns when the window is too short to show every tool, and goes back to the columns you chose when there is room; along the top or bottom it adds rows
+
 ## 0.18.0
 
 - Strokes drawn with FLA files' art and pattern paint brushes draw on the stage and in exports and SWF movies, and save as they were; the Paint Brush can draw with the file's brushes, listed under Brushes in this document

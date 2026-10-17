@@ -121,6 +121,8 @@ set(HEADERS
     src/gui/library_panel.h
     src/gui/find_replace_dialog.h
     src/gui/toolbox.h
+    src/gui/toolbox_flow.h
+    src/gui/color_well.h
     src/gui/toolbar_editor.h
     src/gui/theme.h
     src/gui/theme_editor.h
@@ -419,6 +421,7 @@ set(SOURCES
     src/gui/library_panel.cpp
     src/gui/find_replace_dialog.cpp
     src/gui/toolbox.cpp
+    src/gui/color_well.cpp
     src/gui/toolbar_editor.cpp
     src/gui/theme.cpp
     src/gui/theme_editor.cpp

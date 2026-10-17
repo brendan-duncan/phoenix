@@ -12,6 +12,10 @@ class QAction;
 class QFrame;
 class QToolButton;
 
+namespace toolboxflow {
+enum class Kind;
+}
+
 /// The Tools panel: the tools in slots, a slot with more than one
 /// tool showing the last one used and opening the others on a long press,
 /// sections parted by lines, and the color controls after them. The slots
@@ -19,7 +23,9 @@ class QToolButton;
 /// its width holds, along the top or bottom in as many rows as its height
 /// holds. Which tools sit in which slot, in what order, and which are
 /// hidden is a layout that can be edited (Edit Toolbar) and saved; a
-/// hidden tool still works by its key.
+/// hidden tool still works by its key. Docked where it is too short (or,
+/// along the top or bottom, too narrow) for everything, it takes more
+/// columns (rows) until it fits, and goes back when there is room.
 class Toolbox : public QWidget
 {
     Q_OBJECT
@@ -63,7 +69,7 @@ public:
     const Layout& layout() const { return _layout; }
 
     /// The color controls and toggles after the tools, in order; a null
-    /// entry is a line.
+    /// entry is a line. A ColorWell spans the panel's breadth.
     void setExtras(const QList<QWidget*>& extras);
 
     /// Horizontal along the top or bottom of the window, vertical down a
@@ -72,8 +78,15 @@ public:
     void setFloating(bool floating);
     Qt::Orientation orientation() const { return _orientation; }
 
-    /// The width the panel takes for \a columns columns.
+    /// The width the panel takes for \a columns columns (down a side), or
+    /// its height for that many rows (along the top or bottom).
     int widthFor(int columns) const;
+    /// The fewest columns (rows), the ones chosen or more, at which
+    /// everything fits in \a length along the flow.
+    int acrossFor(int length) const;
+    /// The columns (rows) it would have now: the ones chosen, or more where
+    /// the window is too short for those.
+    int preferredAcross() const;
 
     QSize sizeHint() const override;
     QSize minimumSizeHint() const override;
@@ -83,6 +96,9 @@ signals:
     void layoutChanged();
     /// Edit Toolbar was chosen from the panel's menu.
     void editRequested();
+    /// It took more columns (rows) to fit, or gave them back: its dock
+    /// should take sizeHint()'s breadth.
+    void preferredSizeChanged();
 
 protected:
     void contextMenuEvent(QContextMenuEvent* event) override;
@@ -100,6 +116,10 @@ private:
     /// along the flow it takes, for \a across items across.
     int place(int across, bool move);
     int cell() const;
+    std::vector<toolboxflow::Kind> kinds() const;
+    /// Takes more columns (rows) when docked too short, or gives them back;
+    /// true when that changed.
+    bool updateForced();
     QFrame* makeLine();
     /// \a layout with unknown ids dropped and missing ones put back.
     Layout completed(const Layout& layout) const;
@@ -113,6 +133,10 @@ private:
     std::vector<Item> _items;
     Qt::Orientation _orientation = Qt::Vertical;
     bool _floating = false;
+    /// The columns (rows) taken to fit, more than chosen; 0 when none.
+    int _forced = 0;
+    /// Giving those back: the width it still has is not chosen.
+    bool _returning = false;
 };
 
 /// A slim title bar for a dock, a row of grip dots: dragged it moves the
