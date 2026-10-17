@@ -361,6 +361,10 @@ bool Clip::wantsMouse() const
 {
     if (button)
         return true;
+    // A clip with on() handlers for the pointer, as a button is.
+    for (const char* event : {"press", "release", "releaseOutside", "rollOver", "rollOut", "dragOver", "dragOut"})
+        if (clipEvents.count(event))
+            return true;
     for (const auto& [type, list] : listeners)
         if (!list.empty() && isMouseEvent(type))
             return true;
@@ -2232,17 +2236,21 @@ void MovieRuntime::enter(std::vector<Clip*>& entered)
             const std::string script = instanceScript(*clip.placed);
             if (!script.empty())
             {
-                // Run with __onClipEvent gathering the handlers, into the
-                // clip as long as it lives.
+                // Run on the clip with __onClipEvent and __on gathering the
+                // handlers, into the clip as long as it lives: a clip's
+                // on() and onClipEvent() handlers run on the clip, as a
+                // player runs a placed clip's actions.
                 const std::shared_ptr<Clip*> life = clip.life;
-                _vm->registerBuiltin("__onClipEvent", [life](const std::vector<as3::ValuePtr>& args) {
+                const auto gather = [life](const std::vector<as3::ValuePtr>& args) {
                     Clip* gathering = *life;
                     if (gathering && args.size() >= 2)
                         for (const as3::ValuePtr& event : args[0]->elements)
                             gathering->clipEvents[event->toString()] = args[1];
                     return as3::Value::makeUndefined();
-                });
-                run(clip.placed, script, *clip.parent, clip.name.empty() ? clip.key : clip.name);
+                };
+                _vm->registerBuiltin("__onClipEvent", gather);
+                _vm->registerBuiltin("__on", gather);
+                run(clip.placed, script, clip, clip.name.empty() ? clip.key : clip.name);
             }
             runClipEvent(clip, "load");
         }
@@ -2623,6 +2631,8 @@ void MovieRuntime::pointerOver(Clip* button)
                 buttonSound(*left, 0);
             runButtonEvent(*left, _pressed == left ? "dragOut" : "rollOut");
         }
+        else
+            runClipEvent(*left, _pressed == left ? "dragOut" : "rollOut");
     }
     // What the pointer moved onto may be gone once those settled.
     if (button && _hovered == button)
@@ -2635,6 +2645,8 @@ void MovieRuntime::pointerOver(Clip* button)
                 buttonSound(*button, 1);
             runButtonEvent(*button, _pressed == button ? "dragOver" : "rollOver");
         }
+        else
+            runClipEvent(*button, _pressed == button ? "dragOver" : "rollOver");
     }
     settle();
 }
@@ -2663,6 +2675,8 @@ void MovieRuntime::pointerDown()
             buttonSound(pressed, 2);
             runButtonEvent(pressed, "press");
         }
+        else
+            runClipEvent(pressed, "press");
     }
     settle();
 }
@@ -2702,6 +2716,8 @@ void MovieRuntime::pointerUp()
             buttonSound(*pressed, 3);
         runButtonEvent(*pressed, pressed == hovered ? "release" : "releaseOutside");
     }
+    else if (pressed)
+        runClipEvent(*pressed, pressed == hovered ? "release" : "releaseOutside");
     settle();
 }
 
