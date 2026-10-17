@@ -3,10 +3,12 @@ package cases {
     import fl.controls.CheckBox;
     import fl.controls.ColorPicker;
     import fl.controls.ComboBox;
+    import fl.controls.Label;
     import fl.controls.List;
     import fl.controls.NumericStepper;
     import fl.controls.RadioButton;
     import fl.controls.Slider;
+    import fl.controls.TextArea;
     import fl.controls.TextInput;
     import fl.controls.UIScrollBar;
     import fl.core.UIComponent;
@@ -26,6 +28,8 @@ package cases {
                 [new NumericStepper(), 80, 22],
                 [new Slider(), 80, 3],
                 [new TextInput(), 100, 22],
+                [new TextArea(), 100, 100],
+                [new Label(), 100, 22],
                 [new UIScrollBar(), 15, 100]
             ];
             for each (var entry:Array in made) {
