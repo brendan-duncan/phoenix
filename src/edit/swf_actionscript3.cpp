@@ -381,7 +381,9 @@ public:
                     base = button ? "flash.display.SimpleButton" : "flash.display.MovieClip";
                 TimelineClass made;
                 made.symbol = symbol;
-                if (!button)
+                // A component's class makes it: its timeline holds only its
+                // avatar and the assets it uses, never played.
+                if (!button && symbol->itemElement != "DOMComponentItem")
                     gather(made, symbol->timelines.front(), "symbol " + symbol->name, 0);
                 const bool scripted = !made.frames.empty();
                 if (linked.empty() && !scripted)
@@ -492,10 +494,21 @@ public:
             }
         }
 
+        // A class's file after the files of what it extends and implements:
+        // a player defines the classes in the order the ABC has them, each
+        // finding its superclass already there.
         std::vector<as3::abc::Source> sources;
+        std::set<std::string> placed;
+        std::function<void(const std::string&)> place = [&](const std::string& name) {
+            const auto found = _found.find(name);
+            if (found == _found.end() || !found->second || !placed.insert(name).second)
+                return;
+            for (const std::string& need : supertypes(found->second->first))
+                place(need);
+            sources.push_back({found->second->first, found->second->second});
+        };
         for (const auto& [name, found] : _found)
-            if (found.has_value())
-                sources.push_back({found->first, found->second});
+            place(name);
         std::vector<as3::abc::Timeline> timelines;
         for (const TimelineClass& made : _timelines)
             timelines.push_back(made.timeline);
@@ -581,6 +594,55 @@ private:
     {
         const auto known = _found.find(qualified);
         return known != _found.end() && known->second ? known->second->first : std::string();
+    }
+
+    /// The classes and interfaces of the movie that \a source's classes
+    /// extend and implement, qualified.
+    std::vector<std::string> supertypes(const std::string& source) const
+    {
+        const Scan seen = scan(source);
+        std::vector<std::string> out;
+        const auto known = [&](const std::string& name) {
+            const auto found = _found.find(name);
+            return found != _found.end() && found->second.has_value();
+        };
+        bool listing = false;
+        for (const std::string& word : seen.words)
+        {
+            if (word == "extends" || word == "implements")
+            {
+                listing = true;
+                continue;
+            }
+            if (!listing)
+                continue;
+            // The names after extends and implements, up to the next
+            // keyword (the class body's first).
+            const std::string first = word.substr(0, word.find('.'));
+            if (first.empty() || !std::isupper(static_cast<unsigned char>(first[0])))
+            {
+                if (word.find('.') == std::string::npos)
+                {
+                    listing = false;
+                    continue;
+                }
+            }
+            std::vector<std::string> candidates{word};
+            const auto imported = seen.imports.find(word);
+            if (imported != seen.imports.end())
+                candidates.insert(candidates.begin(), imported->second);
+            if (!seen.package.empty())
+                candidates.push_back(seen.package + "." + word);
+            for (const std::string& wildcard : seen.wildcards)
+                candidates.push_back(wildcard + "." + word);
+            for (const std::string& candidate : candidates)
+                if (known(candidate))
+                {
+                    out.push_back(candidate);
+                    break;
+                }
+        }
+        return out;
     }
 
     /// Looks for the classes \a text names: dotted paths, and short names
@@ -775,6 +837,12 @@ private:
     std::string describe(const as3::abc::Diagnostic& diagnostic) const
     {
         const std::string kind = diagnostic.isError ? std::string() : std::string("warning: ");
+        // The parser's own messages say where again: "Warning in X at line
+        // 50, column 33: ...".
+        std::string message = diagnostic.message;
+        for (const char* lead : {"Warning in ", "Error in "})
+            if (message.rfind(lead, 0) == 0 && message.find(": ") != std::string::npos)
+                message = message.substr(message.find(": ") + 2);
         for (const TimelineClass& made : _timelines)
         {
             const std::string prefix = made.timeline.className + ", frame ";
@@ -791,11 +859,11 @@ private:
                     which = i;
             const int line = diagnostic.line > 0 ? diagnostic.line - starts->second[which] + 1 : 0;
             return parts->second[which].where + (line > 0 ? ", line " + std::to_string(line) : std::string()) + ": " +
-                kind + diagnostic.message;
+                kind + message;
         }
         return (diagnostic.fileName.empty() ? std::string("ActionScript") : diagnostic.fileName) +
             (diagnostic.line > 0 ? ", line " + std::to_string(diagnostic.line) : std::string()) + ": " + kind +
-            diagnostic.message;
+            message;
     }
 };
 
