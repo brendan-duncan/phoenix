@@ -87,25 +87,29 @@
 
 <h2 id="actionscript-3">ActionScript 3</h2>
 
-<p>Frame scripts in ActionScript 3 run with what simple games use:</p>
+<p>An ActionScript 3 movie (as its publish settings say) plays with the <code>flash.*</code> classes, over the display list: everything on the stage is a display object scripts can find, move, filter, draw into and take apart, and every class can be made with <code>new</code>, extended, and tested with <code>is</code> and <code>instanceof</code>.</p>
 
 <ul>
-  <li><code>addEventListener</code> and <code>removeEventListener</code> on named movie clips and buttons and on <code>stage</code>, for <code>MouseEvent.CLICK</code>, <code>MOUSE_DOWN</code>, <code>MOUSE_UP</code>, <code>ROLL_OVER</code>, <code>ROLL_OUT</code>, <code>MOUSE_OVER</code>, <code>MOUSE_OUT</code> and <code>MOUSE_MOVE</code>, <code>Event.ENTER_FRAME</code>, and <code>KeyboardEvent.KEY_DOWN</code> and <code>KEY_UP</code> (with <code>keyCode</code>). Mouse events go on up to the clips a clip is in, and a movie clip with a mouse listener answers clicks as a button does.</li>
-  <li>A clip's <code>x</code>, <code>y</code>, <code>visible</code>, <code>alpha</code>, <code>scaleX</code>, <code>scaleY</code>, <code>rotation</code>, <code>width</code>, <code>height</code>, <code>mouseX</code>, <code>mouseY</code>, <code>currentFrame</code>, <code>totalFrames</code>, <code>currentLabel</code>, <code>name</code>, <code>parent</code> and <code>root</code>, <code>MovieClip(root)</code>, and <code>import</code> lines, which are taken as read.</li>
-  <li>Movie clip symbols exported with a class name: <code>new Hat()</code> makes one, <code>addChild</code> puts it on the stage and <code>removeChild</code> takes it off.</li>
-  <li><code>stage.focus = name_txt</code>, for input fields.</li>
+  <li><strong>The display list.</strong> <code>Sprite</code>, <code>Shape</code>, <code>MovieClip</code> (its frames, labels and scenes: <code>currentFrame</code>, <code>currentLabel</code>, <code>currentLabels</code>, <code>scenes</code>, <code>gotoAndStop</code> with a scene, <code>addFrameScript</code>), <code>SimpleButton</code>, <code>Bitmap</code>, <code>TextField</code>, and the <code>Stage</code> (<code>stageWidth</code>, <code>frameRate</code>, <code>focus</code>, <code>invalidate()</code> and the rest). Children are added, removed, reordered and found by name; objects have their position, scale, rotation, alpha, filters, blend mode, mask, scroll rect, <code>transform</code>, bounds, and hit tests. What the timeline places is the same objects: a frame's named instances are its timeline's variables, and a class that declares them gets them.</li>
+  <li><strong>Drawing.</strong> <code>graphics</code>: lines, fills (solid, gradient and bitmap), rectangles, circles, ellipses, curves, <code>drawPath</code> and <code>drawTriangles</code>. <code>BitmapData</code> with all its methods, from <code>getPixel32</code> and <code>fillRect</code> to <code>draw</code>, <code>copyPixels</code>, <code>threshold</code>, <code>applyFilter</code>, <code>floodFill</code> and <code>perlinNoise</code>.</li>
+  <li><strong>Events.</strong> <code>EventDispatcher</code> with capture, target and bubble phases, priorities, <code>stopPropagation</code> and <code>preventDefault</code>; <code>Event</code>, <code>MouseEvent</code>, <code>KeyboardEvent</code>, <code>FocusEvent</code>, <code>TextEvent</code>, <code>TimerEvent</code>, <code>ProgressEvent</code>, <code>IOErrorEvent</code> and the rest. Classes of your own may extend <code>EventDispatcher</code> or <code>Event</code>; an event sent again goes as its <code>clone()</code>. The pointer and the keys reach what is under them and the focus, and the stage hears every key.</li>
+  <li><strong>Geometry and filters.</strong> <code>Point</code>, <code>Rectangle</code>, <code>Matrix</code>, <code>ColorTransform</code> and <code>Transform</code>; <code>BlurFilter</code>, <code>DropShadowFilter</code>, <code>GlowFilter</code>, <code>BevelFilter</code>, the gradient filters, <code>ColorMatrixFilter</code> and <code>ConvolutionFilter</code> (a display object's <code>filters</code> are copies, as the player keeps them); <code>fl.motion.AdjustColor</code>.</li>
+  <li><strong>Data, time and the web.</strong> <code>ByteArray</code> (every read and write, both byte orders, <code>compress</code> and <code>uncompress</code>), <code>Timer</code>, <code>setTimeout</code>, <code>setInterval</code> and <code>getTimer</code>, which keep the movie's time. <code>URLLoader</code> loads text, bytes and variables, and <code>Loader</code> loads PNG, JPEG and GIF images, from files beside the movie or from the web; <code>navigateToURL</code> opens web pages in your browser. Anything the movie sends to the web is shown in the Output panel; <code>navigateToURL</code> sends no form data, and says so. <code>SharedObject.getLocal</code> keeps what a movie saves with Phoenix's settings.</li>
+  <li><strong>Library symbols are classes.</strong> A symbol exported for ActionScript is its class: <code>new CloseButton()</code> makes one, <code>getDefinitionByName("CloseButton")</code> finds it, and each instance a timeline places is one, its constructor run as it is placed and before the frame's scripts. A symbol without a class file gets the class the player would make for it. Bitmaps and sounds exported for ActionScript are <code>BitmapData</code> and <code>Sound</code> classes.</li>
+  <li><strong>Frame scripts</strong> belong to their timeline: what frame 1 declares, later frames see, <code>this</code> is the timeline, and the <code>flash.*</code> classes need no <code>import</code>. With a document class, they run in its instance.</li>
+  <li><strong>Components.</strong> The <code>fl.controls</code> components (Button, CheckBox, ComboBox, List, Slider and the rest) are Phoenix's own, written in ActionScript: placed on the stage, they take the parameters set in the Component Parameters.</li>
 </ul>
 
 <h3 id="class-files">Class files</h3>
 
-<p>An ActionScript 3 movie can keep its code in class files (<code>.as</code>) beside the FLA rather than on its frames. Test Movie runs two kinds:</p>
+<p>An ActionScript 3 movie can keep its code in class files (<code>.as</code>). Test Movie loads each class the first time a script needs it, by its name: <code>game.Hat</code> is <code>game/Hat.as</code>, looked for in turn in the document's folder, the source paths in its publish settings, the sources kept beside a library the publish settings list (the <code>src</code> folder beside a <code>.swc</code>'s <code>lib</code> folder), any <code>src</code> folder in the document's folder or the folders in it, the class paths in <span class="menu-path">Edit &rsaquo; Preferences &rsaquo; ActionScript</span>, and last Phoenix's own classes.</p>
 
 <ul>
-  <li>The <strong>document class</strong>, named in the publish settings. Its constructor runs on the main timeline before the first frame's scripts, with the first frame's instances already placed, so <code>btn.addEventListener(...)</code> in the constructor finds <em>btn</em>. Its methods and fields belong to the main timeline: frame scripts see them, and a method passed as a listener runs there.</li>
-  <li>A symbol's <strong>class</strong>, its linkage class name. Each clip of the symbol, placed on a timeline or made with <code>new</code>, runs the class's constructor with the clip as <code>this</code>.</li>
+  <li>The <strong>document class</strong>, named in the publish settings, is the main timeline's: its constructor runs before the first frame's scripts, with the first frame's instances placed, and frame scripts see its methods and fields.</li>
+  <li>A symbol's <strong>class</strong>, its linkage class name, is what each clip of the symbol is.</li>
 </ul>
 
-<p>A class <code>Main</code> is looked for in <code>Main.as</code> in the document's folder, and a class in a package, <code>game.Hat</code>, in <code>game/Hat.as</code>; the source paths in the publish settings are searched too. A class file's error shows in the Output panel with its file and line, as a frame script's does.</p>
+<p>A class that does not compile shows its file and line in the Output panel, as a frame script does.</p>
 
 <h2 id="games">What games use</h2>
 
@@ -123,7 +127,7 @@
 
 <h2 id="errors">Errors and trace</h2>
 
-<p>What scripts <code>trace()</code> goes to the Output panel (<kbd>F2</kbd>). A script error stops that script only, and is shown in the Output panel, in red, with the frame or button and the line it was on; the movie plays on, and the line below the movie counts the errors.</p>
+<p>What scripts <code>trace()</code> goes to the Output panel (<kbd>F2</kbd>). A script error stops that script only, and is shown in the Output panel, in red, with the frame or button and the line it was on, and in ActionScript 3 the functions it was in; the movie plays on, and the line below the movie counts the errors.</p>
 
 <p>Once the Test Movie window is closed, double-click an error in the Output panel to see its script in the Actions panel with the caret on that line.</p>
 
@@ -135,7 +139,7 @@
 
 <div class="callout">
   <span class="label">Not yet</span>
-  <p>Interfaces, getters and setters, calls to <code>super</code>, drawing from scripts, and loading other movies. Published SWF files carry the artwork but not the scripts.</p>
+  <p>Loading other movies (SWF files), video, the microphone and camera, sockets, <code>ByteArray</code>'s <code>readObject</code> and <code>writeObject</code>, and the <code>DataGrid</code>, <code>TileList</code>, <code>ScrollPane</code>, <code>UILoader</code> and <code>ProgressBar</code> components. Published SWF files carry the artwork but not the scripts.</p>
 </div>
 
 </article>
