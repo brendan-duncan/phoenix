@@ -251,13 +251,21 @@ PublishSettingsDialog::PublishSettingsDialog(const std::string& xml, const QStri
 
     // Publish keeps the settings and publishes with them; OK only keeps
     // them.
-    QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
-    _publishButton = buttons->addButton("Publish", QDialogButtonBox::AcceptRole);
+    // Publish, OK, Cancel, in that order on every platform.
+    QHBoxLayout* buttons = new QHBoxLayout;
+    buttons->addStretch(1);
+    _publishButton = new QPushButton("Publish", this);
     _publishButton->setToolTip("Keep these settings and publish now");
+    _okButton = new QPushButton("OK", this);
+    _okButton->setDefault(true);
+    QPushButton* cancel = new QPushButton("Cancel", this);
+    buttons->addWidget(_publishButton);
+    buttons->addWidget(_okButton);
+    buttons->addWidget(cancel);
     connect(_publishButton, &QPushButton::clicked, this, [this]() { finish(true); });
-    connect(buttons->button(QDialogButtonBox::Ok), &QPushButton::clicked, this, [this]() { finish(false); });
-    connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
-    layout->addWidget(buttons);
+    connect(_okButton, &QPushButton::clicked, this, [this]() { finish(false); });
+    connect(cancel, &QPushButton::clicked, this, &QDialog::reject);
+    layout->addLayout(buttons);
     listProfiles(settings.profile);
     connect(add, &QPushButton::clicked, this, &PublishSettingsDialog::newProfile);
     connect(rename, &QPushButton::clicked, this, &PublishSettingsDialog::renameProfile);
@@ -397,6 +405,7 @@ void PublishSettingsDialog::load(const fla::publish::Settings& settings)
 
 void PublishSettingsDialog::preferPublish()
 {
+    _okButton->setDefault(false);
     _publishButton->setDefault(true);
     _publishButton->setFocus();
 }
@@ -410,8 +419,7 @@ QString PublishSettingsDialog::parentFolder() const
 void PublishSettingsDialog::folderChanged()
 {
     const QString parent = parentFolder();
-    QPushButton* ok = findChild<QDialogButtonBox*>() ? findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Ok)
-                                                     : nullptr;
+    QPushButton* ok = _okButton;
     if (parent.isEmpty())
     {
         _destination->setText("<i>Choose a parent folder.</i>");

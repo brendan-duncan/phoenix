@@ -189,3 +189,22 @@ TEST(publish_configurations_are_the_files_profiles)
     CHECK(fla::publish::profiles(fresh) == (std::vector<std::string>{"Default", "Copy"}));
     CHECK(fla::publish::read(fresh, "shot", "Copy").html5);
 }
+
+TEST(publish_configurations_show_the_apps_own_profile_as_default)
+{
+    const std::string animate = "<flash_profiles><flash_profile version=\"1.0\" name=\"Animate Settings\" current=\"true\">"
+                                "<PublishFormatProperties><png>1</png></PublishFormatProperties></flash_profile></flash_profiles>";
+    CHECK(fla::publish::profiles(animate) == std::vector<std::string>{"Default"});
+    CHECK(fla::publish::currentProfile(animate) == "Default");
+    const fla::publish::Settings settings = fla::publish::read(animate, "shot");
+    CHECK(settings.profile == "Default" && settings.png);
+    CHECK(fla::publish::read(animate, "shot", "Default").png);
+    // Written back, it is Default in the file too.
+    const std::string written = fla::publish::write(animate, settings, "shot");
+    CHECK(written.find("name=\"Default\"") != std::string::npos);
+    CHECK(written.find("Animate Settings") == std::string::npos);
+    // With a Default of its own, the file's names stay as they are.
+    const std::string both = "<flash_profiles><flash_profile name=\"Flash CS6 Settings\" current=\"true\"/>"
+                             "<flash_profile name=\"Default\"/></flash_profiles>";
+    CHECK((fla::publish::profiles(both) == std::vector<std::string>{"Flash CS6 Settings", "Default"}));
+}

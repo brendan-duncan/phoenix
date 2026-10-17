@@ -6362,20 +6362,22 @@ void MainWindow::setupMenus()
     });
     exportMenu->addAction(exportSwfAction);
 
-    QAction* publishSettingsAction = fileMenu->addAction("Publish Settings...");
-    publishSettingsAction->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_F12));
-    publishSettingsAction->setStatusTip("Which formats Publish writes, and their options");
-    connect(publishSettingsAction, &QAction::triggered, this, &MainWindow::publishSettings);
-    // Publish: a submenu of the document's publish configurations, the
-    // current one first (Shift+F12), each publishing as it says.
+    // Publish: Publish Settings, then the document's publish configurations,
+    // the current one first (Shift+F12), each publishing as it says.
     QMenu* publishMenu = fileMenu->addMenu("Publish");
+    QAction* publishSettingsAction = publishMenu->addAction("Publish Settings...");
+    publishSettingsAction->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_F12));
+    publishSettingsAction->setStatusTip("The publish configurations: which formats each writes, where, and their options");
+    connect(publishSettingsAction, &QAction::triggered, this, &MainWindow::publishSettings);
+    publishMenu->addSeparator();
     QAction* publishAction = publishMenu->addAction("Publish");
     publishAction->setShortcut(QKeySequence(Qt::SHIFT | Qt::Key_F12));
     publishAction->setStatusTip("Publish with the current publish configuration");
     connect(publishAction, &QAction::triggered, this, [this]() { publish(); });
-    connect(publishMenu, &QMenu::aboutToShow, this, [this, publishMenu, publishAction]() {
+    connect(publishMenu, &QMenu::aboutToShow, this, [this, publishMenu, publishAction, publishSettingsAction]() {
+        // The other configurations, made again each time the menu opens.
         for (QAction* action : publishMenu->actions())
-            if (action != publishAction)
+            if (action != publishAction && action != publishSettingsAction && !action->isSeparator())
             {
                 publishMenu->removeAction(action);
                 action->deleteLater();
@@ -6394,9 +6396,6 @@ void MainWindow::setupMenus()
             other->setStatusTip(QString("Publish with the configuration %1").arg(profile));
             connect(other, &QAction::triggered, this, [this, profile]() { publish(profile); });
         }
-        publishMenu->addSeparator();
-        QAction* settings = publishMenu->addAction("Publish Settings...");
-        connect(settings, &QAction::triggered, this, &MainWindow::publishSettings);
     });
 
     // The format Save As starts in for a new document: XFL folders suit a

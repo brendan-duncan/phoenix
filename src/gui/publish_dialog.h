@@ -74,6 +74,7 @@ private:
     QLineEdit* _publishFolder = nullptr;
     QLabel* _destination = nullptr;
     QPushButton* _publishButton = nullptr;
+    QPushButton* _okButton = nullptr;
     QCheckBox* _flash = nullptr;
     QCheckBox* _html = nullptr;
     QCheckBox* _png = nullptr;

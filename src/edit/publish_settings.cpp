@@ -36,18 +36,36 @@ Element* group(Element* profile, const char* id)
 /// The profile in use: the one marked current, or the first.
 XMLElement* currentProfile(XMLDocument& document);
 
-/// The profile named \a name, or the current one when there is none.
+/// A profile's name as Phoenix shows it: its own, but Default for the one
+/// another app made for every file (named after the app: "Animate
+/// Settings", "Flash CS6 Settings"), unless the file has a Default of its
+/// own. Written back, the profile takes the name shown.
+std::string shownName(const XMLElement* profile)
+{
+    const char* attribute = profile ? profile->Attribute("name") : nullptr;
+    const std::string own = attribute ? attribute : "";
+    const std::string suffix = " Settings";
+    const bool appsOwn = own.size() > suffix.size() && own.compare(own.size() - suffix.size(), suffix.size(), suffix) == 0 &&
+        (own.rfind("Animate", 0) == 0 || own.rfind("Flash", 0) == 0);
+    if (!appsOwn)
+        return own;
+    for (const XMLElement* sibling = profile->Parent() ? profile->Parent()->FirstChildElement("flash_profile") : nullptr;
+         sibling; sibling = sibling->NextSiblingElement("flash_profile"))
+        if (sibling->Attribute("name") && std::strcmp(sibling->Attribute("name"), "Default") == 0)
+            return own;
+    return "Default";
+}
+
+/// The profile named \a name (as Phoenix shows it), or the current one when
+/// there is none.
 XMLElement* profileNamed(XMLDocument& document, const std::string& name)
 {
     XMLElement* root = document.RootElement();
     if (!name.empty() && root && std::strcmp(root->Name(), "flash_profiles") == 0)
         for (XMLElement* profile = root->FirstChildElement("flash_profile"); profile;
              profile = profile->NextSiblingElement("flash_profile"))
-        {
-            const char* own = profile->Attribute("name");
-            if (own && name == own)
+            if (shownName(profile) == name)
                 return profile;
-        }
     return currentProfile(document);
 }
 
@@ -196,8 +214,8 @@ Settings read(const std::string& xml, const std::string& name, const std::string
     const XMLElement* profile = profileNamed(document, profileName);
     if (!profile)
         return settings;
-    if (const char* own = profile->Attribute("name"))
-        settings.profile = own;
+    if (profile->Attribute("name"))
+        settings.profile = shownName(profile);
     const XMLElement* formats = profile->FirstChildElement("PublishFormatProperties");
     settings.defaultNames = flagOf(formats, "defaultNames", true);
     settings.flash = flagOf(formats, "flash", true);
@@ -324,6 +342,10 @@ std::string write(const std::string& xml, const Settings& settings, const std::s
         root->InsertEndChild(profile);
     }
     XMLElement* profile = profileNamed(document, settings.profile);
+    // An app's own profile, shown as Default, takes that name.
+    if (profile->Attribute("name") && shownName(profile) == settings.profile &&
+        settings.profile != profile->Attribute("name"))
+        profile->SetAttribute("name", settings.profile.c_str());
     XMLElement* formats = child(document, profile, "PublishFormatProperties");
     if (!formats->Attribute("enabled"))
         formats->SetAttribute("enabled", "true");
@@ -466,8 +488,7 @@ bool parsed(const std::string& xml, const std::string& name, XMLDocument& docume
 
 bool named(const XMLElement* profile, const std::string& name)
 {
-    const char* own = profile->Attribute("name");
-    return own && name == own;
+    return profile->Attribute("name") && shownName(profile) == name;
 }
 
 } // namespace
@@ -479,10 +500,10 @@ std::vector<std::string> profiles(const std::string& xml)
     if (!xml.empty() && document.Parse(xml.c_str(), xml.size()) == tinyxml2::XML_SUCCESS)
     {
         for (const XMLElement* profile : profileList(document))
-            names.push_back(profile->Attribute("name") ? profile->Attribute("name") : "");
+            names.push_back(shownName(profile));
         if (names.empty())
             if (const XMLElement* only = currentProfile(document))
-                names.push_back(only->Attribute("name") ? only->Attribute("name") : "Default");
+                names.push_back(only->Attribute("name") ? shownName(only) : "Default");
     }
     if (names.empty())
         names.push_back(Settings().profile);
@@ -495,7 +516,7 @@ std::string currentProfile(const std::string& xml)
     if (xml.empty() || document.Parse(xml.c_str(), xml.size()) != tinyxml2::XML_SUCCESS)
         return std::string();
     const XMLElement* profile = currentProfile(document);
-    return profile && profile->Attribute("name") ? profile->Attribute("name") : std::string();
+    return profile && profile->Attribute("name") ? shownName(profile) : std::string();
 }
 
 std::string addProfile(const std::string& xml, const std::string& profile, const std::string& from,
