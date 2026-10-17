@@ -873,14 +873,17 @@ void Scripts::report(const std::string& where)
         JS_FreeValue(_ctx, value);
     }
     JS_FreeValue(_ctx, exception);
-    if (Clock::now() > _deadline)
+    const bool timedOut = Clock::now() > _deadline;
+    if (timedOut)
         message = "the script ran for longer than " + std::to_string(kTimeLimit.count()) +
             " seconds and was stopped (a loop that does not end?)";
     // The script the error is in: the frame script its stack runs through,
-    // else the one that was run.
+    // else the one that was run. Where a script was stopped is not known.
     std::string file;
     int line = 0;
     locate(stack, _sources, file, line);
+    if (timedOut)
+        line = 0;
     if (file.empty() && message.rfind("SyntaxError", 0) == 0 && _sources.count(where))
     {
         // A script that does not compile: the line is at its end.

@@ -135,9 +135,10 @@ const char* const kHelp =
     "\n"
     "  play <file> [--frames N] [--tree] [--click-all] [--image <out.png>]\n"
     "       [--click F:X,Y] [--drag F:X,Y:X,Y] [--move F:X,Y] [--key F:CODE]\n"
-    "      Plays the movie as Control > Test Movie does, scripts and all, for N\n"
-    "      frames (120 unless given), printing what its scripts trace and the\n"
-    "      errors they stop on. --tree lists the clips playing then, with\n"
+    "      Plays the movie as Control > Test Movie does, scripts and all (an\n"
+    "      HTML5 Canvas document's JavaScript too), for N frames (120 unless\n"
+    "      given), printing what its scripts trace or log and the errors they\n"
+    "      stop on. --tree lists the clips playing then, with\n"
     "      their scripts. --click-all then clicks each button it finds,\n"
     "      one after another, playing a few frames after each. --image draws\n"
     "      the frame it is then on, as Test Movie shows it. --click, --drag,\n"
@@ -964,9 +965,9 @@ int play(const QStringList& args)
             movie.pointerDown();
             movie.pointerUp();
             movie.pointerOver(nullptr);
-            // ActionScript 3's listeners hear it from the stage, at the
-            // middle of the button.
-            if (movie.actionScript3() && clip->display && clip->display->stage())
+            // ActionScript 3's and JavaScript's listeners hear it from the stage,
+            // at the middle of the button.
+            if ((movie.actionScript3() || movie.javaScript()) && clip->display && clip->display->stage())
             {
                 const fla::display::Rect box = clip->display->getBounds(&movie.stage());
                 const double x = box.x + box.width / 2.0;
