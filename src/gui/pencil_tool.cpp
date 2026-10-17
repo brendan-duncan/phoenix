@@ -311,8 +311,13 @@ fla::Element* PencilTool::createShape(fla::Frame* frame, const fla::EditablePath
 {
     fla::Shape* shape = new fla::Shape(frame);
 
-    // A pencil stroke is a line, so it is stroke only however the fill is set.
-    fla::StrokeStyle* stroke = _style.createStroke(shape);
+    // A pencil stroke is a line, so it is stroke only however the fill is
+    // set, and drawn in the stroke's color, weight and style (its paint
+    // brush too) whether or not new shapes are set to get a stroke (Stroke
+    // in the Tool tab), as the brushes paint in the fill color.
+    fla::DrawingStyle drawn = _style;
+    drawn.hasStroke = true;
+    fla::StrokeStyle* stroke = drawn.createStroke(shape);
     if (stroke && stroke->style() == fla::StrokeStyle::Style::PaintBrush)
     {
         if (paintBrush > 0)
@@ -322,8 +327,8 @@ fla::Element* PencilTool::createShape(fla::Frame* frame, const fla::EditablePath
     }
     if (!stroke)
     {
-        // With strokes off the stroke would be invisible, so fall back to a
-        // hairline rather than adding nothing to the document.
+        // A style with no stroke to make at all: a hairline rather than
+        // adding nothing to the document.
         fla::SolidStroke* fallback = new fla::SolidStroke(shape);
         fallback->weight = 1.0;
         fallback->fill = new fla::SolidColor(fallback);
