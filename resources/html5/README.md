@@ -147,7 +147,9 @@ What `as3` has:
   a `Sound` playing it) or a bitmap (`new cls()` is a `BitmapData` of its
   pixels). Returns false when there is no such item.
 - `as3.documentClass(cls)`: the main timeline's class: the document class,
-  or the class made for the main timeline's frame scripts.
+  or the class made for the main timeline's frame scripts. Without it, a
+  class defined under the document class's name (the content's
+  `documentClass`) is used.
 - `as3.frameScripts(symbol, scripts)`: frame scripts for a timeline with no
   class of its own: `symbol` is a library name or linkage (`""` for the
   main timeline), `scripts` an object of functions by frame number from 0;

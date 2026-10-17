@@ -956,7 +956,12 @@ function begin(movie, settings) {
             play();
         }
     };
-    // The main timeline: made on the stage, so its constructor sees it.
+    // The main timeline: made on the stage, so its constructor sees it. Its
+    // class is the one registered as the document class, or the class
+    // defined under the name the publish settings give it.
+    var named = movie.documentClass ? phoenix.classByName(movie.documentClass) : null;
+    if (!phoenix._.documentClass && named && named.prototype instanceof display.DisplayObject)
+        as3.documentClass(named);
     var Cls = phoenix._.documentClass || display.MovieClip;
     phoenix._.pending = {def: phoenix._.rootDef, name: "root1"};
     var made;

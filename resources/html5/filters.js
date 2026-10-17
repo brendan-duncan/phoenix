@@ -21,9 +21,12 @@ class BitmapFilter {
     _apply(canvas, scale) { return canvas; }
 }
 
-/// The canvas blur's radius for a box blur of a size and passes.
+/// The canvas blur's radius for a box blur of a size and passes: a box
+/// \a blur pixels wide reaches half that either side, and passes of it
+/// spread as far as a Gaussian of the same variance.
 function sigmaOf(blur, quality, scale) {
-    return Math.max(0, blur) * scale * Math.sqrt(Math.max(1, quality | 0) / 12);
+    var n = 2 * Math.floor(Math.max(0, blur) * scale / 2) + 1;
+    return Math.sqrt(Math.max(1, quality | 0) * (n * n - 1) / 12);
 }
 function newLike(canvas) {
     return phoenix.makeCanvas(canvas.width, canvas.height);
