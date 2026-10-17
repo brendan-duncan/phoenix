@@ -4,7 +4,7 @@
 #include <string>
 #include <vector>
 
-/// The .phx container (docs/PHOENIX_FORMAT.md): a header, chunks each with a
+/// The .phx container (docs/phx-format.html): a header, chunks each with a
 /// checksum, an index of the chunks and a trailer. Knows nothing of what the
 /// chunks hold. Free of Qt.
 namespace phx {

@@ -1,0 +1,931 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The FLA and XFL format · Phoenix User Guide</title>
+<meta name="description" content="What Phoenix knows about the FLA and XFL format: the package, DOMDocument.xml, timelines, shapes, edges, tweens, text and media.">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Phoenix">
+<meta property="og:title" content="The FLA and XFL format · Phoenix User Guide">
+<meta property="og:description" content="What Phoenix knows about the FLA and XFL format: the package, DOMDocument.xml, timelines, shapes, edges, tweens, text and media.">
+<meta property="og:url" content="https://phoenixanimate.com/fla-format.html">
+<meta property="og:image" content="https://phoenixanimate.com/assets/shots/hero.webp">
+<meta property="og:image:type" content="image/webp">
+<meta property="og:image:width" content="1704">
+<meta property="og:image:height" content="1061">
+<meta property="og:image:alt" content="The Phoenix window with three flower characters on the stage, the timeline below and the Properties panel on the right">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://phoenixanimate.com/assets/shots/hero.webp">
+<meta name="keywords" content="fla xfl file format specification DOMDocument edges cubics shapes tweens zip developer">
+<link rel="icon" href="assets/img/logo.png">
+<link rel="stylesheet" href="assets/site.css">
+<script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<main>
+<article class="content">
+
+<p class="eyebrow">Developers</p>
+<h1>The FLA and XFL format</h1>
+<p class="lead">What Phoenix knows about the format Adobe Animate (and Flash Professional CS5
+and later) saves, learned from reading real files and making Phoenix's reader
+and writer agree with them. Adobe has never published a specification, so
+everything here is observation. Where a point rests on one sample, or was
+written from memory and not yet checked against a file, it says so.</p>
+
+<p>Units throughout: a <strong>twip</strong> is 1/20 of a pixel. Phoenix's model holds pixels
+and converts on read and write.</p>
+
+<hr>
+
+<h2>1. Containers</h2>
+
+<p>A document comes in one of three containers:</p>
+
+<table>
+<thead>
+<tr>
+<th>Container</th>
+<th>What it is</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>.fla</code> (CS5 and later)</td>
+<td>A ZIP archive of the XFL package below</td>
+</tr>
+<tr>
+<td>XFL folder</td>
+<td>The same package as loose files, marked by a <code>&lt;name&gt;.xfl</code> file</td>
+</tr>
+<tr>
+<td><code>.fla</code> (CS4 and earlier)</td>
+<td>A Microsoft compound document (signature <code>D0 CF 11 E0 A1 B1 1A E1</code>) holding an undocumented binary format of MFC-serialized objects. Phoenix converts it to XFL in memory and reads that; see <a href="binary-fla-format.html">The binary FLA format</a></td>
+</tr>
+</tbody>
+</table>
+
+<h3>Package contents</h3>
+
+<pre><code>DOMDocument.xml           the document: settings, library index, scenes
+LIBRARY/&lt;path&gt;.xml        one file per symbol, at its library path
+LIBRARY/&lt;path&gt;            imported bitmaps kept in their original form
+bin/&lt;id&gt;.dat              media data: bitmaps, sounds (see section 9)
+bin/SymDepend.cache       Animate's dependency cache; safe to drop
+META-INF/metadata.xml     XMP metadata
+PublishSettings.xml       publish profiles
+MobileSettings.xml        AIR / mobile settings
+publishtemplates/         (folder, usually empty)
+mimetype                  &quot;application/vnd.adobe.xfl&quot;
+&lt;name&gt;.xfl                the project marker; contains &quot;PROXY-CS5&quot;
+</code></pre>
+
+<p>Animate writes entries in roughly that order with <code>LIBRARY/</code> first and
+<code>mimetype</code> last, unlike ODF, which puts <code>mimetype</code> first. Directory entries are
+present. Files are stored or deflated; there are no data descriptors.</p>
+
+<h3>The ZIP central directory quirk</h3>
+
+<p>Many Animate-saved <code>.fla</code> files state a central directory size <strong>54 bytes
+larger</strong> than the real one in the end-of-central-directory record. Readers that
+derive the archive start from that size reject the file. Python's <code>zipfile</code>
+reports "Bad magic number for central directory" for 45 of the corpus files.
+Readers that use the stated offset and entry count are fine. The quirk shows up
+in files from Flash CS5 through Animate 24, but not in every file a given
+version saves. Phoenix's reader uses the offset and count and is unaffected.</p>
+
+<h3>What Phoenix writes differently (to check)</h3>
+
+<p>These are differences between Phoenix's output and Animate's that have not yet
+been tested against Animate opening the file:</p>
+
+<ul>
+<li>The <code>.xfl</code> marker contains <code>PROJECT_XFL</code>; every Animate marker in the corpus
+  contains <code>PROXY-CS5</code></li>
+<li>A Phoenix <code>.fla</code> has no <code>mimetype</code>, <code>META-INF</code>, <code>PublishSettings.xml</code> or
+  <code>MobileSettings.xml</code> unless the document came from a file that had them</li>
+<li>A document made in Phoenix says <code>xflVersion="2.971"</code> and
+  <code>creatorInfo="Phoenix"</code>; Animate 24 writes <code>xflVersion="23.0"</code></li>
+</ul>
+
+<h2>2. DOMDocument.xml</h2>
+
+<p>The root is <code>&lt;DOMDocument xmlns="http://ns.adobe.com/xfl/2008/"&gt;</code>. Notable
+attributes:</p>
+
+<table>
+<thead>
+<tr>
+<th>Attribute</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>width</code>, <code>height</code></td>
+<td>Stage size in pixels (default 550 x 400)</td>
+</tr>
+<tr>
+<td><code>frameRate</code></td>
+<td>Frames per second (default 24)</td>
+</tr>
+<tr>
+<td><code>backgroundColor</code></td>
+<td>Stage color</td>
+</tr>
+<tr>
+<td><code>currentTimeline</code></td>
+<td>1-based index of the scene that was open</td>
+</tr>
+<tr>
+<td><code>xflVersion</code>, <code>creatorInfo</code>, <code>platform</code>, <code>versionInfo</code>, <code>majorVersion</code>, <code>buildNumber</code></td>
+<td>Which program saved it ("Saved by Animate Windows 24.0 build 3")</td>
+</tr>
+<tr>
+<td><code>gridSpacingX</code>, <code>gridSpacingY</code>, <code>objectsSnapTo</code>, <code>snapAlignBorderSpacing</code></td>
+<td>Grid and snap settings</td>
+</tr>
+<tr>
+<td><code>viewAngle3D</code>, <code>vanishingPoint3DX</code>, <code>vanishingPoint3DY</code></td>
+<td>3D perspective</td>
+</tr>
+<tr>
+<td><code>nextSceneIdentifier</code></td>
+<td>Counter for new scenes</td>
+</tr>
+<tr>
+<td><code>layerDepthEnabled</code></td>
+<td>Layer Depth is on</td>
+</tr>
+</tbody>
+</table>
+
+<p>Attributes left at their default are omitted, and Phoenix's writer omits them
+the same way.</p>
+
+<p>Children, in the order Animate writes them:</p>
+
+<table>
+<thead>
+<tr>
+<th>Element</th>
+<th>Holds</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>&lt;folders&gt;</code></td>
+<td><code>DOMFolderItem</code> for each library folder (<code>name</code> is its path)</td>
+</tr>
+<tr>
+<td><code>&lt;fonts&gt;</code></td>
+<td>Embedded fonts</td>
+</tr>
+<tr>
+<td><code>&lt;media&gt;</code></td>
+<td><code>DOMBitmapItem</code>, <code>DOMSoundItem</code>, video items</td>
+</tr>
+<tr>
+<td><code>&lt;symbols&gt;</code></td>
+<td><code>&lt;Include href="&lt;path&gt;.xml" itemIcon loadImmediate itemID lastModified/&gt;</code> per symbol</td>
+</tr>
+<tr>
+<td><code>&lt;timelines&gt;</code></td>
+<td>One <code>DOMTimeline</code> per scene</td>
+</tr>
+<tr>
+<td><code>&lt;PrinterSettings&gt;</code>, <code>&lt;publishHistory&gt;</code>, <code>&lt;swatchLists&gt;</code>, <code>&lt;extendedSwatchLists&gt;</code>, <code>&lt;scripts&gt;</code></td>
+<td>Document metadata</td>
+</tr>
+</tbody>
+</table>
+
+<p><code>&lt;symbols&gt;</code> may also include a package file that isn't a symbol, such as
+<code>&lt;Include href="PaintBrushDefinitions.xml"/&gt;</code> for custom brushes.</p>
+
+<p>Phoenix models the folders, bitmaps, symbols and timelines. It keeps
+everything else (sound items, fonts, brush definitions, swatch lists,
+printer settings, publish history, scripts) as the XML text it read and
+writes it back in the same place.</p>
+
+<h2>3. Library</h2>
+
+<ul>
+<li>An item's <strong>name is its path</strong>: <code>Characters/Bob/head</code>. The symbol's file is
+  <code>LIBRARY/Characters/Bob/head.xml</code>, and its root is a <code>DOMSymbolItem</code> with
+  <code>name</code>, <code>itemID</code>, <code>lastModified</code>, <code>symbolType</code> and an inner <code>&lt;timeline&gt;</code>
+  holding one <code>DOMTimeline</code></li>
+<li>Renaming or moving an item changes its path. Every reference follows it:
+  <code>libraryItemName</code> on instances, <code>bitmapPath</code> on bitmap fills, <code>soundName</code> on
+  frames, and the item's own file path</li>
+<li><code>symbolType</code> on a symbol item: <code>graphic</code>, <code>button</code>, <code>movie clip</code>, and in
+  newer files <code>puppet</code> and <code>puppetBase</code> (Asset Warp) and <code>ik container</code> (a
+  shape with bones). Phoenix keeps a type it does not know as spelled and
+  draws it as a graphic</li>
+<li>9-slice: <code>scaleGridLeft</code>, <code>scaleGridTop</code>, <code>scaleGridRight</code>,
+  <code>scaleGridBottom</code> on the symbol item</li>
+<li>Linkage (<code>linkageExportForAS</code>, <code>linkageClassName</code>...) is kept as read</li>
+<li><code>DOMBitmapItem</code>: <code>name</code>, <code>href</code> (the original file under LIBRARY when there
+  is one), <code>bitmapDataHRef</code> (the <code>.dat</code> under <code>bin/</code>), <code>allowSmoothing</code>,
+  <code>quality</code>, <code>sourceLastImported</code>, <code>frameRight</code>, <code>frameBottom</code></li>
+<li><code>DOMSoundItem</code>: <code>name</code>, <code>soundDataHRef</code> (the <code>.dat</code>), <code>format</code>
+  ("44kHz 16bit Stereo"), <code>sampleCount</code>, <code>exportFormat</code>...</li>
+</ul>
+
+<h2>4. Timelines, layers and frames</h2>
+
+<pre><code>DOMTimeline name guides=...
+└── layers
+    └── DOMLayer
+        └── frames
+            └── DOMFrame
+                └── elements
+                    └── DOMShape, DOMSymbolInstance, DOMGroup, ...
+</code></pre>
+
+<h3>DOMTimeline</h3>
+
+<p><code>name</code> is the scene name (or "Symbol N" inside a symbol). Ruler guides are
+saved as XML inside the <code>guides</code> attribute, in this form (written from memory;
+no corpus file has guides):</p>
+
+<pre><code>&lt;guidelines&gt;&lt;guideline direction=&quot;v&quot;&gt;x&lt;/guideline&gt;&lt;guideline direction=&quot;h&quot;&gt;y&lt;/guideline&gt;&lt;/guidelines&gt;
+</code></pre>
+
+<h3>DOMLayer</h3>
+
+<table>
+<thead>
+<tr>
+<th>Attribute</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>name</code>, <code>color</code></td>
+<td>Name, and the outline color used for highlights and outline view</td>
+</tr>
+<tr>
+<td><code>layerType</code></td>
+<td><code>normal</code> (omitted), <code>folder</code>, <code>guide</code>, <code>mask</code>, <code>masked</code></td>
+</tr>
+<tr>
+<td><code>parentLayerIndex</code></td>
+<td>0-based index of the layer's parent: the folder it sits in, or the mask it is under</td>
+</tr>
+<tr>
+<td><code>visible</code>, <code>locked</code>, <code>outline</code>, <code>current</code>, <code>isSelected</code>, <code>autoNamed</code></td>
+<td>View state</td>
+</tr>
+<tr>
+<td><code>animationType</code></td>
+<td><code>motion object</code> (an object motion tween layer), <code>IK pose</code> (an armature layer)</td>
+</tr>
+</tbody>
+</table>
+
+<p>Masked layers are often written as <code>normal</code> with <code>parentLayerIndex</code> pointing at
+a mask layer. A layer's type has to be worked out from its parent's
+(<code>document_parser.cpp</code>). Layers are listed top to bottom: <code>layers[0]</code> draws on
+top.</p>
+
+<p>Layer parenting (Animate 2019's parent layer, not the folder link) is stored
+apart from <code>parentLayerIndex</code> on the layer: a parent layer carries
+<code>layerRiggingIndex="N"</code>, and each keyframe of a child names it with
+<code>parentLayerIndex="N"</code> on its <code>DOMFrame</code>, so a child can change parents from
+keyframe to keyframe. The child's content is placed by the parent's first
+element as shown, through the parent's own parent in turn. Tweened parent
+keyframes also carry <code>rigPropagationMatrix</code> (a JSON matrix in 16.16 fixed
+point, seen holding a pure rotation) and, on motion object tweens,
+<code>propagateRotMap</code> (a list of angles in degrees); Phoenix keeps both but does
+not read them. The format has no setting for leaving out a parent's scale,
+skew or flip: Phoenix keeps those as <code>phoenixParentScale</code>,
+<code>phoenixParentSkew</code> and <code>phoenixParentFlip</code> (<code>"false"</code> when off, absent
+otherwise) on the child <code>DOMLayer</code>.</p>
+
+<h3>DOMFrame</h3>
+
+<p>A frame element is a <strong>span</strong>: <code>index</code> (0-based start) and <code>duration</code>.
+Keyframes are the spans themselves; there are no in-between frame elements.</p>
+
+<table>
+<thead>
+<tr>
+<th>Attribute</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>index</code>, <code>duration</code>, <code>keyMode</code></td>
+<td>Position, length, and a bit set Animate uses internally</td>
+</tr>
+<tr>
+<td><code>name</code>, <code>labelType</code></td>
+<td>Frame label: <code>name</code>, <code>comment</code> or <code>anchor</code></td>
+</tr>
+<tr>
+<td><code>tweenType</code></td>
+<td><code>motion</code> (classic), <code>shape</code>, <code>motion object</code>, <code>IK pose</code></td>
+</tr>
+<tr>
+<td><code>acceleration</code></td>
+<td>Classic ease, -100 to 100; repeated as <code>&lt;tweens&gt;&lt;Ease intensity&gt;</code></td>
+</tr>
+<tr>
+<td><code>hasCustomEase</code></td>
+<td>A <code>&lt;tweens&gt;&lt;CustomEase&gt;</code> of <code>&lt;Point&gt;</code>s gives a bezier chain from (0,0) to (1,1)</td>
+</tr>
+<tr>
+<td><code>motionTweenRotate</code>, <code>motionTweenRotateTimes</code></td>
+<td><code>auto</code>, <code>none</code>, <code>clockwise</code>, <code>counter-clockwise</code>, and the extra turns</td>
+</tr>
+<tr>
+<td><code>motionTweenSnap</code>, <code>motionTweenSync</code>, <code>motionTweenOrientToPath</code>, <code>motionTweenScale</code></td>
+<td>Classic tween options. Old files also spell it <code>motionTWeenSnap</code></td>
+</tr>
+<tr>
+<td><code>soundName</code>, <code>soundSync</code>, <code>inPoint44</code>, <code>outPoint44</code>, <code>soundLoopMode</code>, <code>soundLoop</code></td>
+<td>A sound placed on the frame. <code>soundSync</code> is <code>event</code> (omitted), <code>start</code>, <code>stop</code> or <code>stream</code></td>
+</tr>
+</tbody>
+</table>
+
+<p>A frame may also carry <code>&lt;Actionscript&gt;&lt;script&gt;</code> (frame script, as CDATA),
+<code>&lt;SoundEnvelope&gt;</code> (volume points, see section 9), <code>&lt;MorphShape&gt;</code> (shape tween
+data, section 7) and <code>&lt;motionObjectXML&gt;</code> (section 7).</p>
+
+<h2>5. Elements</h2>
+
+<table>
+<thead>
+<tr>
+<th>Element</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>DOMShape</code></td>
+<td>Fills, strokes and edges (section 6). <code>isDrawingObject="true"</code> makes it an Object Drawing shape that never merges. Without it, it is merge-mode artwork</td>
+</tr>
+<tr>
+<td><code>DOMGroup</code></td>
+<td><code>&lt;members&gt;</code> holding elements</td>
+</tr>
+<tr>
+<td><code>DOMSymbolInstance</code></td>
+<td><code>libraryItemName</code>, <code>symbolType</code> (of the instance; can differ from the item's), <code>name</code> (instance name), <code>loop</code>, <code>firstFrame</code>, <code>blendMode</code>, <code>cacheAsBitmap</code>, <code>&lt;matrix&gt;</code>, <code>&lt;transformationPoint&gt;</code>, <code>&lt;color&gt;</code>, <code>&lt;filters&gt;</code></td>
+</tr>
+<tr>
+<td><code>DOMBitmapInstance</code></td>
+<td><code>libraryItemName</code>, <code>&lt;matrix&gt;</code></td>
+</tr>
+<tr>
+<td><code>DOMStaticText</code>, <code>DOMDynamicText</code>, <code>DOMInputText</code></td>
+<td><code>&lt;textRuns&gt;</code> of <code>DOMTextRun</code> with <code>&lt;characters&gt;</code> and <code>&lt;textAttrs&gt;&lt;DOMTextAttrs&gt;</code>. Dynamic and input text add <code>instanceName</code> and <code>lineType</code></td>
+</tr>
+<tr>
+<td><code>DOMRectangleObject</code></td>
+<td>Rectangle Primitive: <code>objectWidth</code>, <code>objectHeight</code>, <code>x</code>, <code>y</code>, <code>topLeftRadius</code>... and a stroke and fill</td>
+</tr>
+<tr>
+<td><code>DOMOvalObject</code></td>
+<td>Oval Primitive: plus <code>startAngle</code>, <code>endAngle</code>, <code>innerRadius</code>, <code>closePath</code></td>
+</tr>
+</tbody>
+</table>
+
+<p>An Object Drawing rectangle is a <code>DOMShape isDrawingObject="true"</code>, not a
+<code>DOMRectangleObject</code>. The primitive elements come only from the Rectangle and
+Oval Primitive tools.</p>
+
+<h3>Matrix and transformation point</h3>
+
+<p><code>&lt;Matrix a b c d tx ty/&gt;</code> with <code>tx</code>, <code>ty</code> in pixels. A missing attribute takes
+the identity value. <code>&lt;transformationPoint&gt;&lt;Point x y/&gt;</code> is the pivot in the
+element's own space.</p>
+
+<h3>Loop</h3>
+
+<p><code>loop</code> on a graphic instance: <code>loop</code>, <code>play once</code>, <code>single frame</code>. The corpus
+uses only these three (<code>single frame</code> 5609 times, <code>loop</code> 1631, <code>play once</code> 3).
+Animate also has reverse playback options whose spelling has not been seen.
+Phoenix accepts an older <code>loopType</code> attribute and a <code>ping pong</code> value of
+unknown origin.</p>
+
+<h3>Color effect</h3>
+
+<p><code>&lt;color&gt;&lt;Color .../&gt;&lt;/color&gt;</code>:</p>
+
+<table>
+<thead>
+<tr>
+<th>Attributes</th>
+<th>Effect</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>brightness</code> (-1 to 1)</td>
+<td>b &gt; 0: each channel x (1-b) + 255b. b &lt; 0: x (1+b)</td>
+</tr>
+<tr>
+<td><code>tintMultiplier</code>, <code>tintColor</code></td>
+<td>Each channel x (1-t) + t x tint. Alpha untouched</td>
+</tr>
+<tr>
+<td><code>alphaMultiplier</code></td>
+<td>Alpha alone</td>
+</tr>
+<tr>
+<td><code>redMultiplier</code>, <code>redOffset</code>, ... <code>alphaOffset</code></td>
+<td>Advanced: multiply then add, per channel</td>
+</tr>
+</tbody>
+</table>
+
+<p>The arithmetic runs on straight (unpremultiplied) color.</p>
+
+<h3>Filters</h3>
+
+<p><code>&lt;filters&gt;</code> holds any of <code>DropShadowFilter</code>, <code>BlurFilter</code>, <code>GlowFilter</code>,
+<code>BevelFilter</code>, <code>GradientGlowFilter</code>, <code>GradientBevelFilter</code> and
+<code>AdjustColorFilter</code>, applied in order, each with <code>enabled</code>. Blur is an
+iterated box blur: <code>quality</code> is the number of passes, and <code>blurX</code> and <code>blurY</code>
+are separate.</p>
+
+<h3>Blend modes</h3>
+
+<p><code>blendMode</code>: <code>normal</code> (also omitted), <code>layer</code>, <code>multiply</code>, <code>screen</code>,
+<code>lighten</code>, <code>darken</code>, <code>difference</code>, <code>add</code>, <code>subtract</code>, <code>invert</code>, <code>alpha</code>,
+<code>erase</code>, <code>overlay</code>, <code>hardlight</code>. <code>alpha</code> and <code>erase</code> only show inside a
+<code>layer</code> group. Outside one, Flash draws nothing for them.</p>
+
+<h2>6. Shapes</h2>
+
+<pre><code>&lt;DOMShape&gt;
+  &lt;fills&gt;&lt;FillStyle index=&quot;1&quot;&gt;&lt;SolidColor color=&quot;#FF0000&quot;/&gt;&lt;/FillStyle&gt;&lt;/fills&gt;
+  &lt;strokes&gt;&lt;StrokeStyle index=&quot;1&quot;&gt;&lt;SolidStroke weight=&quot;2&quot;&gt;...&lt;/SolidStroke&gt;&lt;/StrokeStyle&gt;&lt;/strokes&gt;
+  &lt;edges&gt;
+    &lt;Edge fillStyle1=&quot;1&quot; strokeStyle=&quot;1&quot; edges=&quot;!0 0|2000 0|2000 2000|0 2000|0 0&quot;/&gt;
+    &lt;Edge cubics=&quot;!0 0(;...);&quot;/&gt;
+  &lt;/edges&gt;
+&lt;/DOMShape&gt;
+</code></pre>
+
+<p>Style indexes are 1-based; 0 or absent means none.</p>
+
+<h3>Fill sides</h3>
+
+<p>An edge carries the fill on each side of it. <strong><code>fillStyle1</code> is the fill on the
+left of the edge's direction and <code>fillStyle0</code> the one on the right</strong>, in a
+y-down space. The format never says this. It was settled by arranging eight
+real documents into faces and checking which reading makes every face agree
+with itself: 44 of 44 faces agreed one way, 3 of 44 the other.</p>
+
+<p>Merge-mode artwork is a planar map. Edges meet at shared points, and a face is
+whatever the edges around it agree on. A shape's edges are pieces that end at
+each meeting point, so a corner is shared by two or more <code>Edge</code> elements. A
+shape doesn't need to be stored as closed outlines.</p>
+
+<h3>The <code>edges</code> string</h3>
+
+<p>The geometry the shape is drawn with. Lines and quadratics only:</p>
+
+<table>
+<thead>
+<tr>
+<th>Token</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>!x y</code></td>
+<td>Move to</td>
+</tr>
+<tr>
+<td><code>\|x y</code></td>
+<td>Line to</td>
+</tr>
+<tr>
+<td><code>/x y</code></td>
+<td>Line to (same as <code>\|</code>; appears 29 times in the corpus)</td>
+</tr>
+<tr>
+<td><code>[cx cy x y</code></td>
+<td>Quadratic curve to</td>
+</tr>
+<tr>
+<td><code>Sn</code></td>
+<td>A number Animate records after a move. Seen as S1, S2, S4, S6. Its meaning is unknown. Phoenix keeps it with the path and writes it back after the move it followed (writing it before the move loses it)</td>
+</tr>
+</tbody>
+</table>
+
+<p>Phoenix's reader also accepts <code>FSn</code> / <code>LSn</code>, which haven't been seen in Animate's
+output.</p>
+
+<p>A move to the point where the last segment ended continues the same path.
+Animate writes <code>!a|b!b|c</code> for pieces that join.</p>
+
+<p><strong>Numbers</strong> are twips, written two ways:</p>
+
+<ul>
+<li>Decimal: <code>2000</code>, <code>-850</code>, occasionally with a fraction (<code>2081.5</code>)</li>
+<li>Hex fixed point: <code>#</code> then the whole twips in hex, <code>.</code> and up to two hex
+  digits of fraction: <code>#11C2.6A</code> is 0x11C2 + 0x6A/256. A single digit counts in
+  sixteenths. Negative values are 24-bit two's complement: <code>#FFF973.D</code> is
+  -1677 + 13/16 = -1676.1875</li>
+</ul>
+
+<p>Animate mostly writes fractional values in hex, but decimal fractions occur
+too. Phoenix writes whole values in decimal and fractional ones in hex,
+snapping to the 1/256-twip grid so what it writes reads back as the same
+number.</p>
+
+<h3>The <code>cubics</code> string</h3>
+
+<p>Shapes drawn with the pen, brushes and other cubic tools carry the original
+cubic curves too, as extra <code>&lt;Edge cubics="..."&gt;</code> elements with no style
+attributes. Only the editor uses them. The <code>edges</code> strings are a quadratic
+approximation that's drawn and published. Some files hold a lot of these:
+Charlotte_06_2021 has 87,744 and the Alvin file 49,730.</p>
+
+<pre><code>!873 -1566(873,-1566;608,-1639 317,-1675 0,-1673q873 -1566Q475 -1676q0 -1673);
+</code></pre>
+
+<p><code>(</code> opens a run: the start point, <code>;</code>, then each cubic as control 1, control 2
+and end point. After <code>q</code>/<code>Q</code>/<code>p</code>/<code>P</code> come the quadratic points it was
+approximated with. <code>)</code> closes the run, optionally followed by an end point,
+then <code>;</code>.</p>
+
+<p>Animate writes the start point inside the run (<code>(873,-1566;...</code>) or leaves
+it out (<code>(;...</code>); across the corpus the short form is about four times as
+common.</p>
+
+<p><strong>Phoenix today:</strong></p>
+
+<ul>
+<li>Draws from <code>edges</code> and keeps each shape's <code>cubics</code> edges as they were
+  read, writing them back in place while the shape's edges are unchanged</li>
+<li>Writes edited cubic geometry as Animate does: quadratics in <code>edges</code>
+  (each cubic split until the quadratics are within half a twip of it), and
+  the cubic in an <code>&lt;Edge cubics&gt;</code> of its own after its edge, in the short
+  form</li>
+</ul>
+
+<h3>Fill styles</h3>
+
+<table>
+<thead>
+<tr>
+<th>Element</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>SolidColor</code></td>
+<td><code>color</code> (#RRGGBB, default black), <code>alpha</code> (default 1)</td>
+</tr>
+<tr>
+<td><code>LinearGradient</code>, <code>RadialGradient</code></td>
+<td><code>&lt;matrix&gt;</code> maps a gradient square of +-16384 twips (+-819.2 px). <code>&lt;GradientEntry color alpha ratio&gt;</code> stops, ratio 0 to 1. <code>spreadMethod</code>: pad (omitted), <code>reflect</code>, <code>repeat</code>. <code>interpolationMethod="linearRGB"</code> interpolates in linear light. Radial adds <code>focalPointRatio</code></td>
+</tr>
+<tr>
+<td><code>BitmapFill</code></td>
+<td><code>bitmapPath</code> (library path), <code>bitmapIsClipped</code> (false tiles), <code>&lt;matrix&gt;</code> in twips: a = 20 is the bitmap at its own size</td>
+</tr>
+</tbody>
+</table>
+
+<h3>Stroke styles</h3>
+
+<p><code>SolidStroke</code>, <code>DashedStroke</code>, <code>DottedStroke</code>, <code>RaggedStroke</code>,
+<code>StippleStroke</code>, <code>HatchedStroke</code>, each with a <code>&lt;fill&gt;</code> holding a fill style.</p>
+
+<table>
+<thead>
+<tr>
+<th>Attribute</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>weight</code></td>
+<td>Pixels. Missing means 1, except for a hairline</td>
+</tr>
+<tr>
+<td><code>solidStyle="hairline"</code></td>
+<td>A 1-device-pixel line at any zoom, with no <code>weight</code></td>
+</tr>
+<tr>
+<td><code>caps</code></td>
+<td>Round (omitted), <code>none</code>, <code>square</code></td>
+</tr>
+<tr>
+<td><code>joints</code></td>
+<td>Round (omitted), <code>miter</code>, <code>bevel</code>, with <code>miterLimit</code></td>
+</tr>
+<tr>
+<td><code>scaleMode</code></td>
+<td><code>normal</code>, <code>horizontal</code>, <code>vertical</code>, <code>none</code>: how the weight follows the instance's scale</td>
+</tr>
+<tr>
+<td><code>pixelHinting</code></td>
+<td>Snap to whole pixels</td>
+</tr>
+<tr>
+<td><code>dash1</code>, <code>dash2</code></td>
+<td>Dash and gap, for DashedStroke</td>
+</tr>
+<tr>
+<td><code>dotSpace</code></td>
+<td>DottedStroke spacing</td>
+</tr>
+</tbody>
+</table>
+
+<p>Ragged, stipple and hatched strokes have their own procedural parameters
+(wave height and length, dot size, density, hatch thickness, spacing,
+jiggle...). A stroke may carry a <code>&lt;VariablePointWidth&gt;</code> of <code>&lt;WidthMarker&gt;</code>s
+for variable width. Phoenix keeps these but doesn't draw them.</p>
+
+<h2>7. Tweens</h2>
+
+<h3>Classic tweens</h3>
+
+<p>On a keyframe with <code>tweenType="motion"</code>. The in-betweens aren't stored. They
+are computed between this keyframe and the next one's elements.</p>
+
+<ul>
+<li>Matrices are taken apart into translation, scale and Animate's two skew
+  angles, blended (rotation the short way, plus <code>motionTweenRotateTimes</code>
+  turns), and put back together. Blending matrix entries directly shrinks a
+  rotating object</li>
+<li>Progress follows <code>acceleration</code> (straight progress blended with t² or its
+  mirror) or the <code>CustomEase</code> curve</li>
+<li>Color effects blend amount by amount</li>
+<li>Motion guides: a guide layer above the tweened layer bends the path (not yet
+  modeled)</li>
+</ul>
+
+<h3>Shape tweens</h3>
+
+<p>On a keyframe with <code>tweenType="shape"</code>. Animate stores the tween it computed as
+a <code>&lt;MorphShape&gt;</code> on the frame:</p>
+
+<pre><code>&lt;MorphShape&gt;&lt;morphSegments&gt;&lt;MorphSegment startPointA startPointB strokeIndex1 strokeIndex2 fillIndex1 fillIndex2&gt;
+  &lt;MorphCurves controlPointA anchorPointA controlPointB anchorPointB isLine/&gt;
+</code></pre>
+
+<p>Each point exists in an A form (start) and a B form (end). A morph coordinate
+is <strong>twips over 256</strong>. <code>#9.61</code> is 0x961 = 2401 twips, so one fraction digit
+weighs 1/16 of a unit, not 1/256. Reading these as ordinary twips makes the
+tween 12.8 times too small. <code>&lt;morphHintsList&gt;</code> holds shape hints.</p>
+
+<p>New shape tweens need a MorphShape computed for them. Animate's own runs one
+segment per closed outline (fill on the left, so <code>fillIndex2</code> holds it),
+starting at the outline's leftmost point. Phoenix builds one the same way
+(<code>buildMorph</code> in <code>src/edit/shape_tween.cpp</code>) for a tween it creates, and
+again whenever either keyframe's shape is edited; a stored morph is kept
+until then.</p>
+
+<h3>Object motion tweens</h3>
+
+<p><code>tweenType="motion object"</code> on the frame and <code>animationType="motion object"</code>
+on the layer. The frame's <code>&lt;motionObjectXML&gt;</code> holds an <code>AnimationCore</code>
+document: property curves (<code>Motion_X</code>, <code>Motion_Y</code>, rotation, scale, skew,
+color, filters) of <code>&lt;Keyframe&gt;</code>s in TimeScale units, a <code>&lt;TimeMap&gt;</code> ease and a
+transformation point offset. Phoenix keeps this verbatim but doesn't play it.
+template_robot.fla has 12.</p>
+
+<h3>IK armatures</h3>
+
+<p>From three samples saved by Animate 24: ik_bones.fla (a shape with four
+bones), ik_poses.fla (a shape posed twice, eased) and ik_symbols.fla (bones
+joining three movie clips).</p>
+
+<ul>
+<li>The armature layer has <code>animationType="IK pose"</code>. Its pose keyframes have
+  <code>tweenType="IK pose"</code>, <code>isIKPose="true"</code>, <code>poseLocations</code> (the poses'
+  frames into the span, "0,29"), <code>keyMode="9732"</code> and a
+  <code>betweenFrameMatrixList</code></li>
+<li>An <code>&lt;IKTree name treeName physicsEnabled&gt;</code> holds a root <code>&lt;IKNode&gt;</code> whose
+  <code>&lt;ChildNode&gt;</code>s nest one per joint (the first sits on the root and carries
+  the root's pose): <code>name</code>, <code>boneName</code>, the joint <code>location</code> in hex fixed
+  point (units of 256 twips, "#1D.D8" is 0x1DD8 twips), <code>xArray</code>/<code>yArray</code>
+  (twips) and <code>angleArray</code> (radians) for every frame of the span, and a
+  <code>&lt;State&gt;</code> per pose (duration, angle, x and y)</li>
+<li>A State's angle is relative to the parent joint's absolute angle, and its
+  x, y the joint's offset in the parent's frame, in twips (absolute for the
+  root's child)</li>
+<li><code>&lt;IKState&gt;</code> entries give each pose's length and the ease to the next
+  (<code>easeType="simple quadratic"</code>, <code>easeValue</code> -100 to 100). A positive
+  strength s runs time as (1 - s) t + s (2t - t^2). The joint lists hold
+  every frame worked out from the poses this way (checked to 1e-5 against
+  every frame of ik_poses.fla)</li>
+<li><code>persistentData</code> keeps <code>ikBoneCount</code>, <code>ikTreeCount</code> and <code>ikNodeCount</code></li>
+</ul>
+
+<p>Armatures of symbols: each node names its instance by <code>referenceID</code> (the
+DOMSymbolInstance carries the same). <code>location</code> is the joint, the instance's
+transformation point; <code>xArray</code>/<code>yArray</code> are the instance's registration
+point (its matrix's tx, ty) and <code>angleArray</code> its turn, frame by frame. The
+nodes have no worldMatrix. <code>betweenFrameMatrixList</code> holds one near-identity
+Matrix per instance in the one-pose sample. Phoenix reads it as each
+instance's matrix in its joint's frame (the instance's matrix with the
+joint's registration point and angle taken off) and writes one per instance
+for every frame of the span, frame by frame (inferred: no multi-pose symbol
+sample). Phoenix plays the instances from the joint lists: on each frame an
+instance is its saved matrix (the span's first frame) turned by the change
+in its node's angle and moved onto that frame's registration point.</p>
+
+<p>Shape armatures: nodes have <code>nodeType="lsd"</code>, their joint lists hold the
+joints themselves, and each has a <code>worldMatrix</code> (the joint's frame). The
+boned shape becomes a library symbol of <code>symbolType="ik container"</code> placed
+on the armature layer as a graphic playing once; it holds the bent shape on
+a keyframe for every frame of the span, so it plays as stored.</p>
+
+<ul>
+<li><code>&lt;IKContour&gt;</code> is the shape's outline as a cubic contour: <code>dataPoints</code> in
+  hex fixed point relative to its <code>matrix</code> (the container's placement):
+  the first point and its handle out, then each point's handle in, the
+  point and its handle out, and the last point's handle in and the point
+  (25 data points for 9 points in ik_bones.fla). Then the stroke and fill</li>
+<li><code>connectionIndices</code>: the number of bound points, then for each point its
+  number and, for each bone it follows, the bone (numbered by the joint at
+  its tail, as the nodes are numbered depth first under the root), the
+  offset of its group of four in <code>connectionData</code>, a 1, and the offsets of
+  its two handles' groups; -1 ends the point</li>
+<li><code>connectionData</code>: groups of four floats, one for the point and one for
+  each handle per bone: the place along the bone (0 at its head, 1 at its
+  tail), the signed distance to its side in pixels (the bone's direction
+  crossed with the point's offset from the head), the distance from the
+  bone, and the weight. A point beside a joint follows both bones, 0.5 each</li>
+</ul>
+
+<p>Phoenix's own boned shapes (the Bone tool) keep this layout, inferred from
+the one sample, with two differences, marked by <code>phoenixBinding="anchors"</code>
+on the IKTree: the bound points are the shape's own anchors, numbered in the
+order its edges reach them (not a cubic contour Animate fits), and each
+point's handles sit on the point. Phoenix bends a shape by its binding only
+when it has that mark; an Animate binding is kept as read and the shape is
+bent by nearness to the bones. Joint rotation limits are Phoenix's own
+attributes (<code>phoenixMinRotation</code>, <code>phoenixMaxRotation</code>); no sample has
+Animate's limits or springs. Spring settings, read as <code>springStrength</code> and
+<code>springDamping</code> (or <code>strength</code> and <code>damping</code>) on a node, and any other
+attribute of a node or the tree are kept when an armature is built again
+with a bone more.</p>
+
+<h3>Asset Warp</h3>
+
+<p>Symbols of <code>symbolType="puppet"</code> (and <code>puppetBase</code>) hold a mesh warped by pins.
+template_bike_girl.fla has 24, template_robot.fla 14. The storage hasn't been
+read yet. Phoenix keeps them and draws them unwarped.</p>
+
+<h2>8. Text</h2>
+
+<ul>
+<li><code>characters</code> holds the text. Line breaks are CR, which XML turns into LF on
+  read, so a writer has to emit <code>&amp;#13;</code>. Without that, 12 of the first 74
+  corpus documents came back with altered text and layer names</li>
+<li><code>DOMTextAttrs</code>: <code>face</code> is a PostScript name (<code>ArialMT</code>,
+  <code>TimesNewRomanPS-BoldItalicMT</code>), <code>size</code> is in pixels, plus <code>fillColor</code>,
+  <code>alignment</code>, <code>letterSpacing</code>, <code>lineSpacing</code>, <code>autoKern</code>, <code>aliasText</code>...</li>
+<li>A text box grows to fit unless it has a fixed width. The box has a 2-pixel
+  gutter</li>
+</ul>
+
+<h2>9. Binary data under bin/</h2>
+
+<h3>Bitmaps</h3>
+
+<p>A <code>DOMBitmapItem</code>'s <code>.dat</code> is one of:</p>
+
+<ul>
+<li><strong>JPEG</strong>: a plain JPEG stream (FF D8 FF), for photo-compressed bitmaps</li>
+<li><strong>Lossless</strong>: a 26-byte header, then a zlib stream split into pieces. The
+  header is u16 <code>0x0503</code>, u16 bytes per row, u16 width, u16 height, then the
+  size in twips. The pieces start at byte 26, each a little-endian u16 length
+  and that many bytes, until a zero length. Joined, they inflate to rows of
+  pixels: 4 bytes A, R, G, B with color premultiplied, or 3 bytes R, G, B when
+  the row is only 3 x width</li>
+</ul>
+
+<p>When the original file is also kept under <code>LIBRARY/</code> (<code>href</code>), either form
+can be used.</p>
+
+<h3>Sounds</h3>
+
+<p>A <code>DOMSoundItem</code>'s <code>.dat</code> is MP3 (it starts with a valid MPEG frame header),
+or raw PCM described by the item's <code>format</code>: "5kHz" (5512 Hz), "11kHz", "22kHz"
+or "44kHz", "8bit" or "16bit", "Mono" or "Stereo". Raw PCM can begin with
+FF FF, so recognizing MP3 takes a full header check, not just the sync bits.</p>
+
+<p>A frame's <code>&lt;SoundEnvelope&gt;</code> holds <code>&lt;SoundEnvelopePoint mark44 level0 level1&gt;</code>:
+a sample position at 44.1 kHz and the left and right levels (32768 is full; a
+level left out is silence). The volume runs in straight lines between points
+and holds flat past either end. <code>inPoint44</code> and <code>outPoint44</code> trim the sound in
+the same units.</p>
+
+<h2>10. Rendering rules that are part of the format</h2>
+
+<p>These aren't written anywhere in a file, but a file only looks right when
+they're followed:</p>
+
+<ul>
+<li>Strokes default to round caps and round joins</li>
+<li>Same-style stroke pieces are joined end to end before stroking, so a
+  corner where two edges meet is a join, not two caps</li>
+<li>Masks use coverage only: a 30% fill masks like a solid one, and mask edges
+  aren't anti-aliased</li>
+<li>An alpha-only color effect fades each shape inside the instance on its own
+  (overlapping shapes show through each other). Any other effect applies to
+  the instance as a whole</li>
+<li>9-slice applies to movie clips scaled without rotation or skew</li>
+<li>Gradients and bitmap fills on strokes follow the stroke's own fill matrix</li>
+</ul>
+
+<h2>11. Open questions</h2>
+
+<ul>
+<li>Does Animate accept Phoenix's <code>.xfl</code> marker text and a package with no
+  <code>mimetype</code>? (section 1)</li>
+<li>What does <code>S</code> in an <code>edges</code> string mean? (section 6)</li>
+<li>The guides attribute format (section 4)</li>
+<li>The spelling of the reverse loop options (section 5)</li>
+<li>Camera layers, layer depth and 3D rotation: no samples yet</li>
+<li>Asset Warp mesh and pin storage (section 7)</li>
+<li>IK: a symbol armature with two poses (its betweenFrameMatrixList), joint
+  limits and springs as Animate writes them (section 7)</li>
+<li>What <code>keyMode</code> encodes</li>
+</ul>
+
+<h2>12. Where Phoenix implements this</h2>
+
+<table>
+<thead>
+<tr>
+<th>Part</th>
+<th>Code</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ZIP and folder reading</td>
+<td><code>src/parser/zip_reader.cpp</code>, <code>src/util/zip_archive.cpp</code></td>
+</tr>
+<tr>
+<td>XML to model</td>
+<td><code>src/parser/document_parser.cpp</code></td>
+</tr>
+<tr>
+<td><code>edges</code> and morph coordinates</td>
+<td><code>src/parser/path_parser.cpp</code>, <code>src/writer/edge_writer.cpp</code></td>
+</tr>
+<tr>
+<td>Model to XML</td>
+<td><code>src/writer/xfl_writer.cpp</code>, <code>src/writer/xfl_content.cpp</code></td>
+</tr>
+<tr>
+<td><code>.fla</code> and folder output</td>
+<td><code>src/writer/fla_writer.cpp</code>, <code>src/writer/xfl_folder_writer.cpp</code>, <code>src/util/zip_writer.cpp</code></td>
+</tr>
+<tr>
+<td>Bitmap <code>.dat</code></td>
+<td><code>src/data/bitmap_decoder.cpp</code></td>
+</tr>
+<tr>
+<td>Sound <code>.dat</code></td>
+<td><code>src/gui/audio_engine.cpp</code></td>
+</tr>
+<tr>
+<td>Fill sides and faces</td>
+<td><code>src/geom/planar_map.cpp</code>, <code>src/geom/fill_attribution.cpp</code></td>
+</tr>
+<tr>
+<td>Classic tween blending and easing</td>
+<td><code>src/edit/transform_blend.cpp</code>, <code>src/edit/tween_ease.cpp</code></td>
+</tr>
+<tr>
+<td>Shape tweens</td>
+<td><code>src/edit/shape_tween.cpp</code></td>
+</tr>
+<tr>
+<td>IK armatures, poses and binding</td>
+<td><code>src/edit/ik_pose.cpp</code>, <code>src/parser/ik_tree.cpp</code></td>
+</tr>
+</tbody>
+</table>
+
+</article>
+</main>
+</body>
+</html>

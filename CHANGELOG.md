@@ -6,6 +6,7 @@ What changed in each release of Phoenix, newest first.
 
 - ActionScript 3 movies play with the flash.* classes in Test Movie: the display list, drawing, BitmapData, events, filters, text, ByteArray, Timer, loading files and images, SharedObject; library symbols are classes, frame scripts share their timeline, and classes load from the class path and Preferences
 - Updates and downloads now come through phoenixanimate.com, and Help > Phoenix Help opens the guide there
+- The guide has a Developers section: building from source, and the .phx, FLA and binary FLA formats
 
 ## 0.15.1
 

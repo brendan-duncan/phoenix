@@ -26,7 +26,7 @@
 ///
 /// The format is undocumented. The layouts here follow the independent
 /// reverse engineering in fla-decoder (MIT, Ed Moore) and were checked
-/// field by field against documents saved both ways (see FLA_FORMAT.md).
+/// field by field against documents saved both ways (see docs/binary-fla-format.html).
 /// Free of Qt.
 namespace BinaryFla {
 

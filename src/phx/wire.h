@@ -7,7 +7,7 @@
 #include <vector>
 
 /// The protobuf wire format, which the Phoenix format encodes its model in
-/// (docs/PHOENIX_FORMAT.md): fields of a key (field number and wire type)
+/// (docs/phx-format.html): fields of a key (field number and wire type)
 /// and a value. A small codec of Phoenix's own, so no protobuf library is
 /// needed. Free of Qt.
 namespace phx {

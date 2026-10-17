@@ -114,7 +114,7 @@ public:
 
     /// What a .phx file held that this Phoenix does not know: whole chunks,
     /// written back unchanged on save, and the Phoenix-only features the
-    /// document uses (docs/PHOENIX_FORMAT.md).
+    /// document uses (docs/phx-format.html).
     struct UnknownChunk
     {
         uint32_t type = 0;

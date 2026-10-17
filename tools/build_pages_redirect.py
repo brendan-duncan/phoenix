@@ -8,8 +8,9 @@ The guide used to be served from brendan-duncan.github.io/phoenix, and links
 to it are still about. .github/workflows/pages.yml publishes what this writes
 there instead of docs/, so an old link lands on the right page of
 phoenixanimate.com, its #section kept. Every guide page gets one; the format
-notes in docs/*.md (which Pages showed as .html) go to their source on GitHub;
-anything else falls to 404.html, which sends the same path to the site.
+notes Pages showed from docs/*.md (FLA_FORMAT.html and the like) go to the
+pages they became; anything else falls to 404.html, which sends the same path
+to the site.
 """
 
 import html
@@ -19,7 +20,13 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 DOCS = ROOT / "docs"
 SITE = "https://phoenixanimate.com/"
-SOURCE = "https://github.com/brendan-duncan/phoenix/blob/main/docs/"
+# The notes that were Markdown, as Pages named them, and the pages they became.
+FORMER_NOTES = {
+    "BUILDING.html": "building.html",
+    "PHOENIX_FORMAT.html": "phx-format.html",
+    "FLA_FORMAT.html": "fla-format.html",
+    "BINARY_FLA_FORMAT.html": "binary-fla-format.html",
+}
 
 PAGE = """<!doctype html>
 <html lang="en">
@@ -73,8 +80,8 @@ def main():
         url = SITE if source.name == "index.html" else SITE + source.name
         (out / source.name).write_text(page(url), encoding="utf-8", newline="\n")
         count += 1
-    for source in sorted(DOCS.glob("*.md")):
-        (out / (source.stem + ".html")).write_text(page(SOURCE + source.name), encoding="utf-8", newline="\n")
+    for old, new in FORMER_NOTES.items():
+        (out / old).write_text(page(SITE + new), encoding="utf-8", newline="\n")
         count += 1
     (out / "404.html").write_text(NOT_FOUND, encoding="utf-8", newline="\n")
     (out / ".nojekyll").write_text("", encoding="utf-8")

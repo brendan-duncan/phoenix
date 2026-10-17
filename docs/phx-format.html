@@ -1,0 +1,659 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Phoenix document format · Phoenix User Guide</title>
+<meta name="description" content="The .phx file format: its chunked container, how the document model is encoded, and the rules that keep files compatible across versions.">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Phoenix">
+<meta property="og:title" content="The Phoenix document format · Phoenix User Guide">
+<meta property="og:description" content="The .phx file format: its chunked container, how the document model is encoded, and the rules that keep files compatible across versions.">
+<meta property="og:url" content="https://phoenixanimate.com/phx-format.html">
+<meta property="og:image" content="https://phoenixanimate.com/assets/shots/hero.webp">
+<meta property="og:image:type" content="image/webp">
+<meta property="og:image:width" content="1704">
+<meta property="og:image:height" content="1061">
+<meta property="og:image:alt" content="The Phoenix window with three flower characters on the stage, the timeline below and the Properties panel on the right">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://phoenixanimate.com/assets/shots/hero.webp">
+<meta name="keywords" content="phx file format specification container chunks protobuf schema compatibility versions developer">
+<link rel="icon" href="assets/img/logo.png">
+<link rel="stylesheet" href="assets/site.css">
+<script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<main>
+<article class="content">
+
+<p class="eyebrow">Developers</p>
+<h1>The Phoenix document format</h1>
+<p class="lead">Phoenix's own file format. FLA and XFL remain Phoenix's formats for
+exchanging files with Animate; <code>.phx</code> is what Phoenix saves by default. Its
+job is to hold everything Phoenix can do, including what Animate cannot
+store, and to keep holding it as Phoenix grows.</p>
+
+<p>The schema of the document model is <code>docs/phoenix_format.proto</code>. This page
+describes the container, the encoding rules and the compatibility rules
+around it.</p>
+
+<h2>Goals</h2>
+
+<ol>
+<li><strong>Nothing lost.</strong> Everything Phoenix reads from an FLA survives
+   FLA → PHX → FLA: the modeled document, plus every attribute, element and
+   package file Phoenix keeps without modeling. A <code>.phx</code> saved from an FLA
+   can always be exported back to the same FLA.</li>
+<li><strong>Phoenix's own features.</strong> Variable width strokes, textured and bitmap
+   brushes, linked palettes, reference video, review notes and whatever comes
+   next are stored natively, not squeezed into XFL.</li>
+<li><strong>Fast to open and save.</strong> No XML to parse and no text geometry to
+   tokenize; media is never decoded or re-encoded to save; the parts of a
+   file can be read in parallel and media loaded only when shown.</li>
+<li><strong>Embedded data.</strong> Bitmaps, sounds, video, brush textures and fonts live
+   inside the one file, in their original encodings.</li>
+<li><strong>Compatible both ways.</strong><ul>
+<li><em>Forward</em>: an older Phoenix opens a file from a newer one. It shows what
+ it understands, keeps what it does not, and saves without dropping it.</li>
+<li><em>Backward</em>: every Phoenix opens every older <code>.phx</code>.</li>
+</ul>
+</li>
+<li><strong>Robust.</strong> Damage is detected (checksums) and contained (one damaged
+   chunk does not take the rest of the file with it); saving never leaves a
+   half-written file in place of a good one.</li>
+</ol>
+
+<h2>File layout</h2>
+
+<p>A <code>.phx</code> file is a header, a sequence of chunks, and an index of the chunks
+at the end.</p>
+
+<pre><code>+----------------------+  offset 0
+| header (32 bytes)    |
++----------------------+
+| chunk                |
+| chunk                |  ... in any order
+| ...                  |
++----------------------+
+| index chunk          |  located by the header and the trailer
++----------------------+
+| trailer (16 bytes)   |
++----------------------+
+</code></pre>
+
+<p>All integers in the header, chunk headers, index and trailer are
+little-endian.</p>
+
+<h3>Header</h3>
+
+<table>
+<thead>
+<tr>
+<th>offset</th>
+<th>size</th>
+<th>field</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0</td>
+<td>8</td>
+<td>magic <code>89 50 48 58 0D 0A 1A 0A</code> (<code>\x89PHX\r\n\x1a\n</code>)</td>
+</tr>
+<tr>
+<td>8</td>
+<td>2</td>
+<td>format major version</td>
+</tr>
+<tr>
+<td>10</td>
+<td>2</td>
+<td>format minor version</td>
+</tr>
+<tr>
+<td>12</td>
+<td>4</td>
+<td>flags (none defined; written 0, ignored when read)</td>
+</tr>
+<tr>
+<td>16</td>
+<td>8</td>
+<td>offset of the index chunk</td>
+</tr>
+<tr>
+<td>24</td>
+<td>4</td>
+<td>CRC-32 of bytes 0–23</td>
+</tr>
+<tr>
+<td>28</td>
+<td>4</td>
+<td>reserved, 0</td>
+</tr>
+</tbody>
+</table>
+
+<p>The magic's high byte, CR LF, Ctrl-Z and LF catch transfers in text mode,
+as PNG's do.</p>
+
+<h3>Chunks</h3>
+
+<p>Every chunk starts on an 8-byte boundary (padding is zero bytes), so a
+reader can map the file and use a media chunk's bytes in place.</p>
+
+<table>
+<thead>
+<tr>
+<th>offset</th>
+<th>size</th>
+<th>field</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0</td>
+<td>4</td>
+<td>type, four ASCII letters</td>
+</tr>
+<tr>
+<td>4</td>
+<td>4</td>
+<td>flags</td>
+</tr>
+<tr>
+<td>8</td>
+<td>8</td>
+<td>stored length (bytes after this header)</td>
+</tr>
+<tr>
+<td>16</td>
+<td>8</td>
+<td>length once decompressed</td>
+</tr>
+<tr>
+<td>24</td>
+<td>4</td>
+<td>CRC-32 of the stored bytes</td>
+</tr>
+<tr>
+<td>28</td>
+<td>4</td>
+<td>chunk id (unique in the file)</td>
+</tr>
+<tr>
+<td>32</td>
+<td>…</td>
+<td>stored bytes</td>
+</tr>
+</tbody>
+</table>
+
+<p>Flags: bits 0–3 compression (0 none, 1 zlib deflate; others reserved), bit 4
+<em>critical</em>. Other bits are reserved: written 0, kept as read.</p>
+
+<p>A <strong>critical</strong> chunk is one a reader must understand to show the document
+correctly. A reader meeting a critical chunk type it does not know opens
+the file read-only and says which feature it is missing. A reader meeting an
+unknown chunk that is not critical skips it, and copies it unchanged when it
+saves. (PNG makes the same split with the case of a letter; here it is a
+flag, so a type name can be any four letters.)</p>
+
+<h3>Index and trailer</h3>
+
+<p>The index is a chunk of type <code>INDX</code> whose content is a protobuf-encoded
+<code>ChunkIndex</code> (see the schema): for every other chunk its id, type, offset,
+lengths, flags and CRC, and for a media chunk its media id. With it a
+reader seeks straight to what it needs without walking the file.</p>
+
+<p>The trailer is the last 16 bytes of the file: the index offset again (8
+bytes), then <code>50 48 58 21</code> (<code>PHX!</code>), then the CRC-32 of the first 12 bytes.
+A file whose header was damaged can still be indexed from the trailer, and
+a file whose index was damaged can still be read by walking the chunks from
+the header.</p>
+
+<h2>Chunk types</h2>
+
+<table>
+<thead>
+<tr>
+<th>type</th>
+<th>critical</th>
+<th>content</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>INDX</code></td>
+<td>yes</td>
+<td>the chunk index</td>
+</tr>
+<tr>
+<td><code>DOCU</code></td>
+<td>yes</td>
+<td><code>Document</code>: settings, scenes, library folders and item list, swatches, publish settings; one per file</td>
+</tr>
+<tr>
+<td><code>SYMB</code></td>
+<td>yes</td>
+<td><code>Symbol</code>: one library symbol and its timelines; one chunk per symbol</td>
+</tr>
+<tr>
+<td><code>MDIA</code></td>
+<td>yes</td>
+<td>the bytes of one media item: a length-prefixed <code>MediaHeader</code>, then the data. Package files an FLA carried that Phoenix does not model (sound data, publish settings, metadata) are media of kind <code>MEDIA_PACKAGE_FILE</code>, kept for export back to FLA</td>
+</tr>
+<tr>
+<td><code>THMB</code></td>
+<td>no</td>
+<td>a PNG thumbnail of the first frame, for file browsers</td>
+</tr>
+<tr>
+<td><code>META</code></td>
+<td>no</td>
+<td><code>Metadata</code>: application, user, dates, free-form key/values</td>
+</tr>
+</tbody>
+</table>
+
+<p>Compression: <code>DOCU</code>, <code>SYMB</code> and <code>META</code> are deflated (they are
+mostly small integers and strings and shrink well). <code>MDIA</code> is stored as is
+when its data is already compressed (PNG, JPEG, MP3, AAC, Ogg, FLAC, video)
+and deflated otherwise (raw PCM, Animate's lossless bitmap <code>.dat</code>). <code>THMB</code>
+is never compressed.</p>
+
+<p>A symbol per chunk is what lets a reader decode symbols on several threads
+at once, and lets a save copy the bytes of the symbols that did not change.</p>
+
+<h2>Encoding the model</h2>
+
+<p>Every message in <code>phoenix_format.proto</code> is encoded in the protobuf wire
+format: a sequence of fields, each a key (field number and wire type, as a
+varint) and a value (varint, 64-bit, length-delimited or 32-bit). Phoenix
+encodes and decodes it with its own small codec (<code>src/phx/wire.h</code>); no
+protobuf library is needed, and <code>protoc --decode</code> can read any chunk's
+content given the schema, which makes the format easy to inspect and to
+read from other languages.</p>
+
+<p>Conventions:</p>
+
+<ul>
+<li><strong>Lengths, counts and indices</strong> are varints; <strong>signed values</strong> that are
+  often negative use zigzag (<code>sint32</code>/<code>sint64</code>).</li>
+<li><strong>Real numbers</strong> are doubles (<code>fixed64</code>), except where noted.</li>
+<li><strong>Colors</strong> are a <code>fixed32</code> holding RGBA, red in the low byte.</li>
+<li><strong>Matrices</strong> are <code>Matrix</code> messages (a, b, c, d, tx, ty as doubles); a
+  missing matrix is the identity.</li>
+<li><strong>Geometry</strong> is on Animate's grid, 1/256 of a twip (1/5120 of a pixel):
+  coordinates are integers in that unit, stored as zigzag deltas from the
+  previous point in a packed list. A straight segment costs a few bytes
+  rather than a few dozen characters of XFL, and the integers are exact, so
+  nothing drifts on a round trip.</li>
+<li><strong>Library references</strong> are by the item's name (its full library path), as
+  in FLA; deflate makes the repetition cheap. Media are referenced by media
+  id (<code>uint32</code>, unique in the file).</li>
+<li><strong>Defaults</strong>: a field left out has its default (zero, empty, or the value
+  the schema documents). Writers leave out fields at their default, which
+  keeps files small and makes a newly added field cost nothing in files
+  that do not use it.</li>
+</ul>
+
+<h3>Kept XFL detail</h3>
+
+<p>Phoenix keeps parts of an FLA it does not model: unknown attributes and
+elements, raw sections, the order attributes were written in, and package
+files. Each message for something that came from XFL has an <code>xfl</code> field
+(<code>XflDetail</code>) holding exactly those, so an export to FLA writes what the
+original had. It is never needed to display the document; a reader that
+never exports FLA can skip it.</p>
+
+<h3>Phoenix-only features</h3>
+
+<p>Phoenix's own features are kept in FLA and XFL files too: each is stored as
+attributes of its own (named <code>phoenix...</code>) on the document, symbols, layers,
+frames, elements, fill and stroke styles or text runs, which other FLA
+editors ignore and Phoenix reads back. <code>src/edit/phoenix_features.cpp</code> is the
+one list of them: each feature's id, its name, the attributes that mark it,
+and how another FLA editor shows a document that uses it. The test
+<code>phoenix_features_survive_xfl_and_phx</code> writes a document using every one of
+them to an XFL folder and to a <code>.phx</code> and checks that each comes back.</p>
+
+<p>Phoenix uses the list to warn before an FLA or XFL save: the features are
+kept, but another editor drops them if it saves the file. <code>Document.features</code>
+in a <code>.phx</code> lists the ids of those the document uses, written from the
+document at each save; ids a newer Phoenix wrote that this one does not know
+are kept, and an FLA export lists them as possibly lost.</p>
+
+<table>
+<thead>
+<tr>
+<th>id</th>
+<th>Feature</th>
+<th>Another FLA editor shows</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>textured-brushes</code></td>
+<td>Textured brushes</td>
+<td>the grain baked into a bitmap fill, which can no longer be changed</td>
+</tr>
+<tr>
+<td><code>art-and-pattern-brushes</code></td>
+<td>Art and pattern brushes</td>
+<td>plain strokes along the same lines</td>
+</tr>
+<tr>
+<td><code>bitmap-painting</code></td>
+<td>Bitmap painting</td>
+<td>the painted canvas as an ordinary bitmap</td>
+</tr>
+<tr>
+<td><code>linked-palettes</code></td>
+<td>Linked palettes</td>
+<td>the colors as they are, without the palettes or their links</td>
+</tr>
+<tr>
+<td><code>effect-layers</code></td>
+<td>Effect layers</td>
+<td>hidden guide layers: the tone, highlight or glow is missing</td>
+</tr>
+<tr>
+<td><code>line-and-color-art</code></td>
+<td>Line and color art layers</td>
+<td>ordinary layers</td>
+</tr>
+<tr>
+<td><code>review-notes</code></td>
+<td>Review notes</td>
+<td>the notes as text on a guide layer, which is not exported</td>
+</tr>
+<tr>
+<td><code>multiplane-camera</code></td>
+<td>Multiplane camera</td>
+<td>a guide layer: the shot is not framed, moved, colored or given depth</td>
+</tr>
+<tr>
+<td><code>pegs</code></td>
+<td>Pegs</td>
+<td>ordinary symbols</td>
+</tr>
+<tr>
+<td><code>deformers</code></td>
+<td>Deformers</td>
+<td>the instances without their bend</td>
+</tr>
+<tr>
+<td><code>behaviors</code></td>
+<td>Behaviors</td>
+<td>the instances as keyed, without the motion their behaviors add</td>
+</tr>
+<tr>
+<td><code>shape-operators</code></td>
+<td>Shape operators</td>
+<td>the shapes as drawn, without Trim Paths, Wiggle Path or Zig-zag</td>
+</tr>
+<tr>
+<td><code>text-animators</code></td>
+<td>Text animators</td>
+<td>the text as typed, its letters still</td>
+</tr>
+<tr>
+<td><code>compositing</code></td>
+<td>Track mattes and adjustment layers</td>
+<td>matte layers drawn plainly and adjustment layers without their blur or color</td>
+</tr>
+<tr>
+<td><code>instance-effects</code></td>
+<td>Effects on instances</td>
+<td>the instances without their blurs, glows, distortions and wipes</td>
+</tr>
+<tr>
+<td><code>node-graph</code></td>
+<td>Node graphs</td>
+<td>the layers stacked as usual, without the graph's effects, merges and mattes</td>
+</tr>
+<tr>
+<td><code>mask-edges</code></td>
+<td>Mask edges and layer modes</td>
+<td>masks hard-edged and not inverted, layers drawn normally</td>
+</tr>
+<tr>
+<td><code>several-masks</code></td>
+<td>Several masks on a layer</td>
+<td>each masked layer masked by its own mask layer only</td>
+</tr>
+<tr>
+<td><code>motion-blur</code></td>
+<td>Motion blur, echo and posterize time</td>
+<td>the layers drawn sharp, every frame, without echoes</td>
+</tr>
+<tr>
+<td><code>templates</code></td>
+<td>Template fields</td>
+<td>the symbols' text and colors as drawn, the same in every instance, nothing pinned to the text</td>
+</tr>
+<tr>
+<td><code>master-controllers</code></td>
+<td>Master controllers</td>
+<td>the properties as keyed, without the sliders</td>
+</tr>
+<tr>
+<td><code>3d-rotation</code></td>
+<td>3D rotation and depth</td>
+<td>the movie clips flat, without their 3D turn, lighting, shadows or depth</td>
+</tr>
+<tr>
+<td><code>parenting-options</code></td>
+<td>Layer parenting options</td>
+<td>child layers taking on all of the parent's transform</td>
+</tr>
+<tr>
+<td><code>joint-limits</code></td>
+<td>Bone joint limits</td>
+<td>bones that turn freely when posed</td>
+</tr>
+<tr>
+<td><code>shape-binding</code></td>
+<td>Bones bound in Phoenix</td>
+<td>boned shapes as drawn; posing them may bend them differently</td>
+</tr>
+<tr>
+<td><code>shape-hints</code></td>
+<td>Shape hints</td>
+<td>shape tweens without the hints steering them</td>
+</tr>
+<tr>
+<td><code>mouth-charts</code></td>
+<td>Lip sync mouth charts</td>
+<td>the mouth frames as set, without the chart</td>
+</tr>
+<tr>
+<td><code>layer-transparency</code></td>
+<td>Layer transparency</td>
+<td>the layers drawn solid</td>
+</tr>
+<tr>
+<td><code>see-through-stage</code></td>
+<td>See-through stage</td>
+<td>an opaque stage color</td>
+</tr>
+<tr>
+<td><code>safe-zones</code></td>
+<td>Safe zones and aspect-ratio guides</td>
+<td>the stage without them</td>
+</tr>
+<tr>
+<td><code>other-phoenix-settings</code></td>
+<td>Other Phoenix settings</td>
+<td>the document without them</td>
+</tr>
+</tbody>
+</table>
+
+<h2>Versioning and compatibility</h2>
+
+<h3>Versions</h3>
+
+<p>The header carries a <strong>major</strong> and a <strong>minor</strong> version. This is version
+<strong>1.0</strong>.</p>
+
+<ul>
+<li>A <strong>minor</strong> version adds things: new fields, new messages, new chunk
+  types, new enum values. Nothing a reader of an older minor version relies
+  on changes meaning. Readers accept every minor version of their major
+  version.</li>
+<li>A <strong>major</strong> version is a change older readers cannot follow. It is
+  expected to be rare (ideally never). A reader refuses a file of a newer
+  major version and says which version of Phoenix is needed.</li>
+</ul>
+
+<h3>Rules that make forward compatibility work</h3>
+
+<ol>
+<li><strong>Field numbers are forever.</strong> A field is never renumbered, and a removed
+   field's number is <code>reserved</code> in the schema and never used again.</li>
+<li><strong>Meaning is forever.</strong> A field never changes its meaning or its unit. A
+   new meaning gets a new field.</li>
+<li><strong>Unknown fields are kept.</strong> A reader keeps every field it does not
+   understand, as its encoded bytes, attached to the object it came from,
+   and writes them back on save. A document from a newer Phoenix therefore
+   comes back from an older one with the newer data intact (as long as the
+   object itself was not deleted).</li>
+<li><strong>Unknown chunks are kept.</strong> Ancillary chunks of unknown type are copied
+   on save; critical ones make the document read-only (see Chunks).</li>
+<li><strong>Required features.</strong> When a newer feature changes how something
+   already understood must be drawn (so ignoring it would show the document
+   wrong rather than just incomplete), the writer adds the feature's name to
+   <code>Document.required_features</code>. A reader that does not know a listed name
+   opens the file read-only and says what is missing. Features that only add
+   (a new kind of library item, say) are not listed, so older readers still
+   edit those files.</li>
+<li><strong>Enums are open.</strong> An unknown enum value is kept as its number and
+   written back; the reader treats the object as its documented fallback
+   (an unknown layer type draws as a normal layer, an unknown fill as no
+   fill).</li>
+</ol>
+
+<h3>Backward compatibility</h3>
+
+<p>A reader of a later version reads every earlier file: fields it finds
+missing have their defaults, and anything whose default changed between
+versions is converted by a migration step keyed on the file's version, run
+once after reading. Version 1.0 is the first, so there are none yet.</p>
+
+<p>An element of a kind the reader does not know is kept as an empty group
+that carries the unknown kind with it, so it keeps its place in the frame
+and is written back as it was.</p>
+
+<h2>Embedded data</h2>
+
+<p>Each media item is one <code>MDIA</code> chunk: a <code>MediaHeader</code> (media id, kind,
+format, the original file name and size, pixel size, sample format, a
+content hash) followed by the bytes.</p>
+
+<ul>
+<li><strong>Original encodings are kept.</strong> An imported PNG is stored as the PNG; a
+  JPEG as the JPEG; an MP3 as the MP3. A bitmap that came from an FLA keeps
+  Animate's <code>.dat</code> encoding so that an export to FLA can copy it byte for
+  byte. Nothing is decoded or re-encoded to save.</li>
+<li><strong>Loaded when needed.</strong> Opening a file reads only each media chunk's
+  header (from its stored bytes, or the first few hundred bytes inflated):
+  its id, size and hash. The bytes are read, checked and inflated the first
+  time something shows them. A file with hours of reference video opens as
+  fast as one without. Phoenix keeps no handle on the file between reads,
+  so it can be replaced by a save.</li>
+<li><strong>Deduplication.</strong> Media with the same content hash and bytes are stored
+  once, and every item using them points at the same media id.</li>
+<li><strong>Cheap to save.</strong> Media still as they were read from a Phoenix file are
+  copied into the new one as stored, keeping their media id: never read
+  into memory, inflated or compressed again. Other media already compressed
+  are stored as they are, so saving them costs a checksum and a write. Chunks
+  are prepared on several threads and written in order. After a save the
+  document reads its media from the new file, so the next save copies all
+  of them. If a file media were to be copied from has gone or changed (its
+  checksum says so), the save stops rather than leave the media out.</li>
+<li><strong>Kinds</strong> today: bitmap, sound, video, font, brush texture, other. A new
+  kind is a minor version change.</li>
+</ul>
+
+<h2>Saving safely</h2>
+
+<p>Phoenix writes the whole file to a temporary file in the same folder,
+flushes it to disk, and renames it over the old one. A crash or a full disk
+mid-save leaves the previous file untouched.</p>
+
+<h2>Performance</h2>
+
+<p>Measured on the FLA files of the test corpus, Release build,
+one run after another on the same machine:</p>
+
+<table>
+<thead>
+<tr>
+<th></th>
+<th>FLA</th>
+<th>PHX</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>size</td>
+<td>177.6 MB</td>
+<td>169.0 MB</td>
+</tr>
+<tr>
+<td>read</td>
+<td>1.49 s</td>
+<td>0.24 s</td>
+</tr>
+<tr>
+<td>save, from FLA</td>
+<td></td>
+<td>1.49 s</td>
+</tr>
+<tr>
+<td>save again, from PHX</td>
+<td></td>
+<td>0.96 s</td>
+</tr>
+</tbody>
+</table>
+
+<p>(88 files.) Most of the size is media, which both formats store
+compressed; a read leaves media on disk until shown. The first read of a
+file just written takes longer, the system scanning the new file; the
+figure above is a read after that.</p>
+
+<h2>Tools</h2>
+
+<ul>
+<li><code>Phoenix --phx-dump file.phx</code> prints the header, the index and every
+  chunk's fields as text, without needing the schema (and so for files from
+  any version).</li>
+<li><code>Phoenix --convert in out</code> converts between <code>.phx</code>, <code>.fla</code> and XFL
+  folders, by the output's extension, without a window; what an FLA cannot
+  hold is listed.</li>
+<li>With the schema, <code>protoc --decode=phoenix.Document phoenix_format.proto</code>
+  decodes a chunk's content (after removing the chunk header and inflating).</li>
+<li><code>PHOENIX_PHX_PROFILE=1</code> makes Phoenix print how long each part of a read
+  takes.</li>
+<li><code>Phoenix --roundtrip file folder [samples]</code> saves a document as <code>.fla</code> and
+  <code>.phx</code>, opens each again and compares sample frames with the original's;
+  <code>python tools/roundtrip_check.py &lt;corpus&gt;</code> runs it over a folder of files
+  and reports any that draw differently, with images of the differences.</li>
+</ul>
+
+<h2>Planned features</h2>
+
+<p>The schema already has room for the features in TODO and PARITY that need
+storage, so adding them is a minor version: textured and bitmap brushes
+(<code>BrushDefinition</code>), art and pattern brushes, linked palettes, reference
+video items and instances, review notes, camera and 3D properties, function
+curves, deformers and master controllers. Each is listed with the field
+numbers set aside for it in the schema.</p>
+
+</article>
+</main>
+</body>
+</html>

@@ -1,5 +1,5 @@
 // The Phoenix document format, version 1.0: the content of the chunks of a
-// .phx file. See PHOENIX_FORMAT.md for the container, the conventions and the
+// .phx file. See phx-format.html for the container, the conventions and the
 // compatibility rules. In short:
 //
 // - Field numbers are never reused or renumbered; removed ones are reserved.

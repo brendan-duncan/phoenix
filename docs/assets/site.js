@@ -90,6 +90,12 @@ const NAV = [
     { href: "harmony.html", title: "Coming from Harmony" },
     { href: "changelog.html", title: "What's new" },
   ] },
+  { group: "Developers", pages: [
+    { href: "building.html", title: "Building from source" },
+    { href: "phx-format.html", title: "The Phoenix document format" },
+    { href: "fla-format.html", title: "The FLA and XFL format" },
+    { href: "binary-fla-format.html", title: "The binary FLA format" },
+  ] },
 ];
 
 const ICONS = {
@@ -179,7 +185,9 @@ function buildSidebar(layout, page) {
 
 function buildToc(layout, content) {
   const headings = [...content.querySelectorAll("h2, h3")].filter(h => !h.closest(".card, .pager"));
+  const labels = new Map();
   for (const h of headings) {
+    labels.set(h, h.textContent.trim().replace(/&/g, "&amp;").replace(/</g, "&lt;"));
     if (!h.id) h.id = slug(h.textContent);
     const a = document.createElement("a");
     a.className = "anchor";
@@ -193,7 +201,7 @@ function buildToc(layout, content) {
   toc.className = "toc";
   if (headings.length > 1) {
     toc.innerHTML = `<h4>On this page</h4><ul>${headings.map(h =>
-      `<li><a href="#${h.id}" class="${h.tagName === "H3" ? "sub" : ""}">${h.firstChild.textContent.trim()}</a></li>`).join("")}</ul>`;
+      `<li><a href="#${h.id}" class="${h.tagName === "H3" ? "sub" : ""}">${labels.get(h)}</a></li>`).join("")}</ul>`;
   }
   layout.append(toc);
 

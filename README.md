@@ -20,9 +20,9 @@ Installers for Windows, macOS (Apple silicon) and Linux are on [phoenixanimate.c
 
 - [User Guide](https://phoenixanimate.com/): installing, drawing, animating and exporting
 - [Changelog](CHANGELOG.md): what changed in each release
-- [Building](docs/BUILDING.md): building from source and running the tests
-- [Phoenix document format](docs/PHOENIX_FORMAT.md)
-- [FLA format](docs/FLA_FORMAT.md) and [binary FLA format](docs/BINARY_FLA_FORMAT.md)
+- [Building](https://phoenixanimate.com/building.html): building from source and running the tests
+- [Phoenix document format](https://phoenixanimate.com/phx-format.html)
+- [FLA format](https://phoenixanimate.com/fla-format.html) and [binary FLA format](https://phoenixanimate.com/binary-fla-format.html)
 
 ## License
 

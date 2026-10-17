@@ -1,0 +1,628 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The binary FLA format · Phoenix User Guide</title>
+<meta name="description" content="The binary FLA format of CS4 and earlier: the compound file, its MFC-serialized objects, and how Phoenix maps them to XFL.">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Phoenix">
+<meta property="og:title" content="The binary FLA format · Phoenix User Guide">
+<meta property="og:description" content="The binary FLA format of CS4 and earlier: the compound file, its MFC-serialized objects, and how Phoenix maps them to XFL.">
+<meta property="og:url" content="https://phoenixanimate.com/binary-fla-format.html">
+<meta property="og:image" content="https://phoenixanimate.com/assets/shots/hero.webp">
+<meta property="og:image:type" content="image/webp">
+<meta property="og:image:width" content="1704">
+<meta property="og:image:height" content="1061">
+<meta property="og:image:alt" content="The Phoenix window with three flower characters on the stage, the timeline below and the Properties panel on the right">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://phoenixanimate.com/assets/shots/hero.webp">
+<meta name="keywords" content="binary fla cs4 cs3 flash 8 compound file ole2 mfc format specification developer">
+<link rel="icon" href="assets/img/logo.png">
+<link rel="stylesheet" href="assets/site.css">
+<script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<main>
+<article class="content">
+
+<p class="eyebrow">Developers</p>
+<h1>The binary FLA format</h1>
+<p class="lead">Before CS5, Flash saved .fla files in a binary format: a Microsoft compound
+file (OLE2) whose streams hold MFC-serialized objects. Phoenix reads them by
+converting them to XFL in memory (<code>src/parser/compound_file.cpp</code>,
+<code>src/parser/binary_fla.cpp</code>) and parsing the result as any other document.</p>
+
+<p>The format is undocumented. This description builds on the independent
+reverse engineering in <a href="https://github.com/eddiemoore/fla-decoder">fla-decoder</a>
+(MIT, Ed Moore), corrected and extended by checking a Python prototype field
+by field against the corpus documents that exist in both formats
+(<code>Yard_Sale_03</code> / <code>Yard_Sale_03_2</code>, <code>Freya_Fairy_07</code> / <code>Freya_Fairy_07_2</code>).
+All 183 streams of the three binary corpus files parse to their last byte.
+Flash 8 (Contents 0x138), which has no twin in the corpus, was worked out
+structurally from 20 production files (about 10,000 streams), every stream of
+which now parses to its last byte; what is new in it is marked [S].</p>
+
+<p>Confidence tags used below:</p>
+
+<ul>
+<li><strong>[X]</strong> confirmed against an XFL twin. The counts are items compared, all
+  matching unless a mismatch is stated.</li>
+<li><strong>[S]</strong> structurally confirmed: the field size is right because every stream
+  parses to its exact end, but its meaning is unknown or guessed.</li>
+<li><strong>[G]</strong> guessed, with no evidence in the corpus.</li>
+</ul>
+
+<h2>0. Versions seen</h2>
+
+<p>When Flash saves, it copies unchanged Symbol streams verbatim. A single file
+can therefore mix object schemas (Freya <code>Symbol 14</code> is MX 2004 era), so a
+decoder must branch on the schema of each object, never on the file version.</p>
+
+<p>Contents versions: the low byte is the version, and the high byte is 0 or 1
+with nothing else changed [S] (both are found for most versions; 0x43 is a CS4
+save in CS3's layout). Among 1,600 binary FLAs from 1999 to 2010 [S]:</p>
+
+<table>
+<thead>
+<tr>
+<th>Version</th>
+<th>Saved by</th>
+<th>Bytes before the scene list</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0x1B</td>
+<td>Flash 5</td>
+<td>5</td>
+</tr>
+<tr>
+<td>0x20</td>
+<td>MX</td>
+<td>9</td>
+</tr>
+<tr>
+<td>0x29</td>
+<td>MX 2004</td>
+<td>13</td>
+</tr>
+<tr>
+<td>0x38</td>
+<td>Flash 8</td>
+<td>17</td>
+</tr>
+<tr>
+<td>0x3F</td>
+<td>Flash 8 (later saves)</td>
+<td>21</td>
+</tr>
+<tr>
+<td>0x43</td>
+<td>CS3</td>
+<td>25</td>
+</tr>
+<tr>
+<td>0x47</td>
+<td>CS4 ("Saved by Adobe Flash Windows 10.0")</td>
+<td>29</td>
+</tr>
+</tbody>
+</table>
+
+<p>CS3 and CS4 can name their streams <code>P N &lt;time&gt;</code>, <code>S N &lt;time&gt;</code> and
+<code>M N &lt;time&gt;</code>. Only a few Contents records follow the file version rather
+than a schema of their own (the ItemHeader tail, the profiles list, the sound
+record's last u32, the swatch list ends); everything in the timeline streams
+branches on schemas.</p>
+
+<p>Their timeline streams use only the classes below, plus <code>CCommandObj</code>
+(Flash 5, not read).</p>
+
+<h2>1. Container and primitives</h2>
+
+<ul>
+<li>OLE2 compound file. Streams: <code>Contents</code>, <code>Page N</code> (scenes), <code>Symbol N</code>
+  (library symbols), <code>Media N</code> (bitmaps and sounds).</li>
+<li>Little endian throughout.</li>
+<li><strong>CString</strong> (MFC): <code>u8 n</code>. If n is 0xFF: <code>u16 n</code>; if that u16 is 0xFFFE the
+  string is UTF-16, so read the length again (<code>u8</code>, or <code>FF</code>+<code>u16</code>, or
+  <code>FFFF</code>+<code>u32</code>) and then n UTF-16 code units. Otherwise the string is n ANSI
+  bytes. Empty strings are <code>00</code> (ANSI) or <code>FF FE FF 00</code> (Unicode).</li>
+<li><strong>wstr8</strong>: <code>u8 n</code> + n UTF-16 units with no marker. Used for stream names in
+  <code>Contents</code> when the record schema is at least 22 (CDocumentPage; 22 is
+  Flash 8 [S]) or at least 6 (CMedia*). Older records use an ANSI string
+  (<code>u8 n</code> + bytes).</li>
+<li><strong>color</strong>: 4 bytes R, G, B, A. [X]</li>
+<li><strong>matrix</strong>: 6 x s32: a, b, c, d as 16.16 fixed point, then tx, ty in twips
+  (divide by 20 for px). [X] 260 instance matrices plus all shape matrices.</li>
+<li><strong>itemID</strong>: <code>u32 time, u32 counter</code>, the XFL <code>itemID="tttttttt-cccccccc"</code>.
+  (0, 0) means none. [X] every symbol, media item and folder.</li>
+<li><strong>CArchive object</strong> (MFC <code>ReadObject</code>):<ul>
+<li><code>u16 tag</code>.</li>
+<li><code>0x0000</code> means null.</li>
+<li><code>0xFFFF</code> declares a new class: <code>u16 schema, u16 len, ASCII name</code>. It
+appends the class and then the object to the load table.</li>
+<li><code>0x8000|i</code> is a new object of the class at load index i (appends one
+entry).</li>
+<li>Any other value below 0x8000 is a back-reference to an object that was
+already loaded.</li>
+<li><code>0x7FFF</code> is followed by a <code>u32</code>: once the load table passes 0x7FFE
+entries, class and object indices no longer fit in 15 bits. Bit 31 set
+means a new object of the class at index <code>u32 &amp; 0x7FFFFFFF</code>, clear a
+back-reference to that object. [S] Terrence <code>Page 1</code>, 2 MB.</li>
+<li>An object can only refer back to one whose reading has finished; a
+reference to one still being read (itself or an ancestor) is damage.</li>
+<li>The load table starts at index 1. The class-level schema was 1 everywhere
+(0 for CColorDef), so the real versioning is a schema byte inside each
+object.</li>
+<li>Back-references matter. A folder layer is first serialized inline inside
+its child layer's <code>parent</code> field. When it shows up later in the page's
+layer list, that entry is only a back-reference. [X]</li>
+</ul>
+</li>
+</ul>
+
+<h2>2. Timeline streams (<code>Page N</code>, <code>Symbol N</code>)</h2>
+
+<p>The stream is <code>u8 01</code>, followed by one <code>CPicPage</code> object.</p>
+
+<h3>2.1 CPicObj base (every CPic class)</h3>
+
+<pre><code>u8  objSchema            1 or 5 seen
+u8  objFlags             CPicShape: bit0 set = loose shape (XFL DOMShape), clear = DOMGroup [X]
+ReadObject children...   until the null tag. Page: layers. Layer: frames.
+                         Frame: elements. Group: members.
+s32 x, s32 y             transformation point in parent px*20 (twips); INT_MIN,INT_MIN = unset
+                         [X] 260 instances: equals matrix applied to the XFL transformationPoint
+if objSchema &gt;= 4: u8, u8    (always 0; schema 4 is Flash 8's later saves) [S]
+</code></pre>
+
+<h3>2.2 CPicPage (scene or symbol timeline)</h3>
+
+<pre><code>CPicObj base (children = layers, stored BOTTOM layer first; XFL lists the top first) [X]
+u8  pageSchema (2, 3, 7)
+u16  (2 seen)                                   [S]
+if pageSchema &gt;= 5: u16                         [S]
+if pageSchema &gt;= 7: u32                         [S]
+if pageSchema &gt;= 3: u32 n; n x (u32, u32)   guide/ruler list, always empty [S]
+</code></pre>
+
+<p>Schema 2 is Flash 5's.</p>
+
+<h3>2.3 CPicLayer</h3>
+
+<pre><code>CPicObj base (children = frames in time order)
+u8  layerSchema (10, 11)
+CString name                                        [X] 215 layers
+u8  current        (the timeline's active layer)   [X]
+u8  hidden         (1 means XFL visible=&quot;false&quot;)   [X]
+u8  locked                                         [X]  (NOTE: hidden comes before locked)
+u32 0xFFFFFFFF                                     [S]
+color  layer outline color (#RRGGBB + ff)          [X] 215
+u32 outline mode   (always 0 in the corpus)        [G]
+u32 height multiplier (always 1)                   [G]
+u8  layerType      0 normal, 1 guide, 3 folder     [X]  other values not in corpus
+ReadObject parent  folder layer this layer belongs to (XFL parentLayerIndex) [X];
+                   presumably also the mask/guide layer for masked/guided layers [G]
+u8  1                                              [S]
+u8  autoNamed      (XFL autoNamed)                 [X] 215/215 correlation
+if layerSchema &gt;= 13 (CS4): u8                     [S]
+</code></pre>
+
+<p>Layer schema 8 (Flash 5) ends differently after the layer type [S]: <code>u8,
+u8, ReadObject link, u8</code>. The link is the layer it is tied to. When that
+layer comes later in the list, it is serialized inline in the link and named
+again in the page's list by back-reference, as a folder is.
+A folder layer has exactly one empty frame. XFL omits frames for folder
+layers.</p>
+
+<h3>2.4 CPicFrame (a frame is a CPicShape that carries its own "merge drawing" shape)</h3>
+
+<pre><code>CPicObj base (children = element objects, in z order bottom to top)
+CPicShape body (2.5)    the frame's raw shape; XFL emits it as the first DOMShape when non-empty [X]
+u8  frameSchema (22, 26)
+u16 duration                                         [X] 370 frames
+u16 keyMode         bit0 = classic motion tween. XFL keyMode = binary | (bit0 ? 0x4000 : 0x2000):
+                    0x0600-&gt;9728, 0x1E00-&gt;15872, 0x1E01-&gt;24065 [X]
+s16 ease (-100..100)         always 0 in corpus     [G]
+u16 sound           Media N of the frame sound, 0 = none [X] 3 frames
+u16 n; n x (u32 mark44, u16 level0, u16 level1)   sound envelope (32768 = full) [S]
+u16 soundLoop  u8 soundSync (3 = stream [X])  u32 inPoint44  s32 outPoint44 (0x3FFFFFFF = end)
+u16 soundZoom (0xFFFF = XFL soundZoomLevel 65535) [X]
+CString label       always empty in corpus           [G] (best candidate position)
+action block (2.9)  frame ActionScript               [X] 5 scripts in Freya Scene 1
+u32 x3
+ReadObject morph    CPicMorphShape (2.11) on the first keyframe of a shape tween, else null [S]
+u32
+ReadObject hints    CObList of CMorphHintItem (2.11): the tween's shape hints, else null [S]
+CString             always empty                     [S]
+u32 x3              (1,0,0)                          [S]
+if frameSchema &gt;= 24: u32, u32 customEase           [S]
+if customEase: 6 x (u32 n; n x 3 x (f64 x, f64 y))  [S]
+</code></pre>
+
+<p>The custom ease curves are for the targets all, position, rotation, scale,
+color and filters, in that order. Each point is its in handle, the point and
+its out handle; XFL's <code>CustomEase</code> lists the same points without the first
+in handle and the last out handle.
+Tween type: shape tween when <code>morph</code> is non-null [S]; otherwise motion when
+keyMode bit0 is set [X] (26 tweens); otherwise none. Flash 8 writes
+frameSchema 23 with the 22 layout.</p>
+
+<p>Older frames differ after the label [S]: schema 21 (MX) has the action block
+of version 0 (2.9) and ends with two u32s (1, 0) rather than three; schema
+18 (Flash 5) has Flash 5 actions (2.9) in place of the action block and ends
+after the CString, with no u32s.</p>
+
+<h3>2.5 CPicShape body (also used inside CPicFrame)</h3>
+
+<pre><code>u8  shapeSchema (2, 3 or 6). Below, &quot;&gt;=3&quot; is the threshold for the stroke
+    and gradient fields; schema 3 (Flash 8's later saves) has them but not
+    the straight-edge byte or the cubics' quadratic points, which &quot;&gt;=6&quot;
+    marks [S].
+matrix
+ShapeData:
+  u8  shapeDataSchema (5)
+  u32 edge count hint (approximate)                              [S]
+  u16 nFills;   nFills x FillStyle
+  u16 nLines;   nLines x LineStyle
+  edges until a 0x00 flag byte
+  if shapeDataSchema &gt;= 5: s32 nCubics; nCubics x Cubic             [S]
+</code></pre>
+
+<p><strong>Cubic</strong> (the curve the edges were made from, as drawn with a cubic tool):</p>
+
+<pre><code>4 x (s32 x, s32 y)    start, control, control, end, in 1/20 px (twips)
+if shapeSchema &gt;= 6:
+  u8 n; n x (s32 x, s32 y, u16 kind)   the quadratic points standing for it,
+                                         starting at the cubic's start; kind 1
+                                         marks a control point
+  u8 more              bit 0 and bit 1 each add one (s32 x, s32 y) after it;
+                       the other bits vary from save to save (leftover memory)
+</code></pre>
+
+<p>[S] 43,958 records in the nine CS3/CS4 Gumball files parse to the end of
+their streams. Flash 8 shapes (schemas 2 and 3) have the four points alone.
+<strong>FillStyle</strong></p>
+
+<pre><code>color; u16 kind: low byte is the SWF fill type [X]
+  0x00 solid
+  0x10 linear, 0x12 radial, 0x13 focal [0x10/0x12 X]:
+       matrix (maps the -16384..16384 twip gradient square, as in SWF/XFL) [X render]
+       u8 nStops; if shapeSchema &gt;= 3: 8 bytes (zero); nStops x (u8 ratio, color)
+  0x40 repeat, 0x41 clipped, 0x42/0x43 non-smoothed bitmap:
+       matrix (bitmap pixels -&gt; twips, e.g. a=d=20) [X]; u16 Media N [X]
+</code></pre>
+
+<p><strong>LineStyle</strong></p>
+
+<pre><code>color; u16 width in twips [X 81 strokes]; 4 bytes stroke style (0 = solid) [S]
+if shapeSchema &gt;= 3: 6 bytes caps/joins (00 00 01 01 00 03: round, round, miter 3.0?) [G];
+                     FillStyle (stroke fill) [S]
+</code></pre>
+
+<p><strong>Edge record</strong> (all coordinates are in 1/256 twip, the same fixed point as
+XFL's <code>#hex.hex</code> edge numbers) [X]: 76,964 segments matched XFL exactly,
+0 mismatches.</p>
+
+<pre><code>u8 f; 0 = end
+if f &amp; 0x40: style change: (f &amp; 0x80 ? 3 x u8 : 3 x u16) = line, fill0, fill1.
+             1-based indices into the lists above; 0 = none. Bit 15 of the u16
+             form = XFL edge selection flag (&quot;S&quot; mask); mask it off.        [X]
+three deltas, type = (f&gt;&gt;0)&amp;3, (f&gt;&gt;2)&amp;3, (f&gt;&gt;4)&amp;3:
+     0 = (0,0), 1 = 2 x s16, 2 = 2 x s32, 3 = 2 x s16 &lt;&lt; 7
+from = previous 'to' + d1 (d1 != 0 starts a new subpath, XFL &quot;!&quot;)
+ctrl = from + d2;  to = from + d3
+straight edge when (f &amp; 0x0C) == 0 (no control point)
+if shapeSchema &gt;= 6 and straight: one extra byte, always 0 (3,113 seen)  [S]
+</code></pre>
+
+<p>XFL may store the same segment in the opposite direction. In that case
+fill0 and fill1 are swapped.</p>
+
+<h3>2.6 Symbol instance: CPicSymbol (graphic), CPicSprite (movie clip), CPicButton</h3>
+
+<pre><code>CPicObj base (children: none seen; point = transformation point)
+u8  instSchema (7, 8, 10, 14, 19, 22)
+matrix                                                         [X] 260
+u16 firstFrame (0-based, graphics)                            [X] 179
+u16 loop: 0 loop, 2 single frame (1 = play once [G])          [X] 179
+u8  1                                                          [S]
+color transform: 4 x (u16 mult 8.8, s16 add) in order alpha, red, green, blue  [X] alpha and brightness
+u16 colorMode (0 none, 1 brightness, 4 alpha seen; 2 tint / 3 advanced [G]); s16 panel percent; color tint
+CString   always empty                                         [S]
+u32 symbol = N of the &quot;Symbol N&quot; stream (the library reference) [X] 260/260
+if instSchema &gt;= 22 (CS4): the 7 bytes, then the 3D transform: 16 x f32
+     (a 4 x 4 matrix, identity when flat), 24 bytes, s32 x, y (INT_MIN:
+     unset), 6 bytes                                              [S]
+else if instSchema &gt;= 19: 7 bytes 00 00 00 00 01 00 00         [S]
+else if instSchema &gt;= 14 (Flash 8): 3 bytes 00 00 00            [S]
+else if instSchema == 8 (MX): 11 bytes                          [S]
+CPicSprite only:
+  u8 spriteSchema (1, 3, 6, 8)
+  spriteSchema 1 (Flash 5): CString instance name; nothing more [S]
+  action block (2.9: onClipEvent script);
+  CString instance name                                        [X] 39 names
+  u32 2, u8                                                    [S]
+  if spriteSchema &gt;= 4: u32, u32, u32 (MX's schema 3 ends before them) [S]
+  if spriteSchema &gt;= 8: u8 1, u32 (per-file counter), CString component metadata XML
+CPicButton only:
+  u8 buttonSchema (4, 11)
+  buttonSchema 4 (Flash 5): Flash 5 actions (2.9), u8; nothing more [S]
+  action block (button script, e.g. &quot;on (release) {...}&quot;) [X text];
+  u8, CString (instance name [G]), u32
+</code></pre>
+
+<h3>2.7 CPicText</h3>
+
+<pre><code>CPicObj base; u8 textSchema (4, 5, 9, 12, 13, 14); matrix [X]
+4 x s32 bounds twips: xmin, xmax, ymin, ymax.
+  (XFL left/width differ by about 2 twips on each side.)
+u8 1, u8 0, u32 flags, u16 0 (not in schema 4), CString instance name [S]
+  (text kind static/dynamic/input is probably here [G])
+if textSchema &gt;= 5 and 0x2000 is set in either half of the flags: CString
+  (seen twice, a CS3 and a CS4 text, the CS4 one static with a link) [S]
+if textSchema &gt;= 14 (CS4): u8                           [S]
+runs until u16 nChars == 0:
+   u8 runSchema (4, 5 Flash 5; 7 ANSI, 12 UTF-16 [X]; 15 CS4); u16 size in twips [X];
+   u8 n + font name (UTF-16 if runSchema &gt;= 10)        [X] (XFL uses the PostScript face name)
+   color [X]; attribute block of 18 bytes (rs 4), 19 bytes (rs 5 [S]),
+   23 bytes (rs 7), 24 bytes (rs 10, Flash 8 [S]) or 35 bytes (rs 12):
+      [0] flags  [2] bold [X]  [3] italic [G]  [7] align 0 left / 1 right / 2 center [X]
+      [8] s16 lineSpacing twips [X]  [16] s16 letterSpacing twips [X rs7]
+   rs 7's block is 18 bytes, u8 n + link URL, 3 bytes, u8 n + target: some
+   MX 2004 documents end these strings, and font names, with a NUL [S]
+   rs 15 (CS4) [S]: CString family, CString PostScript name, u32, color,
+   the 18 bytes, CString URL, u32, CString target, 10 bytes, CString
+   nChars characters (ANSI or UTF-16; CR = line break) [X]
+textSchema 4 and 5 (Flash 5) end here [S]
+CString; u32; u32
+if textSchema &gt;= 11: CString;  &gt;= 12: CString;  &gt;= 13: u8 filterFlag (0) + u16
+</code></pre>
+
+<h3>2.8 Groups</h3>
+
+<p>A CPicShape child with objFlags bit0 = 0 is an XFL DOMGroup [X 78]. Its own
+shape is the first member; the CPic children follow. All member matrices are
+in the parent coordinate space; the group matrix equals the matrix of its own
+shape.</p>
+
+<h3>2.9 Action block (frames, sprites, buttons)</h3>
+
+<pre><code>u32 version (0 = MX, 1 = MX2004, 4 = Flash 8, 5 = CS3 and CS4), u32 kind
+version 0: nothing more, but as below for kind 0 and 1 [S]
+otherwise: u32 id/hash, u32 n (0 but once, a CS4 button with 1)
+if version &gt;= 5: n x u32 [G], u32 0, CString script [X]
+if version == 4: CString script               [S]
+if version &lt;= 1: kind 1: CString script; kind 2: nothing; kind 0: action list [S]
+</code></pre>
+
+<p><strong>Action list</strong> (MX and MX 2004 scripts written in normal mode) [S]: <code>u32 0,
+u32 n</code>, then n actions, each a u32 naming it and its fields (u = u32,
+s = CString): 0x00 go to (uussu), 0x01 next frame, 0x02 stop, 0x04 play,
+0x05 get URL (ussu), 0x08 tell target (usu), 0x0A if frame is loaded
+(ussu), 0x0B on a button event (uuu), 0x0C end of the event, 0x0F if (us),
+0x10 end of the if, 0x11 else if (us), 0x12 else, 0x13 end of if frame is
+loaded, 0x17 set property (uususu), 0x18 set variable (ususu), 0x1A with
+(usuuuuu), 0x1C comment (us), 0x29 expression (us), 0x2C for (usss),
+0x3E call (usss); 0x09, 0x1D, 0x2D and 0x2E end blocks. Blocks nest by
+their end actions. Read from 700 lists; an action not in the table stops
+the stream.
+<strong>Flash 5 actions</strong> (frame schema 18, button schema 4) are records rather
+than script text [S]: <code>u32 n</code>, then n x (<code>u8 9</code>, <code>u32</code> action, 5 bytes,
+3 x CString, 32 bytes, <code>u32 -1</code>, <code>u16</code>, 2 x CString, 67 bytes). The strings
+are the parameters ("allowscale", "false" for an fscommand; "MouseDown =
+true" for an expression). Phoenix reads past them.</p>
+
+<h3>2.10 CPicBitmap (a bitmap on the stage)</h3>
+
+<pre><code>CPicObj base; u8 schema (1, 2); matrix (bitmap pixels to the parent, tx/ty in
+twips); u16 N of its &quot;Media N&quot;; if schema &gt;= 2: u8 0                  [S]
+</code></pre>
+
+<p>Written as a DOMBitmapInstance of the library bitmap.</p>
+
+<h3>2.11 Shape tweens</h3>
+
+<p>The first keyframe of a shape tween holds the tween's precomputed outline
+pairs. Phoenix tweens from the keyframes itself, so it reads past these and
+keeps only the tween type; the field meanings are partly guessed [S].</p>
+
+<pre><code>CPicMorphShape: u8 schema (2); matrix; matrix; 8 bytes;
+                u16 n; n x ReadObject CMorphSegment;
+                u16 (0); u16 nFills; nFills x (color, u16 kind 0 = solid);
+                u16 nLines; nLines x (color, u16 width, 4 bytes)
+                (no gradient or bitmap fill seen: Phoenix stops the stream there)
+CMorphSegment:  16 bytes; s32 x, y start on the first keyframe; s32 x, y on the last;
+                u16 n; n x ReadObject CMorphCurve
+CMorphCurve:    s32 control x, y, anchor x, y on the first keyframe; the same on
+                the last; u32 (1 = straight)                            36 bytes
+CObList:        u16 n (0xFFFF: u32 n follows); n x ReadObject
+CMorphHintItem: s32 x, y on the first keyframe; s32 x, y on the last; u32   20 bytes
+</code></pre>
+
+<h3>2.12 Videos on the stage</h3>
+
+<pre><code>CPicVideoStream (MX 2004 and later): CPicObj base; u8 schema (3, 4); matrix;
+    4 x s32 frame twips (xmin, xmax, ymin, ymax); u8; CString; CString;
+    u32 1; u16 N of its &quot;Media N&quot;                                     [S]
+CPicVideo (MX): CPicObj base; u8 schema (0); matrix; u16 N            [S]
+</code></pre>
+
+<p>Written as a DOMVideoInstance of the library video.</p>
+
+<h3>2.13 CPicRect (rectangle primitive, CS3 and later)</h3>
+
+<p>A CPicShape holding the rectangle as drawn, then <code>u8 schema (3), u8 (1),
+4 x s32</code> corner radii in twips [S]. Written as the drawing object it draws as.</p>
+
+<h2>3. Contents stream</h2>
+
+<pre><code>u16 version; 5 to 29 zero bytes (the table in section 0)          [S]
+scene list:  ReadObject CDocumentPage ... until null tag
+u16 next Page number, u16 1, u16 next scene number
+symbol list: ReadObject CDocumentPage ... until null tag
+u16 next Symbol number
+media list:  ReadObject CMediaBits / CMediaSound / CMediaVideoStream / CMediaVideo ... until null tag
+u16 next Media number
+document: u8, u16, rect (4 x s32 twips xmin, xmax, ymin, ymax) -&gt; width/height [X];
+          u16, u16, u8, u16, u16; 4 x u32 grid/snap spacing twips [X 18px]; 12 bytes;
+          color background [X white]; color grid color [X #C0C0C0];
+          u32 frame rate 16.16 [X 30 / 12]; 7 bytes
+0x129: u16 n + n x (CString key, CString value)   publish settings
+0x138, 0x143: same list (document properties), then u32 nProfiles x (u16 n + pairs)
+       [S 0x138: one property, legacyLineSpacing; one profile of publish settings]
+u32 -1, CString, CString, u32 1, u16 0
+u16 nSolid + nSolid x CColorDef, u8, u16 nGrad + nGrad x CColorDef, u8    (swatch panel;
+       CS4 ends each list with two bytes rather than one [S])
+u32 3, u32 1, 4 x u32 (rect), 6 x u32
+u32 nFolders x Folder   [X] all 8 folders with paths
+0x138, 0x143: u16 0
+u16 n x (CString name, ReadObject)   (&quot;PublishQTProperties::QTSndSettings&quot; -&gt; CQTAudioSettings: u32)
+trailer (not traced for 0x138): 17 bytes, CString, 14 bytes, CString, CString, 20 bytes;
+  0x143 adds u32 x4, u16 x2, u32, u16, u32 x2, CString, u32, CString, u32 x2,
+  CString x2, u32 x5, u8, u32 x2, then u16 n + ANSI &quot;Saved by ...&quot; (NUL terminated)
+</code></pre>
+
+<p><strong>ItemHeader</strong> (shared by symbols, scenes, media and folders):
+<code>u32 ver (4/5/6), u32 1, itemID parentFolder, u32 1, itemID self [X],
+u32 0, Linkage, Source, if ver &gt;= 6: u8, and from 0x13F CString, u8</code>.
+The tail follows the file: Flash 8 writes ver 6 with the u8 alone [S].
+Ver 4 (Flash 5) ends after the <code>u32 0</code>; MX files (before 0x129) have
+<code>u32, u8, CString x2</code> in place of the Linkage and Source [S].</p>
+
+<ul>
+<li>Linkage: <code>u32 ver (3/5/7; 0x100 is set on an exported symbol), u8,
+  CString identifier, CString, if ver &gt;= 5: CString; u8 (5 seen: exported
+  for ActionScript, in the first frame), u32</code> [S]</li>
+<li>Source (linked/imported item): <code>CString source .fla path, CString source
+  item href, u32 sourceLastModified, u32, u32, itemID sourceItemID</code>
+  [X Yard "testure"]</li>
+</ul>
+
+<p><strong>CDocumentPage</strong> (one per scene or symbol):</p>
+
+<pre><code>u8 schema (8 / 12 / 17 / 22 / 23 / 24 / 25); stream name (&quot;Page N&quot; / &quot;Symbol N&quot;;
+ANSI, wstr8 from 22; some MX 2004 names end in a NUL);
+CString name [X]; u32 N (0 for scenes); u8 symbolType 0 graphic, 1 button [G], 2 movie clip [X 110];
+CString; u32 1; ItemHeader; u32 lastModified [X];
+schema 8 (Flash 5) ends here [S]
+CString x2; u32, u8, u32, u32;
+schema 12 (MX) ends with 3 bytes [S]
+Linkage; Source;
+schema 17: 34 bytes (constant)
+schema 24: u8, CString, u32, u8, CString, u32 x3, CString, 3 x (u8 3, CString, u32, u32),
+           CString, u32, u8, u32, CString, u32 x4, CString, u32 x2, CString x2, u32,
+           CString, u32, scale-9 rect 4 x s32 (INT_MIN = none) [G], 9 bytes
+schema 22 (Flash 8) [S]: schema 24 without the first u8 and CString, without
+           the u32 x4 and CString after the fifth CString, and without the
+           last u32, scale-9 rect and 9 bytes:
+           u32, u8, CString, u32 x3, CString, 3 x (u8 3, CString, u32, u32),
+           CString, u32, u8, u32, CString, u32 x2, CString x2, u32, CString
+schema 23 (0x13F) [S]: schema 22 with 24's first u8 and CString, 12 bytes
+           for the u32 x2, and 24's last u32 and scale-9 rect (not its 9 bytes)
+schema 25 (CS4) [S]: schema 24 with 11 bytes in place of the last 9
+</code></pre>
+
+<p>The library path is the folder chain (from the parent folder itemID) plus
+"/" plus the name [X].</p>
+
+<p><strong>Folder</strong>: <code>u32 ver (3/4), CString name, ItemHeader</code> [X]</p>
+
+<p><strong>CMediaBits</strong>:</p>
+
+<pre><code>u8 schema (4/5/6/7), stream &quot;Media N&quot;, CString name [X], u16 N,
+CString import path, u32 sourceLastImported [X], ItemHeader, u32 1 (not in
+schema 4), u16 3, u8 quality [X], u8 allowSmoothing, u32 jpeg byte count
+(0 for lossless) [S]; schema 7 (CS4) adds a u8 [S]
+</code></pre>
+
+<p><strong>CMediaSound</strong>: same first part as CMediaBits, then
+<code>u32 1, u8 8, u16 format (bit0 stereo, bit1 16-bit, bits2-3 rate 5.5/11/22/44 kHz)
+[X 6], u32 sampleCount [X 6], u32 0xFFFFFFFF, 11 bytes</code>; schema 6 adds a
+CString (empty) [S], and files from 0x13F on a u32 after it [S]. Schema 4
+(Flash 5) is <code>u8, u16 format, u32 sampleCount, u32</code> after the first part,
+with no leading u32 [S].</p>
+
+<p><strong>CMediaVideoStream</strong> (MX 2004 and later) and <strong>CMediaVideo</strong> (MX): the same
+first part, then <code>u32 1</code>; CMediaVideo adds a u8 [S].</p>
+
+<p><strong>CColorDef</strong>: <code>u8 schema (3/4), color, u16 kind; if gradient: matrix, u8 n,
+(schema &gt;= 4: 8 bytes), n x (u8, color); u16 x3 HSL (0..240)</code></p>
+
+<h2>4. Media streams</h2>
+
+<p>A <code>Media N</code> stream has the same bytes as the XFL <code>bin/Media N.dat</code> file of
+the same number: 11 of 16 Yard media are byte-identical, and the others are
+the same format recompressed. Phoenix's existing <code>.dat</code> handling therefore
+applies directly (<code>Bitmap::datData</code>).</p>
+
+<ul>
+<li>Lossless bitmap layout:
+  <code>03 05, u16 rowBytes, u16 w, u16 h, 4 x s32 frame (twips:
+  0, frameRight, 0, frameBottom) [X], u8 flags (bit0 alpha), u8 1</code>, then
+  chunks of <code>u16 len + bytes</code> until len = 0. Together the chunks form one zlib
+  stream of ARGB, premultiplied. [X]</li>
+<li>JPEG bitmaps start with <code>FF D8</code>.</li>
+<li>MP3 sounds are raw frames. Other sounds are raw PCM in the CMediaSound
+  format.</li>
+</ul>
+
+<h2>5. Mapping to XFL (summary)</h2>
+
+<ul>
+<li>DOMDocument: width, height, frameRate, backgroundColor come from Contents
+  §3.</li>
+<li>Library item: CDocumentPage, plus the timeline in <code>Symbol N</code>.</li>
+<li><code>DOMSymbolInstance libraryItemName</code>: the instance <code>u32 symbol</code>, looked up as
+  the <code>Symbol N</code> library path.</li>
+<li>Layers: reverse the stored order. parentLayerIndex comes from the <code>parent</code>
+  object.</li>
+<li>Frame index is the sum of the earlier durations.</li>
+<li>Elements: in the order stored, with the frame's own shape first. CPicShape
+  maps to DOMShape (flags bit0) or DOMGroup. CPicSprite, CPicSymbol and
+  CPicButton map to DOMSymbolInstance with symbolType movie clip, graphic and
+  button. CPicText maps to DOMStaticText.</li>
+<li>Shapes: edges convert to XFL edge strings one-for-one (same 1/256-twip
+  units, the same fill0/fill1/stroke indices).</li>
+</ul>
+
+<h2>6. Not covered by the corpus (still unverified)</h2>
+
+<ul>
+<li>Which custom ease curves the frame uses (one for all, or one per
+  property): seen only on untweened frames.</li>
+<li>Frame labels and ease: the Flash 8 files have labels ("wave", "Short
+  bounce") and eases of -100 and 100 where 2.4 puts them, but no XFL twin
+  to compare against [S].</li>
+<li>Shape tweens: the <code>CPicMorphShape</code> layout is structural only (2.11), and
+  one with a gradient or bitmap fill has not been seen.</li>
+<li>Mask/guided layer type codes.</li>
+<li>Tint and advanced color modes.</li>
+<li>Dynamic/input text.</li>
+<li>Text filters.</li>
+<li>Bitmap instances (<code>CPicBitmap</code>): structural, and the matrix taken as
+  pixels to the parent from one file [S].</li>
+<li>Video: the library items and stage instances are structural [S], and
+  the video data in their streams is not read.</li>
+<li><code>CPicButton</code> instance names.</li>
+<li>Flash 5 actions as scripts: the records are read past (2.9), not turned
+  into ActionScript.</li>
+<li>Some objects in the older files: of the 1,616 binary FLAs surveyed, all
+  open and 1,397 read with nothing missing; in the rest, about 560
+  streams (mostly Flash 5) still stop early.</li>
+<li>Normal-mode action lists as scripts: read past, not turned into
+  ActionScript.</li>
+</ul>
+
+<p>A class not described here ends the stream it is in: MFC objects carry no
+length, so nothing after it can be found. Phoenix keeps what came before it
+(the layers before, and the layer it was in up to it), reads the other
+streams, and says which parts are missing when the document opens.</p>
+
+</article>
+</main>
+</body>
+</html>
