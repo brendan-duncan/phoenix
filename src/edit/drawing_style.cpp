@@ -229,6 +229,7 @@ StrokeLook StrokeLook::of(const StrokeStyle& stroke)
     look.dash2 = stroke.dash2;
     look.dotSpace = stroke.dotSpace;
     look.styleAttributes = stroke.styleAttributes;
+    look.paintBrush = stroke.paintBrushDefinition;
     for (const auto& attribute : stroke.extraAttributes)
     {
         if (attribute.first == "phoenixBrush")
@@ -264,7 +265,8 @@ bool StrokeLook::operator==(const StrokeLook& other) const
     return kind == other.kind && hairline == other.hairline && caps == other.caps && joints == other.joints &&
         scaleMode == other.scaleMode && miterLimit == other.miterLimit && hinting == other.hinting &&
         widthProfile == other.widthProfile &&
-        brush == other.brush && brushPattern == other.brushPattern && dash1 == other.dash1 &&
+        brush == other.brush && brushPattern == other.brushPattern && paintBrush == other.paintBrush &&
+        dash1 == other.dash1 &&
         dash2 == other.dash2 && dotSpace == other.dotSpace && styleAttributes == other.styleAttributes;
 }
 
@@ -279,8 +281,10 @@ StrokeStyle* StrokeLook::applyTo(const StrokeStyle& stroke, DOMElement* parent) 
     case StrokeStyle::Style::Dotted: copy = new DottedStroke(parent); break;
     case StrokeStyle::Style::Hatched: copy = new HatchedStroke(parent); break;
     case StrokeStyle::Style::Solid: copy = new SolidStroke(parent); break;
+    case StrokeStyle::Style::PaintBrush: copy = new PaintBrushStroke(parent); break;
     }
     copy->weight = stroke.weight;
+    copy->paintBrushDefinition = kind == StrokeStyle::Style::PaintBrush ? paintBrush : 0;
     copy->pixelHinting = hinting;
     copy->dash1 = dash1;
     copy->dash2 = dash2;

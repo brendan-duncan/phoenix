@@ -13,12 +13,15 @@
 #include "symbol_list.h"
 #include <cstdint>
 #include <map>
+#include <memory>
 #include <string>
 #include <unordered_set>
 #include <vector>
 #include <utility>
 
 namespace fla {
+
+class PaintBrushLibrary;
 
 class Document : public DOMElement
 {
@@ -84,6 +87,11 @@ public:
     /// Files of the package those refer to (a sound's data under bin, the
     /// brush definitions file), by path, carried through byte for byte.
     std::vector<std::pair<std::string, LazyBytes>> extraFiles;
+
+    /// The paint brushes read from the brush definitions file among
+    /// extraFiles, and the bytes they were read from (paintBrushesOf).
+    mutable std::shared_ptr<const PaintBrushLibrary> paintBrushes;
+    mutable const void* paintBrushesSource = nullptr;
 
     /// The library's sounds, as much as playing them needs: the name frames
     /// refer to them by, how the data is laid out, and where under the

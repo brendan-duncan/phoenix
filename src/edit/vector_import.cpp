@@ -581,6 +581,7 @@ struct SvgStyle
     double opacity = 1.0;
     double fillOpacity = 1.0;
     double strokeOpacity = 1.0;
+    bool evenOdd = false;
     std::optional<Color> color;
     bool hidden = false;
     /// A fill or stroke given as url(#id): the gradient's id.
@@ -662,7 +663,7 @@ void applyStyle(const tinyxml2::XMLElement& element, SvgStyle& style)
     // declarations over them.
     std::vector<std::pair<std::string, std::string>> declarations;
     for (const char* name : {"color", "fill", "stroke", "stroke-width", "opacity", "fill-opacity", "stroke-opacity",
-             "display", "visibility", "font-family", "font-size", "font-weight", "font-style"})
+             "fill-rule", "display", "visibility", "font-family", "font-size", "font-weight", "font-style"})
         if (const char* value = element.Attribute(name))
             declarations.emplace_back(name, value);
     if (gDefs)
@@ -731,6 +732,8 @@ void applyStyle(const tinyxml2::XMLElement& element, SvgStyle& style)
             style.fillOpacity = std::atof(value.c_str());
         else if (key == "stroke-opacity")
             style.strokeOpacity = std::atof(value.c_str());
+        else if (key == "fill-rule")
+            style.evenOdd = value == "evenodd";
         else if ((key == "display" && value == "none") || (key == "visibility" && value == "hidden"))
             style.hidden = true;
     }
@@ -1124,6 +1127,7 @@ void walkSvg(const tinyxml2::XMLElement& element, SvgStyle style, const Affine& 
         painted.fill = withAlpha(style.fill, style.opacity * style.fillOpacity);
         painted.stroke = withAlpha(style.stroke, style.opacity * style.strokeOpacity);
         painted.strokeWidth = style.strokeWidth;
+        painted.evenOdd = style.evenOdd;
         if (!style.fillUrl.empty() || !style.strokeUrl.empty())
         {
             // A gradient's bounding box is the path's, in its own space.

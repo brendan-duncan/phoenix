@@ -82,6 +82,7 @@ public:
         MorphSegment,
         MorphCurves,
         RawElement,
+        PaintBrushStroke,
     };
 
     bool visible = true;
@@ -141,7 +142,8 @@ public:
     {
         DOMType type = domType();
         return type == DOMType::SolidStroke || type == DOMType::DashedStroke || type == DOMType::RaggedStroke ||
-            type == DOMType::StippleStroke || type == DOMType::DottedStroke || type == DOMType::HatchedStroke;
+            type == DOMType::StippleStroke || type == DOMType::DottedStroke || type == DOMType::HatchedStroke ||
+            type == DOMType::PaintBrushStroke;
     }
 
     bool isSwatchType() const

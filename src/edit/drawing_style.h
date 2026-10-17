@@ -39,6 +39,9 @@ struct StrokeLook
     /// (phoenixBrush, phoenixBrushPattern).
     std::string brush;
     bool brushPattern = false;
+    /// For a paint brush stroke (kind PaintBrush), the document's paint
+    /// brush definition it draws with, by index.
+    int paintBrush = 0;
     /// The kind's own settings (Custom Stroke Style): a dashed stroke's
     /// dash and gap, a dotted one's spacing, and a ragged, stipple or
     /// hatched one's choices by attribute name, as the file spells them.

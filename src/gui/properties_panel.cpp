@@ -39,6 +39,7 @@
 #include "../data/timeline.h"
 #include "../edit/command_stack.h"
 #include "../edit/drawing_style.h"
+#include "../edit/paint_brushes.h"
 #include "../edit/edit_context.h"
 #include "../edit/element_clone.h"
 #include "../edit/element_commands.h"
@@ -54,6 +55,7 @@
 #include <QCheckBox>
 #include <QFontDatabase>
 #include <QFormLayout>
+#include <QStandardItemModel>
 #include <QDialogButtonBox>
 #include <QDialog>
 #include <QDoubleSpinBox>
@@ -1604,13 +1606,46 @@ std::vector<std::pair<QWidget*, QWidget*>> PropertiesPanel::addStrokeLookFields(
     if (!look.brush.empty() && !names.contains(QString::fromStdString(look.brush)))
         names << QString::fromStdString(look.brush);
     brush->addItems(names);
-    brush->setCurrentIndex(look.brush.empty() ? 0 : brush->findText(QString::fromStdString(look.brush)));
+    // The document's own paint brushes, by the index strokes keep.
+    std::shared_ptr<const fla::PaintBrushLibrary> paintBrushes;
+    if (const fla::Document* doc = document())
+        paintBrushes = fla::paintBrushesOf(*doc);
+    if (paintBrushes && !paintBrushes->definitions.empty())
+    {
+        brush->insertSeparator(brush->count());
+        brush->addItem("Brushes in this document");
+        if (auto* model = qobject_cast<QStandardItemModel*>(brush->model()))
+            model->item(brush->count() - 1)->setEnabled(false);
+        for (const fla::PaintBrushDefinition& definition : paintBrushes->definitions)
+            brush->addItem(QString::fromStdString(definition.name), definition.index);
+    }
+    const bool paintBrush = look.kind == fla::StrokeStyle::Style::PaintBrush;
+    brush->setCurrentIndex(paintBrush        ? std::max(brush->findData(look.paintBrush), 0)
+                           : look.brush.empty() ? 0
+                                                : brush->findText(QString::fromStdString(look.brush)));
     QComboBox* mode = new QComboBox(brushRow);
     mode->addItems({"Stretch", "Repeat"});
     mode->setToolTip("Stretch the symbol from end to end (an art brush), or repeat it along the stroke (a pattern brush)");
     mode->setCurrentIndex(look.brushPattern ? 1 : 0);
     mode->setEnabled(!look.brush.empty());
     connect(brush, &QComboBox::currentIndexChanged, this, [=](int index) {
+        const QVariant definition = brush->itemData(index);
+        if (definition.isValid())
+        {
+            // A paint brush: the stroke becomes one that draws with it.
+            current->kind = fla::StrokeStyle::Style::PaintBrush;
+            current->hairline = false;
+            current->paintBrush = definition.toInt();
+            current->brush.clear();
+            mode->setEnabled(false);
+            apply(*current);
+            return;
+        }
+        if (current->kind == fla::StrokeStyle::Style::PaintBrush)
+        {
+            current->kind = fla::StrokeStyle::Style::Solid;
+            current->paintBrush = 0;
+        }
         current->brush = index <= 0 ? std::string() : brush->itemText(index).toStdString();
         mode->setEnabled(index > 0);
         apply(*current);

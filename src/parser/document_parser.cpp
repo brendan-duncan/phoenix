@@ -384,6 +384,7 @@ bool parseStroke(const tinyxml2::XMLElement* element, fla::StrokeStyle* stroke)
     stroke->dash1 = getDoubleAttribute(element, "dash1", 6.0);
     stroke->dash2 = getDoubleAttribute(element, "dash2", 6.0);
     stroke->dotSpace = getDoubleAttribute(element, "dotSpace", 3.0);
+    stroke->paintBrushDefinition = getIntAttribute(element, "paintBrushDefinition", 0);
     for (const char* name : {"pattern", "waveHeight", "waveLength", "dotSize", "variation", "density",
              "hatchThickness", "space", "jiggle", "rotate", "curve", "length"})
     {
@@ -393,7 +394,7 @@ bool parseStroke(const tinyxml2::XMLElement* element, fla::StrokeStyle* stroke)
     // Anything else on the stroke, such as Phoenix's own brush, is kept.
     std::vector<std::string> present;
     keepAttributes(element, {"scaleMode", "weight", "solidStyle", "caps", "joints", "miterLimit", "pixelHinting",
-        "dash1", "dash2", "dotSpace", "pattern", "waveHeight", "waveLength", "dotSize", "variation", "density",
+        "dash1", "dash2", "dotSpace", "paintBrushDefinition", "pattern", "waveHeight", "waveLength", "dotSize", "variation", "density",
         "hatchThickness", "space", "jiggle", "rotate", "curve", "length"}, stroke->extraAttributes, present);
 
     for (const tinyxml2::XMLElement* childElement = element->FirstChildElement();
@@ -472,6 +473,10 @@ fla::StrokeStyle* parseStrokeStyle(const tinyxml2::XMLElement* element, fla::DOM
         else if (std::strcmp(tagName, "HatchedStroke") == 0)
         {
             stroke = new fla::HatchedStroke(parent);
+        }
+        else if (std::strcmp(tagName, "PaintBrushStroke") == 0)
+        {
+            stroke = new fla::PaintBrushStroke(parent);
         }
         else
         {

@@ -132,6 +132,7 @@ if(PHOENIX_TESTS_HAVE_PARSER)
         test_phoenix_features.cpp
         test_other_apps.cpp
         test_node_graph.cpp
+        test_paint_brushes.cpp
     )
 endif()
 

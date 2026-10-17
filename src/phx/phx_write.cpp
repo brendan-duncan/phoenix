@@ -228,6 +228,7 @@ Writer encodeStroke(const fla::StrokeStyle& stroke)
     writeDouble(w, s::Stroke::Dash1, stroke.dash1, 6.0);
     writeDouble(w, s::Stroke::Dash2, stroke.dash2, 6.0);
     writeDouble(w, s::Stroke::DotSpace, stroke.dotSpace, 3.0);
+    writeInt(w, s::Stroke::PaintBrushDefinition, stroke.paintBrushDefinition);
     writeKeyValues(w, s::Stroke::StyleAttributes,
         std::vector<std::pair<std::string, std::string>>(stroke.styleAttributes.begin(), stroke.styleAttributes.end()));
     writeStrings(w, s::Stroke::ExtraChildren, stroke.extraChildren);

@@ -274,6 +274,7 @@ const char* strokeTagName(StrokeStyle::Style style)
     case StrokeStyle::Style::Stipple: return "StippleStroke";
     case StrokeStyle::Style::Dotted: return "DottedStroke";
     case StrokeStyle::Style::Hatched: return "HatchedStroke";
+    case StrokeStyle::Style::PaintBrush: return "PaintBrushStroke";
     case StrokeStyle::Style::Solid: break;
     }
     return "SolidStroke";
@@ -533,6 +534,8 @@ void XFLWriter::writeStrokeStyle(const StrokeStyle& stroke, XMLElement* parent)
     XMLElement* node = doc->NewElement(strokeTagName(stroke.style()));
     setDouble(node, "weight", stroke.weight, 1.0);
     setString(node, "scaleMode", stroke.scaleMode);
+    if (stroke.style() == StrokeStyle::Style::PaintBrush)
+        node->SetAttribute("paintBrushDefinition", stroke.paintBrushDefinition);
     setString(node, "solidStyle", stroke.solidStyle);
     setString(node, "caps", stroke.caps);
     setString(node, "joints", stroke.joints);

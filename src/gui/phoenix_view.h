@@ -1401,7 +1401,18 @@ private:
         /// on where the shape is drawn (scaleMode) makes it again.
         mutable QPainterPath strokeOutline;
         mutable double strokeOutlineWidth = -1.0;
+
+        /// For a stroke drawn with one of the document's paint brushes,
+        /// the brush's art laid along it: areas, each filled in its own
+        /// color, bottom first. Made once with the entry.
+        std::shared_ptr<const std::vector<std::pair<QPainterPath, QColor>>> paintBrushArt;
     };
+
+    /// \a centerline drawn with \a stroke's paint brush, as
+    /// PathCacheEntry::paintBrushArt holds it; null when the stroke has no
+    /// paint brush the document defines.
+    std::shared_ptr<const std::vector<std::pair<QPainterPath, QColor>>> layPaintBrushStroke(
+        const QPainterPath& centerline, const fla::StrokeStyle& stroke, const QPen& pen) const;
 
     /// Paints one cached entry: its fill and stroke, or its procedural
     /// marks, or in outline view its outline.

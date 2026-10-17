@@ -7,6 +7,7 @@
 #include "../edit/templates.h"
 #include "../edit/text_animators.h"
 #include "../edit/vector_import.h"
+#include "../edit/paint_brushes.h"
 #include "../jsfl/behavior_frames.h"
 #include "theme.h"
 #include "../play/movie_runtime.h"
@@ -6012,6 +6013,13 @@ void PhoenixView::paintEntry(QPainter& painter, const PathCacheEntry& entry)
             return;
         }
     }
+    if (entry.paintBrushArt)
+    {
+        painter.setPen(Qt::NoPen);
+        for (const auto& [area, color] : *entry.paintBrushArt)
+            painter.fillPath(area, color);
+        return;
+    }
     if (!entry.effectPath.isEmpty())
     {
         painter.setPen(Qt::NoPen);
@@ -6915,6 +6923,8 @@ void PhoenixView::buildShapePaths(const fla::Shape* shape, PathCacheList& cacheE
             PathCacheEntry entry{ QBrush(Qt::NoBrush), pen, strokePath, strokeStyle };
             if (StrokeEffects::isProcedural(*strokeStyle))
                 entry.effectPath = StrokeEffects::outline(strokePath, *strokeStyle);
+            if (strokeStyle->style() == fla::StrokeStyle::Style::PaintBrush)
+                entry.paintBrushArt = layPaintBrushStroke(strokePath, *strokeStyle, pen);
             cacheEntries.push_back(entry);
         }
     }
@@ -6954,6 +6964,13 @@ void PhoenixView::drawShape(QPainter& painter, const fla::Shape* shape, const fl
             warped.painterPath = warpedPath(entry.painterPath, toPuppet);
             if (!entry.effectPath.isEmpty())
                 warped.effectPath = warpedPath(entry.effectPath, toPuppet);
+            if (entry.paintBrushArt)
+            {
+                auto art = std::make_shared<std::vector<std::pair<QPainterPath, QColor>>>();
+                for (const auto& [area, color] : *entry.paintBrushArt)
+                    art->emplace_back(warpedPath(area, toPuppet), color);
+                warped.paintBrushArt = art;
+            }
             paintEntry(painter, warped);
         }
         painter.restore();
@@ -7415,6 +7432,9 @@ PhoenixView::PathCacheEntry PhoenixView::operatedEntry(const fla::Shape& shape, 
     changed.seamPath = QPainterPath();
     changed.strokeOutline = QPainterPath();
     changed.strokeOutlineWidth = -1.0;
+    changed.paintBrushArt.reset();
+    if (stroke && entry.strokeStyle && entry.paintBrushArt)
+        changed.paintBrushArt = layPaintBrushStroke(path, *entry.strokeStyle, entry.pen);
     if (stroke && entry.strokeStyle)
     {
         // Tapered: each line's outline, filled with the stroke's color or
@@ -7839,6 +7859,49 @@ const fla::Symbol* PhoenixView::brushOf(const fla::StrokeStyle& stroke) const
     return nullptr;
 }
 
+std::shared_ptr<const std::vector<std::pair<QPainterPath, QColor>>> PhoenixView::layPaintBrushStroke(
+    const QPainterPath& centerline, const fla::StrokeStyle& stroke, const QPen& pen) const
+{
+    const fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
+    if (!document)
+        return nullptr;
+    const auto library = fla::paintBrushesOf(*document);
+    const fla::PaintBrushDefinition* definition = library ? library->find(stroke.paintBrushDefinition) : nullptr;
+    const auto art = definition ? library->art(definition->index) : nullptr;
+    if (!art)
+        return nullptr;
+    const QColor penColor = pen.brush().color();
+    const fla::PaintBrushArt::Color color{static_cast<uint8_t>(penColor.red()), static_cast<uint8_t>(penColor.green()),
+        static_cast<uint8_t>(penColor.blue()), static_cast<uint8_t>(penColor.alpha())};
+    auto laid = std::make_shared<std::vector<std::pair<QPainterPath, QColor>>>();
+    // Each run of the stroke on its own, closed where it comes back round.
+    for (const QPolygonF& polygon : centerline.toSubpathPolygons())
+    {
+        std::vector<fla::PaintBrushArt::Point> points;
+        points.reserve(polygon.size());
+        for (const QPointF& point : polygon)
+            points.push_back({point.x(), point.y()});
+        const bool closed = polygon.size() > 2 && polygon.isClosed();
+        for (const fla::PaintBrushArt::Piece& piece :
+            fla::layPaintBrush(*definition, *art, points, closed, stroke.weight, color))
+        {
+            QPainterPath area;
+            area.setFillRule(piece.evenOdd ? Qt::OddEvenFill : Qt::WindingFill);
+            for (const auto& ring : piece.rings)
+            {
+                QPolygonF outline;
+                outline.reserve(static_cast<int>(ring.size()));
+                for (const fla::PaintBrushArt::Point& point : ring)
+                    outline << QPointF(point.x, point.y);
+                area.addPolygon(outline);
+                area.closeSubpath();
+            }
+            laid->emplace_back(area, QColor(piece.color[0], piece.color[1], piece.color[2], piece.color[3]));
+        }
+    }
+    return laid;
+}
+
 void PhoenixView::drawBrushStroke(QPainter& painter, const PathCacheEntry& entry, const fla::Symbol& brush)
 {
     const QPainterPath& path = entry.painterPath;
@@ -8247,7 +8310,20 @@ void PhoenixView::hitTestElement(fla::Element& element, fla::Frame* frame,
         {
             const bool stroked = entry.pen.style() != Qt::NoPen;
 
-            if (stroked)
+            if (stroked && entry.paintBrushArt)
+            {
+                // A paint brush stroke is where its art is.
+                const QRectF near(localPos.x() - localTolerance, localPos.y() - localTolerance, 2 * localTolerance,
+                    2 * localTolerance);
+                const bool hit = std::any_of(entry.paintBrushArt->begin(), entry.paintBrushArt->end(),
+                    [&](const auto& piece) { return piece.first.intersects(near); });
+                if (hit)
+                {
+                    part = HitResult::Part::Stroke;
+                    break;
+                }
+            }
+            else if (stroked)
             {
                 const double half = qMax(entry.pen.widthF() * 0.5, 0.0);
                 if (isNearOutline(entry.painterPath, localPos, half + localTolerance))
@@ -11970,6 +12046,16 @@ QRectF PhoenixView::calculateShapeBounds(const fla::Shape* shape)
         // Default small margin for anti-aliasing
         if (!_tightBounds)
             bounds = bounds.adjusted(-2, -2, 2, 2);
+    }
+
+    // Paint brush art can reach past the weight: proportional art, or art
+    // drawn round a tight bend.
+    for (const PathCacheEntry& entry : shapePaths(shape))
+    {
+        if (!entry.paintBrushArt)
+            continue;
+        for (const auto& piece : *entry.paintBrushArt)
+            bounds = bounds.isNull() ? piece.first.boundingRect() : bounds.united(piece.first.boundingRect());
     }
 
     QTransform transform(shape->transform.m11, shape->transform.m12,
