@@ -370,6 +370,8 @@ document.addEventListener("DOMContentLoaded", () => {
   buildToc(layout, content);
   buildPager(content, page);
   buildFooter(content);
+  // Where a page names the current version (the downloads), it is this one.
+  for (const el of document.querySelectorAll(".phoenix-version")) el.textContent = VERSION;
   setupSearch();
   setupLightbox(content);
   // Last, so it sees the finished page (headings with ids, header, footer).
