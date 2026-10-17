@@ -4,7 +4,7 @@ What changed in each release of Phoenix, newest first.
 
 ## Unreleased
 
-- Old binary FLA files saved with a printer chosen in Page Setup open in full (ten more of the 1,603 on hand)
+- Old binary FLA files saved with a printer chosen in Page Setup open in full
 - The Brush, Nib Brush and Ink Brush paint in the fill color with Fill unchecked, and the Pencil and Paint Brush draw with the stroke's color, weight and brush with Stroke unchecked, not a black hairline
 - Old binary FLA files whose buttons carry scripts saved by Flash 8 open in full
 - ActionScript 2's `_global` works in Test Movie: what a script sets there every script sees
