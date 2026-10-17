@@ -144,7 +144,7 @@ endif()
 # build.
 if(TARGET phoenix_core AND TARGET as3_parser)
     list(APPEND TEST_SOURCES test_movie_runtime.cpp test_display.cpp test_as3_bindings.cpp test_canvas_scripts.cpp
-        test_canvas_document.cpp test_swf_movie.cpp test_html5_export.cpp test_html5_runtime.cpp
+        test_canvas_document.cpp test_swf_movie.cpp test_swf_actions.cpp test_html5_export.cpp test_html5_runtime.cpp
         test_html5_as2.cpp)
 endif()
 

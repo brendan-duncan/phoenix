@@ -1,4 +1,5 @@
 #include "movie_runtime.h"
+#include "avm1_player.h"
 
 #include "../data/action_script.h"
 #include "../data/bitmap.h"
@@ -21,6 +22,7 @@
 #include "script/bindings.h"
 
 #include "abc/abc_domain.h"
+#include "avm1/avm1_interpreter.h"
 #include "bytecode/compiler.h"
 #include "bytecode/vm.h"
 #include "parser/parser.h"
@@ -547,6 +549,7 @@ public:
         Clip* clip = *_life;
         return clip && _runtime.setProperty(*clip, name, value);
     }
+    Clip* clip() const { return *_life; }
 
 private:
     MovieRuntime& _runtime;
@@ -579,6 +582,7 @@ MovieRuntime::~MovieRuntime()
     _bindings.reset();
     _canvas.reset();
     _abcDomain.reset();
+    _actions.reset();
 }
 
 bool MovieRuntime::mouseHidden() const
@@ -667,6 +671,8 @@ void MovieRuntime::start()
     _bindings.reset();
     _canvas.reset();
     _abcDomain.reset();
+    _actions.reset();
+    _initsRun.clear();
     _vm = std::make_unique<as3::VM>();
     if (!_stage)
         _stage = std::make_shared<display::Stage>();
@@ -1393,6 +1399,10 @@ Clip* MovieRuntime::makeClip(Clip* parent, const Symbol& symbol, const std::stri
     else
         _offStage.push_back(std::move(made));
     _madeToEnter.push_back(clip);
+    // A clip attachMovie or duplicateMovieClip made is of its symbol's
+    // class at once.
+    if (!_as3)
+        registeredClass(*clip);
     if (changed)
         changed();
     return clip;
@@ -1843,10 +1853,17 @@ void MovieRuntime::runFrameScripts(Clip& clip)
         const Frame* frame = keyframeAt(*layer, clip.frame);
         if (frame && frame->index == clip.frame && frameSound && !attributeOf(frame->extraAttributes, "soundName").empty())
             frameSound(*frame);
-        if (!frame || frame->index != clip.frame || !frame->actionScript || frame->actionScript->code.empty())
+        if (!frame || frame->index != clip.frame)
             continue;
         const std::string where = (clip.symbol ? clip.symbol->name : clip.timeline->name) + ", frame " +
             std::to_string(clip.frame + 1);
+        if (!_canvas && !frame->extraChildren.empty() && compiledActionsOf(frame, frame->extraChildren))
+        {
+            runCompiled(clip, *frame, false, where);
+            continue;
+        }
+        if (!frame->actionScript || frame->actionScript->code.empty())
+            continue;
         if (_canvas)
             _canvas->runFrame(clip, *frame, where);
         else
@@ -1854,10 +1871,101 @@ void MovieRuntime::runFrameScripts(Clip& clip)
     }
 }
 
+void MovieRuntime::runFrameActions(Clip& clip, int index)
+{
+    if (!clip.timeline)
+        return;
+    for (const Layer* layer : clip.timeline->layers)
+    {
+        const Frame* frame = layer && plays(*layer) ? keyframeAt(*layer, index) : nullptr;
+        if (!frame || frame->index != index)
+            continue;
+        const std::string where = (clip.symbol ? clip.symbol->name : clip.timeline->name) + ", frame " +
+            std::to_string(index + 1);
+        if (!frame->extraChildren.empty() && compiledActionsOf(frame, frame->extraChildren))
+            runCompiled(clip, *frame, false, where);
+        else if (frame->actionScript && !frame->actionScript->code.empty())
+            run(frame, frame->actionScript->code, clip, where);
+    }
+}
+
+const CompiledActions* MovieRuntime::compiledActionsOf(const void* element, const std::vector<std::string>& extraChildren)
+{
+    const auto found = _compiledActions.find(element);
+    if (found != _compiledActions.end())
+        return found->second.get();
+    std::shared_ptr<const CompiledActions> compiled = compiledActionsIn(extraChildren);
+    _compiledActions[element] = compiled;
+    return compiled.get();
+}
+
+ActionsPlayer& MovieRuntime::actionsPlayer(int version)
+{
+    if (!_actions)
+        _actions = std::make_unique<ActionsPlayer>(*this, *_vm, version);
+    return *_actions;
+}
+
+void MovieRuntime::runInitActions(Clip& clip)
+{
+    for (const Layer* layer : clip.timeline->layers)
+    {
+        const Frame* frame = layer && plays(*layer) ? keyframeAt(*layer, clip.frame) : nullptr;
+        if (!frame || frame->index != clip.frame || frame->extraChildren.empty())
+            continue;
+        if (std::find(_initsRun.begin(), _initsRun.end(), frame) != _initsRun.end())
+            continue;
+        if (!compiledActionsOf(frame, frame->extraChildren))
+            continue;
+        _initsRun.push_back(frame);
+        runCompiled(clip, *frame, true,
+            (clip.symbol ? clip.symbol->name : clip.timeline->name) + ", frame " + std::to_string(clip.frame + 1));
+    }
+}
+
+void MovieRuntime::runCompiled(Clip& clip, const Frame& frame, bool init, const std::string& where)
+{
+    const CompiledActions* compiled = compiledActionsOf(&frame, frame.extraChildren);
+    if (!compiled)
+        return;
+    const CompiledActions::Block::Kind kind = init ? CompiledActions::Block::Kind::Init : CompiledActions::Block::Kind::Frame;
+    const DOMElement* wasSource = _source;
+    _source = &frame;
+    for (const CompiledActions::Block& block : compiled->blocks)
+        if (block.kind == kind)
+            actionsPlayer(compiled->version).run(block, clip, init ? where + ", #initclip " + block.symbol : where);
+    _source = wasSource;
+}
+
+void MovieRuntime::registeredClass(Clip& clip)
+{
+    if (!_actions || !clip.symbol || clip.classed)
+        return;
+    std::string linkage = attributeOf(clip.symbol->extraAttributes, "linkageIdentifier");
+    if (linkage.empty())
+        linkage = attributeOf(clip.symbol->extraAttributes, "linkageClassName");
+    const as3::Val constructor = linkage.empty() ? as3::Val() : _actions->interpreter().registeredClass(linkage);
+    if (!constructor.isFunction())
+        return;
+    clip.classed = true;
+    Clip* was = _current;
+    _current = &clip;
+    _actions->interpreter().applyClass(objectFor(clip), constructor);
+    _current = was;
+}
+
+Clip* MovieRuntime::clipOfObject(const as3::Val& value)
+{
+    const ClipObject* object = value.host<ClipObject>();
+    return object ? object->clip() : nullptr;
+}
+
 void MovieRuntime::syncChildren(Clip& clip, std::vector<Clip*>& entered)
 {
     if (!clip.timeline)
         return;
+    if (!_as3 && !_canvas)
+        runInitActions(clip);
     std::vector<std::unique_ptr<Clip>> kept;
     for (const Layer* layer : clip.timeline->layers)
     {
@@ -1898,6 +2006,10 @@ void MovieRuntime::syncChildren(Clip& clip, std::vector<Clip*>& entered)
             // Its own children are placed now too, so a script anywhere
             // finds the whole of what is on the stage.
             syncChildren(*made, entered);
+            // The class Object.registerClass gave its symbol, made before
+            // the frame's scripts run.
+            if (!_as3 && !_canvas)
+                registeredClass(*made);
             kept.push_back(std::move(made));
         }
     }
@@ -2242,9 +2354,32 @@ void MovieRuntime::enter(std::vector<Clip*>& entered)
                             gathering->clipEvents[event->toString()] = args[1];
                     return as3::Value::makeUndefined();
                 });
-                run(clip.placed, script, *clip.parent, clip.name.empty() ? clip.key : clip.name);
+                // The handlers' names are the clip's own, as a player has
+                // them: _name, _x and _parent are its.
+                run(clip.placed, script, clip, clip.name.empty() ? clip.key : clip.name);
             }
+            // Handlers a SWF had compiled, by event.
+            const CompiledActions* compiled = clip.placed->extraChildren.empty()
+                ? nullptr
+                : compiledActionsOf(clip.placed, clip.placed->extraChildren);
+            if (compiled)
+            {
+                std::map<std::string, std::vector<const CompiledActions::Block*>> byEvent;
+                for (const CompiledActions::Block& block : compiled->blocks)
+                    if (block.kind == CompiledActions::Block::Kind::Clip)
+                        for (const std::string& event : clipEventNames(block.events, block.key))
+                            byEvent[event].push_back(&block);
+                ActionsPlayer& player = actionsPlayer(compiled->version);
+                for (const auto& [event, blocks] : byEvent)
+                    clip.clipEvents[event] = player.handler(blocks,
+                        (clip.name.empty() ? clip.key : clip.name) + ", onClipEvent(" + event + ")");
+            }
+            registeredClass(clip);
+            runClipEvent(clip, "initialize");
+            runClipEvent(clip, "construct");
             runClipEvent(clip, "load");
+            if (_actions)
+                _actions->callHandler(clip, "onLoad");
         }
         // Its children are placed before its frame's scripts run, so the
         // scripts find them; its class, when it has one, runs first.
@@ -2437,6 +2572,13 @@ void MovieRuntime::step()
         _bindings->frameStarted();
         placeMadeClips();
     }
+    else if (_actions)
+    {
+        // ActionScript 1's setInterval and setTimeout.
+        _vm->runTimers(static_cast<double>(
+            std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - _started).count()));
+        settle();
+    }
     // Every playhead on a frame, what the frames place on the display list.
     std::vector<Clip*> entered;
     std::vector<Clip*> scripts;
@@ -2452,6 +2594,8 @@ void MovieRuntime::step()
     eachClip([this](Clip& clip) {
         if (!clip.clipEvents.empty())
             runClipEvent(clip, "enterFrame");
+        if (_actions && !_as3)
+            _actions->callHandler(clip, "onEnterFrame");
         if (clip.listensFor("enterFrame"))
             dispatch(clip, "enterFrame", false);
     });
@@ -2485,7 +2629,16 @@ void MovieRuntime::keyDown(int code, int character, bool shift, bool ctrl, bool 
     _lastCharacter = character;
     eachClip([&](Clip& clip) {
         if (!clip.clipEvents.empty())
+        {
             runClipEvent(clip, "keyDown");
+            // onClipEvent(keyPress "<Left>"), as a SWF has it.
+            std::vector<std::string> pressed;
+            for (const auto& [event, handler] : clip.clipEvents)
+                if (event.compare(0, 9, "keyPress ") == 0 && keyPressMatches(event.substr(9), code, character))
+                    pressed.push_back(event);
+            for (const std::string& event : pressed)
+                runClipEvent(clip, event);
+        }
         // A button's keyPress handlers: on (keyPress "<Left>").
         if (clip.button)
         {
@@ -2563,6 +2716,21 @@ std::map<std::string, as3::ValuePtr>& MovieRuntime::buttonHandlers(Clip& button)
             return as3::Value::makeUndefined();
         });
         run(button.placed, script, *button.parent, "button " + (button.name.empty() ? button.key : button.name));
+    }
+    const CompiledActions* compiled = button.placed && !button.placed->extraChildren.empty()
+        ? compiledActionsOf(button.placed, button.placed->extraChildren)
+        : nullptr;
+    if (compiled && button.parent)
+    {
+        std::map<std::string, std::vector<const CompiledActions::Block*>> byEvent;
+        for (const CompiledActions::Block& block : compiled->blocks)
+            if (block.kind == CompiledActions::Block::Kind::Button)
+                for (const std::string& event : buttonEventNames(block.events))
+                    byEvent[event].push_back(&block);
+        ActionsPlayer& player = actionsPlayer(compiled->version);
+        for (const auto& [event, blocks] : byEvent)
+            gathered[event] = player.handler(blocks, "button " + (button.name.empty() ? button.key : button.name) +
+                ", on(" + event + ")");
     }
     return gathered;
 }
