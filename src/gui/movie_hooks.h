@@ -7,8 +7,10 @@
 class QObject;
 
 namespace fla {
+class Document;
 class FLADocument;
 namespace play {
+class ClassPath;
 class MovieRuntime;
 }
 } // namespace fla
@@ -23,6 +25,13 @@ class MovieRuntime;
 /// \a notice tells the person playing of what the movie sent.
 void connectMovie(fla::play::MovieRuntime& movie, const fla::FLADocument& document, const QString& file, QObject* owner,
     std::function<void(const QString&)> notice);
+
+/// Where a movie's ActionScript 3 classes are found, as Test Movie finds
+/// them and Publish compiles them: the folder of \a file (the document's
+/// path, empty for one not saved), its publish settings' source paths, the
+/// extra paths in Preferences, then Phoenix's own classes (the fl.*
+/// components).
+fla::play::ClassPath movieClassPath(const fla::Document& document, const QString& file);
 
 /// The extra ActionScript 3 class paths Preferences gives.
 QStringList actionScriptClassPaths();

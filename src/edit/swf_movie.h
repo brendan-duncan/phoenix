@@ -83,6 +83,9 @@ std::string unstructured(const Document& document);
 /// Whether \a document has scripts: frame scripts or handlers on instances.
 bool hasScripts(const Document& document);
 
+/// A dynamic or input text field's instance name, or empty.
+std::string fieldName(const StaticText& text);
+
 struct Options
 {
     /// An ActionScript 2 class's source by its qualified name, or none: the
@@ -94,10 +97,12 @@ struct Options
     double scaleY = 1.0;
     /// An ActionScript 3 movie (its publish settings say version 3) has its
     /// scripts written by this, as DoABC and SymbolClass tags (see
-    /// swf::Writer::doABC), once the movie clips with frame scripts or a
-    /// linked class are written: \a sprites gives their character ids. The
-    /// movie is marked ActionScript 3 first. Without it, an ActionScript 3
-    /// movie goes out without its scripts.
+    /// swf::Writer::doABC), once the movie clips with frame scripts, a
+    /// linked class or components, and the buttons with a linked class,
+    /// are written: \a sprites gives their character ids (see
+    /// writeActionScript3). The movie is marked ActionScript 3 first, and
+    /// its components are placed as clips of their symbols. Without it, an
+    /// ActionScript 3 movie goes out without its scripts.
     std::function<void(swf::Writer& writer, const std::map<const Symbol*, int>& sprites)> actionScript3;
 };
 

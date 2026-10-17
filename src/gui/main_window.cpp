@@ -122,6 +122,7 @@
 #include "../util/swf_writer.h"
 #include "../edit/publish_settings.h"
 #include "../edit/swf_event_sounds.h"
+#include "../edit/swf_actionscript3.h"
 #include "../edit/swf_movie.h"
 #include "../play/script/class_path.h"
 #include "movie_hooks.h"
@@ -9206,15 +9207,32 @@ bool MainWindow::exportSwf(const QString& path, const QSize& size, QString& erro
     {
         SwfViewDrawer drawer(*_phoenixView, art);
         fla::swfmovie::Options options;
-        const QString folder = _documentPath.isEmpty() ? QString() : QFileInfo(_documentPath).absolutePath();
-        std::vector<std::string> extra;
-        for (const QString& entry : actionScriptClassPaths())
-            if (!entry.trimmed().isEmpty())
-                extra.push_back(QDir::fromNativeSeparators(entry.trimmed()).toStdString());
-        const fla::play::ClassPath classPath(*document, folder.toStdString(), extra);
-        options.findClass = [classPath](const std::string& name) -> std::optional<std::string> {
+        // The classes as Test Movie finds them: ActionScript 2's on the
+        // class path, ActionScript 3's there and then among Phoenix's own.
+        const fla::play::ClassPath classPath = movieClassPath(*document, _documentPath);
+        fla::play::ClassPath ownOnly = classPath;
+        ownOnly.builtIn = nullptr;
+        options.findClass = [ownOnly](const std::string& name) -> std::optional<std::string> {
+            const std::optional<fla::play::ClassFile> found = ownOnly.find(name);
+            return found ? std::optional<std::string>(found->source) : std::nullopt;
+        };
+        fla::swfmovie::ActionScript3Options as3;
+        as3.findClass = [classPath](const std::string& name) -> std::optional<std::string> {
             const std::optional<fla::play::ClassFile> found = classPath.find(name);
             return found ? std::optional<std::string>(found->source) : std::nullopt;
+        };
+        const QString folder = _documentPath.isEmpty() ? QString() : QFileInfo(_documentPath).absolutePath();
+        as3.readFile = [folder](const std::string& path) -> std::optional<std::string> {
+            QFile file(QDir(folder).filePath(QString::fromStdString(path)));
+            if (folder.isEmpty() || !file.open(QIODevice::ReadOnly))
+                return std::nullopt;
+            return file.readAll().toStdString();
+        };
+        as3.documentName = _documentPath.isEmpty() ? std::string("Untitled")
+                                                   : QFileInfo(_documentPath).completeBaseName().toStdString();
+        options.actionScript3 = [&](swf::Writer& out, const std::map<const fla::Symbol*, int>& sprites) {
+            for (const std::string& note : fla::swfmovie::writeActionScript3(*document, out, sprites, as3))
+                _swfNotes << QString::fromStdString(note);
         };
         options.scaleX = document->width > 0 ? size.width() / document->width : 1.0;
         options.scaleY = document->height > 0 ? size.height() / document->height : 1.0;

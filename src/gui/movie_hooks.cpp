@@ -34,6 +34,23 @@ void setActionScriptClassPaths(const QStringList& paths)
     QSettings().setValue("preferences/actionScriptClassPaths", paths);
 }
 
+fla::play::ClassPath movieClassPath(const fla::Document& document, const QString& file)
+{
+    const QString folder = file.isEmpty() ? QString() : QFileInfo(file).absolutePath();
+    std::vector<std::string> extra;
+    for (const QString& path : actionScriptClassPaths())
+        if (!path.trimmed().isEmpty())
+            extra.push_back(QDir::fromNativeSeparators(path.trimmed()).toStdString());
+    fla::play::ClassPath path(document, folder.toStdString(), extra);
+    path.builtIn = [](const std::string& relative) -> std::optional<std::string> {
+        QFile source(":/as3/" + QString::fromStdString(relative));
+        if (!source.open(QIODevice::ReadOnly))
+            return std::nullopt;
+        return source.readAll().toStdString();
+    };
+    return path;
+}
+
 void connectMovie(fla::play::MovieRuntime& movie, const fla::FLADocument& document, const QString& file, QObject* owner,
     std::function<void(const QString&)> notice)
 {
@@ -52,17 +69,7 @@ void connectMovie(fla::play::MovieRuntime& movie, const fla::FLADocument& docume
         movie.url = QUrl::fromLocalFile(QDir(folder).filePath(info.completeBaseName() + ".swf")).toString().toStdString();
 
     // Its classes: beside it, on its class path, and Phoenix's own.
-    std::vector<std::string> extra;
-    for (const QString& path : actionScriptClassPaths())
-        if (!path.trimmed().isEmpty())
-            extra.push_back(QDir::fromNativeSeparators(path.trimmed()).toStdString());
-    fla::play::ClassPath path(data, folder.toStdString(), extra);
-    path.builtIn = [](const std::string& relative) -> std::optional<std::string> {
-        QFile source(":/as3/" + QString::fromStdString(relative));
-        if (!source.open(QIODevice::ReadOnly))
-            return std::nullopt;
-        return source.readAll().toStdString();
-    };
+    const fla::play::ClassPath path = movieClassPath(data, file);
     movie.findClass = [path](const std::string& name) { return path.find(name); };
     movie.setClasses({}, fla::play::documentClassOf(data));
 

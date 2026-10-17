@@ -3,6 +3,7 @@
 #include "../edit/motion_blur.h"
 #include "../edit/shape_operators.h"
 #include "../edit/adjustments.h"
+#include "../edit/swf_movie.h"
 #include "../edit/templates.h"
 #include "../edit/text_animators.h"
 #include "../edit/vector_import.h"
@@ -5704,7 +5705,7 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
         if (_capture && _frameDepth == 1 && !_maskPass &&
             (text->textType == fla::StaticText::TextType::Input ||
                 (text->textType == fla::StaticText::TextType::Dynamic &&
-                    (!text->instanceName.empty() ||
+                    (!fla::swfmovie::fieldName(*text).empty() ||
                         std::any_of(text->extraAttributes.begin(), text->extraAttributes.end(), [](const auto& a) {
                             return a.first == "variableName" && !a.second.empty();
                         })))))

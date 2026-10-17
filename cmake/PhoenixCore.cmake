@@ -234,6 +234,7 @@ set(PHOENIX_CORE_PLAY_SOURCES
     play/script/bindings.cpp
     play/script/class_path.cpp
     play/script/png_reader.cpp
+    edit/swf_actionscript3.cpp
     edit/swf_movie.cpp
 )
 
