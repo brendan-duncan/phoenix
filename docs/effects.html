@@ -4,11 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Filters, blends and color effects · Phoenix User Guide</title>
-<meta name="description" content="Tint, brighten and fade instances, apply blend modes, and add filters such as drop shadow, blur, glow and bevel.">
+<meta name="description" content="Tint, brighten, fade and recolor instances, mix them with blend modes, and add filters such as drop shadow, blur, glow, bevel and adjust color: every setting, presets, stacking order and tweening.">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Phoenix">
 <meta property="og:title" content="Filters, blends and color effects · Phoenix User Guide">
-<meta property="og:description" content="Tint, brighten and fade instances, apply blend modes, and add filters such as drop shadow, blur, glow and bevel.">
+<meta property="og:description" content="Tint, brighten, fade and recolor instances, mix them with blend modes, and add filters such as drop shadow, blur, glow, bevel and adjust color: every setting, presets, stacking order and tweening.">
 <meta property="og:url" content="https://phoenixanimate.com/effects.html">
 <meta property="og:image" content="https://phoenixanimate.com/assets/shots/hero.webp">
 <meta property="og:image:type" content="image/webp">
@@ -17,7 +17,7 @@
 <meta property="og:image:alt" content="The Phoenix window with three flower characters on the stage, the timeline below and the Properties panel on the right">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:image" content="https://phoenixanimate.com/assets/shots/hero.webp">
-<meta name="keywords" content="color effect brightness tint alpha advanced blend mode multiply screen overlay layer erase filters blur drop shadow glow bevel gradient glow gradient bevel adjust color copy paste filters filter presets motion tween effect layer">
+<meta name="keywords" content="color effect brightness tint alpha advanced color multiplier offset formula blend mode blending multiply screen lighten darken overlay hard light add subtract difference invert layer alpha erase filters blur drop shadow inner shadow knockout hide object glow inner glow bevel inner outer full gradient glow gradient bevel gradient bar adjust color brightness contrast saturation hue quality strength angle distance filter order enable disable copy paste filters filter presets tween filters motion tween classic tween effect layer">
 <link rel="icon" href="assets/img/logo.png">
 <link rel="stylesheet" href="assets/site.css">
 <script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
@@ -29,80 +29,393 @@
 
 <p class="eyebrow">Symbols</p>
 <h1>Filters, blends and color effects</h1>
-<p class="lead">Symbol instances can be recolored, blended with what is behind them, and given filters, all without touching the symbol itself. Every one of these settings can change from keyframe to keyframe and be tweened.</p>
+<p class="lead">Symbol instances can be recolored, blended with what is behind them, and given filters, all without touching the symbol itself. Every one of these settings can change from keyframe to keyframe, and most of them tween.</p>
 
 <figure>
   <img src="assets/shots/effects-stage.webp" alt="Two rows of overlapping squares: the top row with blur, drop shadow, glow, bevel and adjust color filters, the bottom row with different blend modes over a red and green band" width="825" height="320">
   <figcaption>Top: filters. Bottom: blend modes over a two-color band.</figcaption>
 </figure>
 
-<h2>Color effects</h2>
+<p>All three live on the Object tab of the Properties panel when one instance is selected: <strong>Color Effect</strong>, then <strong>Display</strong> (with <strong>Blending</strong>), then <strong>Filters</strong>. Each change is one step to undo.</p>
 
-<p>Select an instance, then choose a <strong>Style</strong> under <strong>Color Effect</strong> on the Object tab:</p>
-
-<dl class="defs">
-  <dt>None</dt><dd>The symbol's own colors.</dd>
-  <dt>Brightness</dt><dd>Toward black or white, from -100% to 100%.</dd>
-  <dt>Tint</dt><dd>Toward a color you choose, by a percentage. Set the color with the swatch or by its <strong>Red</strong>, <strong>Green</strong> and <strong>Blue</strong> values.</dd>
-  <dt>Alpha</dt><dd>Transparency, from 0% (invisible) to 100% (solid).</dd>
-  <dt>Advanced</dt><dd>Separate multipliers and offsets for red, green, blue and alpha, for any color change the others cannot make.</dd>
-</dl>
-
-<p>Color effects tween smoothly, so a character can fade in or flush red over a few frames. In a classic tween, set a different effect on each keyframe. In a <a href="tweens.html#motion-tweens">motion tween</a>, move the playhead into the span and change the effect there: Phoenix keys the color curve on that frame.</p>
-
-<h2>Blend modes</h2>
-
-<p>Under <strong>Display</strong>, <strong>Blending</strong> sets how an instance mixes with what is beneath it:</p>
+<h2>What can take effects</h2>
 
 <table>
-  <thead><tr><th>Mode</th><th>Effect</th></tr></thead>
+  <thead><tr><th>Object</th><th>Color effect</th><th>Blend mode</th><th>Filters</th></tr></thead>
   <tbody>
-    <tr><td>Normal</td><td class="wrap">Covers what is beneath</td></tr>
-    <tr><td>Multiply</td><td class="wrap">Darkens, like layers of ink; good for shadows</td></tr>
-    <tr><td>Screen</td><td class="wrap">Lightens, like projected light; good for glows</td></tr>
-    <tr><td>Lighten, Darken</td><td class="wrap">Keeps the lighter or darker of the two colors</td></tr>
-    <tr><td>Overlay, Hard Light</td><td class="wrap">Adds contrast, multiplying darks and screening lights</td></tr>
-    <tr><td>Add, Subtract</td><td class="wrap">Adds or subtracts the colors</td></tr>
-    <tr><td>Difference</td><td class="wrap">The difference between the colors</td></tr>
-    <tr><td>Invert</td><td class="wrap">Inverts what is beneath, in the instance's shape</td></tr>
-    <tr><td>Layer</td><td class="wrap">Composites the instance's contents as one image first, so transparency and the two modes below apply to the whole</td></tr>
-    <tr><td>Alpha, Erase</td><td class="wrap">Used inside a Layer instance: Alpha keeps only what the artwork covers, Erase cuts the artwork's shape out</td></tr>
+    <tr><td>Movie clip instance</td><td>Yes</td><td>Yes</td><td>Yes</td></tr>
+    <tr><td>Button instance</td><td>Yes</td><td>Yes</td><td>Yes</td></tr>
+    <tr><td>Graphic instance</td><td>Yes</td><td>Yes</td><td class="wrap">Only once it has some, as one in an opened FLA file may. Then the whole Filters section shows, Add Filter included.</td></tr>
+    <tr><td>Text, shapes, drawing objects, bitmaps</td><td>No</td><td>No</td><td>No</td></tr>
   </tbody>
 </table>
 
+<p>To give text, a shape or a bitmap an effect, make it a symbol first: select it, press <kbd>F8</kbd> and choose <strong>Movie Clip</strong> (see <a href="symbols.html#create-a-symbol">Create a symbol</a>). To give a graphic instance its first filter, change its <strong>Type</strong> on the Object tab to <strong>Movie Clip</strong>. That changes only this instance, not the symbol.</p>
+
+<p>Effects are set on one instance at a time. With several objects selected, the Object tab shows them as a mixed selection, without these sections. To give many instances the same filters, use <a href="#copy-and-paste-filters">Copy Filters and Paste Filters</a> or a <a href="#filter-presets">preset</a>.</p>
+
+<h2>Color effects</h2>
+
+<p>A color effect changes the colors of everything in the instance: to fade it, darken it for a shadow pass, flash it white on a hit, or tint it to match a scene.</p>
+
+<ol class="steps">
+  <li>Select an instance on the stage.</li>
+  <li>On the Object tab, under <strong>Color Effect</strong>, choose a <strong>Style</strong>.</li>
+  <li>Set its values. Drag a value left or right, or click it and type.</li>
+</ol>
+
+<figure>
+  <img src="assets/shots/color-effect-styles.webp" alt="Six copies of a movie clip made of a red circle, a green circle, a blue bar and a yellow tab, over a striped background: unchanged, darkened, lightened, tinted blue, see-through, and recolored with Advanced" width="1200" height="230">
+  <figcaption>The same instance with each style. Alpha lets the stripes show through; the others keep it solid.</figcaption>
+</figure>
+
+<dl class="defs">
+  <dt>None</dt><dd>The symbol's own colors.</dd>
+  <dt>Brightness</dt><dd>From -100% (black) through 0 (unchanged) to 100% (white). The shape's alpha stays as it is, so a fully dark or bright instance is a solid silhouette.</dd>
+  <dt>Tint</dt><dd>Mixes every color toward one color. The swatch picks the tint color, or set its <strong>Red</strong>, <strong>Green</strong> and <strong>Blue</strong> values (0 to 255). The percentage beside the swatch says how far: 0% leaves the colors alone, 100% paints the whole instance in the tint color. A new tint starts at 50%.</dd>
+  <dt>Alpha</dt><dd>Transparency, from 0% (invisible) to 100% (solid).</dd>
+  <dt>Advanced</dt><dd>A multiplier and an offset for each of alpha, red, green and blue. This can make any of the changes above, and ones they can't, such as dropping out one channel or pushing the colors toward night blue.</dd>
+</dl>
+
+<h3>How each style works</h3>
+
+<p>Every style is a sum done on each pixel's red, green, blue and alpha values, which run from 0 to 255. The result is kept within 0 to 255.</p>
+
+<table>
+  <thead><tr><th>Style</th><th>New value of each color channel</th></tr></thead>
+  <tbody>
+    <tr><td>Brightness <i>b</i> above 0</td><td class="wrap">old &times; (1 &minus; <i>b</i>) + 255 &times; <i>b</i></td></tr>
+    <tr><td>Brightness <i>b</i> below 0</td><td class="wrap">old &times; (1 + <i>b</i>)</td></tr>
+    <tr><td>Tint, amount <i>t</i></td><td class="wrap">old &times; (1 &minus; <i>t</i>) + tint color &times; <i>t</i></td></tr>
+    <tr><td>Alpha <i>a</i></td><td class="wrap">Colors unchanged; alpha &times; <i>a</i></td></tr>
+    <tr><td>Advanced</td><td class="wrap">old &times; multiplier + offset, for each channel and for alpha</td></tr>
+  </tbody>
+</table>
+
+<div class="split">
+  <figure style="margin:0"><img src="assets/shots/properties-color-effect-advanced.webp" alt="Color Effect section set to Advanced: Alpha 100% plus 0, Red 30% plus 0, Green 40% plus 0, Blue 100% plus 60, with the Display section below set to Multiply" width="300" height="302"></figure>
+  <div>
+    <p>In the <strong>Advanced</strong> style, the left column is the multiplier, from -100% to 100%, and the right column (after <strong>+</strong>) is the offset, from -255 to 255.</p>
+    <p><b>Worked example.</b> With the settings shown, an orange pixel of red 255, green 140, blue 0 becomes:</p>
+    <ul>
+      <li>red 255 &times; 30% + 0 = 76</li>
+      <li>green 140 &times; 40% + 0 = 56</li>
+      <li>blue 0 &times; 100% + 60 = 60</li>
+    </ul>
+    <p>So orange turns a dark violet, and the whole instance looks lit by moonlight. Alpha at 100% + 0 leaves its transparency alone.</p>
+  </div>
+</div>
+
+<p>Two more recipes: red, green and blue at -100% with offsets of 255 make a photo negative; all three at 0% with offsets of 255 make a white silhouette, like Brightness 100%.</p>
+
+<p>Brightness, Tint and Alpha replace each other: switching from one to another starts the new one fresh, rather than adding to the old. Choosing <strong>None</strong> clears the effect.</p>
+
+<p>The camera can color the whole picture it sees, with the same styles, for fades to black or white. See <a href="rigging.html#multiplane-camera">Multiplane camera</a>.</p>
+
+<h2>Blend modes</h2>
+
+<p>A blend mode says how an instance's colors mix with what is beneath it on the stage: the layers below, and the objects behind it on its own layer.</p>
+
+<ol class="steps">
+  <li>Select an instance.</li>
+  <li>On the Object tab, under <strong>Display</strong>, choose a mode from <strong>Blending</strong>.</li>
+</ol>
+
+<p>In the table, the <i>instance</i> is the color of the object you set the mode on, and the <i>backdrop</i> is the color beneath it.</p>
+
+<table>
+  <thead><tr><th>Mode</th><th>Result</th><th>Good for</th></tr></thead>
+  <tbody>
+    <tr><td>Normal</td><td class="wrap">The instance covers the backdrop, as far as its alpha allows</td><td class="wrap">Everything else</td></tr>
+    <tr><td>Layer</td><td class="wrap">Looks like Normal, but the instance is drawn on its own first, so Alpha and Erase instances inside it can cut into it. See <a href="#layer-alpha-and-erase">Layer, Alpha and Erase</a></td><td class="wrap">Holes and cutouts</td></tr>
+    <tr><td>Multiply</td><td class="wrap">Instance &times; backdrop. Always darker; white leaves the backdrop alone, black makes black</td><td class="wrap">Shadows, ink, stains, colored glass</td></tr>
+    <tr><td>Screen</td><td class="wrap">The inverse of multiplying the inverses. Always lighter; black leaves the backdrop alone, white makes white</td><td class="wrap">Light, glows, fog, reflections</td></tr>
+    <tr><td>Lighten</td><td class="wrap">The lighter of the two, channel by channel</td><td class="wrap">Replacing only the dark parts</td></tr>
+    <tr><td>Darken</td><td class="wrap">The darker of the two, channel by channel</td><td class="wrap">Replacing only the light parts</td></tr>
+    <tr><td>Overlay</td><td class="wrap">Multiplies where the backdrop is dark and screens where it is light, so the backdrop's lights and darks stay</td><td class="wrap">Coloring a scene while keeping its shading</td></tr>
+    <tr><td>Hard Light</td><td class="wrap">Multiplies where the instance is dark and screens where it is light: Overlay with the two swapped</td><td class="wrap">Harsh light, strong shading</td></tr>
+    <tr><td>Add</td><td class="wrap">Instance + backdrop, stopping at white</td><td class="wrap">Bright light, sparks, flashes</td></tr>
+    <tr><td>Subtract</td><td class="wrap">Backdrop &minus; instance, stopping at black</td><td class="wrap">Darkening, burn effects</td></tr>
+    <tr><td>Difference</td><td class="wrap">The darker of the two subtracted from the lighter, channel by channel</td><td class="wrap">Psychedelic and glitch looks</td></tr>
+    <tr><td>Invert</td><td class="wrap">Inverts the backdrop wherever the instance covers it; the instance's own colors don't matter</td><td class="wrap">Negative flashes, X-ray looks</td></tr>
+    <tr><td>Alpha, Erase</td><td class="wrap">Cut into what is beneath them inside a Layer instance</td><td class="wrap">See <a href="#layer-alpha-and-erase">below</a></td></tr>
+  </tbody>
+</table>
+
+<figure>
+  <img src="assets/shots/blend-modes-examples.webp" alt="Eleven tiles, each an orange circle over four stripes of black, gray, white and blue, with the circle set to Normal, Multiply, Screen, Lighten, Darken, Overlay, Hard Light, Add, Subtract, Difference and Invert" width="960" height="400">
+  <figcaption>The same orange circle over black, gray, white and blue stripes in each mode.</figcaption>
+</figure>
+
+<h3>A worked example</h3>
+
+<p>Take the orange circle above (red 242, green 140, blue 40) over the gray stripe (128 in every channel). Channel by channel:</p>
+
+<ul>
+  <li><b>Multiply</b>: red 242 &times; 128 / 255 = 121, green 70, blue 20. A dark brown-orange: the circle looks painted on the gray in transparent ink.</li>
+  <li><b>Screen</b>: red 255 &minus; (13 &times; 127 / 255) = 248, green 198, blue 148. A pale peach: the circle looks projected onto the gray as light.</li>
+  <li><b>Add</b>: red 242 + 128 = 370, stopped at 255; green 268, stopped at 255; blue 168. A pale yellow, brighter than Screen.</li>
+  <li><b>Subtract</b>: red 128 &minus; 242, stopped at 0; green 0; blue 128 &minus; 40 = 88. Navy: where the instance is brighter than the backdrop, the channel goes black.</li>
+</ul>
+
+<p>On the white stripe, Multiply shows plain orange and Screen shows plain white; on the black stripe it is the other way round. That is the quickest way to tell which mode you want: Multiply for things that should only darken, Screen or Add for things that should only lighten.</p>
+
+<h3>To add a soft shadow with Multiply</h3>
+
+<ol class="steps">
+  <li>Draw the shadow shape in a mid gray or a dark color of the scene, and convert it to a movie clip (<kbd>F8</kbd>).</li>
+  <li>Place it over the ground, under the character.</li>
+  <li>Set <strong>Blending</strong> to <strong>Multiply</strong>. The ground's color and texture show through, darkened.</li>
+  <li>For a softer edge, add a <a href="#blur">Blur</a> filter to the same instance.</li>
+</ol>
+
+<h3>Layer, Alpha and Erase</h3>
+
+<p>Alpha and Erase only do something on an instance that is inside another instance set to <strong>Layer</strong>. They cut into what is beneath them in that Layer instance:</p>
+
+<dl class="defs">
+  <dt>Erase</dt><dd>Removes what is beneath it in the Layer instance wherever it is opaque, so the scene behind shows through. Its colors don't matter, only its shape and alpha.</dd>
+  <dt>Alpha</dt><dd>Keeps what is beneath it in the Layer instance only where it is opaque, and removes the rest, like a mask.</dd>
+</dl>
+
+<p>Partly transparent pixels cut partly. Anything stacked above the Alpha or Erase instance in the same symbol is not cut. Outside a Layer instance, an Alpha or Erase instance draws nothing at all.</p>
+
+<figure>
+  <img src="assets/shots/blend-layer-alpha-erase.webp" alt="Three red panels over yellow stripes: the first with a round hole showing the stripes, the second cut down to just a red circle, the third a plain red panel with no hole" width="960" height="250">
+  <figcaption>Each movie clip holds a red panel with a circle on top. Left: the clip is set to Layer and the circle to Erase. Middle: Layer and Alpha. Right: the clip is left at Normal, so the Erase circle does nothing.</figcaption>
+</figure>
+
+<p><b>To cut a hole through a movie clip:</b></p>
+
+<ol class="steps">
+  <li>Open the movie clip for editing (double-click it).</li>
+  <li>On a layer above the art, draw the hole's shape in any color, convert it to a movie clip (<kbd>F8</kbd>), and set its <strong>Blending</strong> to <strong>Erase</strong>. It disappears, which is expected.</li>
+  <li>Go back to the scene, select the outer movie clip, and set its <strong>Blending</strong> to <strong>Layer</strong>. The hole appears, and whatever is behind the clip shows through it.</li>
+</ol>
+
+<p>Animate the Erase instance inside the clip to make the hole move, grow or wipe across.</p>
+
 <h2>Filters</h2>
 
-<p>Filters add effects such as shadows and glows to movie clips and buttons. They appear in the <strong>Filters</strong> section of the Object tab.</p>
+<p>Filters add shadows, blurs, glows, bevels and color adjustments to a movie clip or button. They are drawn from the instance's picture each time it is shown, so they follow its outline as it animates and never change the symbol itself.</p>
+
+<h3>To add a drop shadow</h3>
+
+<ol class="steps">
+  <li>Select a movie clip or button instance.</li>
+  <li>On the Object tab, under <strong>Filters</strong>, click <strong>Add Filter</strong> and choose <strong>Drop Shadow</strong>. The shadow appears at once, with its usual starting settings: black, 5 px of blur, 100% strength, 45&deg; and 5 px away.</li>
+  <li>Change its settings in the rows under the filter's name. Raise <strong>Blur X</strong> and <strong>Blur Y</strong> for a softer shadow, <strong>Distance</strong> to lift the object off the ground, and lower <strong>Strength</strong> to make the shadow lighter.</li>
+  <li>Click the <strong>Color</strong> swatch to pick the shadow's color and opacity.</li>
+</ol>
 
 <div class="split">
   <figure style="margin:0"><img src="assets/shots/object-filters.webp" alt="Object tab for an instance with a Drop Shadow filter: blur, quality, strength, angle, distance, color, knockout, inner shadow and hide object, with Copy Filters, Paste Filters, Presets and Add Filter" width="391" height="847"></figure>
   <div>
+    <p>Each filter in the list has a heading row:</p>
     <ul>
-      <li>Click <strong>Add Filter</strong> and choose one. An instance can have several, applied top to bottom.</li>
-      <li>Use the checkbox to turn a filter off without losing its settings, the arrows to change the order, and <strong>&times;</strong> to remove it.</li>
+      <li>The checkbox with its name turns it on or off. A filter that is off keeps its settings, and is saved with the file.</li>
+      <li>&#9650; and &#9660; move it up or down the list. See <a href="#stacking-order">Stacking order</a>.</li>
+      <li>&times; removes it.</li>
     </ul>
-    <p>Quality can be Low, Medium or High. Higher quality looks smoother and takes longer to draw.</p>
+    <p>Under the list are <strong>Copy Filters</strong>, <strong>Paste Filters</strong>, <strong>Presets</strong> and <strong>Add Filter</strong>.</p>
   </div>
 </div>
 
-<table>
-  <thead><tr><th>Filter</th><th>Settings</th></tr></thead>
-  <tbody>
-    <tr><td>Blur</td><td class="wrap">Blur X and Y, quality</td></tr>
-    <tr><td>Drop Shadow</td><td class="wrap">Blur, strength, angle, distance, color, knockout, inner shadow, hide object</td></tr>
-    <tr><td>Glow</td><td class="wrap">Blur, strength, color, knockout, inner glow</td></tr>
-    <tr><td>Bevel</td><td class="wrap">Blur, strength, angle, distance, shadow and highlight colors, inner, outer or full</td></tr>
-    <tr><td>Gradient Glow</td><td class="wrap">Like Glow, colored by a gradient you edit on a bar</td></tr>
-    <tr><td>Gradient Bevel</td><td class="wrap">Like Bevel, colored by a gradient</td></tr>
-    <tr><td>Adjust Color</td><td class="wrap">Brightness, contrast, saturation and hue</td></tr>
-  </tbody>
-</table>
+<h3>Settings most filters share</h3>
 
-<p>Beyond filters, an instance can carry Phoenix's own effects on its picture: outlines, distortions, gradients, color grades and wipes, from the Effects side of the Behaviors panel. See <a href="behaviors.html#instance-effects">Effects on one instance</a>.</p>
+<p>Every filter except Adjust Color blurs something, and most also have a strength. The settings are:</p>
 
-<p>Filters tween the same way: between classic tween keyframes, and in motion tweens, where changing a filter setting on a frame inside the span keys it there. A graphic instance shows the Filters section only when it already has filters, as one in an opened FLA file may.</p>
+<dl class="defs">
+  <dt>Blur X, Blur Y</dt><dd>How far the blur spreads, sideways and up and down, from 0 to 255 px. Set them differently for a stretched blur, such as a streak of speed.</dd>
+  <dt>Quality</dt><dd><strong>Low</strong>, <strong>Medium</strong> or <strong>High</strong>: the blur is done once, twice or three times. Higher quality is smoother and reaches further for the same Blur values, and takes longer to draw. Low is often enough for small blurs; High looks best on large, soft ones.</dd>
+  <dt>Strength</dt><dd>How solid the effect is, from 0% to 1000%. 100% is plain. Above it, the soft edge of a shadow or glow fills in and turns denser; at 0% the effect disappears.</dd>
+  <dt>Angle</dt><dd>The direction a shadow or bevel falls, in degrees, from -360 to 360. 0&deg; is to the right and the angle turns clockwise, so 45&deg; is down and to the right and 90&deg; is straight down.</dd>
+  <dt>Distance</dt><dd>How far a shadow or bevel is offset, from -255 to 255 px. A negative distance throws it the opposite way.</dd>
+  <dt>Knockout</dt><dd>Hides the object itself and keeps only the effect. A knocked-out shadow or glow also has the object's shape cut out of it, so the background shows through where the object was.</dd>
+  <dt>Colors</dt><dd>Click a swatch to choose a color. The color picker includes opacity, so a shadow can be a half-transparent color without lowering its strength.</dd>
+</dl>
 
-<p><strong>Copy Filters</strong> and <strong>Paste Filters</strong> pass an instance's filters to another. Under <strong>Presets</strong>, <strong>Save As...</strong> keeps them under a name, choosing a preset puts its filters on the selected instance in place of its own, and <strong>Delete</strong> removes one. Presets are kept with Phoenix, for every document.</p>
+<p>Filter sizes are in pixels of the space the instance sits in. Scaling the instance itself doesn't make its blur or shadow bigger, though scaling a symbol it is inside does, and so does zooming the stage. A shadow's angle is measured on the stage, so it keeps falling the same way however you rotate the instance.</p>
+
+<h3>Drop Shadow</h3>
+
+<p>A copy of the object's shape in one color, offset and blurred, behind the object. Settings: Blur X and Y, Quality, Strength, Angle, Distance, Color, and three options:</p>
+
+<dl class="defs">
+  <dt>Knockout</dt><dd>Shows only the shadow, with the object's shape cut out of it.</dd>
+  <dt>Inner shadow</dt><dd>Puts the shadow inside the object's edge instead, as if the object were a hole cut into the page. At 45&deg; it lines the top and left edges, as if light came from the top left.</dd>
+  <dt>Hide object</dt><dd>Shows the shadow alone, without the object and without a hole. Use it for a shadow you want to skew or place apart from the object: put a second instance of the same symbol where the shadow should be, give it a drop shadow with Hide object, and transform it as you like.</dd>
+</dl>
+
+<figure>
+  <img src="assets/shots/filters-drop-shadow-options.webp" alt="Four yellow rounded squares over light stripes: a plain drop shadow, a knocked-out shadow showing the stripes through the square, an inner shadow along the top and left edges inside the square, and a blurred dark shadow with the square hidden" width="960" height="230">
+  <figcaption>Drop Shadow, then the same shadow with Knockout, Inner shadow, and Hide object.</figcaption>
+</figure>
+
+<h3>Blur</h3>
+
+<p>Softens the whole instance. Settings: Blur X, Blur Y and Quality. Blur X alone, with Blur Y at 0, smears the object sideways like a fast pan; both together make it look out of focus. Animate the blur to pull focus, or to bring something in out of a haze.</p>
+
+<h3>Glow</h3>
+
+<p>A blurred halo of one color around the object's edge, with no offset. Settings: Blur X and Y, Quality, Strength, Color (it starts red), Knockout, and <strong>Inner glow</strong>, which puts the glow inside the edge instead. A strength of 200% to 400% with a small blur makes a crisp outline.</p>
+
+<figure>
+  <img src="assets/shots/filters-blur-and-glow.webp" alt="Five yellow rounded squares: evenly blurred, smeared sideways, with a soft red glow outside, with a red glow inside the edge, and with a glow running from yellow at the edge to blue further out" width="1200" height="230">
+  <figcaption>Blur, a sideways blur, Glow, Inner glow and Gradient Glow.</figcaption>
+</figure>
+
+<h3>Bevel</h3>
+
+<p>Makes the object look raised, with a highlight on the edges facing the light and a shadow on the edges facing away. The angle is the way the shadow falls, so at 45&deg; the light comes from the top left. Settings: Blur X and Y (how wide and soft the beveled edge is), Quality, Strength, Angle, Distance (how deep it looks), the <strong>Shadow</strong> and <strong>Highlight</strong> colors, Knockout, and <strong>Type</strong>:</p>
+
+<dl class="defs">
+  <dt>Inner</dt><dd>The bevel lies inside the object's edge, like a raised button.</dd>
+  <dt>Outer</dt><dd>The bevel lies outside the edge, so the object looks set into a raised surface.</dd>
+  <dt>Full</dt><dd>Both, inside and outside the edge.</dd>
+</dl>
+
+<figure>
+  <img src="assets/shots/filters-bevel-types.webp" alt="Four blue rounded squares: an inner bevel with a light top-left edge and dark bottom-right edge, an outer bevel outside the edge, a full bevel on both sides of the edge, and a gradient bevel with a white highlight and a brown shadow" width="960" height="230">
+  <figcaption>Bevel with Type set to Inner, Outer and Full, and a Gradient Bevel.</figcaption>
+</figure>
+
+<h3>Gradient Glow</h3>
+
+<p>A glow colored by a gradient instead of one color. Settings: Blur X and Y, Quality, Strength, Angle and Distance (so the glow can be offset like a shadow), Type, the gradient bar, and Knockout. The left end of the bar is the outer edge of the glow and the right end is next to the object; a new Gradient Glow runs from clear white out at the edge to black at the object. The <strong>Type</strong> list is shown, but today the glow is always drawn outside the object whatever it says.</p>
+
+<h3>Gradient Bevel</h3>
+
+<p>A bevel colored by a gradient. It has the Bevel's settings, with a gradient bar in place of the two colors. The middle of the bar is the flat face of the object, the right end colors the edges facing the light, and the left end colors the edges on the shadow side. Keep the middle stop clear so only the edges are colored. A new Gradient Bevel starts with just two stops, clear white and black, which darkens the whole face; click the middle of the bar to add a stop there and make it transparent.</p>
+
+<h3>Editing the gradient bar</h3>
+
+<p>The two gradient filters edit their colors on the same bar as the <a href="color.html">Color panel</a>:</p>
+
+<ul>
+  <li>Click the bar to add a color stop. It takes the color the gradient already has there. A gradient holds up to 15 stops.</li>
+  <li>Drag a stop's pointer along the bar to move it.</li>
+  <li>Drag a pointer down, well off the bar, and let go to remove it. At least two stops always stay.</li>
+  <li>Double-click a pointer to choose its color. The picker includes opacity, which is how you make a stop clear.</li>
+</ul>
+
+<h3>Adjust Color</h3>
+
+<p>Changes the instance's colors with four sliders, without a blur. It is the one filter with no Quality, Strength or Knockout.</p>
+
+<dl class="defs">
+  <dt>Brightness</dt><dd>-100 to 100. Adds or takes away the same amount from every channel, lifting or lowering darks and lights alike.</dd>
+  <dt>Contrast</dt><dd>-100 to 100. Spreads the colors away from mid gray, or pulls them toward it. At -100 everything is mid gray.</dd>
+  <dt>Saturation</dt><dd>-100 to 100. At -100 the instance is grayscale; above 0 the colors grow more intense.</dd>
+  <dt>Hue</dt><dd>-180 to 180 degrees. Turns every color around the color wheel: at 120, reds turn blue, greens turn a reddish brown and blues turn green; at -120 they turn the other way.</dd>
+</dl>
+
+<figure>
+  <img src="assets/shots/filters-adjust-color.webp" alt="Five copies of a clip with red and green circles, a blue bar and a yellow tab: unchanged, brighter, higher contrast, grayscale, and with the hue turned so red is blue, green is brown and blue is green" width="1200" height="230">
+  <figcaption>Adjust Color with one slider set at a time.</figcaption>
+</figure>
+
+<p>Adjust Color and the <a href="#color-effects">color effect</a> can be used together. The color effect is applied first, then the filters in order. Adjust Color can do what the color effect can't, such as grayscale or a hue shift; the color effect can fade the instance, which Adjust Color can't.</p>
+
+<h3 id="stacking-order">Stacking order</h3>
+
+<p>An instance can have as many filters as you like, of any kinds, even several of the same kind. They are applied from the top of the list down: the second filter works on the picture the first one made, and so on. Order matters wherever one filter would catch another's result:</p>
+
+<figure>
+  <img src="assets/shots/filters-order.webp" alt="Two yellow rounded squares with a white outline glow and a dark drop shadow: on the left the shadow includes the white outline, on the right the white glow also rings the shadow" width="560" height="230">
+  <figcaption>Left: a white Glow, then a Drop Shadow, so the shadow includes the outline. Right: the Drop Shadow first, so the glow outlines the shadow as well.</figcaption>
+</figure>
+
+<p>Use &#9650; and &#9660; on a filter's heading to move it. A common stack for a game sprite or a title is a Glow for an outline, then a Drop Shadow, then a Bevel last so it shades the outline too.</p>
+
+<div class="split">
+  <figure style="margin:0"><img src="assets/shots/properties-filters-stack.webp" alt="The Filters section with three filters: Bevel and Gradient Glow switched on, the Gradient Glow showing its gradient bar, and Adjust Color switched off" width="300" height="640"></figure>
+  <div>
+    <p><b>Turning filters off.</b> Clear a filter's checkbox to turn it off while you look at the others, or to keep a version of the look ready without showing it. Here the Adjust Color filter is off. It keeps its settings, its place in the list, and is saved with the file.</p>
+    <p><b>Removing a filter.</b> Click &times; on its heading. There is no command to remove them all at once; click &times; on each one.</p>
+  </div>
+</div>
+
+<h3 id="copy-and-paste-filters">Copy and paste filters</h3>
+
+<ol class="steps">
+  <li>Select the instance whose filters you want and click <strong>Copy Filters</strong>. All its filters are copied, the ones turned off included.</li>
+  <li>Select another movie clip or button and click <strong>Paste Filters</strong>. Its own filters are replaced by the copied ones.</li>
+</ol>
+
+<p>The copied filters stay ready to paste onto more instances, in any open document, until you copy others or quit Phoenix. Copying the instance itself (<span class="menu-path">Edit &rsaquo; Copy</span>) also brings its filters, color effect and blend mode along with it.</p>
+
+<h3 id="filter-presets">Filter presets</h3>
+
+<p>A preset keeps a set of filters under a name, to put on any instance later.</p>
+
+<dl class="defs">
+  <dt>Save a preset</dt><dd>Select an instance with the filters you want, click <strong>Presets</strong> and choose <strong>Save As...</strong>. Type a name and click <strong>OK</strong>. All its filters are saved, in order, with their settings. Saving under a name that already exists replaces that preset.</dd>
+  <dt>Apply a preset</dt><dd>Select an instance, click <strong>Presets</strong> and choose the preset by name. Its filters replace the instance's own. Undo puts the old ones back.</dd>
+  <dt>Delete a preset</dt><dd>Click <strong>Presets</strong>, point to <strong>Delete</strong>, and choose the preset.</dd>
+</dl>
+
+<p>Presets are kept in Phoenix's own settings on your computer, not in the document, so every document you open can use them. They don't travel with an FLA file you send to someone else. Presets can't be renamed: apply one, save it under the new name, and delete the old one.</p>
+
+<h3>Filters and drawing speed</h3>
+
+<p>Each filtered instance is drawn on its own and then filtered, every time it changes. Large blurs, High quality and long stacks take the most time. If the stage feels slow while you animate, set Quality to Low while you work and back to High before you export, or turn the heaviest filters off for a while.</p>
+
+<h2>Animating effects</h2>
+
+<p>Color effects and filters tween; blend modes do not.</p>
+
+<h3>In a classic tween</h3>
+
+<p>Set different effects on the instance at each keyframe, and the frames between blend from one to the next:</p>
+
+<ul>
+  <li><b>Color effects</b> blend every amount, multiplier and offset, and the tint color. A tween from Alpha 0% to Alpha 100% fades in; from Brightness 100% to None flashes white and settles.</li>
+  <li><b>Filters</b> pair up by their place in the list. When the pair are the same kind, their blurs, strength, angle, distance, colors, gradient colors and Adjust Color sliders blend. On-off settings (Knockout, Inner, Hide object, Type) come from the first keyframe.</li>
+  <li>A filter that only one of the two keyframes has fades in or out: the other keyframe is taken to have the same filter with no blur, distance or strength.</li>
+  <li>When the two filters at the same place are different kinds, the first keyframe's filter is shown unchanged until the next keyframe. Keep both keyframes' lists in the same order to tween them.</li>
+</ul>
+
+<figure>
+  <img src="assets/shots/filters-tween-glow.webp" alt="Four frames of a yellow square: no glow, a faint red glow, a stronger glow, and a full red glow" width="960" height="200">
+  <figcaption>Frames 1, 5, 9 and 13 of a classic tween from a Glow with no blur or strength to a 24 px glow at 200%.</figcaption>
+</figure>
+
+<p><b>To make a glow pulse:</b></p>
+
+<ol class="steps">
+  <li>Give a movie clip a Glow filter with Blur 0 and Strength 0 on its first keyframe.</li>
+  <li>Add a keyframe (<kbd>F6</kbd>) a few frames later and raise the glow's Blur and Strength there.</li>
+  <li>Add a third keyframe later still, and copy the first keyframe's settings back: <strong>Copy Filters</strong> on the first, <strong>Paste Filters</strong> on the third.</li>
+  <li>Right-click a frame in each span and choose <strong>Classic Tween</strong>. See <a href="tweens.html#classic-tweens">Classic tweens</a>.</li>
+</ol>
+
+<h3>In a motion tween</h3>
+
+<p>Move the playhead to a frame inside a <a href="tweens.html#motion-tweens">motion tween</a> and change the color effect or a filter's number there: Phoenix keys that value on that frame, and the tween curves between keys. The numbers that key are the color effect's values; Blur X and Blur Y on every filter that blurs; Strength on every filter but Blur; Angle and Distance on Drop Shadow, Bevel and the two gradient filters; and the four Adjust Color sliders. Edit their curves in the <a href="tweens.html#the-motion-editor">Motion Editor</a>.</p>
+
+<p>Filter colors, Quality, the on-off options and Type are not keyed: changing one inside a motion tween changes it for the whole span. Adding, removing or reordering filters does the same.</p>
+
+<h3>Blend modes and keyframes</h3>
+
+<p>A blend mode holds from its keyframe until the next one: there is no in-between for Multiply and Screen. To ease from one look to another, put two instances on top of each other with different modes and cross-fade them with color effect alpha.</p>
+
+<h2>Effects in exported files</h2>
+
+<ul>
+  <li><b>Movies and images</b> (<a href="export.html#export-movie">Export Movie</a>, <a href="export.html#export-image">Export Image</a>) show everything as the stage does.</li>
+  <li><b>SWF movies</b> keep each instance's color effect, filters and blend mode, for the player to draw. See <a href="export.html#swf">SWF movies</a>.</li>
+  <li><b>HTML5 pages</b> carry color effects, blend modes and all seven filters, drawn by the browser, so filter edges can differ slightly from Phoenix's. See <a href="export.html#html5">HTML5 pages</a>.</li>
+  <li><b>SVG</b> includes filtered instances as images, and draws blend modes as Normal. See <a href="export.html#export-to-svg">Export to SVG</a>.</li>
+</ul>
+
+<h2>Effects from scripts</h2>
+
+<p>Scripts can set all of this on the selected instances: <code>setBlendMode</code>, <code>setInstanceAlpha</code>, <code>setInstanceBrightness</code>, <code>setInstanceTint</code>, and for filters <code>addFilter</code>, <code>setFilterProperty</code>, <code>setFilters</code>, <code>getFilters</code>, and enabling, disabling, reordering and removing them. That is handy for putting the same look on hundreds of instances at once. See <a href="scripting.html#what-scripts-can-reach">What scripts can reach</a>.</p>
+
+<h2>Beyond filters</h2>
+
+<p>An instance can also carry Phoenix's own effects on its picture: outlines, distortions, gradients, color grades and wipes, from the Effects side of the Behaviors panel. See <a href="behaviors.html#instance-effects">Effects on one instance</a>.</p>
 
 <h2>Effect layers</h2>
 
