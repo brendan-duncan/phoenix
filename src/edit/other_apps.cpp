@@ -2,6 +2,7 @@
 
 #include "adjustments.h"
 #include "behaviors.h"
+#include "deformers.h"
 #include "frame_bake.h"
 #include "layer_commands.h"
 #include "element_clone.h"
@@ -967,6 +968,36 @@ std::string named(const std::string& name, const char* fallback)
     return name.empty() ? std::string(fallback) : name;
 }
 
+/// How far past its art element \a index of keyframe \a frame of \a layer
+/// is bent by a deformer (a corner pin, a curve, an envelope) anywhere on its
+/// span, posed itself or tweening to a keyframe where it is, in the
+/// timeline's pixels; below 0 when it is not bent.
+double bentReach(const Layer& layer, const Frame& frame, size_t index)
+{
+    const auto reach = [](const Element* element) {
+        if (!element || element->elementType() != Element::Type::SymbolInstance)
+            return -1.0;
+        const std::optional<deform::Deformer> deformer = deform::of(*static_cast<const SymbolInstance*>(element));
+        if (!deformer || deform::atRest(*deformer))
+            return -1.0;
+        double far = 0.0;
+        for (size_t i = 0; i < deformer->rest.size(); ++i)
+            far = std::max(far, std::hypot(deformer->posed[i].x - deformer->rest[i].x, deformer->posed[i].y - deformer->rest[i].y));
+        const Transform& m = element->transform;
+        return far * std::max(std::hypot(m.m11, m.m12), std::hypot(m.m21, m.m22));
+    };
+    if (index >= frame.elements.size() || !frame.elements[index] ||
+        frame.elements[index]->elementType() != Element::Type::SymbolInstance ||
+        !deform::of(*static_cast<const SymbolInstance*>(frame.elements[index])))
+        return -1.0;
+    double far = reach(frame.elements[index]);
+    if (frame.tweenType == TweenType::Motion)
+        for (const Frame* next : layer.frames)
+            if (next && next->index == frame.index + std::max(1, frame.duration) && index < next->elements.size())
+                far = std::max(far, reach(next->elements[index]));
+    return far;
+}
+
 void drawForBitmaps(Document& document, const Renderer& render, Bitmaps& bitmaps, Drawn& drawn)
 {
     for (Timeline* timeline : allTimelines(document))
@@ -1003,15 +1034,20 @@ void drawForBitmaps(Document& document, const Renderer& render, Bitmaps& bitmaps
             {
                 if (!frame)
                     continue;
-                for (Element* element : frame->elements)
+                for (size_t e = 0; e < frame->elements.size(); ++e)
                 {
+                    Element* element = frame->elements[e];
+                    // Bent by a deformer, which other apps cannot do: drawn
+                    // as Phoenix draws it, effects and all.
+                    const double bend = bentReach(*layer, *frame, e);
+                    const bool bent = bend >= 0.0;
                     if (!element || element->elementType() != Element::Type::SymbolInstance ||
-                        !compositing::hasInstanceEffects(*element))
+                        (!compositing::hasInstanceEffects(*element) && !bent))
                         continue;
                     auto* instance = static_cast<SymbolInstance*>(element);
                     const std::vector<behaviors::Applied> effects = compositing::instanceEffectsOf(*instance);
                     const int span = std::max(1, frame->duration);
-                    if (carriedThroughout(effects, frame->index, span, instance->colorTransform))
+                    if (!bent && carriedThroughout(effects, frame->index, span, instance->colorTransform))
                         continue;
                     std::map<int, Placed>& placed = drawn.instances[element];
                     const std::string name = named(instance->name, named(instance->libraryItemName, "Instance").c_str());
@@ -1023,7 +1059,7 @@ void drawForBitmaps(Document& document, const Renderer& render, Bitmaps& bitmaps
                         drawing.to = a + 1;
                         drawing.element = element;
                         drawing.frame = f;
-                        drawing.margin = compositing::reach(effects, f);
+                        drawing.margin = compositing::reach(effects, f) + std::max(0.0, bend);
                         placed[f] = bitmaps.add(render(drawing), name + " " + std::to_string(f + 1));
                     }
                 }
@@ -1062,10 +1098,11 @@ void bakeInstanceEffects(Document& document, Timeline& timeline, const Drawn& dr
                 if (!element || element->elementType() != Element::Type::SymbolInstance)
                     continue;
                 const std::vector<behaviors::Applied> effects = compositing::instanceEffectsOf(*element);
-                if (effects.empty())
-                    continue;
                 const auto found = drawn.instances.find(element);
                 const std::map<int, Placed>* placed = found == drawn.instances.end() ? nullptr : &found->second;
+                // Drawn for its effects, or for a deformer's bend.
+                if (effects.empty() && !placed)
+                    continue;
                 targets.push_back({e, static_cast<SymbolInstance*>(element), effects,
                     static_cast<SymbolInstance*>(element)->colorTransform, placed});
                 // Keyed settings or bitmaps change from frame to frame.
@@ -1079,7 +1116,10 @@ void bakeInstanceEffects(Document& document, Timeline& timeline, const Drawn& dr
             {
                 const std::string what = "Instance of " + named(target.original->libraryItemName, "a symbol") +
                     (target.original->name.empty() ? std::string() : " (" + target.original->name + ")") + " on layer " + layer->name;
-                if (target.placed)
+                if (target.placed && carriedThroughout(target.effects, first, span, target.color))
+                    notes.push_back(what + ": its deformer has no match in other apps, so it is drawn into a bitmap on each "
+                        "frame where it changes.");
+                else if (target.placed)
                     notes.push_back(what + ": " + uncarried(target.effects, first, span, target.color) +
                         " no filter in other apps, so it is drawn into a bitmap on each frame where it changes.");
                 else if (!carriedThroughout(target.effects, first, span, target.color))
@@ -1518,6 +1558,10 @@ bool carryEffects(const std::vector<behaviors::Applied>& effects, int frame, std
 
 bool needsBaking(const Document& document)
 {
+    const auto bent = [](const Element& element) {
+        const std::optional<deform::Deformer> deformer = deform::of(static_cast<const SymbolInstance&>(element));
+        return deformer && !deform::atRest(*deformer);
+    };
     Document& editable = const_cast<Document&>(document);
     for (Timeline* timeline : allTimelines(editable))
     {
@@ -1530,7 +1574,7 @@ bool needsBaking(const Document& document)
             found = found || (element->elementType() == Element::Type::SymbolInstance &&
                                  (templates::any(*static_cast<SymbolInstance*>(element)) ||
                                      !compositing::instanceEffectsOf(*element).empty() ||
-                                     responsive(*static_cast<SymbolInstance*>(element))));
+                                     responsive(*static_cast<SymbolInstance*>(element)) || bent(*element)));
         });
         if (found)
             return true;

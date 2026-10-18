@@ -1866,6 +1866,23 @@ void PhoenixView::drawDeformers(QPainter& painter)
                 painter.drawLine(at(i + 1), at(i + 2));
             }
         }
+        else if (target.deformer.kind == fla::deform::Kind::CornerPin)
+        {
+            // The four corners and the edges between them, and the middle
+            // lines, which show the perspective.
+            path.addPolygon(QPolygonF({at(0), at(1), at(2), at(3)}));
+            path.closeSubpath();
+            const auto mapped = [&](double u, double v) {
+                const fla::Point& a = target.deformer.rest[0];
+                const fla::Point& c = target.deformer.rest[2];
+                const fla::Point point = fla::deform::apply(target.deformer,
+                    fla::Point(a.x + (c.x - a.x) * u, a.y + (c.y - a.y) * v));
+                return stageToWidget(target.placed.map(QPointF(point.x, point.y)));
+            };
+            painter.setPen(QPen(ink, 1.0, Qt::DotLine));
+            painter.drawLine(mapped(0.5, 0.0), mapped(0.5, 1.0));
+            painter.drawLine(mapped(0.0, 0.5), mapped(1.0, 0.5));
+        }
         else
         {
             // The envelope's edges, exactly, and its inner rows and columns.
@@ -1891,8 +1908,8 @@ void PhoenixView::drawDeformers(QPainter& painter)
         painter.drawPath(path);
         for (size_t i = 0; i < posed.size(); ++i)
         {
-            const bool anchor = target.deformer.kind == fla::deform::Kind::Curve
-                ? i % 3 == 0 : (i == 0 || i == 3 || i == 12 || i == 15);
+            const bool anchor = target.deformer.kind == fla::deform::Kind::Curve ? i % 3 == 0
+                : target.deformer.kind == fla::deform::Kind::CornerPin || i == 0 || i == 3 || i == 12 || i == 15;
             painter.setPen(QPen(ink, 1.5));
             painter.setBrush(target.locked ? QColor(128, 128, 128) : QColor(255, 255, 255));
             if (anchor)
@@ -4690,7 +4707,8 @@ void PhoenixView::drawFrame(QPainter& painter, const fla::Frame* frame, const fl
     for (const fla::Element* element : frame->elements)
         if (element && element->elementType() == fla::Element::Type::SymbolInstance &&
             (fla::behaviors::any(*static_cast<const fla::SymbolInstance*>(element)) ||
-                fla::compositing::hasInstanceEffects(*element)))
+                fla::compositing::hasInstanceEffects(*element) ||
+                fla::deform::of(*static_cast<const fla::SymbolInstance*>(element))))
         {
             driven = true;
             break;
@@ -5040,7 +5058,8 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
                        transform.m21, transform.m22,
                        transform.tx, transform.ty);
     const QTransform placedTransform = qTransform;
-    qTransform = qTransform * threeDTransform(element, qTransform, tweenElement, tweenProgress);
+    qTransform = cornerPinTransform(element, tweenElement, tweenProgress) * qTransform *
+        threeDTransform(element, qTransform, tweenElement, tweenProgress);
 
     // A movie clip's parent's space on the stage, for the movie's scripts
     // (dragging, the pointer in its space).
@@ -5234,7 +5253,9 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
                 if (other)
                     if (std::optional<fla::deform::Deformer> to = fla::deform::of(*other))
                         deformer = fla::deform::blend(*deformer, *to, tweenProgress);
-                if (!fla::deform::atRest(*deformer))
+                // A corner pin is a perspective, which the painter's own
+                // transform carries (cornerPinTransform).
+                if (!fla::deform::atRest(*deformer) && deformer->kind != fla::deform::Kind::CornerPin)
                     warpWith([deformer = *deformer](const fla::Point& point) { return fla::deform::apply(deformer, point); });
             }
 
@@ -7693,6 +7714,24 @@ QTransform PhoenixView::threeDTransform(const fla::Element* element, const QTran
     return QTransform(m[0], m[3], m[6], m[1], m[4], m[7], m[2], m[5], m[8]);
 }
 
+QTransform PhoenixView::cornerPinTransform(const fla::Element* element, const fla::Element* tweenElement,
+    double progress) const
+{
+    const auto* instance = dynamic_cast<const fla::SymbolInstance*>(element);
+    if (!instance || instance->extraAttributes.empty())
+        return QTransform();
+    std::optional<fla::deform::Deformer> pin = fla::deform::of(*instance);
+    if (!pin || pin->kind != fla::deform::Kind::CornerPin)
+        return QTransform();
+    if (const auto* other = dynamic_cast<const fla::SymbolInstance*>(tweenElement))
+        if (std::optional<fla::deform::Deformer> to = fla::deform::of(*other))
+            pin = fla::deform::blend(*pin, *to, progress);
+    std::array<double, 9> m;
+    if (fla::deform::atRest(*pin) || !fla::deform::cornerPinMap(*pin, m))
+        return QTransform();
+    return QTransform(m[0], m[3], m[6], m[1], m[4], m[7], m[2], m[5], m[8]);
+}
+
 bool PhoenixView::gatherShadowCasters(const fla::Timeline* timeline, fla::LoopType loopType, int firstFrame)
 {
     const fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
@@ -8245,7 +8284,7 @@ void PhoenixView::hitTestElement(fla::Element& element, fla::Frame* frame,
 
     const fla::Transform& t = shownTransform ? *shownTransform : element.transform;
     QTransform elementTransform(t.m11, t.m12, t.m21, t.m22, t.tx, t.ty);
-    elementTransform = elementTransform * threeDTransform(&element, elementTransform);
+    elementTransform = cornerPinTransform(&element) * elementTransform * threeDTransform(&element, elementTransform);
 
     // Groups pre-transform their children, so applying the group's own transform
     // as well would move them twice. drawElement skips it for the same reason.

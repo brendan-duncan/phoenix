@@ -1882,6 +1882,11 @@ public:
     /// back is (an extruded clip has one even when flat).
     QTransform threeDTransform(const fla::Element* element, const QTransform& placed,
         const fla::Element* tweenElement = nullptr, double progress = 0.0, double depth = 0.0) const;
+    /// A corner pin's perspective, as a map in the instance's own space, to
+    /// go before its placement; the identity for anything else. Part way to
+    ///  tweenElement's pin at  progress.
+    QTransform cornerPinTransform(const fla::Element* element, const fla::Element* tweenElement = nullptr,
+        double progress = 0.0) const;
 
 private:
     /// A movie clip a timeline shows now, which can cast a shadow on a
