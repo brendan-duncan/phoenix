@@ -735,17 +735,37 @@ joining three movie clips).</p>
 </ul>
 
 <p>Armatures of symbols: each node names its instance by <code>referenceID</code> (the
-DOMSymbolInstance carries the same). <code>location</code> is the joint, the instance's
-transformation point; <code>xArray</code>/<code>yArray</code> are the instance's registration
-point (its matrix's tx, ty) and <code>angleArray</code> its turn, frame by frame. The
-nodes have no worldMatrix. <code>betweenFrameMatrixList</code> holds one near-identity
-Matrix per instance in the one-pose sample. Phoenix reads it as each
-instance's matrix in its joint's frame (the instance's matrix with the
-joint's registration point and angle taken off) and writes one per instance
-for every frame of the span, frame by frame (inferred: no multi-pose symbol
-sample). Phoenix plays the instances from the joint lists: on each frame an
-instance is its saved matrix (the span's first frame) turned by the change
-in its node's angle and moved onto that frame's registration point.</p>
+DOMSymbolInstance carries the same). The joint is the instance's
+transformation point: the Bone tool puts it where the bone was dragged
+from or to and moves the instance's transformation point there, whatever it
+was before (bones_springs.fla: the Forearm's point, moved to its far end,
+came back to 10.05 pixels left of its middle, where the bone ended). The
+first pose's States place it (the root's absolutely); <code>location</code> is the
+joint for the root but not always below it, so Phoenix takes the States.
+<code>xArray</code>/<code>yArray</code> are the instance's registration point (its matrix's tx,
+ty) and <code>angleArray</code> its turn, frame by frame. The nodes have no
+worldMatrix. <code>betweenFrameMatrixList</code> holds, for each instance in the order
+the pose frame lists them, a Matrix for every frame of the span: the move
+from where the first frame has it to where that frame does (the first
+frame's near identity, off by a twip). Phoenix plays the instances from the
+joint lists: on each frame an instance is its saved matrix (the span's first
+frame) turned by the change in its node's angle and moved onto that frame's
+registration point, and writes the list the same way.</p>
+
+<p>Limits and springs (bones_springs.fla): a joint's rotation limit is on the
+node at the head of the bone it turns, as <code>rotationConstrained="true"</code>,
+<code>rotationMin</code> and <code>rotationMax</code> in radians from 0 up to a whole turn
+(-45 to 90 degrees is 5.4978 to 1.5708), applying to the node's State
+angle. A bone's spring is on the node at its tail: <code>springStrength</code> and
+<code>dampingValue</code> (0 to 100; damping 0 is left out). The IKTree's
+<code>physicsEnabled</code> turns springs on and off for the whole armature. The
+joint lists, the betweenFrameMatrixList and an ik container's shapes are
+stored with the springs at work: in the sample the arm swings past its last
+pose (at frame 20 the upper arm is at -37 degrees, posed at -23) and even
+dips the other way at first, so a player only has to play what is stored.
+Phoenix does that, and stores its own springs in the joint lists the same
+way, from a damped spring on each sprung joint's angle (its own, not the
+sample's, motion).</p>
 
 <p>Shape armatures: nodes have <code>nodeType="lsd"</code>, their joint lists hold the
 joints themselves, and each has a <code>worldMatrix</code> (the joint's frame). The
@@ -775,14 +795,18 @@ a keyframe for every frame of the span, so it plays as stored.</p>
 the one sample, with two differences, marked by <code>phoenixBinding="anchors"</code>
 on the IKTree: the bound points are the shape's own anchors, numbered in the
 order its edges reach them (not a cubic contour Animate fits), and each
-point's handles sit on the point. Phoenix bends a shape by its binding only
-when it has that mark; an Animate binding is kept as read and the shape is
-bent by nearness to the bones. Joint rotation limits are Phoenix's own
-attributes (<code>phoenixMinRotation</code>, <code>phoenixMaxRotation</code>); no sample has
-Animate's limits or springs. Spring settings, read as <code>springStrength</code> and
-<code>springDamping</code> (or <code>strength</code> and <code>damping</code>) on a node, and any other
-attribute of a node or the tree are kept when an armature is built again
-with a bone more.</p>
+point's handles sit on the point. A binding without the mark numbers its
+points along the contour, which holds the outline as last shown (in
+bones_springs.fla, bent as at frame 20), not as bound; Phoenix finds each of
+the shape's anchors among the bound points by where <code>connectionData</code> puts
+them (along and beside their first bone) on the span's first frame's
+bones, and bends by that. Limits, springs and any other attribute of a node
+or the tree are kept when an armature is built again with a bone more.
+Phoenix 0.12 to 0.18 wrote limits as <code>phoenixMinRotation</code> and
+<code>phoenixMaxRotation</code> and springs on the joint they turn as
+<code>springStrength</code> and <code>springDamping</code>, worked out as the armature plays;
+Phoenix still reads and plays those, and writes them the new way once the
+armature's joints are worked out again.</p>
 
 <h3>Asset Warp</h3>
 

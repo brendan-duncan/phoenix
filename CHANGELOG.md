@@ -2,6 +2,13 @@
 
 What changed in each release of Phoenix, newest first.
 
+## Unreleased
+
+- Bone springs and joint limits from FLA files play as saved: an arm or tail swings, overshoots and settles just as the file has it
+- Bone springs and joint limits are saved the way FLA files keep them, so other apps read them
+- Springs are worked into every frame of an armature, so the bones swing with the art, and an armature can end swung past its last pose
+- Posing a boned shape from an FLA file bends it by the binding saved with it
+
 ## 0.18.2
 
 - The guide covers much more: new pages on importing artwork, 3D and video, and filters, text, tweens, export, sound, symbols, the timeline, color and the drawing tools in depth, with new pictures
