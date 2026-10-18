@@ -4,11 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Drawing tools · Phoenix User Guide</title>
-<meta name="description" content="Every drawing and painting tool in Phoenix: pen, line, width tool, shapes, primitives, PolyStar, paint brush, pencil, the Brush, Nib Brush and Ink Brush and their presets, eraser, paint bucket, ink bottle and eyedropper.">
+<meta name="description" content="Every drawing and painting tool in Phoenix and its options: pen, anchor point tools, line, width tool, rectangle and oval with corner radius and angles, primitives, PolyStar, paint brush and making your own brushes, pencil modes, the Brush, Nib Brush and Ink Brush with brush modes and presets, eraser modes and faucet, paint bucket gap sizes, ink bottle and eyedropper.">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Phoenix">
 <meta property="og:title" content="Drawing tools · Phoenix User Guide">
-<meta property="og:description" content="Every drawing and painting tool in Phoenix: pen, line, width tool, shapes, primitives, PolyStar, paint brush, pencil, the Brush, Nib Brush and Ink Brush and their presets, eraser, paint bucket, ink bottle and eyedropper.">
+<meta property="og:description" content="Every drawing and painting tool in Phoenix and its options: pen, anchor point tools, line, width tool, rectangle and oval with corner radius and angles, primitives, PolyStar, paint brush and making your own brushes, pencil modes, the Brush, Nib Brush and Ink Brush with brush modes and presets, eraser modes and faucet, paint bucket gap sizes, ink bottle and eyedropper.">
 <meta property="og:url" content="https://phoenixanimate.com/drawing-tools.html">
 <meta property="og:image" content="https://phoenixanimate.com/assets/shots/hero.webp">
 <meta property="og:image:type" content="image/webp">
@@ -17,7 +17,7 @@
 <meta property="og:image:alt" content="The Phoenix window with three flower characters on the stage, the timeline below and the Properties panel on the right">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:image" content="https://phoenixanimate.com/assets/shots/hero.webp">
-<meta name="keywords" content="pen anchor point bezier line rectangle oval primitive polystar star pencil smooth straighten ink recognize shapes brush nib brush ink brush pressure tilt stabilizer taper eraser faucet paint bucket gap ink bottle eyedropper stroke style cap join width profile paint brush art brush pattern brush brush presets dynamics texture grain bitmap brush auto fill repaint lock fill fill all regions">
+<meta name="keywords" content="pen anchor point bezier line rectangle oval primitive polystar star pencil smooth straighten ink recognize shapes brush nib brush ink brush pressure tilt stabilizer taper eraser faucet paint bucket gap ink bottle eyedropper stroke style cap join width profile paint brush art brush pattern brush brush presets dynamics texture grain bitmap brush auto fill repaint lock fill fill all regions corner radius start angle end angle inner radius rectangle settings draw from center symbol brush custom brush convert anchor point pen preview snap faucet erase inside erase selected fills close gaps color art">
 <link rel="icon" href="assets/img/logo.png">
 <link rel="stylesheet" href="assets/site.css">
 <script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
@@ -29,7 +29,9 @@
 
 <p class="eyebrow">Drawing</p>
 <h1>Drawing tools</h1>
-<p class="lead">Every tool's settings live on the Properties panel's <strong>Tool</strong> tab, which appears when you pick the tool. The panel stays on the Tool tab while you draw, even though the shape you just drew is selected; it switches to the <strong>Object</strong> tab only when you select something with a selection tool. Phoenix remembers each tool's settings between sessions.</p>
+<p class="lead">Every tool's settings live on the Properties panel's <strong>Tool</strong> tab, which appears when you pick the tool. The panel stays on the Tool tab while you draw, even though the shape you just drew is selected; it switches to the <strong>Object</strong> tab only when you select something with a selection tool. Phoenix remembers the brushes' settings and the Eraser's nib between sessions; the other tools keep their settings until you quit and start from their defaults next time.</p>
+
+<p>Whether new artwork merges with what is beneath it or stays an object of its own is set by <strong>Object Drawing</strong> (<kbd>J</kbd>), the button under the colors in the toolbox. See <a href="drawing-models.html">Drawing models</a>. Snapping to the grid, guides and objects, set in the View menu, applies to the shape tools, the Line and the Pen; see <a href="stage.html#grid-and-snapping">Grid and snapping</a>.</p>
 
 <h2>Color and style</h2>
 
@@ -73,10 +75,14 @@
     <tr><td><kbd>Esc</kbd></td><td class="wrap">Abandon the path</td></tr>
     <tr><td>Press on the end of an open path</td><td class="wrap">Carry on drawing from there: any open path's loose end on the frame, or either end of the selected shape's path</td></tr>
     <tr><td>Finish on the end of another open path</td><td class="wrap">Join the two into one path</td></tr>
+    <tr><td>Click a segment of the selected shape</td><td class="wrap">Before starting a path: add a point there</td></tr>
+    <tr><td>Click a point of the selected shape</td><td class="wrap">Before starting a path: remove that point</td></tr>
   </tbody>
 </table>
 
-<p>The cursor shows what the next click will do: start a new path, close the path, or add or remove a point. If you switch tools in the middle of a path, Phoenix keeps what you have drawn as an open path.</p>
+<p>The cursor shows what the next click will do: start a new path, carry on a path, close it, or add or remove a point. If you switch tools in the middle of a path, Phoenix keeps what you have drawn as an open path. A path closed by clicking its first point gets the fill color; an open path is drawn as a stroke only, whatever the fill is set to. With both fill and stroke turned off, the path is drawn as a hairline so that it isn't invisible.</p>
+
+<p>While you draw, the Pen shows the next segment stretching from the last point to the cursor, and draws its points as small white squares; the first point turns yellow when a click there would close the path. Turn the preview off, or draw the points filled in blue, under <strong>Pen</strong> in <a href="preferences.html#drawing">Preferences</a>. When snapping is on, points snap to the grid, guides and objects, and line up with the points already placed in the path.</p>
 
 <h3>Add, Delete and Convert Anchor Point</h3>
 
@@ -90,7 +96,7 @@
 
 <h2>Line</h2>
 
-<p>Press <kbd>N</kbd> and drag to draw a straight line. Hold <kbd>Shift</kbd> to keep it at a multiple of 45&deg;.</p>
+<p>Press <kbd>N</kbd> and drag to draw a straight line. Hold <kbd>Shift</kbd> to keep it at a multiple of 45&deg;. The Line draws only a stroke, in the stroke color, size and style on the Tool tab; its ends snap when snapping is on, and with <strong>Snap to Objects</strong> on, a small ring at the cursor grows when the end has snapped (the shape tools show the same ring). Lines drawn in merge drawing cut the artwork they cross, so a line across a shape splits its fill in two.</p>
 
 <h2>Width tool</h2>
 
@@ -115,13 +121,28 @@
 <table>
   <thead><tr><th>Tool</th><th>Key</th><th>Notes</th></tr></thead>
   <tbody>
-    <tr><td>Rectangle</td><td><kbd>R</kbd></td><td class="wrap"><kbd>Shift</kbd> draws a square, <kbd>Alt</kbd> draws from the center. While dragging, press <kbd>&uarr;</kbd> and <kbd>&darr;</kbd> to round the corners (with <kbd>Shift</kbd> for bigger steps). <strong>Corner radius</strong> sets the rounding before you draw. <kbd>Alt</kbd>-click without dragging to type the width, height and corner radius instead.</td></tr>
+    <tr><td>Rectangle</td><td><kbd>R</kbd></td><td class="wrap"><kbd>Shift</kbd> draws a square, <kbd>Alt</kbd> draws from the center. While dragging, press <kbd>&uarr;</kbd> and <kbd>&darr;</kbd> to round the corners one pixel at a time (with <kbd>Shift</kbd>, ten). <strong>Corner radius</strong> sets the rounding before you draw; it is never more than half the shorter side. <kbd>Alt</kbd>-click without dragging to type the width, height and corner radius instead.</td></tr>
     <tr><td>Oval</td><td><kbd>O</kbd></td><td class="wrap"><kbd>Shift</kbd> draws a circle, <kbd>Alt</kbd> draws from the center. <kbd>Alt</kbd>-click without dragging to type the width and height.</td></tr>
     <tr><td>Rectangle Primitive</td><td><kbd>Shift</kbd>+<kbd>R</kbd></td><td class="wrap">A rectangle whose four corner radii stay editable. Draws like the Rectangle, with the same keys.</td></tr>
-    <tr><td>Oval Primitive</td><td><kbd>Shift</kbd>+<kbd>O</kbd></td><td class="wrap">An oval with an editable start angle, end angle and inner radius, for pie slices and rings. Set them before drawing with <strong>Start angle</strong>, <strong>End angle</strong> and <strong>Inner radius</strong>.</td></tr>
-    <tr><td>PolyStar</td><td></td><td class="wrap">Drag out from the center. Set the number of <strong>Sides</strong> (3 to 32), and check <strong>Star</strong> to draw a star; <strong>Star point size</strong> sets how deep its points are, from long and thin near 0 to a plain polygon at 1. <kbd>Shift</kbd> turns it in 45&deg; steps.</td></tr>
+    <tr><td>Oval Primitive</td><td><kbd>Shift</kbd>+<kbd>O</kbd></td><td class="wrap">An oval with an editable start angle, end angle and inner radius, for pie slices and rings. Set them before drawing with <strong>Start angle</strong>, <strong>End angle</strong> and <strong>Inner radius</strong>. Draws like the Oval, with the same keys.</td></tr>
+    <tr><td>PolyStar</td><td></td><td class="wrap">Drag out from the center; the drag sets the size and which way it points. Set the number of <strong>Sides</strong> (3 to 32), and check <strong>Star</strong> to draw a star; <strong>Star point size</strong> sets how deep its points are, from long and thin near 0 to a plain polygon at 1. <kbd>Shift</kbd> turns it in 45&deg; steps.</td></tr>
   </tbody>
 </table>
+
+<p>The <kbd>Alt</kbd>-click dialog, <strong>Rectangle Settings</strong> or <strong>Oval Settings</strong>, also has <strong>Draw from center</strong>, which places the click at the middle of the shape instead of its top-left corner. It remembers the last size you typed. The plain Oval has no start or end angle; for a pie slice or ring, use the Oval Primitive.</p>
+
+<div class="split">
+  <figure style="margin:0"><img src="assets/shots/tool-options-polystar-oval-primitive.webp" alt="Tool Options for the PolyStar tool, with Sides 5, the Star check box and Star point size 0.50, and for the Oval Primitive tool, with Start angle, End angle and Inner radius all at zero" width="391" height="240"></figure>
+  <div>
+    <dl class="defs" style="grid-template-columns:1fr">
+      <dt>Start angle and End angle</dt>
+      <dd>Where the oval primitive's arc begins and ends, in degrees clockwise from three o'clock. The same angle for both, such as 0 and 0, draws the whole oval.</dd>
+      <dt>Inner radius</dt>
+      <dd>A hole in the middle, as a percentage of the oval's size, from 0 to 99. With angles, it makes a ring segment.</dd>
+    </dl>
+    <p>The PolyStar's options are shown above the Oval Primitive's here; each tool shows only its own.</p>
+  </div>
+</div>
 
 <h3>Editing primitives</h3>
 
@@ -137,7 +158,7 @@
 
 <h2>Paint Brush</h2>
 
-<p>Press <kbd>Y</kbd> and draw freehand to paint with an art or pattern brush. The Paint Brush shares a slot with the Pencil. Choose the brush under <strong>Brush</strong> on the Tool tab, or in the <a href="#brush-library">Brush Library</a>. The stroke is fitted like a pencil line, in the Pencil mode and Smoothing you set. To give a stroke already drawn a brush, select it and choose one under <strong>Brush</strong> on the Object tab.</p>
+<p>Press <kbd>Y</kbd> and draw freehand to paint with an art or pattern brush. The Paint Brush shares a slot with the <a href="#brushes">brushes</a>. It draws a stroke, so its Tool tab shows the stroke color and style but no fill. Choose the brush under <strong>Brush</strong> on the Tool tab, or in the <a href="#brush-library">Brush Library</a>. The stroke is fitted like a pencil line, in the Pencil mode and Smoothing you set. To give a stroke already drawn a brush, select it and choose one under <strong>Brush</strong> on the Object tab.</p>
 
 <p>The <strong>Brush</strong> menu shows each brush with a picture of its stroke: the document's own paint brushes under <strong>Brushes in this document</strong>, then the Brush Library's by category, then the library's graphic symbols. An art brush stretches its art from one end of the stroke to the other; a pattern brush repeats its tile along the stroke. The stroke size is the art's height across the stroke. Art drawn in black and grays takes the stroke color (black becomes the color, lighter grays its tints); art in colors of its own keeps them. Any graphic symbol in the library can be a brush too, such as a leaf, a rope or a chain link, with <strong>Stretch</strong> or <strong>Repeat</strong> beside it.</p>
 
@@ -146,6 +167,12 @@
 <p>With a pen, how hard you press sets the stroke's width as you draw, between the brush's narrowest and widest (its options in <a href="color.html#stroke-styles">Custom Stroke Style</a>), and leaning the pen over narrows it toward the brush's width for a leaning pen. The width is kept as the stroke's width profile, which the <a href="#width-tool">Width tool</a> can reshape afterwards; a paint brush stroke never draws wider than the brush's widest.</p>
 
 <p>Where a stroke turns a sharp corner, a pattern brush turns it as its <strong>Corners</strong> option says: <strong>Auto-centered</strong> bends a tile round the corner; <strong>Auto-between</strong> fits the tiles to each side so they meet at the corner, folded into it; <strong>Auto-sliced</strong> cuts the tiles of the two sides along the corner's bisector, like the mitered sides of a picture frame; and <strong>Auto-overlap</strong> runs each side's tiles on past the corner so they overlap there. An art brush with <strong>Bend round corners</strong> on bends its art round a sharp turn; with it off, the art is mitered at the turn and folds over itself on the inside of a tight one.</p>
+
+<h3>Making your own brush</h3>
+
+<p>Any graphic symbol can be a brush. Draw the art, convert it to a graphic symbol (<kbd>F8</kbd>), then choose the symbol under <strong>Brush</strong> on the Tool tab and set <strong>Stretch</strong> to bend one copy along the whole stroke, or <strong>Repeat</strong> to lay copies end to end. Draw the art lying along the horizontal: its left-to-right runs along the stroke, and its height lies across it. At a stroke size of 1 the art keeps its own height; a size of 2 doubles it. A symbol brush draws in the symbol's own colors, not the stroke color. Editing the symbol changes every stroke drawn with it.</p>
+
+<p>To bring in finished art and pattern brushes, import them from a document that has them into the <a href="#brush-library">Brush Library</a>. To change how a brush fits, spaces its tiles or turns corners, use its options in <a href="color.html#custom-stroke-style">Custom Stroke Style</a>, and keep the result as a new brush if you like. Phoenix has no command that turns selected artwork straight into an art or pattern brush.</p>
 
 <h3 id="brush-library">Brush Library</h3>
 
@@ -172,22 +199,27 @@
       <dt>Pencil mode</dt>
       <dd><strong>Smooth</strong> rounds your line into flowing curves. <strong>Straighten</strong> turns it into straight segments and clean arcs. <strong>Ink</strong> keeps it close to exactly what you drew.</dd>
       <dt>Smoothing</dt>
-      <dd>0 to 100. Higher values remove more wobble.</dd>
+      <dd>0 to 100. Higher values remove more wobble and use fewer points. Ink mode keeps close to your line whatever the smoothing.</dd>
       <dt>Connect lines</dt>
-      <dd>In Straighten mode, closes a stroke whose ends nearly meet.</dd>
+      <dd>In Straighten mode, closes a stroke whose ends nearly meet. How near they must be is the <strong>Connect lines</strong> setting in <a href="preferences.html#drawing">Preferences</a>.</dd>
       <dt>Recognize shapes</dt>
       <dd>In Straighten mode, turns a rough rectangle or oval into a true one.</dd>
     </dl>
-    <p>Start a stroke on the end of a selected open path to extend it. Hold <kbd>Shift</kbd> to draw a straight line across or down: the first few pixels of movement choose which.</p>
+    <p>Start a stroke on the end of a selected open path to extend it. Hold <kbd>Shift</kbd> to draw a straight line across or down: the first few pixels of movement choose which. The Pencil draws only a stroke, in the stroke color and style on the Tool tab. The Paint Brush fits its strokes with the same Pencil mode and Smoothing settings.</p>
   </div>
 </div>
 
 <h2>Brushes</h2>
 
-<p>The brush slot holds three brushes: the Brush (<kbd>B</kbd>), the Nib Brush (<kbd>Shift</kbd>+<kbd>B</kbd>) and the Ink Brush, which has no key until you give it one. All three paint filled shapes in the fill color, use your tablet's pen pressure, and keep their own settings. Hold <kbd>Shift</kbd> to paint a straight stroke across or down.</p>
+<p>The brush slot holds three brushes that paint fills: the Brush (<kbd>B</kbd>), the Nib Brush (<kbd>Shift</kbd>+<kbd>B</kbd>) and the Ink Brush, which has no key until you give it one. It also holds the <a href="#paint-brush">Paint Brush</a> (<kbd>Y</kbd>), which draws strokes. The three fill brushes paint filled shapes in the current fill, solid, gradient or bitmap, use your tablet's pen pressure, and keep their own settings. Hold <kbd>Shift</kbd> to paint a straight stroke across or down.</p>
 
 <figure class="narrow">
-  <img src="assets/shots/flyout-brushes.webp" alt="Flyout listing Brush, Nib Brush and Ink Brush" width="190" height="78">
+  <img src="assets/shots/flyout-brushes.webp" alt="Flyout listing Brush (B), Nib Brush (Shift+B), Ink Brush and Paint Brush (Y)" width="197" height="102">
+</figure>
+
+<figure class="narrow">
+  <img src="assets/shots/tool-nib-brush.webp" alt="Tool tab for the Nib Brush: the fill swatch, then Size, Nib shape, Use pressure, Use tilt, Smoothing, Brush mode, the Brush Properties and Presets button, Texture, Grain size, Grain strength, Bitmap brush, Softness, Opacity, Erase pixels and Lock fill" width="391" height="660">
+  <figcaption>The Nib Brush's settings. Each brush shows its own tip settings above the shared ones.</figcaption>
 </figure>
 
 <h3>Brush</h3>
@@ -259,7 +291,7 @@
 
 <p>A brush can paint with a grain, as chalk takes the tooth of the paper. Choose the <strong>Texture</strong> on the Tool tab: one of Phoenix's own, such as Paper, Watercolor Paper, Chalk, Charcoal, Crayon, Sponge, Canvas or Halftone, or a library bitmap. <strong>Grain size</strong> and <strong>Grain strength</strong> set how large it is and how much paint it takes away where it is lightest. In Brush Properties you can also move the grain (<strong>Offset X</strong>, <strong>Offset Y</strong>) and turn it (<strong>Rotation</strong>) so neighboring strokes don't share it. <strong>Pressure sets the strength</strong> shows more grain at a light touch. <strong>Fixed to the frame</strong> keeps the grain the same size in the rendered frame as a camera zooms or the art is scaled. Without it, the grain scales with the art.</p>
 
-<p>A textured stroke stays an object of its own, so merging never spreads its grain. To change the grain of a stroke already painted, or to give any shape one, select it and use the <strong>Texture</strong> section of the Object tab. In an FLA file the grain is kept for Phoenix and also baked for Animate: there the stroke is filled with a small repeating bitmap of the grain in its color, so it looks the same. Opened in Phoenix again, it is the textured stroke you can still change. A grain that keeps its size in the frame is baked at the art's scale, and a grain taken from a JPEG library bitmap shows as plain paint in Animate.</p>
+<p>A textured stroke stays an object of its own, so merging never spreads its grain. To change the grain of a stroke already painted, or to give any shape one, select it and use the <strong>Texture</strong> section of the Object tab. In an FLA file the grain is kept for Phoenix and also baked for other programs that open the file: for them the stroke is filled with a small repeating bitmap of the grain in its color, so it looks the same. Opened in Phoenix again, it is the textured stroke you can still change. A grain that keeps its size in the frame is baked at the art's scale, and a grain taken from a JPEG library bitmap shows as plain paint in other programs.</p>
 
 <h3>Bitmap brush</h3>
 
@@ -278,7 +310,13 @@
 
 <h2>Eraser</h2>
 
-<p>Press <kbd>E</kbd> and drag to erase merge artwork. Set its <strong>Size</strong>, and choose an <strong>Eraser mode</strong>:</p>
+<div class="split">
+  <figure style="margin:0"><img src="assets/shots/tool-eraser.webp" alt="Tool tab for the Eraser: Size 12 px, Eraser shape Round, Use pressure, Use tilt and Sync with Nib Brush check boxes, Eraser mode Erase Normal, and Faucet" width="391" height="345"></figure>
+  <div>
+    <p>Press <kbd>E</kbd> and drag to erase. The Eraser takes away from merge artwork and from drawing objects alike, and drawing objects stay objects. It does not erase symbol instances, text, bitmaps or primitives; break them apart first. While you drag, the area the nib has covered is outlined, and the paint goes when you let go.</p>
+    <p>Set its <strong>Size</strong>, from 1 to 200 pixels, and choose an <strong>Eraser mode</strong>.</p>
+  </div>
+</div>
 
 <table>
   <thead><tr><th>Mode</th><th>Erases</th></tr></thead>
@@ -293,11 +331,19 @@
 
 <p><strong>Eraser shape</strong> picks the nib: round, oval, square, rectangle, a vertical line or a diagonal, and <strong>Use pressure</strong> and <strong>Use tilt</strong> let a pen vary its width and turn it as the brushes do. <strong>Sync with Nib Brush</strong> erases with the Nib Brush's own size, nib, pressure and tilt, so the two stay matched as you switch between them.</p>
 
-<p>Check <strong>Faucet</strong> to delete a whole fill or stroke with one click. Turning a tablet pen over to its eraser end switches to the Eraser, and turning it back returns to your previous tool.</p>
+<p>Erase Selected Fills works on fills you have selected first with a selection tool, and leaves everything else alone. Erase Inside keeps to the one fill where your drag begins; starting on empty stage erases nothing.</p>
+
+<p>Check <strong>Faucet</strong> to delete a whole fill or stroke with one click; the cursor changes to show it. Turning a tablet pen over to its eraser end switches to the Eraser, and turning it back returns to your previous tool. To clear everything on a frame, select it all (<kbd>Ctrl</kbd>+<kbd>A</kbd>) and press <kbd>Delete</kbd>; double-clicking the Eraser does not clear the stage.</p>
 
 <h2>Paint Bucket and Ink Bottle</h2>
 
-<p>The <strong>Paint Bucket</strong> (<kbd>K</kbd>) fills an enclosed area with the fill color, or recolors an existing fill. If your outline has small gaps, choose a <strong>Gap size</strong>: Don't Close Gaps, or close small, medium or large gaps.</p>
+<div class="split">
+  <figure style="margin:0"><img src="assets/shots/tool-paint-bucket.webp" alt="Tool tab for the Paint Bucket: the fill swatch, Gap size Close Small Gaps, and the Fill all regions and Lock fill check boxes" width="391" height="290"></figure>
+  <div>
+    <p>The <strong>Paint Bucket</strong> (<kbd>K</kbd>) fills an enclosed area with the current fill, or recolors an existing fill. Click inside an area bounded by strokes, or by the edges of other fills. It works on shapes; a click on empty stage, or in an area that isn't closed, does nothing.</p>
+    <p>If your outline has small gaps, choose a <strong>Gap size</strong>: <strong>Close Small Gaps</strong> (the default), <strong>Close Medium Gaps</strong> or <strong>Close Large Gaps</strong> bridge openings of about 3, 8 and 20 pixels on screen, so zooming out closes wider gaps. <strong>Don't Close Gaps</strong> fills only closed areas. The bridge is not drawn; the fill simply reaches across it.</p>
+  </div>
+</div>
 
 <ul>
   <li>With a gradient as the fill, <strong>drag</strong> instead of clicking to lay the gradient along the drag: a linear one from where you press to where you let go, a radial one centered where you press, out to there.</li>
@@ -305,11 +351,15 @@
   <li><strong>Lock fill</strong> (also on the brushes) places a gradient or bitmap over the whole stage instead of fitting it to each area, so separate areas read as one sweep of color.</li>
 </ul>
 
-<p>The <strong>Ink Bottle</strong> (<kbd>S</kbd>), in the same slot, works on strokes. Click a fill to add an outline around it, or click a stroke to give it the current stroke color, size and style.</p>
+<p>The <strong>Ink Bottle</strong> (<kbd>S</kbd>), in the same slot, works on strokes. Click a fill, painted or just enclosed, to add an outline around it, or click a stroke to give it the current stroke color, size and style, including cap, join, width profile and brush. Its Tool tab shows only the stroke settings.</p>
+
+<p>On a <a href="ink-and-paint.html#line-and-color-art">color art layer</a>, the Paint Bucket fills the areas closed by the strokes of its line layer, even where the color layer has nothing yet, and puts the paint on the color art layer, under the lines.</p>
 
 <h2>Eyedropper</h2>
 
 <p>Press <kbd>I</kbd> and click a fill to take its color, or a stroke to take its color and size, or a gradient or bitmap fill to take the whole gradient or bitmap. After you pick up a fill, Phoenix switches to the Paint Bucket so you can apply it straight away; after a stroke, to the Ink Bottle.</p>
+
+<p>The Eyedropper reads shapes, drawing objects and rectangle and oval primitives. It takes a stroke's color and weight, not its style, cap or width profile, and only from a stroke of a solid color. It does not read the pixels of a bitmap, so to take a color from a picture, use the color picker's own way to pick a color from the screen. The Eyedropper has no settings on the Tool tab. See also <a href="color.html#the-eyedropper">The Eyedropper</a> on the color page.</p>
 
 </article>
 </main>

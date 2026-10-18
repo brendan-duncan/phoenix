@@ -4,11 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Settings and preferences · Phoenix User Guide</title>
-<meta name="description" content="What Phoenix remembers between sessions, the settings you can change, and where they are kept.">
+<meta name="description" content="The Preferences dialog (undo levels, auto-recovery, startup, highlight, click accuracy, connect lines, pen preview, AI assistants, ActionScript class paths), keyboard shortcut sets, what Phoenix remembers and where settings are kept.">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Phoenix">
 <meta property="og:title" content="Settings and preferences · Phoenix User Guide">
-<meta property="og:description" content="What Phoenix remembers between sessions, the settings you can change, and where they are kept.">
+<meta property="og:description" content="The Preferences dialog (undo levels, auto-recovery, startup, highlight, click accuracy, connect lines, pen preview, AI assistants, ActionScript class paths), keyboard shortcut sets, what Phoenix remembers and where settings are kept.">
 <meta property="og:url" content="https://phoenixanimate.com/preferences.html">
 <meta property="og:image" content="https://phoenixanimate.com/assets/shots/hero.webp">
 <meta property="og:image:type" content="image/webp">
@@ -17,7 +17,7 @@
 <meta property="og:image:alt" content="The Phoenix window with three flower characters on the stage, the timeline below and the Properties panel on the right">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:image" content="https://phoenixanimate.com/assets/shots/hero.webp">
-<meta name="keywords" content="preferences settings remembered auto-save recent files window layout brush settings reset theme workspace shortcut set phoenix_settings_dir">
+<meta name="keywords" content="preferences settings general drawing undo levels auto-recovery start screen reopen documents highlight color click accuracy connect lines pen preview solid points mcp port class paths remembered auto-save recent files window layout brush settings reset theme workspace font mapping shortcut set phoenix_settings_dir">
 <link rel="icon" href="assets/img/logo.png">
 <link rel="stylesheet" href="assets/site.css">
 <script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
@@ -33,19 +33,61 @@
 
 <h2>Preferences</h2>
 
-<p>Choose <span class="menu-path">Edit &rsaquo; Preferences</span> (<kbd>Ctrl</kbd>+<kbd>U</kbd>). The <strong>General</strong> group has the first four settings, the <strong>Drawing</strong> group the next three, <strong>AI Assistants</strong> the next, and <strong>ActionScript</strong> the last. Changes apply when you click <strong>OK</strong>.</p>
+<p>Choose <span class="menu-path">Edit &rsaquo; Preferences</span> (<kbd>Ctrl</kbd>+<kbd>U</kbd>). The dialog is one page in four groups: <strong>General</strong>, <strong>Drawing</strong>, <strong>AI Assistants</strong> and <strong>ActionScript</strong>. Changes apply when you click <strong>OK</strong>; <strong>Cancel</strong> leaves everything as it was. Preferences belong to Phoenix, not to a document, so they hold for every file you open.</p>
+
+<div class="split">
+  <figure style="margin:0"><img src="assets/shots/preferences-dialog.webp" alt="The Preferences dialog: General with Undo levels 200, Auto-recovery every 2 minutes, Show the start screen, Reopen documents from last time and Highlight set to Layer color; Drawing with Click accuracy and Connect lines set to Normal, Show pen preview checked and Show solid points unchecked; AI Assistants with Let AI assistants connect unchecked and the port; ActionScript with Class paths" width="338" height="570"></figure>
+  <div>
+    <h3>General</h3>
+    <dl class="defs" style="grid-template-columns:1fr">
+      <dt>Undo levels</dt><dd>How many steps <span class="menu-path">Edit &rsaquo; Undo</span> can go back, from 1 to 9999; 200 unless you change it. The oldest steps are let go as new ones come; <strong>No limit</strong> (type 0) keeps them all, at the cost of memory.</dd>
+      <dt>Auto-recovery</dt><dd>How often a recovery copy of unsaved work is written: every 1, 2, 5 or 10 minutes, or Off. The same setting as <span class="menu-path">File &rsaquo; Auto-Save</span>; see <a href="documents.html#auto-save-and-recovery">Auto-save and recovery</a>.</dd>
+      <dt>At startup</dt><dd><strong>Show the start screen</strong>. Turn it off and Phoenix reopens your most recent file instead. <strong>Reopen documents from last time</strong>, on unless you turn it off, opens the saved documents that were open when you quit, each in its tab; the start screen then shows only when there were none.</dd>
+      <dt>Highlight</dt><dd><strong>Layer color</strong> outlines a selection in its layer's color; <strong>One color</strong> outlines every selection in the color you pick with the button beside it.</dd>
+    </dl>
+  </div>
+</div>
+
+<h3>Drawing</h3>
+
+<p>These settings change how the drawing and selection tools read your mouse or pen. Each is measured in pixels on the screen, not on the stage, so it feels the same at every zoom.</p>
 
 <dl class="defs">
-  <dt>Undo levels</dt><dd>How many steps Edit &rsaquo; Undo can go back, 200 unless you change it. The oldest steps are let go as new ones come; <strong>No limit</strong> keeps them all, at the cost of memory.</dd>
-  <dt>Auto-recovery</dt><dd>How often a recovery copy of unsaved work is written, or Off. The same setting as <span class="menu-path">File &rsaquo; Auto-Save</span>.</dd>
-  <dt>At startup</dt><dd><strong>Show the start screen</strong>. Turn it off and Phoenix reopens your most recent file instead. <strong>Reopen documents from last time</strong>, on unless you turn it off, opens the saved documents that were open when you quit, each in its tab; the start screen then shows only when there were none.</dd>
-  <dt>Highlight</dt><dd><strong>Layer color</strong> outlines a selection in its layer's color; <strong>One color</strong> outlines every selection in the color you pick with the button beside it.</dd>
-  <dt>Click accuracy</dt><dd>How near a click must be to a line or a point to pick it: Strict, Normal or Tolerant.</dd>
-  <dt>Connect lines</dt><dd>How near the ends of a Straighten pencil line must be to be joined into a closed shape: Must be close, Normal or Can be distant.</dd>
-  <dt>Pen</dt><dd><strong>Show pen preview</strong> draws the next segment to the cursor before you click; <strong>Show solid points</strong> draws the pen's anchors filled.</dd>
-  <dt>AI Assistants</dt><dd><strong>Let AI assistants connect (MCP)</strong> lets an assistant on this computer work in the Phoenix you have open, on the <strong>Port</strong> given. Off by default. See <a href="ai-assistants.html">AI assistants</a>.</dd>
-  <dt>ActionScript</dt><dd><strong>Class paths</strong>: folders of ActionScript 3 class files, separated by <code>;</code>, that every movie played in Test Movie can use, after the movie's own. See <a href="actionscript.html#class-files">Class files</a>.</dd>
+  <dt>Click accuracy</dt><dd>How near a click must be to a line, a point or a handle to pick it: <strong>Strict</strong> (2 screen pixels), <strong>Normal</strong> (4) or <strong>Tolerant</strong> (8). Strict helps when lines lie close together; Tolerant makes thin lines easier to hit. It applies when you click with the selection tools, the Pen and anchor point tools, the Width tool, the Paint Bucket, Ink Bottle and Eyedropper, and to how near the cursor must come for snapping.</dd>
+  <dt>Connect lines</dt><dd>How near the two ends of a Pencil line drawn in Straighten mode must be to be joined into a closed shape: <strong>Must be close</strong> (8 screen pixels), <strong>Normal</strong> (15) or <strong>Can be distant</strong> (30). It works when the Pencil's own <strong>Connect lines</strong> option is on.</dd>
+  <dt>Pen</dt><dd><strong>Show pen preview</strong>, on by default, draws the next segment from the last point to the cursor before you click, so you can see the curve you are about to make. <strong>Show solid points</strong> draws the anchors of the path being drawn filled in blue instead of white. See <a href="drawing-tools.html#pen">Pen</a>.</dd>
 </dl>
+
+<p>The Pencil's other tidying settings are on its Tool tab rather than here: <strong>Pencil mode</strong>, <strong>Smoothing</strong>, which sets how much the line is smoothed, and <strong>Recognize shapes</strong>, which turns a rough rectangle or oval into a true one. See <a href="drawing-tools.html#pencil">Pencil</a>. To smooth or straighten lines already drawn, use <span class="menu-path">Modify &rsaquo; Shape</span>; see <a href="selecting.html#shape-commands">Shape commands</a>.</p>
+
+<h3>AI Assistants</h3>
+
+<p><strong>Let AI assistants connect (MCP)</strong> lets an assistant on this computer, such as Claude Desktop or Claude Code, read and change the document you have open in Phoenix, on the <strong>Port</strong> given (1024 to 65535). Off by default. Phoenix asks before each assistant starts working, and takes connections only from this computer. See <a href="ai-assistants.html">AI assistants</a>.</p>
+
+<h3>ActionScript</h3>
+
+<p><strong>Class paths</strong>: folders of ActionScript 3 class files, separated by <code>;</code>, that every movie played in Test Movie can use, after the movie's own. Classes in them are found by package, so <code>com.studio.Hat</code> is <code>com/studio/Hat.as</code> in one of the folders. See <a href="actionscript.html#class-files">Class files</a>.</p>
+
+<h3>Settings found elsewhere</h3>
+
+<p>Phoenix keeps most settings next to the thing they change rather than in Preferences:</p>
+
+<table>
+  <thead><tr><th>To change</th><th>Go to</th></tr></thead>
+  <tbody>
+    <tr><td>The window's colors, font size and UI scale</td><td class="wrap"><span class="menu-path">Window &rsaquo; Theme</span>; see <a href="workspace.html#themes">Themes</a></td></tr>
+    <tr><td>Panel layouts</td><td class="wrap"><span class="menu-path">Window &rsaquo; Workspaces</span>; see <a href="workspace.html#workspaces">Workspaces</a></td></tr>
+    <tr><td>The tools in the Tools panel</td><td class="wrap"><span class="menu-path">Window &rsaquo; Edit Toolbar...</span></td></tr>
+    <tr><td>Keys for commands and tools</td><td class="wrap"><span class="menu-path">Edit &rsaquo; Keyboard Shortcuts</span>; see <a href="#keyboard-shortcuts">below</a></td></tr>
+    <tr><td>Fonts shown in place of missing ones</td><td class="wrap"><span class="menu-path">Edit &rsaquo; Font Mapping...</span>; see <a href="text.html#missing-fonts">Missing fonts</a></td></tr>
+    <tr><td>The format new documents save in</td><td class="wrap"><span class="menu-path">File &rsaquo; Default Save Format</span></td></tr>
+    <tr><td>Snapping, the grid and guides</td><td class="wrap">The View menu; see <a href="stage.html#grid-and-snapping">Grid and snapping</a></td></tr>
+    <tr><td>Each tool's options</td><td class="wrap">The Tool tab of the Properties panel; see <a href="drawing-tools.html">Drawing tools</a></td></tr>
+    <tr><td>Default swatches</td><td class="wrap"><strong>Save as Default</strong> in the Swatches panel menu; see <a href="color.html#swatches">Swatches</a></td></tr>
+  </tbody>
+</table>
+
+<p>Phoenix has no preferences for undo kept separately per object, for clipboard image formats, or for script and code editor formatting.</p>
 
 <h2>Keyboard shortcuts</h2>
 
@@ -83,7 +125,7 @@
     <tr><td>Undo levels, highlight, click accuracy, connect lines and pen display</td><td class="wrap"><span class="menu-path">Edit &rsaquo; Preferences</span></td></tr>
     <tr><td>The format new documents save in</td><td class="wrap"><span class="menu-path">File &rsaquo; Default Save Format</span></td></tr>
     <tr><td>Outliner shown or hidden, and its width</td><td class="wrap"><span class="menu-path">Window &rsaquo; Outliner</span>, or drag its edge</td></tr>
-    <tr><td>Each tool's settings, including each brush's</td><td class="wrap">The Tool tab of the Properties panel</td></tr>
+    <tr><td>The brushes' settings and presets, brush mode and texture, and the Eraser's nib (other tools start from their defaults each session)</td><td class="wrap">The Tool tab of the Properties panel and Brush Properties and Presets</td></tr>
     <tr><td>Onion skin range, mode, opacity and colors</td><td class="wrap"><span class="menu-path">View &rsaquo; Onion Skin Settings</span></td></tr>
     <tr><td>High-quality anti-aliasing, Snap to Pixels</td><td class="wrap">The View menu</td></tr>
     <tr><td>Last New Document size and frame rate</td><td class="wrap">The New Document dialog</td></tr>
