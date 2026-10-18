@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>3D rotation and translation · Phoenix User Guide</title>
+<meta name="description" content="Turn movie clips in 3D and move them in depth with the 3D Rotation and 3D Translation tools, set the perspective angle and vanishing point, light and shadow them, tween them, and see what other apps and exports show.">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Phoenix">
+<meta property="og:title" content="3D rotation and translation · Phoenix User Guide">
+<meta property="og:description" content="Turn movie clips in 3D and move them in depth, in perspective, with lights, shadows and depth of field.">
+<meta property="og:url" content="https://phoenixanimate.com/3d.html">
+<meta property="og:image" content="https://phoenixanimate.com/assets/shots/hero.webp">
+<meta property="og:image:type" content="image/webp">
+<meta property="og:image:width" content="1704">
+<meta property="og:image:height" content="1061">
+<meta property="og:image:alt" content="The Phoenix window with three flower characters on the stage, the timeline below and the Properties panel on the right">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://phoenixanimate.com/assets/shots/hero.webp">
+<meta name="keywords" content="3d rotation tool 3d translation tool movie clip perspective z depth rotation x rotation y vanishing point perspective angle reset view extrusion lights shadows depth of field 3d motion tween classic tween fla">
+<link rel="icon" href="assets/img/logo.png">
+<link rel="stylesheet" href="assets/site.css">
+<script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<main>
+<article class="content">
+
+<p class="eyebrow">Drawing</p>
+<h1>3D rotation and translation</h1>
+<p class="lead">Turn a movie clip about its horizontal and vertical axes, or push it back into the stage, and Phoenix draws it in perspective. Add a light, shadows and depth of field for a scene with real depth.</p>
+
+<figure>
+  <img src="assets/shots/mg-3d-light.webp" alt="Five cards on a dark blue stage: one flat and unshaded, two turned toward a warm light and lit, one turned away and dark and blurred deep in the stage, and one near the viewer, large and blurred" width="800" height="206">
+  <figcaption>Movie clips turned and moved in 3D, lit from the upper left, with depth of field focused on the stage.</figcaption>
+</figure>
+
+<p>3D works on <strong>movie clip</strong> instances only. A graphic or button, a group, a shape or text can't be turned in 3D; convert it to a movie clip first (<span class="menu-path">Modify &rsaquo; Convert to Symbol</span>, <kbd>F8</kbd>), or change an instance's <strong>Type</strong> to Movie Clip on the Object tab. See <a href="symbols.html">Symbols</a>.</p>
+
+<p>Each clip has three 3D values: its turn about its horizontal axis (X) and about its vertical axis (Y), and its depth (Z). Turning a clip flat on the stage is still done with ordinary rotation, using <a href="selecting.html#free-transform">Free Transform</a> or the <a href="selecting.html#the-transform-panel">Transform panel</a>.</p>
+
+<h2>The 3D tools</h2>
+
+<p>The two 3D tools share a slot in the toolbox; hold the button down to choose between them. Both work on one movie clip at a time: press on the clip and drag. Pressing on anything that isn't a movie clip says so in the status bar.</p>
+
+<dl class="defs">
+  <dt>3D Rotation (<kbd>W</kbd>)</dt><dd>Drag left or right to turn the clip about its vertical axis, up or down to tip it about its horizontal axis, half a degree for each pixel you drag on screen. It turns about its transformation point; move that point with the Free Transform tool first to turn it about an edge, like a door on its hinges. While you work, two lines through the transformation point and a ring around it show the axes. <kbd>Alt</kbd>-click a clip to set it flat again (its depth stays).</dd>
+  <dt>3D Translation (<kbd>G</kbd>)</dt><dd>Drag up to push the clip into the stage, down to bring it nearer, a pixel of depth for each pixel you drag on screen. A clip further in draws smaller and closer to the vanishing point. A dot in a ring marks the depth axis, seen end on. To move a clip across the stage, use the Selection tool as usual.</dd>
+</dl>
+
+<p>Each drag is a single step to undo. Turns are about the stage's own axes; there is no switch between global and local axes, and no handles to drag a clip along X, Y or Z separately. For an exact depth, type it into the Object tab.</p>
+
+<h2>3D Position and View</h2>
+
+<div class="split">
+  <figure><img src="assets/shots/properties-3d-position.webp" alt="The 3D Position and View section of the Object tab: Z 0, Angle 55 degrees, Vanish X 0 and Y 0, Depth 0, and Reset View and Lights and Depth buttons" width="300" height="178"></figure>
+  <div>
+    <p>With a movie clip selected, the Object tab of the Properties panel has a <strong>3D Position and View</strong> section. <strong>Z</strong> and <strong>Depth</strong> belong to the selected clip; the rest is the document's view, shared by all its clips.</p>
+  </div>
+</div>
+
+<dl class="defs">
+  <dt>Z</dt><dd>How far the clip is from the stage: above 0 is further away, below 0 nearer to you.</dd>
+  <dt>Depth</dt><dd>How thick the clip is. Its edges are drawn back that far behind its face and shaded by the lights, for a card with a visible edge or a solid block of a logo. 0 is a flat card.</dd>
+  <dt>Angle</dt><dd>The perspective angle, 1&deg; to 179&deg; (55&deg; unless you change it). Wider exaggerates depth; narrower flattens it. It applies to clips turned with Phoenix's 3D tools; the 3D motion tweens of FLA files keep the file's own view angle.</dd>
+  <dt>Vanish X, Y</dt><dd>The vanishing point that depth recedes to, for the 3D motion tweens of FLA files (see below). 0, 0 stands for the middle of the stage. Clips turned with Phoenix's 3D tools always recede to the middle of the stage for now.</dd>
+  <dt>Reset View</dt><dd>Puts the vanishing point back in the middle of the stage and the angle at 55&deg;.</dd>
+  <dt>Lights and Depth...</dt><dd>Lights, shadows and depth of field; see below.</dd>
+</dl>
+
+<h2 id="lights">Lights, shadows and depth of field</h2>
+
+<p><strong>Lights and Depth...</strong> sets three things for every clip turned or moved in 3D in the document:</p>
+
+<ul>
+  <li><strong>Lights.</strong> Each clip is shaded by how squarely it faces the light, so a card swinging round catches the light and darkens as it turns edge on. <strong>From</strong> says where the light comes from (round from above: 90&deg; from the right, -90&deg; from the left), <strong>Height</strong> how far out toward you it is (90&deg; straight from the front, 0&deg; grazing), <strong>Strength</strong> how strong it is, <strong>Ambient</strong> how bright a clip turned away still is, and <strong>Color</strong> tints the light, warm or cool. Choose <strong>Light 2</strong>, <strong>3</strong> or <strong>4</strong> under <strong>Light</strong> and tick <strong>On</strong> for more lights: a warm key light and a cool one from the other side, each shading the clips in its color, added up. Clips lying flat on the stage are not shaded.</li>
+  <li><strong>Shadows.</strong> With <strong>Clips cast shadows on turned clips behind them</strong> ticked, a movie clip nearer the viewer (a lower Z) casts a soft shadow on a turned clip behind it, thrown away from each light: further and softer the further apart the two are. <strong>Darkness</strong> sets how dark, <strong>Softness</strong> how much blur for each hundred pixels between them.</li>
+  <li><strong>Depth of field.</strong> With <strong>Blur 3D movie clips away from a focus depth</strong> ticked, clips blur the further they are from the <strong>Focus</strong> depth (a Z), by <strong>Blur</strong> pixels for each hundred pixels nearer or further: a sharp title with a soft background pushed back behind it. Key the clips' Z to rack focus as they move.</li>
+</ul>
+
+<p>The lesson <a href="tutorial-3d-cards.html">3D cards in the light</a> walks through all of this step by step.</p>
+
+<h2>Animating in 3D</h2>
+
+<p>A clip's 3D turn and depth are keyed on keyframes like any other property. Set them on two keyframes and make a <strong>classic tween</strong> between them, and the clip turns and moves smoothly from one to the other, its shading, shadows and blur following along. See <a href="tweens.html#classic-tweens">Classic tweens</a>.</p>
+
+<p>Motion tweens in FLA files can carry 3D of their own: Rotation X and Y and a Z position. Phoenix plays them in perspective, turned about the clip's transformation point and seen at the file's view angle and vanishing point, on the stage and in every export. Keying 3D rotation and Z into a motion tween in Phoenix is not available yet, and the Motion Editor does not show those properties. See <a href="tweens.html#motion-tweens">Motion tweens</a>.</p>
+
+<h2>In files and exports</h2>
+
+<ul>
+  <li><strong>Phoenix documents</strong> (.phx) keep everything on this page.</li>
+  <li><strong>FLA and XFL files</strong> keep a clip's 3D turn, depth and thickness, and the document's angle, lights, shadows and depth of field, as Phoenix's own settings beside the clip's ordinary placement. Phoenix reads them back, but another app opening the file shows the clips flat, unshaded, sharp and without shadows. When you save such a document as FLA, Phoenix lists the Phoenix features it uses before it writes.</li>
+  <li>A clip that an FLA file places with a 3D matrix opens where it belongs, and saves back as it was, though Phoenix draws it without its perspective unless a motion tween turns it.</li>
+  <li><strong>Exports.</strong> Images, image sequences and movies show the 3D as the stage does. An SWF movie gets a scene with 3D as frames of vector shapes, and an HTML5 page gets the layers with turned clips as pictures. See <a href="export.html">Export</a>.</li>
+</ul>
+
+</article>
+</main>
+</body>
+</html>
