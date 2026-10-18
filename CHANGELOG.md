@@ -5,6 +5,10 @@ What changed in each release of Phoenix, newest first.
 ## Unreleased
 
 - The scene name above the stage drops down: switch scenes, add, duplicate or delete one, or open the Scene panel
+- The guide has a Lip Sync tutorial, also a lesson in Help > Tutorials: key a talking face's mouth to a line of dialogue, then touch up a shape with the Frame Picker
+- Lip Sync listens to a sound already in the library, starting with the one on the timeline, as well as to a recording on disk
+- Lip Sync's mouth chart fills itself in from the mouth symbol's frame labels: label each frame A, B, C... and each shape goes to its frame
+- Lip sync without Rhubarb opens the mouth with the first sound of a word, rather than a frame or two late
 
 ## 0.18.2
 
