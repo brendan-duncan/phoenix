@@ -4,11 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>The library · Phoenix User Guide</title>
-<meta name="description" content="Use the Library panel to preview, place, rename, duplicate, delete and organize symbols, bitmaps and sounds.">
+<meta name="description" content="Use the Library panel to preview, place, find, sort, rename, organize and delete symbols, bitmaps, sounds and fonts, set linkage for scripts, and copy items between documents.">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Phoenix">
 <meta property="og:title" content="The library · Phoenix User Guide">
-<meta property="og:description" content="Use the Library panel to preview, place, rename, duplicate, delete and organize symbols, bitmaps and sounds.">
+<meta property="og:description" content="Use the Library panel to preview, place, find, sort, rename, organize and delete symbols, bitmaps, sounds and fonts, set linkage for scripts, and copy items between documents.">
 <meta property="og:url" content="https://phoenixanimate.com/library.html">
 <meta property="og:image" content="https://phoenixanimate.com/assets/shots/hero.webp">
 <meta property="og:image:type" content="image/webp">
@@ -17,7 +17,7 @@
 <meta property="og:image:alt" content="The Phoenix window with three flower characters on the stage, the timeline below and the Properties panel on the right">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:image" content="https://phoenixanimate.com/assets/shots/hero.webp">
-<meta name="keywords" content="library panel folders symbols bitmaps sounds fonts preview play search use count linkage unused items rename duplicate delete new folder drag to stage organize items external library copy paste master file edit with">
+<meta name="keywords" content="library panel folders symbols bitmaps sounds fonts videos preview play search filter sort columns use count linkage class export for actionscript symbol properties 9-slice unused items select unused delete rename duplicate new folder move to folder drag to stage external library copy to document paste resolve library conflicts keep both replace master file edit with bitmap properties sound properties reuse assets">
 <link rel="icon" href="assets/img/logo.png">
 <link rel="stylesheet" href="assets/site.css">
 <script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
@@ -29,86 +29,136 @@
 
 <p class="eyebrow">Symbols</p>
 <h1>The library</h1>
-<p class="lead">Every symbol, image and sound in a document lives in its library. The stage holds instances; the library holds the originals.</p>
+<p class="lead">Every symbol, image, sound and font a document uses lives in its library. The stage holds instances; the library holds the originals, so changing an item changes every place it is used.</p>
 
 <div class="split">
   <figure style="margin:0"><img src="assets/shots/library-panel.webp" alt="The Library panel with a preview of a selected flower symbol above a searchable list of 37 items with their types, use counts and linkage" width="391" height="742"></figure>
   <div>
-    <p>The Library is a tab beside Properties in the panel dock (<span class="menu-path">Window &rsaquo; Library</span>, <kbd>Ctrl</kbd>+<kbd>L</kbd>). From top to bottom it shows:</p>
+    <p>The Library is a tab beside Properties in the panel dock (<span class="menu-path">Window &rsaquo; Library</span>, <kbd>Ctrl</kbd>+<kbd>L</kbd>). It always shows the library of the document whose tab is in front. From top to bottom it shows:</p>
     <ul>
-      <li>A <strong>preview</strong> of the selected item: a symbol's first frame, or the image. A symbol with more than one frame shows a <strong>Play</strong> button that runs it in the preview.</li>
+      <li>A <strong>preview</strong> of the selected item: a symbol's first frame, or the image. A symbol with more than one frame shows a <strong>Play</strong> button that runs it in the preview. Folders and sounds have no preview.</li>
       <li>The number of items in the library, and the library menu (&#9776;), which has the same commands as right-clicking the selected item.</li>
-      <li>A <strong>Search</strong> field. Type part of a name to show only the items that match, with the folders that hold them.</li>
-      <li>The <strong>item list</strong>, with each item's name, type, use count, linkage and the date it was last changed or imported. Click a column heading to sort by it.</li>
+      <li>A <strong>Search</strong> field. See <a href="#find-and-sort-items">Find and sort items</a>.</li>
+      <li>The <strong>item list</strong>, with folders you can open and close.</li>
     </ul>
-    <p>Item types are folders, graphics, movie clips, buttons, bitmaps, sounds, fonts and videos, each with its own icon. <strong>Use Count</strong> is how many times the document uses the item.</p>
   </div>
 </div>
+
+<h2>What the list shows</h2>
+
+<table>
+  <thead><tr><th>Column</th><th>Shows</th></tr></thead>
+  <tbody>
+    <tr><td>Name</td><td class="wrap">The item's name, with an icon for its type. Hover over a name inside a folder to see its whole path, such as <em>Characters/Bunny/head</em>.</td></tr>
+    <tr><td>Type</td><td class="wrap">Folder, Movie Clip, Button, Graphic, Bitmap, Sound, Font, Video or Embedded Video. A symbol kept in step with a master file reads <em>(linked)</em>.</td></tr>
+    <tr><td>Use Count</td><td class="wrap">How many times the document uses the item: instances on every timeline, bitmap fills, and sounds on keyframes.</td></tr>
+    <tr><td>Linkage</td><td class="wrap">The class name (or identifier) a symbol is exported to scripts under. See <a href="#linkage">Linkage</a>.</td></tr>
+    <tr><td>Date Modified</td><td class="wrap">When a symbol was last changed, or when a bitmap was imported or last updated.</td></tr>
+  </tbody>
+</table>
+
+<p>When the panel is narrow, scroll the list sideways to see the later columns, or drag the panel wider.</p>
 
 <h2>Use library items</h2>
 
 <ul>
   <li><strong>Drag a symbol or bitmap onto the stage</strong> to place an instance of it, centered where you drop it.</li>
-  <li><strong>Drag a sound onto the stage</strong> to attach it to the current frame. See <a href="sound.html">Sound</a>.</li>
-  <li><strong>Double-click a symbol</strong> to open it for editing, or a bitmap or sound to see its properties.</li>
+  <li><strong>Drag a sound onto the stage</strong> to attach it to the current frame, or onto a layer in the timeline to attach it there. See <a href="sound.html">Sound</a>.</li>
+  <li><strong>Double-click a symbol</strong> to open it for editing. Double-click a bitmap, sound or video to see its properties.</li>
 </ul>
+
+<h2 id="find-and-sort-items">Find and sort items</h2>
+
+<p>Type in <strong>Search</strong> to show only items whose names contain what you type, in upper or lower case. Folders that hold a match stay in the list and open to show it, and a folder whose own name matches shows too. Click the field's clear button, or delete the text, to see everything again.</p>
+
+<p>Click a column heading to sort by it, and click it again to reverse the order. Items sort within each folder, folders among them. Use Count sorts by number, so sorting it puts unused items first; the other columns sort alphabetically. The list starts sorted by name.</p>
 
 <h2>Organize the library</h2>
 
 <p>Right-click an item for:</p>
 
 <dl class="defs">
-  <dt>Rename</dt><dd>Also <kbd>F2</kbd>. Every instance follows the new name automatically.</dd>
+  <dt>Rename</dt><dd>Also <kbd>F2</kbd>. Type the new name in the list. Every instance, fill and sound that uses the item follows the new name automatically. Names cannot contain <code>/</code>, which separates folders.</dd>
   <dt>Duplicate</dt><dd>Makes a full copy of a symbol, named after the original with <em>copy</em> added.</dd>
-  <dt>Linkage...</dt><dd>Gives a symbol a class name, so scripts can create it by that name. Leave it empty for none. The name shows in the <strong>Linkage</strong> column.</dd>
+  <dt>Properties...</dt><dd>For a symbol, its type, linkage and 9-slice scaling; for a bitmap or sound, see <a href="#bitmap-and-sound-properties">Bitmap and sound properties</a>.</dd>
+  <dt>Linkage...</dt><dd>Gives a symbol a class name for scripts. See <a href="#linkage">Linkage</a>.</dd>
   <dt>Generate Sprite Sheet...</dt><dd>Lays the symbol's frames out on one image for a game. See <a href="export.html#sprite-sheets">Sprite sheets</a>.</dd>
-  <dt>Link to Master File...</dt><dd>Keeps a symbol in step with the same symbol in another file, Once it is linked, the menu reads <strong>Change Master File...</strong> and adds <strong>Update from Master</strong> and <strong>Unlink from Master</strong>, and the library menu has <strong>Update All Linked Items</strong>. See <a href="pipeline.html#linked-shared-assets">Linked shared assets</a>.</dd>
-  <dt>Delete</dt><dd>Removes the selected symbols, bitmaps and fonts (also <kbd>Delete</kbd>). If a symbol is still in use, Phoenix says how many times and asks before deleting it along with its instances. A bitmap that is still in use is kept. Text set in a deleted font symbol uses the font itself instead.</dd>
+  <dt>Link to Master File...</dt><dd>Keeps a symbol in step with the same symbol in another file. Once it is linked, the menu reads <strong>Change Master File...</strong> and adds <strong>Update from Master</strong> and <strong>Unlink from Master</strong>, and the library menu has <strong>Update All Linked Items</strong>. See <a href="pipeline.html#linked-shared-assets">Linked shared assets</a>.</dd>
+  <dt>Delete</dt><dd>Removes the selected symbols and bitmaps (also <kbd>Delete</kbd>). With several selected, it reads <strong>Delete 3 Items</strong>. If a symbol is still in use, Phoenix says how many times and asks before deleting it along with its instances. A bitmap that is still in use is kept, and Phoenix says so.</dd>
+  <dt>Copy, Paste</dt><dd>Copy items here and paste them into another open document's library. See <a href="#libraries-of-other-documents">Libraries of other documents</a>.</dd>
   <dt>New Symbol...</dt><dd>Makes a new symbol in the selected folder. <span class="menu-path">Insert &rsaquo; New Symbol</span> puts it there too.</dd>
-  <dt>New Folder</dt><dd>Adds a folder inside the folder you clicked.</dd>
+  <dt>New Folder</dt><dd>Adds a folder inside the folder you clicked, or in the folder that holds the item you clicked, named <em>Untitled Folder 1</em> (rename it straight away with <kbd>F2</kbd>).</dd>
+  <dt>New Font...</dt><dd>Adds a font symbol. See <a href="#font-symbols">Font symbols</a>.</dd>
   <dt>Expand All Folders, Collapse All Folders</dt><dd>Opens or closes every folder at once.</dd>
-  <dt>Select Unused Items</dt><dd>Selects every symbol and bitmap nothing in the document uses, ready to delete. The item count reads how many it found.</dd>
+  <dt>Select Unused Items</dt><dd>See <a href="#unused-items">Unused items</a>.</dd>
 </dl>
 
-<h2>Bitmap and sound properties</h2>
+<p>Sounds, font symbols and folders cannot be deleted from the Library panel. All other library changes can be undone, each as one step.</p>
 
-<p>Right-click a bitmap for:</p>
+<h3>Symbol Properties</h3>
+
+<p>Right-click a symbol and choose <strong>Properties...</strong> to change, in one step you can undo:</p>
 
 <dl class="defs">
-  <dt>Properties...</dt><dd>Shows the bitmap with its source file, size and when it was imported. <strong>Allow smoothing</strong> draws it smoothly when scaled or turned. <strong>Compression</strong> (Photo or Lossless) and <strong>Quality</strong> are kept for publishing. <strong>Import...</strong> replaces the image with another file, keeping every use of it.</dd>
-  <dt>Update</dt><dd>Reads the selected bitmaps again from the files they were imported from, after you change them in another program.</dd>
-  <dt>Edit With...</dt><dd>Opens the bitmap in an image editor you choose (Phoenix remembers it). Each time you save in the editor, Phoenix takes the change, as a step you can undo.</dd>
+  <dt>Type</dt><dd>Movie Clip, Button or Graphic. See <a href="symbols.html#symbol-types">Symbol types</a>.</dd>
+  <dt>Class</dt><dd>The symbol's linkage class name; leave it empty for none.</dd>
+  <dt>Enable guides for 9-slice scaling</dt><dd>Turns on 9-slice scale guides. See <a href="symbols.html#9-slice-scaling">9-slice scaling</a>.</dd>
 </dl>
-
-<p>A sound's <strong>Properties...</strong> show its format and length, with <strong>Play</strong> and <strong>Stop</strong> to hear it.</p>
 
 <h2>Folders and moving items</h2>
 
-<p>Drag items or folders onto a folder to move them into it, or onto empty space to move them to the top level. Moving or renaming a folder takes everything inside it along, and every symbol instance, bitmap fill and sound that uses those items is updated to match. If a name is already taken, Phoenix refuses the change and explains why in the status bar.</p>
+<p>Drag an item or a folder onto a folder to move it inside, or onto empty space to move it to the top level. Items move one at a time. Moving or renaming a folder takes everything inside it along, and every symbol instance, bitmap fill and sound that uses those items is updated to match. If a name is already taken in the folder, Phoenix refuses the change and explains why in the status bar.</p>
 
-<p>All library changes can be undone.</p>
+<p>Folders can hold folders. Phoenix remembers which folders you left open while you work, and Search opens folders to show what it finds.</p>
 
 <div class="callout tip">
   <span class="label">Tip</span>
   <p>Keep a folder per character or prop, and name symbols by part (<em>head</em>, <em>arm_L</em>, <em>mouth_O</em>). A tidy library makes swapping symbols and finding parts in the Edit Symbols list much quicker.</p>
 </div>
 
-<h2>Font symbols</h2>
+<h2 id="unused-items">Unused items</h2>
+
+<p>Over time a library collects items nothing uses: imported pictures you replaced, symbols you swapped out. Right-click and choose <strong>Select Unused Items</strong>. Phoenix clears the search, selects every symbol and bitmap nothing in the document uses, opens the folders that hold them, and the item count reads how many it found, or <em>Every item is used</em>. Then press <kbd>Delete</kbd> to remove them all at once, as one step you can undo.</p>
+
+<p>An item counts as used when a scene shows it: an instance, a bitmap fill or a keyframe sound on a scene's timeline, or inside a symbol that is itself used. A symbol with <a href="#linkage">linkage</a> counts as used too, since a script may create it. So an item used only inside an unused symbol is selected along with that symbol, even though its <strong>Use Count</strong> is above 0.</p>
+
+<h2 id="linkage">Linkage</h2>
+
+<p>Scripts create symbols from the library by their linkage: the class name a symbol is exported under. Right-click a symbol and choose <strong>Linkage...</strong>, then type a class name, such as <code>Ball</code>; leave it empty for no export. The name shows in the <strong>Linkage</strong> column, and Symbol Properties sets the same name under <strong>Class</strong>.</p>
+
+<p>A symbol with a class name is exported for ActionScript. ActionScript 3 makes one with <code>new Ball()</code>, ActionScript 1 and 2 with <code>attachMovie()</code>, and HTML5 Canvas pages with <code>new lib.Ball()</code>. See <a href="actionscript.html">ActionScript and JavaScript</a>.</p>
+
+<p>Setting linkage in Phoenix gives the symbol a class name only. FLA files you open keep the linkage they were saved with, including identifiers, base classes and the linkage of bitmaps and sounds, and Phoenix saves it back unchanged; but in the Library panel only a symbol's class name can be set, and setting it replaces an identifier or base class the symbol had. Scripts can set the rest; see <a href="scripting.html">Scripting</a>. Sharing library items between movies at run time is not available.</p>
+
+<h2 id="bitmap-and-sound-properties">Bitmap and sound properties</h2>
+
+<p>Right-click a bitmap for:</p>
+
+<dl class="defs">
+  <dt>Properties...</dt><dd>Shows the bitmap with its source file, size and when it was imported. <strong>Allow smoothing</strong> draws it smoothly when scaled or turned. <strong>Compression</strong> (Photo or Lossless) and <strong>Quality</strong> are kept for publishing. <strong>Update</strong> reads it again from its file, and <strong>Import...</strong> replaces the image with another file, keeping every use of it. See <a href="import.html#bitmap-properties">Bitmap Properties</a>.</dd>
+  <dt>Update</dt><dd>Reads the selected bitmaps again from the files they were imported from, after you change them in another program.</dd>
+  <dt>Edit With...</dt><dd>Opens the bitmap in an image editor you choose (Phoenix remembers it). Each time you save in the editor, Phoenix takes the change, as a step you can undo. See <a href="import.html#update-bitmaps">Keep bitmaps up to date</a>.</dd>
+</dl>
+
+<p>A sound's <strong>Properties...</strong> show its format and length, with <strong>Play</strong> and <strong>Stop</strong> to hear it. A video's properties say whether it is embedded or linked, its size, frame rate and the file it came from; Phoenix keeps video items from FLA files but does not play them (see <a href="sound.html#reference-video">Reference video</a>).</p>
+
+<h2 id="font-symbols">Font symbols</h2>
 
 <p>A font symbol carries a font, or the characters of it you need, with the document, so dynamic and input text look the same wherever the movie plays, even where the font is not installed. Right-click the library and choose <strong>New Font...</strong>: name it, pick the font and its style, and tick the characters to embed (uppercase, lowercase, numerals, punctuation, basic Latin), adding any others in <strong>Also</strong>.</p>
 
 <p>To set text in a font symbol, select the text and choose <strong>Use for Selected Text</strong> from the symbol's right-click menu. <strong>Font Properties...</strong> changes it later; renaming it keeps the text set in it.</p>
 
-<h2>Libraries of other documents</h2>
+<h2 id="libraries-of-other-documents">Libraries of other documents</h2>
 
-<p>To use items from another document, choose <span class="menu-path">File &rsaquo; Import &rsaquo; Open External Library...</span> (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>O</kbd>) and pick an FLA, XFL or PHX file. Its library opens in a panel of its own, read-only. Then:</p>
+<p>To use items from another document, choose <span class="menu-path">File &rsaquo; Import &rsaquo; Open External Library...</span> (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>O</kbd>) and pick an FLA, XFL or PHX file. Its library opens in a floating panel of its own, titled with the file's name, read-only: you can search and sort, but not rename or move anything, and it shows no preview. Open as many as you like; closing the panel lets the file go. Then:</p>
 
 <ul>
   <li><strong>Drag an item onto the stage</strong> to copy it into your document's library and place it.</li>
-  <li>Right-click items and choose <strong>Copy to Document</strong> to bring them into your library without placing them.</li>
+  <li><strong>Drag an item onto your Library panel</strong> to copy it without placing it.</li>
+  <li>Right-click items and choose <strong>Copy to Document</strong> to bring them into your library, or <strong>Copy</strong> to paste them into any open document's library later.</li>
 </ul>
 
-<p>Between two open documents, right-click items in one library and choose <strong>Copy</strong>, switch to the other document's tab, and choose <strong>Paste</strong> from its library's menu.</p>
+<p>Between two open documents, right-click items in one library and choose <strong>Copy</strong>, switch to the other document's tab, and choose <strong>Paste</strong> from its library's menu. You can also drag items from one window's Library onto another window's stage or Library.</p>
 
 <p>However they come, items arrive whole: a symbol brings the symbols, bitmaps and sounds it uses, and the folders they are in. When your library already has items of the same names, Phoenix asks how to resolve the conflict:</p>
 
@@ -118,7 +168,19 @@
   <dt>Keep both</dt><dd>The incoming items get new names (<em>Head copy</em>), and what came with them uses those names.</dd>
 </dl>
 
-<p>Copying is a single step you can undo. To keep a symbol in step with the file it came from, link it to that file instead; see <a href="pipeline.html#linked-shared-assets">Linked shared assets</a>.</p>
+<p>Copying is a single step you can undo. To keep a symbol in step with the file it came from, link it to that file instead; see <a href="pipeline.html#linked-shared-assets">Linked shared assets</a>. To bring in a whole document at once, its library and its main timeline as a movie clip, import it; see <a href="import.html#documents-and-movies">Other documents and movies</a>.</p>
+
+<h2>Reusing work across documents</h2>
+
+<p>Phoenix has no separate assets panel. To keep things you use again and again, use the library tools above together with these:</p>
+
+<dl class="defs">
+  <dt>A library document</dt><dd>Keep shared characters, props and backgrounds in one document and open it with Open External Library whenever you need them.</dd>
+  <dt>Linked shared assets</dt><dd>Link symbols to a master file, so updating the master updates every document that uses them. See <a href="pipeline.html#linked-shared-assets">Linked shared assets</a>.</dd>
+  <dt>Templates</dt><dd>Save a document as a template to start new documents with its library. See <a href="documents.html#templates">Templates</a>.</dd>
+  <dt>Motion presets</dt><dd>Save a motion to apply to other objects, in any document. See <a href="tweens.html#motion-presets">Motion presets</a>.</dd>
+  <dt>Brush Library</dt><dd>Keeps paint brushes for every document. See <a href="drawing-tools.html#brush-library">Brush Library</a>.</dd>
+</dl>
 
 </article>
 </main>

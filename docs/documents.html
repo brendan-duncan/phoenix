@@ -219,94 +219,23 @@
 
 <p>To convert files without opening them, see <a href="command-line.html#convert-between-formats">the <code>--convert</code> option</a>.</p>
 
-<h2>Import</h2>
+<h2 id="import">Import</h2>
 
-<p>Use <span class="menu-path">File &rsaquo; Import</span>:</p>
-
-<dl class="defs">
-  <dt>Import to Stage...</dt><dd><kbd>Ctrl</kbd>+<kbd>R</kbd>. Adds the file to the library and places it on the current frame.</dd>
-  <dt>Import to Library...</dt><dd>Adds the file to the library only.</dd>
-  <dt>Import Video...</dt><dd>Brings in a video as a reference to animate over. See <a href="sound.html#reference-video">Reference video</a>.</dd>
-  <dt>Open External Library...</dt><dd><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>O</kbd>. Opens another file's library beside this one, to copy items from. See <a href="library.html#libraries-of-other-documents">Libraries of other documents</a>.</dd>
-  <dt>Import Animatic...</dt><dd>Brings in an animatic's cut (EDL or Final Cut XML) as shot labels, boards and audio. See <a href="pipeline.html#start-from-the-animatic">Start from the animatic</a>.</dd>
-</dl>
+<p>To bring artwork, sound and video into a document, use <span class="menu-path">File &rsaquo; Import</span>: <strong>Import to Stage...</strong> (<kbd>Ctrl</kbd>+<kbd>R</kbd>) adds files to the library and places them on the current frame, <strong>Import to Library...</strong> adds them to the library only, and <strong>Open External Library...</strong> (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>O</kbd>) opens another document's library to copy items from. You can also drag files onto the window or paste from other applications.</p>
 
 <table>
   <thead><tr><th>Kind</th><th>Formats</th></tr></thead>
   <tbody>
-    <tr><td>Images</td><td>PNG, JPEG, GIF, BMP</td></tr>
-    <tr><td>Layered images</td><td>Photoshop (PSD and PSB), RGB, CMYK or grayscale, 8, 16 or 32 bits</td></tr>
-    <tr><td>Vector artwork</td><td>SVG, Illustrator (AI), EPS and PostScript, PDF</td></tr>
+    <tr><td>Images</td><td>PNG, JPEG, GIF, BMP, and numbered image sequences</td></tr>
+    <tr><td>Layered images</td><td>Photoshop (PSD and PSB), a layer for each Photoshop layer</td></tr>
+    <tr><td>Vector artwork</td><td>SVG, Illustrator (AI), EPS and PostScript, PDF, with editable paths, gradients and text</td></tr>
+    <tr><td>Documents and movies</td><td>FLA, XFL, SWF</td></tr>
     <tr><td>Sound</td><td>WAV, AIFF, MP3, FLAC, Ogg</td></tr>
     <tr><td>Video (reference)</td><td>MP4, MOV, M4V, AVI, MKV, WebM, FLV, WMV, MPEG</td></tr>
   </tbody>
 </table>
 
-<p>If you import one image from a numbered sequence, such as <code>walk_0001.png</code>, Phoenix offers to import the whole sequence as consecutive keyframes.</p>
-
-<h3>Photoshop files</h3>
-
-<p>Import to Stage turns each layer of a PSD into a layer of its own, named as it was, above the current layer, with the layer's pixels as a bitmap in the library and placed where they were on the canvas. Groups become layer folders, hidden layers stay hidden, and a layer's opacity and layer mask are kept in its pixels. A layer with a blend mode (Multiply, Screen, Overlay, Darken, Lighten, Difference, Linear Dodge, Subtract or Hard Light) is placed inside a movie clip that blends the same way, since only movie clips can blend; other blend modes come in as Normal, and Phoenix says which. Import to Library adds just the bitmaps.</p>
-
-<p>Large documents (PSB), 16- and 32-bit documents and CMYK documents are read too; their colors are brought to 8-bit RGB. Adjustment and fill layers have no pixels of their own and are left out, and layers clipped to the layer below come in unclipped.</p>
-
-<h3>SVG, Illustrator, EPS and PDF files</h3>
-
-<p>Each filled or stroked path becomes a drawing object with its fill and stroke color and stroke width, images become bitmaps in the library placed where they were, and text becomes static text. On the stage they are grouped as one piece of artwork, in the order they were drawn; Import to Library makes a graphic symbol named after the file instead.</p>
-
-<ul>
-  <li><strong>SVG:</strong> paths, rectangles, circles, ellipses, lines, polylines and polygons, with their groups, transforms and opacity, styled by attributes, the <code>style</code> attribute or the style sheet's classes; linear and radial gradients, which become gradient fills; <code>use</code> and symbols; images, embedded or in files beside the SVG; and text, with its font, size, weight and color.</li>
-  <li><strong>Illustrator and PDF:</strong> an Illustrator file is read through the PDF copy it carries, which Illustrator saves by default; for a PDF, the first page is read. Paths with their colors and opacity, spot (Pantone) colors, clipping masks, grouped and placed artwork, gradients, repeating pattern fills (drawn tile by tile), and images, palette images among them. Text comes in as text you can edit, a line at a time where the file placed it, in the font the file names when you have it installed (another font stands in when you do not).</li>
-  <li><strong>Illustrator files without a PDF copy:</strong> a file saved with <strong>Create PDF Compatible File</strong> turned off, and files from Illustrator 8 and older, are read in Illustrator's own format: paths and compound paths, colors (process and spot), gradients, clipping masks and point text; hidden layers are left out.</li>
-  <li><strong>EPS and PostScript:</strong> an EPS that Illustrator saved is read through the Illustrator artwork inside it. Any other EPS or PostScript file (from FreeHand, Photoshop, CorelDRAW and the like) is run as a PostScript program, and what it paints comes in: paths, fills and strokes in gray, RGB, CMYK and spot colors, clipping, images and text. The page is the file's bounding box.</li>
-</ul>
-
-<p>When a file uses something Phoenix cannot bring in, such as a kind of image it does not read, the import says what was left out.</p>
-
-<p>You can also drag images, sounds, PSD, SVG, Illustrator and EPS files from your desktop. Dropped on the stage, they are placed where you drop them; dropped elsewhere, they go into the library.</p>
-
-<p><span class="menu-path">Edit &rsaquo; Paste in Center</span> (<kbd>Ctrl</kbd>+<kbd>V</kbd>) also takes what other applications copy: an image, vector artwork copied as SVG or PDF, which comes in as it would from a file, or files copied in your file manager, which are imported to the stage. Copying in Phoenix puts an image and an SVG of the selection on the clipboard, for pasting into other applications.</p>
-
-<h3>Trace Bitmap</h3>
-
-<p>To turn a picture into artwork you can edit, select it on the stage and choose <span class="menu-path">Modify &rsaquo; Bitmap &rsaquo; Trace Bitmap</span>, or right-click it and choose <strong>Trace Bitmap</strong>. Areas of like color become fills in their average color, and neighboring areas share their edges, so nothing shows through between them.</p>
-
-<dl class="defs">
-  <dt>Color threshold</dt><dd>How different two colors may be and still make one area, from 1 to 500: the red, green and blue differences added together. Higher makes fewer, larger areas.</dd>
-  <dt>Minimum area</dt><dd>Areas smaller than this many pixels join the neighbor they share the most edge with. Raise it to clear away specks.</dd>
-  <dt>Curve fit</dt><dd>How closely the outlines follow the picture. Pixels and Very Tight keep every step of the pixels. From Tight on, rounds become smooth curves and straight sides stay straight, with fewer points the smoother you go.</dd>
-</dl>
-
-<p><strong>Preview</strong> traces the bitmap on the stage with the settings as they are, so you can judge the result in place, zoomed in if you like. The dialog then says how many areas and points the trace made, and suggests what to change when there are far too many or too few. Turn on <strong>Auto Preview</strong> to trace again whenever a setting changes: it waits until you stop dragging a value, so scrubbing stays smooth.</p>
-
-<figure>
-  <img src="assets/shots/trace-bitmap.webp" alt="A picture of a tree and a house traced on the stage, beside the Trace Bitmap dialog: Color threshold 30, Minimum area 8 px, Curve fit Normal, Auto Preview on, 17 areas, 173 points" width="705" height="312">
-</figure>
-
-<p><strong>Trace</strong> keeps the result as one step you can undo, in the bitmap's place and position, and the bitmap stays in the library. <strong>Cancel</strong> puts the bitmap back and leaves nothing in the undo history. With several bitmaps selected, all of them are previewed and traced with the same settings.</p>
-
-<p>Right-clicking a bitmap also offers <strong>Swap Bitmap</strong>, to show another bitmap from the library in its place.</p>
-
-<h3 id="trace-settings">Choosing Trace Bitmap settings</h3>
-
-<p>To try it, download the <a href="assets/img/trace-sample.png" download>sample picture</a> (320 by 240 pixels) and import it with <span class="menu-path">File &rsaquo; Import &rsaquo; Import to Stage</span>. It is flat colors with soft edges and a little noise, like a scanned drawing or a compressed export. Here it is traced at three color thresholds:</p>
-
-<figure>
-  <img src="assets/shots/trace-bitmap-thresholds.webp" alt="The sample traced three times: at threshold 10 it is crazed with tiny shapes, at 30 each flat color is one clean shape, at 100 the two blues of the sky, the two greens of the tree and the two sides of the house have each run together" width="1008" height="264">
-  <figcaption>Color threshold 10, 30 and 100, Minimum area 8 px, Curve fit Normal</figcaption>
-</figure>
-
-<ul>
-  <li><strong>Too low (10):</strong> the noise splits every flat color into specks, 1,058 areas in all. It is slow to draw and impossible to edit.</li>
-  <li><strong>Right (30):</strong> each flat color is one area, 17 in all, and the tree's shadow side stays apart from its lit side.</li>
-  <li><strong>Too high (100):</strong> 10 areas are left. The two blues of the sky have run together, and so have the two greens of the tree, the hills, and the lit and shaded sides of the house.</li>
-</ul>
-
-<p>For this picture, the ideal trace is Color threshold 30, Minimum area 8 px and Curve fit Normal, as shown above: 17 areas and 173 points, with the sun and the tree as smooth curves and the house as straight lines.</p>
-
-<p>For a picture of your own, turn on Auto Preview and zoom in on a detailed part of the stage. Raise Color threshold until the shades of each flat color become one area, and stop before colors you want to keep apart run together; the area count falls steeply as specks merge, then levels off. Then raise Minimum area if specks are left. Last, choose a Curve fit with as few points as still follow the shapes.</p>
-
-<p>Trace Bitmap suits flat-colored artwork: logos, cartoons and scanned inked drawings. A photograph or a gradient becomes many areas at any setting.</p>
+<p id="trace-bitmap">What each format brings in, Trace Bitmap, and the bitmap commands (Swap Bitmap, Break Apart, Bitmap Properties, Update and Edit With) are described in <a href="import.html">Importing artwork</a>; for tracing, see <a href="import.html#trace-bitmap">Trace Bitmap</a>.</p>
 
 <h2>Auto-save and recovery</h2>
 
