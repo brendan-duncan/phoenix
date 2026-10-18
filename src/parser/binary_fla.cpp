@@ -741,6 +741,19 @@ void readListedFields(Reader& r, const char* layout, ListedAction& action)
     }
 }
 
+/// Whether an action read by a guess looks like one: its first field (0 or
+/// 1, as every action's is) and its text (no control characters).
+bool plausibleAction(const ListedAction& action)
+{
+    if (!action.numbers.empty() && action.numbers.front() > 1)
+        return false;
+    for (const std::string& text : action.texts)
+        for (const char c : text)
+            if (static_cast<unsigned char>(c) < 0x20 && c != '\t' && c != '\n' && c != '\r')
+                return false;
+    return true;
+}
+
 /// Whether \a count actions Phoenix knows can be read from where \a r is.
 bool listReadsOn(Reader& r, uint32_t count)
 {
@@ -752,8 +765,10 @@ bool listReadsOn(Reader& r, uint32_t count)
             const auto found = fields.find(r.u32());
             if (found == fields.end())
                 return false;
-            ListedAction ignored;
-            readListedFields(r, found->second, ignored);
+            ListedAction next;
+            readListedFields(r, found->second, next);
+            if (!plausibleAction(next))
+                return false;
         }
     }
     catch (const ParseError&)
@@ -779,6 +794,9 @@ bool guessListedFields(Reader& r, uint32_t rest, ListedAction& action)
             ListedAction guess;
             guess.code = action.code;
             guess.unknown = true;
+            // Fields start with a u32, as every action's do.
+            if (!layout.empty() && layout[0] != 'u')
+                continue;
             try
             {
                 readListedFields(r, layout.c_str(), guess);
@@ -787,6 +805,8 @@ bool guessListedFields(Reader& r, uint32_t rest, ListedAction& action)
             {
                 continue;
             }
+            if (!plausibleAction(guess))
+                continue;
             const size_t after = r.position();
             if (listReadsOn(r, rest))
             {
@@ -983,6 +1003,18 @@ std::string clipEvents(uint32_t events)
     return out.empty() ? std::string("load") : out;
 }
 
+/// A variable set to \a value: its name a reference, as typed; one in slash
+/// syntax as dot syntax, or by set() when it cannot be.
+std::string assignment(const std::string& name, const std::string& value)
+{
+    if (name.find_first_of(":/") == std::string::npos)
+        return name + " = " + value + ";";
+    const std::string dotted = dotSyntax(name);
+    if (dotted != name && dotted.find_first_of(":/") == std::string::npos)
+        return dotted + " = " + value + ";";
+    return "set(" + quoted(name) + ", " + value + ");";
+}
+
 /// A statement written out as typed: given its semicolon when it has none.
 std::string statementText(const std::string& text)
 {
@@ -1139,19 +1171,8 @@ std::string actionListScript(const std::vector<ListedAction>& actions)
         {
             const std::string name = text(0);
             const std::string value = valueText(text(1), number(2) != 0);
-            // A name is a reference to set, as typed; one in slash syntax,
-            // or one given by an expression, is set by set().
-            if (number(1) != 0)
-                line("set(" + dotSyntax(name) + ", " + value + ");");
-            else if (name.find_first_of(":/") != std::string::npos)
-            {
-                const std::string dotted = dotSyntax(name);
-                line(dotted != name && dotted.find_first_of(":/") == std::string::npos
-                        ? dotted + " = " + value + ";"
-                        : "set(" + quoted(name) + ", " + value + ");");
-            }
-            else
-                line(name + " = " + value + ";");
+            // A name given by an expression is set by set().
+            line(number(1) != 0 ? "set(" + dotSyntax(name) + ", " + value + ");" : assignment(name, value));
             break;
         }
         case 0x1A:
@@ -1254,28 +1275,268 @@ std::string readActions(Reader& r)
     return std::string();
 }
 
+/// One Flash 5 action record.
+struct Flash5Action
+{
+    uint8_t code = 0;
+    /// The frame a go to names (0xFFFF: by an expression), or the frame
+    /// if frame is loaded waits for.
+    uint16_t frame = 0;
+    /// The label a go to names.
+    std::string label;
+    /// What the action names, by where each sits: a URL and a window (0, 1),
+    /// a scene (2), a value or condition (3), a second value (4), a target
+    /// (5), a depth (6), a variable (7) and a location (8).
+    std::string texts[9];
+    /// A button's events, one a u32 each.
+    uint32_t events[8] = {};
+    /// The property set (-1: none).
+    int32_t property = -1;
+    /// Bytes after the location: which fields are expressions, and more.
+    uint8_t flags[61] = {};
+};
+
 /// Flash 5 kept a frame's or button's actions as records of its own rather
-/// than script text: a count, then each action. Phoenix reads past them. [S]
-void readFlash5Actions(Reader& r)
+/// than script text: a count, then each action: a byte (9), the action's
+/// code, three CStrings, a u16 frame, a u16 (0xC180), the label (a
+/// CString), three CStrings, eight u32s (a button's events), the property
+/// (s32), a u16, two CStrings, five bytes, a CString and 61 bytes of flags.
+/// [S]
+std::vector<Flash5Action> readFlash5Actions(Reader& r)
 {
     const uint32_t count = r.u32();
     if (count > 100000)
         r.fail("a bad action count");
+    std::vector<Flash5Action> actions;
     for (uint32_t i = 0; i < count; ++i)
     {
+        Flash5Action a;
         r.u8();
-        r.u32(); // the action
+        a.code = r.u8();
+        for (int k = 0; k < 3; ++k)
+            a.texts[k] = r.cstring();
+        a.frame = r.u16();
+        r.u16();
+        a.label = r.cstring();
+        for (int k = 3; k < 6; ++k)
+            a.texts[k] = r.cstring();
+        for (uint32_t& event : a.events)
+            event = r.u32();
+        a.property = r.s32();
+        r.u16();
+        a.texts[6] = r.cstring();
+        a.texts[7] = r.cstring();
         r.skip(5);
-        // Its parameters: three CStrings, 32 bytes, a u32 (-1), a u16, two
-        // CStrings and 67 bytes.
-        r.cstring();
-        r.cstring();
-        r.cstring();
-        r.skip(32 + 4 + 2);
-        r.cstring();
-        r.cstring();
-        r.skip(67);
+        a.texts[8] = r.cstring();
+        for (uint8_t& flag : a.flags)
+            flag = r.u8();
+        actions.push_back(std::move(a));
     }
+    return actions;
+}
+
+/// An expression in the syntax of Flash 4 (which Flash 5 kept for the
+/// actions it read from Flash 4 movies) as ActionScript: = and <> compare,
+/// & joins text, and functions may be capitalized.
+std::string flash4Expression(const std::string& expression)
+{
+    static const std::map<std::string, const char*> functions = {{"getproperty", "getProperty"},
+        {"random", "random"}, {"int", "int"}, {"gettimer", "getTimer"}, {"eval", "eval"}, {"true", "true"},
+        {"false", "false"}, {"targetpath", "targetPath"}};
+    std::string out;
+    char quote = 0;
+    for (size_t i = 0; i < expression.size(); ++i)
+    {
+        const char c = expression[i];
+        if (quote)
+        {
+            out += c;
+            if (c == '\\' && i + 1 < expression.size())
+                out += expression[++i];
+            else if (c == quote)
+                quote = 0;
+            continue;
+        }
+        if (c == '"' || c == '\'')
+        {
+            quote = c;
+            out += c;
+            continue;
+        }
+        const char before = out.empty() ? ' ' : out.back();
+        const char after = i + 1 < expression.size() ? expression[i + 1] : ' ';
+        if (c == '<' && after == '>')
+        {
+            out += "!=";
+            ++i;
+        }
+        else if (c == '=' && before != '<' && before != '>' && before != '!' && before != '=' && after != '=')
+            out += "==";
+        else if (c == '&' && after != '&' && before != '&')
+            out += std::string(before == ' ' ? "" : " ") + "add" + (after == ' ' ? "" : " ");
+        else if (std::isalpha(static_cast<unsigned char>(c)) &&
+            !(std::isalnum(static_cast<unsigned char>(before)) || before == '_' || before == '.' || before == '$'))
+        {
+            size_t end = i;
+            while (end < expression.size() &&
+                (std::isalnum(static_cast<unsigned char>(expression[end])) || expression[end] == '_'))
+                ++end;
+            std::string word = expression.substr(i, end - i);
+            std::string lower = word;
+            for (char& l : lower)
+                l = static_cast<char>(std::tolower(static_cast<unsigned char>(l)));
+            const auto found = functions.find(lower);
+            out += found != functions.end() ? found->second : word;
+            i = end - 1;
+        }
+        else
+            out += c;
+    }
+    return dotSyntax(out);
+}
+
+/// A Flash 5 action's field: text, or an expression when \a expression.
+std::string flash5Value(const std::string& text, bool expression)
+{
+    if (!expression)
+        return quoted(text);
+    return text.empty() ? std::string("\"\"") : flash4Expression(text);
+}
+
+/// Flash 5's action records as the ActionScript they stand for. Codes and
+/// fields were learned from the SWFs published from the same documents. [S]
+std::string flash5Script(const std::vector<Flash5Action>& actions)
+{
+    std::string out;
+    int depth = 0;
+    const auto line = [&](const std::string& text) {
+        out.append(static_cast<size_t>(std::max(0, depth)), '\t');
+        out += text;
+        out += '\n';
+    };
+    const auto open = [&](const std::string& text) {
+        line(text + " {");
+        ++depth;
+    };
+    const auto close = [&]() {
+        if (depth > 0)
+            --depth;
+        line("}");
+    };
+    for (const Flash5Action& a : actions)
+    {
+        // Which fields are expressions, by the flag bytes.
+        const bool valueExpression = a.flags[9] != 0;
+        const bool targetExpression = a.flags[29] != 0;
+        const bool depthExpression = a.flags[33] != 0;
+        switch (a.code)
+        {
+        case 0x01:
+            line("play();");
+            break;
+        case 0x02:
+            line("stop();");
+            break;
+        case 0x03:
+            line("nextFrame();");
+            break;
+        case 0x04:
+            line("prevFrame();");
+            break;
+        case 0x08:
+        case 0x0A:
+        {
+            // In a scene (2) when one is named; by a label, an expression
+            // (frame 0xFFFF) or the frame's number.
+            const std::string go = a.code == 0x0A ? "gotoAndPlay(" : "gotoAndStop(";
+            const std::string scene = a.texts[2].empty() ? std::string() : quoted(a.texts[2]) + ", ";
+            const std::string frame = !a.label.empty() ? quoted(a.label)
+                : a.frame == 0xFFFF                    ? flash5Value(a.texts[3], true)
+                                                       : std::to_string(a.frame);
+            line(go + scene + frame + ");");
+            break;
+        }
+        case 0x09:
+            line("getURL(" + quoted(a.texts[0]) + (a.texts[1].empty() ? std::string() : ", " + quoted(a.texts[1])) +
+                ");");
+            break;
+        case 0x0E:
+            open("tellTarget (" + flash5Value(a.texts[5], targetExpression) + ")");
+            break;
+        case 0x0F:
+        case 0x13:
+        case 0x15:
+        case 0x18:
+            close();
+            break;
+        case 0x10:
+            line("fscommand(" + quoted(a.texts[3]) + ", " + quoted(a.texts[4]) + ");");
+            break;
+        case 0x11:
+        {
+            const std::string& where = a.texts[8];
+            const bool level = !where.empty() &&
+                std::all_of(where.begin(), where.end(), [](char c) { return c >= '0' && c <= '9'; });
+            line(level ? "loadMovieNum(" + quoted(a.texts[0]) + ", " + where + ");"
+                       : "loadMovie(" + quoted(a.texts[0]) + ", " + quoted(where) + ");");
+            break;
+        }
+        case 0x12:
+            open("ifFrameLoaded (" + std::to_string(a.frame) + ")");
+            break;
+        case 0x14:
+        {
+            // Release, press, release outside, roll over, roll out, drag
+            // over, drag out: the second u32 on. [S]
+            static const char* const names[] = {nullptr, "release", "press", "releaseOutside", "rollOver", "rollOut",
+                "dragOver", "dragOut"};
+            std::string events;
+            for (size_t k = 1; k < std::size(names); ++k)
+                if (a.events[k])
+                    events += (events.empty() ? "" : ", ") + std::string(names[k]);
+            open("on (" + (events.empty() ? std::string("release") : events) + ")");
+            break;
+        }
+        case 0x16:
+            open("if (" + flash4Expression(a.texts[3]) + ")");
+            break;
+        case 0x17:
+            close();
+            open("else");
+            break;
+        case 0x1D:
+            line(assignment(a.texts[7], flash5Value(a.texts[3], valueExpression)));
+            break;
+        case 0x1E:
+        {
+            const char* property = a.property >= 0 ? propertyName(static_cast<uint32_t>(a.property)) : nullptr;
+            if (property)
+                line(std::string("setProperty(") + flash5Value(a.texts[5], targetExpression) + ", " + property + ", " +
+                    flash5Value(a.texts[3], valueExpression) + ");");
+            else
+                line("// A property Phoenix does not know (" + std::to_string(a.property) + ") was set here.");
+            break;
+        }
+        case 0x22:
+            line("startDrag(" + flash5Value(a.texts[5], targetExpression) + (a.flags[45] ? ", true" : ", false") +
+                ");");
+            break;
+        case 0x23:
+            line("duplicateMovieClip(" + flash5Value(a.texts[5], targetExpression) + ", " +
+                flash5Value(a.texts[3], valueExpression) + ", " + flash5Value(a.texts[6], depthExpression) + ");");
+            break;
+        default:
+        {
+            char note[96];
+            std::snprintf(note, sizeof(note), "// An action Phoenix does not know (0x%02X) was here.", a.code);
+            line(note);
+            break;
+        }
+        }
+    }
+    while (depth > 0)
+        close();
+    return out;
 }
 
 void readShape(Reader& r, Object& o)
@@ -1316,7 +1577,7 @@ void readFrame(Reader& r, Object& o)
     if (schema >= 21)
         o.script = readActions(r);
     else
-        readFlash5Actions(r);
+        o.script = flash5Script(readFlash5Actions(r));
     r.skip(12);
     o.morph = r.readObject(kTimeline) != nullptr;
     r.u32();
@@ -1565,7 +1826,7 @@ void readButton(Reader& r, Object& o)
     if (schema < 5)
     {
         // Flash 5: the actions and a byte. [S]
-        readFlash5Actions(r);
+        o.script = flash5Script(readFlash5Actions(r));
         r.u8();
         return;
     }

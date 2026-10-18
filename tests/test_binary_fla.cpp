@@ -643,6 +643,9 @@ TEST(binary_fla_reads_flash_5_layers_frames_and_actions)
     CHECK(document.find("name=\"Lower\"") != std::string::npos);
     CHECK(document.find("name=\"Upper\"") != std::string::npos);
     CHECK(document.find("name=\"go\"") != std::string::npos);
+    // The action record as the script it stands for.
+    CHECK(document.find("fscommand(") != std::string::npos);
+    CHECK(document.find("allowscale") != std::string::npos);
 }
 
 TEST(binary_fla_reads_mx_normal_mode_actions)
@@ -709,12 +712,207 @@ TEST(binary_fla_reads_mx_normal_mode_actions)
     body.insert(body.end(), 3 + 4 + 4 + 4 + 4, 0);
     body.insert(body.end(), {0, 0, 0, 1, 1});
     std::map<std::string, std::vector<uint8_t>> streams;
-    streams["Contents"] = emptyContents();
+    streams["Contents"] = contentsWithScene(0x43);
     streams["Page 1"] = pageStream(body);
     std::map<std::string, std::vector<uint8_t>> files;
     std::string error;
     std::string warning;
     CHECK(BinaryFla::convert(streams, files, error, &warning) && warning.empty());
+    // As the script it stands for.
+    const auto xml = files["DOMDocument.xml"];
+    const std::string document(xml.begin(), xml.end());
+    CHECK(document.find("lips01") != std::string::npos);
+    CHECK(document.find(", _visible, ") != std::string::npos);
+    CHECK(document.find("ifFrameLoaded (30) {\n}") != std::string::npos);
+}
+
+namespace {
+
+/// A page whose one frame holds \a actions (an MX 2004 normal mode list of
+/// \a count actions), read as XFL: the document's text.
+std::string normalModeFrame(uint32_t count, const std::vector<uint8_t>& actions, std::string* warning = nullptr)
+{
+    std::vector<uint8_t> body = {0, 0};
+    const auto u32 = [&body](uint32_t v) {
+        for (int i = 0; i < 4; ++i)
+            body.push_back(static_cast<uint8_t>(v >> (8 * i)));
+    };
+    const auto declare = [&body](const std::string& cls) {
+        body.insert(body.end(), {0xFF, 0xFF, 1, 0, static_cast<uint8_t>(cls.size()), 0});
+        body.insert(body.end(), cls.begin(), cls.end());
+    };
+    declare("CPicLayer");
+    body.insert(body.end(), {0, 0});
+    declare("CPicFrame");
+    body.insert(body.end(), {0, 0, 0, 0});
+    body.insert(body.end(), 8, 0);
+    body.push_back(2);
+    body.insert(body.end(), 24, 0);
+    body.push_back(5);
+    u32(0);
+    body.insert(body.end(), {0, 0, 0, 0, 0});
+    u32(0);
+    body.push_back(22);
+    body.insert(body.end(), {1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0});
+    u32(0);
+    u32(0);
+    body.insert(body.end(), {0, 0});
+    body.push_back(0); // no label
+    u32(1);           // version 1, kind 0: a list
+    u32(0);
+    u32(0);
+    u32(0);
+    u32(0);
+    u32(count);
+    body.insert(body.end(), actions.begin(), actions.end());
+    body.insert(body.end(), 12, 0);
+    body.insert(body.end(), {0, 0, 0, 0, 0, 0, 0, 0, 0});
+    body.insert(body.end(), 12, 0);
+    body.insert(body.end(), {0, 0});
+    body.insert(body.end(), 8, 0);
+    body.push_back(11);
+    body.push_back(0);
+    body.insert(body.end(), 3 + 4 + 4 + 4 + 4, 0);
+    body.insert(body.end(), {0, 0, 0, 1, 1});
+    std::map<std::string, std::vector<uint8_t>> streams;
+    streams["Contents"] = contentsWithScene(0x43);
+    streams["Page 1"] = pageStream(body);
+    std::map<std::string, std::vector<uint8_t>> files;
+    std::string error;
+    std::string read;
+    if (!BinaryFla::convert(streams, files, error, &read))
+        return "error: " + error;
+    if (warning)
+        *warning = read;
+    const auto xml = files["DOMDocument.xml"];
+    return std::string(xml.begin(), xml.end());
+}
+
+/// Builds an action list: each action's code and fields in order.
+struct ActionList
+{
+    std::vector<uint8_t> bytes;
+    uint32_t count = 0;
+
+    ActionList& action(uint32_t code)
+    {
+        ++count;
+        return number(code);
+    }
+    ActionList& number(uint32_t v)
+    {
+        for (int i = 0; i < 4; ++i)
+            bytes.push_back(static_cast<uint8_t>(v >> (8 * i)));
+        return *this;
+    }
+    ActionList& text(const std::string& s)
+    {
+        bytes.push_back(static_cast<uint8_t>(s.size()));
+        bytes.insert(bytes.end(), s.begin(), s.end());
+        return *this;
+    }
+};
+
+/// The text of the first script in \a document, its entities undone.
+std::string firstScript(const std::string& document)
+{
+    const size_t start = document.find("<script>");
+    const size_t end = document.find("</script>", start);
+    if (start == std::string::npos || end == std::string::npos)
+        return std::string();
+    std::string script = document.substr(start + 8, end - start - 8);
+    if (script.rfind("<![CDATA[", 0) == 0)
+        script = script.substr(9, script.size() - 12);
+    const std::pair<const char*, const char*> entities[] = {{"&quot;", "\""}, {"&lt;", "<"}, {"&gt;", ">"},
+        {"&apos;", "'"}, {"&amp;", "&"}};
+    for (const auto& [entity, plain] : entities)
+        for (size_t at = script.find(entity); at != std::string::npos; at = script.find(entity, at + 1))
+            script.replace(at, std::strlen(entity), plain);
+    return script;
+}
+
+} // namespace
+
+TEST(binary_fla_decompiles_normal_mode_actions)
+{
+    // A drag and drop button's list, as MX 2004 kept it: on (press) with
+    // start drag (target an expression) and set variable; on (release) with
+    // stop drag, an if with an else holding set property (text and
+    // expression values), get URL and go to (by label, and play), a tell
+    // target, a for loop with a break, a comment, a with, and slash syntax.
+    ActionList list;
+    list.action(0x0B).number(0).number(1).number(0);
+    list.action(0x1A).number(0).text("cap_blue").number(1).text("").text("").text("").text("").number(0).number(0).number(0);
+    list.action(0x18).number(0).text("this.save_x").number(0).text("getProperty(cap_blue, _x)").number(1);
+    list.action(0x0C);
+    list.action(0x0B).number(0).number(6).number(0);
+    list.action(0x1D);
+    list.action(0x0F).number(0).text("dx>225 && /:x<480");
+    list.action(0x17).number(0).number(7).text("1").number(1).text("bunny_blue").number(1);
+    list.action(0x10);
+    list.action(0x17).number(0).number(7).text("0").number(0).text("bunny_blue").number(0);
+    list.action(0x05).number(0).text("http://example.com").text("_blank").number(0).number(0).number(0);
+    list.action(0x12);
+    list.action(0x00).number(0).number(1).text("").text("again").number(1);
+    list.action(0x08).number(0).text("_root.status").number(0);
+    list.action(0x02);
+    list.action(0x09);
+    list.action(0x2C).number(1).text("k=0").text("k<3").text("k++");
+    list.action(0x2E);
+    list.action(0x2D);
+    list.action(0x1C).number(0).text("done");
+    list.action(0x32).number(0).text("_root.card").number(1);
+    list.action(0x29).number(1).text("gotoAndStop(2)");
+    list.action(0x33);
+    list.action(0x18).number(0).text("/:count").number(0).text("0").number(1);
+    list.action(0x0C);
+    std::string warning;
+    const std::string script = firstScript(normalModeFrame(list.count, list.bytes, &warning));
+    CHECK(warning.empty());
+    const std::string wanted = "on (press) {\n"
+                               "\tstartDrag(cap_blue, false);\n"
+                               "\tthis.save_x = getProperty(cap_blue, _x);\n"
+                               "}\n"
+                               "on (release, releaseOutside) {\n"
+                               "\tstopDrag();\n"
+                               "\tif (dx>225 && _root.x<480) {\n"
+                               "\t\tsetProperty(bunny_blue, _visible, 1);\n"
+                               "\t}\n"
+                               "\telse {\n"
+                               "\t\tsetProperty(\"bunny_blue\", _visible, \"0\");\n"
+                               "\t\tgetURL(\"http://example.com\", \"_blank\");\n"
+                               "\t}\n"
+                               "\tgotoAndPlay(\"again\");\n"
+                               "\ttellTarget (\"_root.status\") {\n"
+                               "\t\tstop();\n"
+                               "\t}\n"
+                               "\tfor (k=0; k<3; k++) {\n"
+                               "\t\tbreak;\n"
+                               "\t}\n"
+                               "\t// done\n"
+                               "\twith (_root.card) {\n"
+                               "\t\tgotoAndStop(2);\n"
+                               "\t}\n"
+                               "\t_root.count = 0;\n"
+                               "}\n";
+    if (script != wanted)
+        std::printf("%s\n", script.c_str());
+    CHECK(script == wanted);
+}
+
+TEST(binary_fla_reads_past_a_normal_mode_action_it_does_not_know)
+{
+    // An action of a code Phoenix has no fields for (0x30 here, a u32 and a
+    // CString): its fields are guessed by what lets the rest of the list
+    // read, and a note stands in its place.
+    ActionList list;
+    list.action(0x02);
+    list.action(0x30).number(0).text("something");
+    list.action(0x01);
+    std::string warning;
+    const std::string script = firstScript(normalModeFrame(list.count, list.bytes, &warning));
+    CHECK(warning.empty());
+    CHECK(script == "stop();\n// An action Phoenix does not know (0x30) was here.\nplay();\n");
 }
 
 TEST(binary_fla_sweep)
