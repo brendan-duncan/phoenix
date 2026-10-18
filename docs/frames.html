@@ -4,11 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Frames and keyframes · Phoenix User Guide</title>
-<meta name="description" content="Insert frames and keyframes, select, move, copy and stretch frames, label them, play your animation, and use onion skinning.">
+<meta name="description" content="Insert, convert and clear keyframes, animate frame by frame on ones or twos, read the timeline's marks, move and stretch spans, set the frame rate, play your animation, and use onion skinning.">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Phoenix">
 <meta property="og:title" content="Frames and keyframes · Phoenix User Guide">
-<meta property="og:description" content="Insert frames and keyframes, select, move, copy and stretch frames, label them, play your animation, and use onion skinning.">
+<meta property="og:description" content="Insert, convert and clear keyframes, animate frame by frame on ones or twos, read the timeline's marks, move and stretch spans, set the frame rate, play your animation, and use onion skinning.">
 <meta property="og:url" content="https://phoenixanimate.com/frames.html">
 <meta property="og:image" content="https://phoenixanimate.com/assets/shots/hero.webp">
 <meta property="og:image:type" content="image/webp">
@@ -17,7 +17,7 @@
 <meta property="og:image:alt" content="The Phoenix window with three flower characters on the stage, the timeline below and the Properties panel on the right">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:image" content="https://phoenixanimate.com/assets/shots/hero.webp">
-<meta name="keywords" content="frame keyframe blank keyframe F5 F6 F7 insert remove clear frames select move copy paste overwrite reverse convert to frame-by-frame label comment anchor playback play loop step onion skin frame by frame edit multiple frames select all frames distribute to keyframes">
+<meta name="keywords" content="frame keyframe blank keyframe F5 F6 F7 insert remove clear frames select move copy paste overwrite reverse convert to frame-by-frame label comment anchor playback play loop step onion skin frame by frame edit multiple frames select all frames distribute to keyframes convert to keyframes convert to blank keyframes on ones on twos frame rate fps scale spans time in seconds span end keyframe dot hollow onion markers keyframes only anchor onion outline opacity">
 <link rel="icon" href="assets/img/logo.png">
 <link rel="stylesheet" href="assets/site.css">
 <script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
@@ -47,10 +47,56 @@
 
 <p>Frame, Keyframe and Blank Keyframe are in <span class="menu-path">Insert &rsaquo; Timeline</span>; the others are in <span class="menu-path">Edit &rsaquo; Timeline</span>. All but Clear Frames are also on the menu you get by right-clicking frames. Each acts on every selected frame, or on the playhead's frame of the current layer.</p>
 
-<div class="callout tip">
-  <span class="label">Tip</span>
-  <p>You don't always need <kbd>F6</kbd>. If you draw on a frame of a layer that is only holding an earlier keyframe, Phoenix makes the keyframe for you.</p>
-</div>
+<ul>
+  <li><strong>Convert frames to keyframes:</strong> select a run of frames and press <kbd>F6</kbd>, and each selected frame becomes a keyframe holding what showed there. <kbd>F7</kbd> turns each into an empty keyframe instead.</li>
+  <li><strong>Frame</strong> adds as many frames as you have selected, at the start of the selection. Past the end of a layer, it stretches the layer's last span out to the frame you clicked.</li>
+  <li><strong>Clear Keyframe</strong> merges the keyframe into the span before it. A layer's first keyframe can't be cleared.</li>
+  <li><strong>Clear Frames</strong> leaves an empty keyframe where the frames were, and the artwork after them keeps a keyframe of its own, so nothing later changes.</li>
+  <li>Inside a <a href="tweens.html#motion-tweens">motion tween</a>, <kbd>F6</kbd> adds a property keyframe without splitting the span, and <kbd>F7</kbd> ends the motion there.</li>
+</ul>
+
+<figure>
+  <img src="assets/shots/menu-edit-timeline.webp" alt="The Edit, Timeline menu: Remove Frames, Edit Multiple Frames, Clear Frames, Select All Frames, Clear Keyframe, Remove Tween, cut, copy and paste frames and layers, Copy and Paste Motion, Reverse Frames, Convert to Frame-by-Frame Animation, Bake Behaviors to Keyframes and Pose" width="332" height="501">
+  <figcaption><span class="menu-path">Edit &rsaquo; Timeline</span> with its shortcuts.</figcaption>
+</figure>
+
+<h2>Frame-by-frame animation</h2>
+
+<p>In frame-by-frame animation you draw every drawing yourself, as on paper. It suits movement that tweens can't fake: a character turning round, cloth, splashes, a run full of overlap.</p>
+
+<ol class="steps">
+  <li>Draw the first drawing on a keyframe.</li>
+  <li>Press <kbd>F7</kbd> on the next frame for an empty keyframe, or <kbd>F6</kbd> to start from a copy of the last drawing and change it.</li>
+  <li>Turn on <a href="#onion-skinning">onion skinning</a> to see the drawings either side faintly while you draw the next.</li>
+  <li>Press <kbd>Enter</kbd> to play it back, and <kbd>,</kbd> and <kbd>.</kbd> to flip between drawings.</li>
+</ol>
+
+<p>A keyframe on every frame is called animating <em>on ones</em>. Holding each drawing for two frames, <em>on twos</em>, halves the drawing and still reads smoothly: make a keyframe, then press <kbd>F5</kbd> to hold it a frame longer. You don't always need <kbd>F6</kbd>: draw on a frame that is only holding an earlier keyframe and Phoenix makes the keyframe there for you, in the same undo step as the stroke.</p>
+
+<figure>
+  <img src="assets/shots/timeline-frame-by-frame.webp" alt="Three layers: Held drawing with a labeled keyframe held for six frames and an empty keyframe later, On ones with a keyframe on every frame, and On twos with a keyframe every second frame" width="720" height="155">
+  <figcaption>A drawing held across a span (with a label), drawings on ones, and drawings on twos. A hollow dot is an empty keyframe; a hollow rectangle marks the end of a held span.</figcaption>
+</figure>
+
+<p>To turn a tween into drawings you can adjust one by one, use <strong>Convert to Frame-by-Frame Animation</strong> (see <a href="#frame-commands">Frame commands</a>). For animating a whole sequence with less drawing, see <a href="tweens.html">Tweens and easing</a>, and the <a href="tutorial-frame-by-frame.html">frame-by-frame lesson</a>.</p>
+
+<h2>What the timeline shows</h2>
+
+<table>
+  <thead><tr><th>Mark</th><th>Means</th></tr></thead>
+  <tbody>
+    <tr><td>Filled dot</td><td class="wrap">A keyframe with artwork</td></tr>
+    <tr><td>Hollow dot</td><td class="wrap">An empty keyframe</td></tr>
+    <tr><td>Gray span ending in a hollow rectangle</td><td class="wrap">A keyframe held over several frames</td></tr>
+    <tr><td>Lilac span with an arrow</td><td class="wrap">A <a href="tweens.html#classic-tweens">classic tween</a></td></tr>
+    <tr><td>Green span with an arrow</td><td class="wrap">A <a href="tweens.html#shape-tweens">shape tween</a></td></tr>
+    <tr><td>Blue span with diamonds</td><td class="wrap">A <a href="tweens.html#motion-tweens">motion tween</a>; each diamond is a property keyframe</td></tr>
+    <tr><td><em>a</em> over a dot</td><td class="wrap">A keyframe with a script</td></tr>
+    <tr><td>Red flag, green slashes, gold anchor</td><td class="wrap">A frame <a href="#frame-labels">label</a>: a name, a comment or an anchor</td></tr>
+  </tbody>
+</table>
+
+<p>To change how big the frames and rows are, or to see thumbnails of the artwork in them, use the <a href="timeline.html#frame-view">frame view</a> menu. <kbd>Ctrl</kbd>+wheel over the frames makes them wider or narrower.</p>
 
 <h2>Select frames</h2>
 
@@ -76,21 +122,33 @@
   </tbody>
 </table>
 
+<p>A dragged keyframe stays between the keyframes on either side of it. <kbd>Ctrl</kbd>-dragging the last frame of a span shows an outline of its new length as you drag; it works on tweened spans too, and a motion tween's whole motion stretches with it. Locked layers are left alone.</p>
+
 <h3>Frame commands</h3>
 
 <dl class="defs">
   <dt>Cut, Copy, Paste Frames</dt><dd><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>X</kbd>, <kbd>C</kbd> and <kbd>V</kbd>. Paste Frames inserts, pushing later frames along.</dd>
   <dt>Paste and Overwrite Frames</dt><dd>Pastes over the frames already there instead of inserting.</dd>
-  <dt>Reverse Frames</dt><dd>Plays the selected frames backward.</dd>
-  <dt>Convert to Frame-by-Frame Animation</dt><dd>Turns a tween into a keyframe on every frame, ready to adjust by hand.</dd>
+  <dt>Reverse Frames</dt><dd>Plays the selected frames backward. Select at least two frames; Phoenix makes keyframes at both ends of the selection if they aren't there, then mirrors the keyframes between, keeping how long each is held. Classic and shape tweens stay, with their eases flipped and clockwise turns made counterclockwise. Motion tweens in the selection are removed, so convert them first if you want them reversed.</dd>
+  <dt>Convert to Frame-by-Frame Animation</dt><dd>Turns every span in the selection into a keyframe on every frame, with the tween worked out on each, ready to adjust by hand. The tween itself is removed.</dd>
   <dt>Copy Motion, Paste Motion</dt><dd>Copies a <a href="tweens.html#motion-tweens">motion tween</a>'s movement and gives it to another symbol instance or text block, alone on its keyframe, as a motion tween of its own starting from where that object is.</dd>
   <dt>Remove Tween</dt><dd>Removes the classic, shape or motion tween from the selected spans, leaving their keyframes. A span that had a motion tween holds its object where the motion started.</dd>
   <dt>Distribute to Keyframes</dt><dd>In <span class="menu-path">Modify &rsaquo; Timeline</span>. Select several objects on one frame and each goes on a keyframe of its own, one after another: the bottom one stays, the next goes on the frame after, and so on.</dd>
 </dl>
 
+<h2>Frame rate</h2>
+
+<p>The frame rate sets how many frames play each second. Set it in the Properties panel's <strong>Doc</strong> tab, in the <strong>FPS</strong> field, from 0.01 up to 120; a new document takes it from the <strong>New Document</strong> dialog, 30 unless you pick another. 24 is the film standard, 25 and 30 suit video, and 12 gives a deliberately choppy look.</p>
+
+<ul>
+  <li>Changing the rate on its own keeps every frame, so the animation plays faster or slower. Check <strong>Scale spans</strong> beside it first and every span in every timeline and symbol stretches or squeezes to last as long as before.</li>
+  <li>The strip above the frames shows the current frame, the frame rate and the time of the playhead in seconds.</li>
+  <li>To count the ruler in seconds instead of frames, turn on <strong>Time in Seconds</strong> in the <a href="timeline.html#frame-view">frame view</a> menu.</li>
+</ul>
+
 <h2>Edit Multiple Frames</h2>
 
-<p>Turn on <span class="menu-path">Edit &rsaquo; Timeline &rsaquo; Edit Multiple Frames</span> to see the keyframes within the onion skin markers in full, not faded, and to select and change their artwork together: drag a marquee over a whole run of drawings and move them all at once, for example. Hidden and locked layers are left out. Set the range by dragging the <a href="#onion-skinning">onion skin</a> markers in the ruler.</p>
+<p>Turn on <span class="menu-path">Edit &rsaquo; Timeline &rsaquo; Edit Multiple Frames</span> to see the keyframes within the onion skin markers in full, not faded, and to select and change their artwork together: drag a marquee over a whole run of drawings and move them all at once, for example. Hidden and locked layers are left out. Set the range by dragging the <a href="#onion-skinning">onion skin</a> markers in the ruler; it uses that range even while onion skinning itself is off. It has no shortcut of its own, but you can give it one in <a href="shortcuts.html">Keyboard shortcuts</a>.</p>
 
 <h2>Frame labels</h2>
 
@@ -150,7 +208,7 @@
 
 <h3 id="test-movie">Test Movie</h3>
 
-<p><span class="menu-path">Control &rsaquo; Test Movie</span> (<kbd>Ctrl</kbd>+<kbd>Enter</kbd>) plays the movie in a window of its own as Flash Player would, scripts and all, with buttons that answer clicks and the keyboard. See <a href="actionscript.html#test-movie">Test Movie</a>.</p>
+<p><span class="menu-path">Control &rsaquo; Test Movie</span> (<kbd>Ctrl</kbd>+<kbd>Enter</kbd>) plays the movie as it will play once published, scripts and all, in a window of its own, with buttons that answer clicks and the keyboard. See <a href="actionscript.html#test-movie">Test Movie</a>.</p>
 
 <h2>Onion skinning</h2>
 
@@ -161,18 +219,21 @@
   <figcaption>Frames before the playhead are tinted blue, frames after it green, fading with distance.</figcaption>
 </figure>
 
-<p>Drag the markers in the ruler to set how many frames are shown, or choose a preset and other options from <span class="menu-path">View &rsaquo; Onion Skin Settings</span> (also by right-clicking the onion skin button):</p>
+<p>The onion skin markers are brackets in the ruler either side of the playhead, with the frames between them shaded. Drag them to set how many frames are shown, up to 99 each way; while Loop Playback is on, the ruler's handles set the loop instead. Or choose a preset and other options from <span class="menu-path">View &rsaquo; Onion Skin Settings</span> (also by right-clicking the onion skin button):</p>
 
+<div class="split">
+<figure style="margin:0"><img src="assets/shots/menu-onion-skin-settings.webp" alt="Onion Skin Settings menu: Onion 1, Onion 2 (checked), Onion 5, Onion All, Outline, Anchor Onion, Keyframes Only, Opacity, Color Before and Color After" width="130" height="252"></figure>
 <dl class="defs">
-  <dt>Onion 1, 2, 5, All</dt><dd>How many frames to show on each side.</dd>
+  <dt>Onion 1, 2, 5, All</dt><dd>How many frames to show on each side. Two is the default; All shows as many frames as the timeline has, up to 99 each way.</dd>
   <dt>Outline</dt><dd>Shows the other frames as outlines only.</dd>
-  <dt>Keyframes Only</dt><dd>Skips held frames and shows only drawings.</dd>
+  <dt>Keyframes Only</dt><dd>Counts drawings rather than frames: with Onion 2, the two keyframes before and the two after, however long each is held.</dd>
   <dt>Anchor Onion</dt><dd>Keeps the onion skin on the frames it covers when you turn this on, instead of moving with the playhead: step through a run of frames and compare each with the same few. Drag the markers in the ruler to change which frames it stays on.</dd>
   <dt>Opacity</dt><dd>25, 45, 65 or 85%.</dd>
   <dt>Color Before, Color After</dt><dd>The tints for earlier and later frames.</dd>
 </dl>
+</div>
 
-<p>Locked layers are left out of onion skinning, so lock the background to keep it from cluttering the view.</p>
+<p>Locked and hidden layers are left out of onion skinning, so lock the background to keep it from cluttering the view. Inside a symbol, locked layers show too. The settings are remembered for next time.</p>
 
 </article>
 </main>
