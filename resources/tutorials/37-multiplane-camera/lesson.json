@@ -1,0 +1,97 @@
+{
+  "title": "Multiplane camera",
+  "summary": "Set a landscape's layers at different depths, then pan and move in with Phoenix's camera: near layers slide past faster than far ones.",
+  "minutes": 8,
+  "order": 37,
+  "guide": "rigging.html#multiplane-camera",
+  "tags": ["Animation", "Rigging"],
+  "start": {"document": "start"},
+  "final": "final",
+  "steps": [
+    {
+      "title": "Welcome",
+      "text": "<p>When you look out of a moving train, the fence by the track rushes past while the mountains far away hardly move. A multiplane camera gives a cartoon that same feeling of depth.</p><p>The scene is a landscape on five layers: <i>Grass</i> in front, the <i>Meadow</i> with the house, the <i>Hills</i>, the <i>Mountains</i> and the <i>Sky</i>. You will put each layer at its own distance from a camera, then move the camera along the valley and in toward the house.</p>"
+    },
+    {
+      "title": "Add a camera",
+      "text": "<p>Choose <b>Insert &gt; Camera</b>. A <i>Camera</i> layer appears at the top of the timeline, running the scene's 144 frames.</p><p>Nothing on the stage changes yet: a camera at rest looks at the middle of the stage and shows it as drawn.</p>",
+      "target": "menu:Insert/Camera",
+      "wait": {"action": "Insert/Camera"}
+    },
+    {
+      "title": "Open Layer Depth",
+      "text": "<p>Choose <b>Window &gt; Layer Depth</b>. It opens as a tab beside the timeline.</p><p>The camera is the triangle on the left, looking right. The dotted line marked <b>Stage</b> is the stage's own distance, and <b>Far</b> is at the right edge. Each layer is a colored bar in its own row, and all five sit on the stage line for now.</p>",
+      "target": "menu:Window/Layer Depth",
+      "wait": {"action": "Window/Layer Depth"}
+    },
+    {
+      "title": "Push the far layers back",
+      "text": "<p>Drag the <i>Sky</i> bar all the way to the right, to <b>Far</b>. The number by its name reads 4000: that many pixels behind the stage.</p><p>Then drag <i>Mountains</i> right until it reads about 2000. The farther a layer is, the less it moves when the camera pans.</p>",
+      "target": "dock:Layer Depth",
+      "wait": {"command": "Layer Depth"}
+    },
+    {
+      "title": "The hills and the grass",
+      "text": "<p>Drag <i>Hills</i> a little to the right of the stage line, to about 600.</p><p>Drag <i>Grass</i> to the left of the stage line, to about -300: a minus depth is in front of the stage, nearer the camera, so it moves more than the stage. Leave <i>Meadow</i> on the stage line, so the house moves just as the camera does.</p>",
+      "target": "dock:Layer Depth",
+      "wait": {"command": "Layer Depth"}
+    },
+    {
+      "title": "Back to the timeline",
+      "text": "<p>The stage still looks as it did: depth only shows once the camera moves. Click the <b>Timeline</b> tab beside <b>Layer Depth</b> to see the frames again.</p>",
+      "target": "dock:Timeline"
+    },
+    {
+      "title": "Go to frame 84",
+      "text": "<p>Click frame 84 of the <i>Camera</i> layer. The camera will glide from where it is on frame 1 to where you put it here.</p>",
+      "target": "frame:Camera:84",
+      "wait": {"frame": 84}
+    },
+    {
+      "title": "Pick the Camera tool",
+      "text": "<p>Press <kbd>C</kbd>, or pick the Camera tool from the Hand tool's slot in the toolbox. The corner of the stage reads <b>Camera 640, 360 100% 0&deg;</b>: the point it looks at, its zoom and its turn.</p>",
+      "target": "tool:Camera",
+      "wait": {"tool": "Camera"}
+    },
+    {
+      "title": "Pan the camera",
+      "text": "<p>Drag across the stage from right to left, until the corner reads about <b>1040, 360</b>. The picture follows your hand, so the camera looks farther right, and the house comes to the middle.</p><p>The <i>Camera</i> layer now has a keyframe on frame 84, with a tween arrow from frame 1.</p>",
+      "target": "stage:0,0,1280,720",
+      "wait": {"command": "Camera"}
+    },
+    {
+      "title": "Play it",
+      "text": "<p>Press <kbd>Enter</kbd>, or click the play button in the timeline header. Watch the layers: the fence and grass rush by, the house and meadow go at the camera's pace, the hills lag behind, and the mountains and sun barely move.</p>",
+      "target": "widget:timelinePlay",
+      "wait": {"playing": true}
+    },
+    {
+      "title": "Go to frame 120",
+      "text": "<p>Press <kbd>Enter</kbd> again to stop. Click frame 120 of the <i>Camera</i> layer.</p>",
+      "target": "frame:Camera:120",
+      "wait": {"frame": 120}
+    },
+    {
+      "title": "Move in",
+      "text": "<p>Hold <kbd>Shift</kbd> and drag up on the stage a little, until the corner reads about <b>120%</b>. Dragging up moves the camera in; dragging down moves it out.</p><p>Near layers grow faster than far ones as the camera moves in: the fence drops toward the bottom edge while the mountains hardly change.</p>",
+      "target": "stage:0,0,1280,720",
+      "wait": {"command": "Camera"}
+    },
+    {
+      "title": "Play it again",
+      "text": "<p>Press <kbd>Enter</kbd>. The camera pans along the valley, then moves in toward the house, and holds there to the end.</p>",
+      "target": "widget:timelinePlay",
+      "wait": {"playing": true}
+    },
+    {
+      "title": "Look past the camera",
+      "text": "<p>Press <kbd>Enter</kbd> to stop, then choose <b>View &gt; Camera View</b> to turn it off. The stage shows the layers as drawn, without the camera's moves, which is handy for drawing. Choose it again to look through the camera once more.</p>",
+      "target": "menu:View/Camera View",
+      "wait": {"action": "View/Camera View"}
+    },
+    {
+      "title": "What you did",
+      "text": "<p>You set five layers at different depths and keyed a camera move with two drags. The camera does the parallax for you: the layers themselves never move.</p><p>Each drag with the Camera tool keys the camera on the frame shown, and the camera tweens into it from the keyframe before. <kbd>Alt</kbd>-drag turns the camera. Choose <b>Window &gt; Function Curves</b> with the <i>Camera</i> layer picked to see its pan, zoom and turn as curves.</p><p>To change the move, click a keyframe on the <i>Camera</i> layer and drag again; while the Camera tool is in use, the <b>Tool</b> tab of the Properties panel shows that keyframe's <b>X</b>, <b>Y</b>, <b>Zoom</b> and <b>Turn</b> as numbers you can type. <b>File &gt; Export &gt; Export Movie</b> films the scene through the camera while <b>Through the camera</b> is checked.</p>"
+    }
+  ]
+}

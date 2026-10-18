@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Multiplane camera · Phoenix User Guide</title>
+<meta name="description" content="Set a landscape's layers at different depths, then pan and move in with Phoenix's camera: near layers slide past faster than far ones.">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Phoenix">
+<meta property="og:title" content="Multiplane camera · Phoenix User Guide">
+<meta property="og:description" content="Set a landscape's layers at different depths, then pan and move in with Phoenix's camera: near layers slide past faster than far ones.">
+<meta property="og:url" content="https://phoenixanimate.com/tutorial-multiplane-camera.html">
+<meta property="og:image" content="https://phoenixanimate.com/assets/shots/hero.webp">
+<meta property="og:image:type" content="image/webp">
+<meta property="og:image:width" content="1704">
+<meta property="og:image:height" content="1061">
+<meta property="og:image:alt" content="The Phoenix window with three flower characters on the stage, the timeline below and the Properties panel on the right">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://phoenixanimate.com/assets/shots/hero.webp">
+<meta name="keywords" content="tutorial lesson step by step multiplane camera parallax depth layer depth camera tool pan zoom move in camera view landscape background layers scrolling">
+<link rel="icon" href="assets/img/logo.png">
+<link rel="stylesheet" href="assets/site.css">
+<script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<main>
+<article class="content">
+
+<p class="eyebrow">Tutorials</p>
+
+<h1>Multiplane camera</h1>
+
+<p class="lead">Set a landscape's layers at different depths, then pan and move in with Phoenix's camera: near layers slide past faster than far ones.</p>
+
+<div class="callout">
+  <span class="label">Try it in Phoenix</span>
+  <p>This page is also a lesson inside Phoenix: choose <span class="menu-path">Help &rsaquo; Tutorials...</span> and start <strong>Multiplane camera</strong>, and Phoenix points at each control as you go. It takes about 8 minutes.</p>
+</div>
+
+<p>To follow along here instead, download the starting document, <a href="assets/tutorials/multiplane-camera.fla" download>multiplane-camera.fla</a>, and open it with <span class="menu-path">File &rsaquo; Open...</span>.</p>
+
+<figure>
+  <img src="assets/shots/tutorial-multiplane-camera.webp" alt="Three frames of a landscape with a house, hills, snowy mountains, a sun and a fence in front: the camera at rest, panned so the house is in the middle, and moved in on the house" width="1000" height="184">
+  <figcaption>Frames 1, 84 and 120. As the camera pans, the fence slides farther than the house and the mountains hardly move; as it moves in, the near layers grow fastest.</figcaption>
+</figure>
+
+<p>When you look out of a moving train, the fence by the track rushes past while the mountains far away hardly move. A multiplane camera gives a cartoon that same feeling of depth.</p><p>The scene is a landscape on five layers: <i>Grass</i> in front, the <i>Meadow</i> with the house, the <i>Hills</i>, the <i>Mountains</i> and the <i>Sky</i>. You will put each layer at its own distance from a camera, then move the camera along the valley and in toward the house.</p>
+
+<h2>1. Add a camera</h2>
+
+<p>Choose <span class="menu-path">Insert &rsaquo; Camera</span>. A <i>Camera</i> layer appears at the top of the timeline, running the scene's 144 frames.</p><p>Nothing on the stage changes yet: a camera at rest looks at the middle of the stage and shows it as drawn.</p>
+
+<h2>2. Open Layer Depth</h2>
+
+<p>Choose <span class="menu-path">Window &rsaquo; Layer Depth</span>. It opens as a tab beside the timeline.</p><p>The camera is the triangle on the left, looking right. The dotted line marked <b>Stage</b> is the stage's own distance, and <b>Far</b> is at the right edge. Each layer is a colored bar in its own row, and all five sit on the stage line for now.</p>
+
+<h2>3. Push the far layers back</h2>
+
+<p>Drag the <i>Sky</i> bar all the way to the right, to <b>Far</b>. The number by its name reads 4000: that many pixels behind the stage.</p><p>Then drag <i>Mountains</i> right until it reads about 2000. The farther a layer is, the less it moves when the camera pans.</p>
+
+<h2>4. The hills and the grass</h2>
+
+<p>Drag <i>Hills</i> a little to the right of the stage line, to about 600.</p><p>Drag <i>Grass</i> to the left of the stage line, to about -300: a minus depth is in front of the stage, nearer the camera, so it moves more than the stage. Leave <i>Meadow</i> on the stage line, so the house moves just as the camera does.</p>
+
+<figure class="narrow">
+  <img src="assets/shots/multiplane-camera-layer-depth.webp" alt="The Layer Depth panel: the camera on the left, a dotted Stage line, and the layers at their depths: Grass at -300 in front of the stage, Meadow on it, Hills at 600, Mountains at 2000 and Sky at 4000 by Far" width="561" height="222">
+</figure>
+
+<h2>5. Back to the timeline</h2>
+
+<p>The stage still looks as it did: depth only shows once the camera moves. Click the <b>Timeline</b> tab beside <b>Layer Depth</b> to see the frames again.</p>
+
+<h2>6. Go to frame 84</h2>
+
+<p>Click frame 84 of the <i>Camera</i> layer. The camera will glide from where it is on frame 1 to where you put it here.</p>
+
+<h2>7. Pick the Camera tool</h2>
+
+<p>Press <kbd>C</kbd>, or pick the Camera tool from the Hand tool's slot in the toolbox. The corner of the stage reads <b>Camera 640, 360 100% 0&deg;</b>: the point it looks at, its zoom and its turn.</p>
+
+<h2>8. Pan the camera</h2>
+
+<p>Drag across the stage from right to left, until the corner reads about <b>1040, 360</b>. The picture follows your hand, so the camera looks farther right, and the house comes to the middle.</p><p>The <i>Camera</i> layer now has a keyframe on frame 84, with a tween arrow from frame 1.</p>
+
+<figure>
+  <img src="assets/shots/multiplane-camera-pan.webp" alt="The stage on frame 84 with the Camera tool: the house in the middle of the picture, hills and mountains behind, the fence and grass in front, and a readout at the top left reading Camera 1040, 360, 100%, 0 degrees" width="900" height="430">
+  <figcaption>Frame 84 after the pan. The readout at the top left shows where the camera looks, its zoom and its turn.</figcaption>
+</figure>
+
+<h2>9. Play it</h2>
+
+<p>Press <kbd>Enter</kbd>, or click the play button in the timeline header. Watch the layers: the fence and grass rush by, the house and meadow go at the camera's pace, the hills lag behind, and the mountains and sun barely move.</p>
+
+<h2>10. Go to frame 120</h2>
+
+<p>Press <kbd>Enter</kbd> again to stop. Click frame 120 of the <i>Camera</i> layer.</p>
+
+<h2>11. Move in</h2>
+
+<p>Hold <kbd>Shift</kbd> and drag up on the stage a little, until the corner reads about <b>120%</b>. Dragging up moves the camera in; dragging down moves it out.</p><p>Near layers grow faster than far ones as the camera moves in: the fence drops toward the bottom edge while the mountains hardly change.</p>
+
+<figure>
+  <img src="assets/shots/multiplane-camera-timeline.webp" alt="The timeline: the Camera layer at the top with keyframes on frames 84 and 120 and tween arrows leading into each, above the Grass, Meadow, Hills, Mountains and Sky layers" width="900" height="124">
+  <figcaption>The <i>Camera</i> layer with its keyframes on frames 84 and 120, each tweened into from the one before.</figcaption>
+</figure>
+
+<h2>12. Play it again</h2>
+
+<p>Press <kbd>Enter</kbd>. The camera pans along the valley, then moves in toward the house, and holds there to the end.</p>
+
+<h2>13. Look past the camera</h2>
+
+<p>Press <kbd>Enter</kbd> to stop, then choose <span class="menu-path">View &rsaquo; Camera View</span> to turn it off. The stage shows the layers as drawn, without the camera's moves, which is handy for drawing. Choose it again to look through the camera once more.</p>
+
+<h2>What you did</h2>
+
+<p>You set five layers at different depths and keyed a camera move with two drags. The camera does the parallax for you: the layers themselves never move.</p><p>Each drag with the Camera tool keys the camera on the frame shown, and the camera tweens into it from the keyframe before. <kbd>Alt</kbd>-drag turns the camera. Choose <span class="menu-path">Window &rsaquo; Function Curves</span> with the <i>Camera</i> layer picked to see its pan, zoom and turn as curves.</p><p>To change the move, click a keyframe on the <i>Camera</i> layer and drag again; while the Camera tool is in use, the <b>Tool</b> tab of the Properties panel shows that keyframe's <b>X</b>, <b>Y</b>, <b>Zoom</b> and <b>Turn</b> as numbers you can type. <span class="menu-path">File &rsaquo; Export &rsaquo; Export Movie</span> films the scene through the camera while <b>Through the camera</b> is checked.</p>
+
+<p>For everything this tutorial touches on, see <a href="rigging.html#multiplane-camera">Multiplane camera</a> and <a href="stage.html#the-camera">The camera</a>.</p>
+
+</article>
+</main>
+</body>
+</html>

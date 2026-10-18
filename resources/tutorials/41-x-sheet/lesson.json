@@ -1,0 +1,90 @@
+{
+  "title": "Timing with the X-sheet",
+  "summary": "Time a hop by typing drawing numbers into the X-sheet: hold a pose, put the motion on twos, reuse drawings on the way down and end a puff of dust with a blank.",
+  "minutes": 8,
+  "order": 41,
+  "guide": "rigging.html#x-sheet",
+  "tags": [
+    "Animation",
+    "Drawing"
+  ],
+  "start": {
+    "document": "start"
+  },
+  "final": "final",
+  "steps": [
+    {
+      "title": "Welcome",
+      "text": "<p>On paper, animators time a scene on an exposure sheet, or X-sheet: a column for each layer, a row for each frame, and in each cell the number of the drawing shown there. Phoenix has one too, and you can type the timing straight into it.</p><p>Pip, the orange creature, has four drawings: sitting, crouched, stretched up and at the top of a hop. They sit one per frame at the start of the <i>Pip</i> layer, like a page of drawings. The <i>Dust</i> layer has two puffs of dust. You will time them into a hop with some weight to it.</p>"
+    },
+    {
+      "title": "Play it",
+      "text": "<p>Press <kbd>Enter</kbd>, or click the play button in the timeline header. Pip flickers through all four drawings in a sixth of a second, then just sits.</p>",
+      "target": "widget:timelinePlay",
+      "wait": {
+        "playing": true
+      }
+    },
+    {
+      "title": "Open the X-sheet",
+      "text": "<p>Press <kbd>Enter</kbd> again to stop. Choose <b>Window &gt; X-Sheet</b>.</p>",
+      "target": "menu:Window/X-Sheet",
+      "wait": {
+        "action": "Window/X-Sheet"
+      }
+    },
+    {
+      "title": "Read the sheet",
+      "text": "<p>Each layer is a column: <i>Dust</i>, <i>Pip</i> and <i>Ground</i>. Each row is a frame, numbered down the left. A bold number starts a drawing, and the line below it means that drawing holds. An <b>x</b> means nothing shows.</p><p>The X-sheet numbers each layer's drawings in the order they first appear. Pip's are <b>1</b> sitting, <b>2</b> crouched, <b>3</b> stretched and <b>4</b> at the top; row 5 shows drawing 1 again, held to the end. The dust puffs are <b>1</b> and <b>2</b>.</p>",
+      "target": "dock:X-Sheet"
+    },
+    {
+      "title": "Hold the first pose",
+      "text": "<p>Pip should sit still for half a second before the hop: 12 frames at 24 frames per second. Scroll down the X-Sheet and click the <i>Pip</i> cell in row 13. Type <kbd>2</kbd> and press <kbd>Enter</kbd>.</p><p>Row 13 is now a keyframe showing drawing 2, Pip crouched, and the cursor steps down to row 14.</p>",
+      "target": "dock:X-Sheet",
+      "wait": {
+        "command": "Expose Drawing"
+      }
+    },
+    {
+      "title": "Up, on twos",
+      "text": "<p>On twos, each drawing holds for two frames. Row 14 should keep drawing 2, so press <kbd>Enter</kbd> on its own: with nothing typed, <kbd>Enter</kbd> just moves down.</p><p>On row 15 type <kbd>3</kbd> and press <kbd>Enter</kbd>. Press <kbd>Enter</kbd> again to pass row 16, then on row 17 type <kbd>4</kbd> and press <kbd>Enter</kbd>. The number shows in the cell as you type it.</p>",
+      "target": "dock:X-Sheet"
+    },
+    {
+      "title": "Hang at the top, then come down",
+      "text": "<p>Drawing 4 is the top of the hop. Let Pip hang there for four frames: press <kbd>Enter</kbd> three times, past rows 18, 19 and 20.</p><p>Then bring Pip down through the same drawings: on row 21 type <kbd>3</kbd> and <kbd>Enter</kbd>, press <kbd>Enter</kbd>, on row 23 type <kbd>2</kbd> and <kbd>Enter</kbd>, press <kbd>Enter</kbd>, and on row 25 type <kbd>1</kbd> and <kbd>Enter</kbd>. Pip lands squashed on drawing 2 and sits back up on drawing 1.</p>",
+      "target": "dock:X-Sheet"
+    },
+    {
+      "title": "Clear the page of drawings",
+      "text": "<p>Rows 2 to 5 still flicker through the drawings. Scroll back up, click the <i>Pip</i> cell in row 5 and press <kbd>Delete</kbd>. That keyframe goes, and drawing 4 above it now holds down to row 12.</p><p>Press the <kbd>Up</kbd> arrow and <kbd>Delete</kbd> three more times, for rows 4, 3 and 2. Drawing 1 now holds from row 1 to row 12. Row 1 has nothing before it to hold, so <kbd>Delete</kbd> leaves it alone.</p>",
+      "target": "dock:X-Sheet"
+    },
+    {
+      "title": "Dust on the landing",
+      "text": "<p>Pip lands on row 23 and sits up on row 25. Click the <i>Dust</i> cell in row 25. Type <kbd>1</kbd> and press <kbd>Enter</kbd>, press <kbd>Enter</kbd>, type <kbd>2</kbd> and press <kbd>Enter</kbd>, press <kbd>Enter</kbd>, then press <kbd>X</kbd>.</p><p><kbd>X</kbd> puts an <b>x</b> in row 29: a blank keyframe, so from there no dust shows.</p>",
+      "target": "dock:X-Sheet",
+      "wait": {
+        "command": "Expose Blank"
+      }
+    },
+    {
+      "title": "Clear the dust's page",
+      "text": "<p>Click the <i>Dust</i> cell in row 4 and press <kbd>Delete</kbd>. Press the <kbd>Up</kbd> arrow and <kbd>Delete</kbd> twice more, for rows 3 and 2. The <b>x</b> in row 1 now holds down to row 24.</p>",
+      "target": "dock:X-Sheet"
+    },
+    {
+      "title": "Play it",
+      "text": "<p>Click the play button in the timeline header. (While the X-Sheet has the keyboard, <kbd>Enter</kbd> moves its cursor instead.) Pip sits, crouches, springs up, hangs at the top, lands in a puff of dust and settles.</p><p>The timeline shows the same timing: a keyframe wherever you typed a number, every second frame through the hop.</p>",
+      "target": "widget:timelinePlay",
+      "wait": {
+        "playing": true
+      }
+    },
+    {
+      "title": "What you did",
+      "text": "<p>You timed a scene by typing in the X-sheet: a number exposes that drawing, <kbd>Enter</kbd> on its own lets the drawing above hold, <kbd>X</kbd> shows nothing, and <kbd>Delete</kbd> clears a keyframe so the one before holds on. Each number you type is one step that <b>Edit &gt; Undo</b> takes back.</p><p>You used only four drawings for a hop of seven keyframes: the X-sheet copies a drawing to each cell you give its number. On a layer that shows a graphic symbol, the numbers are the symbol's frames instead, so typing <kbd>3</kbd> shows its frame 3.</p>"
+    }
+  ]
+}
