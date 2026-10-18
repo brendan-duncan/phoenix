@@ -1821,3 +1821,45 @@ TEST(xfl_save_names_the_xfl_version_when_the_source_had_none)
     CHECK(kept.find("xflVersion=\"2.97\"") != std::string::npos);
     CHECK(kept.find("creatorInfo=\"Other\"") != std::string::npos);
 }
+
+TEST(xfl_text_keeps_a_run_of_only_spaces)
+{
+    // "Anand Duncan" set as runs "Anand", " ", "Duncan": the middle run is
+    // all whitespace, which the XML parser would drop.
+    std::unique_ptr<fla::Document> document = parseDocumentText(
+        "<DOMDocument xmlns='http://ns.adobe.com/xfl/2008/'><timelines><DOMTimeline name='Scene 1'><layers>"
+        "<DOMLayer name='Layer 1'><frames><DOMFrame index='0'><elements><DOMStaticText><textRuns>"
+        "<DOMTextRun><characters>Anand</characters></DOMTextRun>"
+        "<DOMTextRun><characters> </characters></DOMTextRun>"
+        "<DOMTextRun><characters>Duncan</characters></DOMTextRun>"
+        "<DOMTextRun><characters>\t \t</characters></DOMTextRun>"
+        "<DOMTextRun><characters></characters></DOMTextRun>"
+        "</textRuns></DOMStaticText></elements></DOMFrame></frames></DOMLayer>"
+        "</layers></DOMTimeline></timelines></DOMDocument>");
+    CHECK(document != nullptr);
+    if (!document)
+        return;
+    const fla::Frame* frame = document->timelines[0]->layers[0]->frames[0];
+    CHECK(frame->elements.size() == 1);
+    if (frame->elements.size() != 1)
+        return;
+    const fla::StaticText* text = static_cast<const fla::StaticText*>(frame->elements[0]);
+    CHECK(text->runs.size() == 5);
+    if (text->runs.size() != 5)
+        return;
+    CHECK(text->runs[0].text == "Anand");
+    CHECK(text->runs[1].text == " ");
+    CHECK(text->runs[2].text == "Duncan");
+    CHECK(text->runs[3].text == "\t \t");
+    CHECK(text->runs[4].text.empty());
+
+    XFLWriter writer;
+    const std::string written = writer.writeDocument(*document);
+    std::unique_ptr<fla::Document> back = parseDocumentText(written);
+    CHECK(back != nullptr);
+    if (!back)
+        return;
+    const fla::StaticText* again =
+        static_cast<const fla::StaticText*>(back->timelines[0]->layers[0]->frames[0]->elements[0]);
+    CHECK(again->runs.size() == 5 && again->runs[1].text == " ");
+}

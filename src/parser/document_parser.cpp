@@ -36,6 +36,34 @@ std::string _currentFile;
 
 bool parseGroup(const tinyxml2::XMLElement* element, fla::Group* group);
 
+/// The XML parser drops text that is only whitespace, so a text run of a
+/// single space between two words would lose it. Each such run's characters
+/// become character references, which the parser keeps.
+std::string keepBlankCharacters(const std::string& xml)
+{
+    static const std::string open = "<characters>";
+    static const std::string close = "</characters>";
+    std::string out;
+    size_t copied = 0;
+    for (size_t at = xml.find(open); at != std::string::npos; at = xml.find(open, at + open.size()))
+    {
+        const size_t start = at + open.size();
+        const size_t end = xml.find(close, start);
+        if (end == std::string::npos)
+            break;
+        if (end == start || xml.find_first_not_of(" \t\r\n", start) != end)
+            continue;
+        out.append(xml, copied, start - copied);
+        for (size_t i = start; i < end; ++i)
+            out += "&#" + std::to_string(static_cast<int>(xml[i])) + ";";
+        copied = end;
+    }
+    if (copied == 0)
+        return xml;
+    out.append(xml, copied, std::string::npos);
+    return out;
+}
+
 // Helper function to safely get attribute as string
 std::string getAttribute(const tinyxml2::XMLElement* element, const char* name, const char* defaultValue = "")
 {
@@ -2084,7 +2112,7 @@ bool parseSymbolInclude(const tinyxml2::XMLElement* element, fla::SymbolList* sy
         return false;
     }
 
-    std::string content = zipReader->readTextFile(libraryPath);
+    std::string content = keepBlankCharacters(zipReader->readTextFile(libraryPath));
 
     _currentFile = href;
 
@@ -2537,7 +2565,7 @@ fla::Document* DocumentParser::parse(const std::string& xmlContent, fla::DOMElem
     _currentFile.clear();
 
     tinyxml2::XMLDocument doc;
-    if (doc.Parse(xmlContent.c_str()) != tinyxml2::XML_SUCCESS)
+    if (doc.Parse(keepBlankCharacters(xmlContent).c_str()) != tinyxml2::XML_SUCCESS)
     {
         _errorString = "Failed to parse XML content";
         return nullptr;
