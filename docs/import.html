@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Importing artwork · Phoenix User Guide</title>
+<meta name="description" content="Bring images, Photoshop, SVG, Illustrator, EPS and PDF artwork, FLA files, sounds and video into Phoenix, trace bitmaps into vectors, and manage imported bitmaps.">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Phoenix">
+<meta property="og:title" content="Importing artwork · Phoenix User Guide">
+<meta property="og:description" content="Bring images, Photoshop, SVG, Illustrator, EPS and PDF artwork, FLA files, sounds and video into Phoenix, trace bitmaps into vectors, and manage imported bitmaps.">
+<meta property="og:url" content="https://phoenixanimate.com/import.html">
+<meta property="og:image" content="https://phoenixanimate.com/assets/shots/hero.webp">
+<meta property="og:image:type" content="image/webp">
+<meta property="og:image:width" content="1704">
+<meta property="og:image:height" content="1061">
+<meta property="og:image:alt" content="The Phoenix window with three flower characters on the stage, the timeline below and the Properties panel on the right">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://phoenixanimate.com/assets/shots/hero.webp">
+<meta name="keywords" content="import to stage import to library open external library import video image sequence png jpeg gif bmp photoshop psd psb layers blend modes svg illustrator ai eps postscript pdf editable text fla xfl swf import sound drag and drop paste from other apps clipboard trace bitmap color threshold minimum area curve fit swap bitmap break apart bitmap fill bitmap properties smoothing compression quality update edit with placed artwork">
+<link rel="icon" href="assets/img/logo.png">
+<link rel="stylesheet" href="assets/site.css">
+<script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<main>
+<article class="content">
+
+<p class="eyebrow">Workspace</p>
+<h1>Importing artwork</h1>
+<p class="lead">Bring in pictures, layered Photoshop files, vector artwork, sounds, video and other documents, then work with what came in: trace bitmaps into shapes, swap them, fill with them and keep them up to date with their files.</p>
+
+<h2>The Import commands</h2>
+
+<div class="split">
+  <figure style="margin:0"><img src="assets/shots/import-menu.webp" alt="The File, Import menu: Import to Stage (Ctrl+R), Import to Library, Open External Library (Ctrl+Shift+O), Import Animatic and Import Video" width="240" height="126"></figure>
+  <div>
+    <p>Everything starts from <span class="menu-path">File &rsaquo; Import</span>. Pick one or more files in the file browser; Phoenix opens it in the folder you imported from last time.</p>
+  </div>
+</div>
+
+<dl class="defs">
+  <dt>Import to Stage...</dt><dd><kbd>Ctrl</kbd>+<kbd>R</kbd>. Adds each file to the library and places it on the current frame of the current layer, at the top-left corner of the stage, selected. Sounds go into the library only. If the current layer is locked or hidden, images go into the library and the status bar says so.</dd>
+  <dt>Import to Library...</dt><dd>Adds each file to the library without placing anything.</dd>
+  <dt>Open External Library...</dt><dd><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>O</kbd>. Opens another document's library in a panel of its own, to copy items from. See <a href="library.html#libraries-of-other-documents">Libraries of other documents</a>.</dd>
+  <dt>Import Animatic...</dt><dd>Brings in an animatic's cut (EDL or Final Cut XML) as shot labels, boards and audio. See <a href="pipeline.html#start-from-the-animatic">Start from the animatic</a>.</dd>
+  <dt>Import Video...</dt><dd>Brings in a video to animate over, as a still for each frame on a guide layer. See <a href="#video">Video</a>.</dd>
+</dl>
+
+<p>Each import is a single step you can undo, however many files it brings in. Importing a file whose name the library already uses adds a second item, numbered (<em>photo 2.png</em>); nothing in the library is replaced. When part of a file cannot be brought in, Phoenix lists what was left out when the import finishes.</p>
+
+<p>Scripts import too: <code>document.importFile()</code> takes the same files. See <a href="scripting.html">Scripting</a>.</p>
+
+<h2>What Phoenix imports</h2>
+
+<table>
+  <thead><tr><th>Kind</th><th>Formats</th><th>Comes in as</th></tr></thead>
+  <tbody>
+    <tr><td>Images</td><td class="wrap">PNG, JPEG, GIF, BMP</td><td class="wrap">A bitmap in the library</td></tr>
+    <tr><td>Layered images</td><td class="wrap">Photoshop (PSD and PSB): RGB, CMYK or grayscale, 8, 16 or 32 bits</td><td class="wrap">A layer for each Photoshop layer, with its pixels as a bitmap</td></tr>
+    <tr><td>Vector artwork</td><td class="wrap">SVG, Illustrator (AI), EPS and PostScript (PS), PDF</td><td class="wrap">Drawing objects, bitmaps and text, grouped</td></tr>
+    <tr><td>Documents and movies</td><td class="wrap">FLA, XFL, SWF</td><td class="wrap">Their library items, and their main timeline as a movie clip</td></tr>
+    <tr><td>Sound</td><td class="wrap">WAV, AIFF, MP3, FLAC, Ogg</td><td class="wrap">A sound in the library</td></tr>
+    <tr><td>Video</td><td class="wrap">MP4, MOV, M4V, AVI, MKV, WebM, FLV, WMV, MPEG</td><td class="wrap">Stills on a guide layer, with Import Video</td></tr>
+  </tbody>
+</table>
+
+<p>Phoenix imports without an options dialog: each kind of file comes in one way, described below. Rearrange the result afterward with the usual tools.</p>
+
+<h2>Images</h2>
+
+<p>A PNG, JPEG, GIF or BMP becomes a bitmap in the library named after its file, such as <em>kitchen.png</em>. A JPEG is stored as it is, with its Photo compression; other images are stored without loss. A transparent PNG or GIF keeps its transparency, and an animated GIF comes in as its first frame. Images wider than 16,383 pixels are too large to import.</p>
+
+<p>On the stage, an image is a bitmap instance: you can move, scale, rotate and skew it, but its pixels stay as they are in the library. To change the pixels, see <a href="#update-bitmaps">Keep bitmaps up to date</a>; to turn them into shapes, see <a href="#trace-bitmap">Trace Bitmap</a>.</p>
+
+<h3>Image sequences</h3>
+
+<p>If you import a single image whose name ends in a number, such as <code>walk_0001.png</code>, and the folder holds others that differ only in that number, Phoenix asks whether to import the whole sequence:</p>
+
+<ul>
+  <li><strong>Yes</strong> puts each image on its own keyframe of the current layer, in number order, starting at the playhead. Each bitmap is placed at the top-left of the stage.</li>
+  <li><strong>No</strong> imports just the file you picked.</li>
+</ul>
+
+<p>Numbers need not be padded or consecutive: <code>walk_1.png</code>, <code>walk_2.png</code> and <code>walk_10.png</code> come in that order. The current layer must not be locked.</p>
+
+<h2 id="photoshop-files">Photoshop files</h2>
+
+<p>Import to Stage turns each layer of a PSD into a layer of its own, named as it was, above the current layer (and in its layer folder, if it has one). Each layer's pixels become a bitmap in the library, placed where they were on the canvas, so the picture looks as it did. Groups become layer folders, and hidden layers come in hidden. A layer's opacity and its layer mask are kept in its pixels.</p>
+
+<figure>
+  <img src="assets/shots/import-psd-layers.webp" alt="A landscape Photoshop file imported to the stage, with its layers Notes (hidden), Shadow, Tree, Sun, a Hills folder holding Near hills and Far hills, and Sky in the timeline, and the matching bitmaps and a Shadow Blend movie clip in the library" width="892" height="430">
+  <figcaption>A PSD imported to the stage: a layer per Photoshop layer, the group as a folder, the hidden layer hidden. The Shadow layer used Multiply, so its bitmap came in inside a movie clip that blends.</figcaption>
+</figure>
+
+<p>A layer with a blend mode (Multiply, Screen, Overlay, Darken, Lighten, Difference, Linear Dodge, Subtract or Hard Light) is placed inside a movie clip named after it, such as <em>Shadow Blend</em>, that blends the same way, since only movie clips can blend. Other blend modes come in as Normal, and Phoenix says which.</p>
+
+<p>Import to Library adds just the bitmaps, one for each layer, without layers or blends.</p>
+
+<p>Large documents (PSB), 16- and 32-bit documents and CMYK documents are read too; their colors are brought to 8-bit RGB. Some things do not come in:</p>
+
+<ul>
+  <li>Adjustment and fill layers have no pixels of their own and are left out.</li>
+  <li>Layers clipped to the layer below come in unclipped.</li>
+  <li>Text and shape layers come in as their pixels, not as text or shapes you can edit.</li>
+  <li>Layer effects (shadows, strokes and so on) are not drawn.</li>
+</ul>
+
+<h2 id="vector-artwork">SVG, Illustrator, EPS and PDF files</h2>
+
+<p>Vector files come in as artwork you can edit. Each filled or stroked path becomes a <a href="drawing-models.html">drawing object</a> with its fill, stroke color and stroke width; gradients become gradient fills; images become bitmaps in the library, placed where they were; and text becomes static text you can edit. On the stage, everything is grouped as one piece of artwork, in the order it was drawn, at the top-left of the stage. Import to Library makes a graphic symbol named after the file instead, with the artwork inside.</p>
+
+<figure>
+  <img src="assets/shots/import-svg.webp" alt="An SVG badge imported to the stage: a rounded rectangle with an orange to pink gradient, a radial gradient sun, dark hills and the word Sunset, selected as one Group of 306 by 226 pixels in the Properties panel" width="712" height="285">
+  <figcaption>An SVG imported to the stage arrives as one group. Its gradients, curves and text stay editable.</figcaption>
+</figure>
+
+<p>To work on the parts, double-click the group to edit inside it, or choose <span class="menu-path">Modify &rsaquo; Ungroup</span> (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>G</kbd>). To reuse the artwork as a symbol, select the group and choose <span class="menu-path">Modify &rsaquo; Convert to Symbol</span>, or import it with Import to Library.</p>
+
+<dl class="defs">
+  <dt>SVG</dt><dd>Paths, rectangles, circles, ellipses, lines, polylines and polygons, with their groups, transforms and opacity, styled by attributes, the <code>style</code> attribute or the style sheet's classes; linear and radial gradients; <code>use</code> and symbols; images, embedded or in files beside the SVG; and text, with its font, size, weight and color.</dd>
+  <dt>Illustrator (AI) and PDF</dt><dd>An Illustrator file is read through the PDF copy it carries, which Illustrator saves by default; for a PDF, only the first page is read. Paths with their colors and opacity, spot (Pantone) colors, clipping masks, grouped and placed artwork, gradients, repeating pattern fills (drawn tile by tile), and images, palette images among them. Text comes in as text you can edit, a line at a time where the file placed it, in the font the file names when you have it installed (another font stands in when you do not).</dd>
+  <dt>Illustrator files without a PDF copy</dt><dd>A file saved with <strong>Create PDF Compatible File</strong> turned off, and files from Illustrator 8 and older, are read in Illustrator's own format: paths and compound paths, colors (process and spot), gradients, clipping masks and point text. Hidden layers are left out.</dd>
+  <dt>EPS and PostScript</dt><dd>An EPS that Illustrator saved is read through the Illustrator artwork inside it. Any other EPS or PostScript file is run as a PostScript program, and what it paints comes in: paths, fills and strokes in gray, RGB, CMYK and spot colors, clipping, images and text. The page is the file's bounding box.</dd>
+</dl>
+
+<p>Illustrator layers are not kept as separate layers: the whole file is one group on the current layer. To spread the parts over layers, ungroup them and use <span class="menu-path">Modify &rsaquo; Timeline &rsaquo; Distribute to Layers</span>; see <a href="selecting.html#distribute-to-layers">Distribute to layers</a>.</p>
+
+<h2 id="documents-and-movies">Other documents and movies</h2>
+
+<p>Importing an FLA, an XFL folder's <code>.xfl</code> file or a SWF movie brings in the whole of it: every item of its library, and its main timeline as a movie clip named after the file. Import to Stage also places that movie clip on the current frame. Library items whose names your library already uses come in under new names (<em>Head copy</em>), so nothing of yours changes.</p>
+
+<p>To take only some items from another document, open its library instead with <span class="menu-path">File &rsaquo; Import &rsaquo; Open External Library...</span>; see <a href="library.html#libraries-of-other-documents">Libraries of other documents</a>. To open a document or movie for editing, use <span class="menu-path">File &rsaquo; Open...</span>; Phoenix opens FLA files back to version MX&nbsp;2004 and SWF movies, as <a href="documents.html#file-formats">File formats</a> describes.</p>
+
+<h2>Sound</h2>
+
+<p>A WAV, AIFF, MP3, FLAC or Ogg file becomes a sound in the library, read as 16-bit audio at 44.1&nbsp;kHz, in mono or stereo. To put it on the timeline, drag it from the library onto the stage or a layer, or drop the file itself on the stage. See <a href="sound.html">Sound</a>.</p>
+
+<h2 id="video">Video</h2>
+
+<p><span class="menu-path">File &rsaquo; Import &rsaquo; Import Video...</span> decodes a video into one still per frame of the document, at its frame rate, on a locked guide layer named after the video, with the stills in a library folder. Guide layers are never published or exported, so the video is a reference to animate over. Before it starts, choose whether to <strong>Shrink to the stage width</strong> and whether to <strong>Import its sound, as a stream</strong>. Phoenix reads video with ffmpeg. See <a href="sound.html#reference-video">Reference video</a>.</p>
+
+<h2>Drag and drop, copy and paste</h2>
+
+<p>You can drag image, sound, Photoshop, SVG, Illustrator, EPS, PostScript and PDF files from your desktop or file manager onto the Phoenix window:</p>
+
+<ul>
+  <li>Dropped on the stage, they are placed centered where you drop them; a sound is put on the current frame of the current layer.</li>
+  <li>Dropped anywhere else in the window, they go into the library.</li>
+  <li>An FLA, XFL or PHX file dropped on the window opens as a document instead.</li>
+</ul>
+
+<p><span class="menu-path">Edit &rsaquo; Paste in Center</span> (<kbd>Ctrl</kbd>+<kbd>V</kbd>) takes what other applications copy:</p>
+
+<dl class="defs">
+  <dt>A picture</dt><dd>Becomes a bitmap in the library named <em>Bitmap 1</em> (or the next free number), placed in the middle of the view.</dd>
+  <dt>Vector artwork</dt><dd>Artwork copied as SVG (from a browser or a vector editor) or as PDF (from Illustrator) comes in as it would from a file: drawing objects, gradients and text, grouped.</dd>
+  <dt>Files</dt><dd>Files copied in your file manager are imported to the stage, as if dropped there.</dd>
+  <dt>Text</dt><dd>Plain text becomes a static text field, in Arial at 20 points, that grows to fit it.</dd>
+</dl>
+
+<p><span class="menu-path">Edit &rsaquo; Paste in Place</span> (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>V</kbd>) pastes the same things at the top-left of the stage instead. Going the other way, copying in Phoenix puts a picture and an SVG of the selection on the clipboard, for pasting into other applications. See <a href="selecting.html#cut-copy-and-paste">Cut, copy and paste</a>.</p>
+
+<h2 id="trace-bitmap">Trace Bitmap</h2>
+
+<p>To turn a picture into shapes you can edit, select it on the stage and choose <span class="menu-path">Modify &rsaquo; Bitmap &rsaquo; Trace Bitmap...</span>, or right-click it and choose <strong>Trace Bitmap</strong>. Areas of like color become fills in their average color, and neighboring areas share their edges, so nothing shows through between them. Transparent parts of the picture stay empty.</p>
+
+<dl class="defs">
+  <dt>Color threshold</dt><dd>How different two colors may be and still make one area, from 1 to 500: the red, green and blue differences added together. Higher makes fewer, larger areas.</dd>
+  <dt>Minimum area</dt><dd>From 1 to 1000 pixels. Areas smaller than this join the neighbor they share the most edge with. Raise it to clear away specks.</dd>
+  <dt>Curve fit</dt><dd>How closely the outlines follow the picture: Pixels, Very Tight, Tight, Normal, Smooth or Very Smooth. Pixels and Very Tight keep every step of the pixels. From Tight on, rounds become curves and straight sides stay straight, with fewer points the smoother you go.</dd>
+</dl>
+
+<p>There are no separate settings for corners, color modes or presets: Color threshold, Minimum area and Curve fit are the whole of it. Phoenix remembers the settings you trace with for next time.</p>
+
+<p><strong>Preview</strong> traces the bitmap on the stage with the settings as they are, so you can judge the result in place, zoomed in if you like. The dialog then says how many areas and points the trace made, and suggests what to change when there are far too many or too few. Turn on <strong>Auto Preview</strong> to trace again whenever a setting changes: it waits until you stop dragging a value, so scrubbing stays smooth.</p>
+
+<figure>
+  <img src="assets/shots/trace-bitmap.webp" alt="A picture of a tree and a house traced on the stage, beside the Trace Bitmap dialog: Color threshold 30, Minimum area 8 px, Curve fit Normal, Auto Preview on, 17 areas, 173 points" width="705" height="312">
+</figure>
+
+<p><strong>Trace</strong> keeps the result as one step you can undo, in the bitmap's place and position, as <a href="drawing-models.html">merge artwork</a>. The bitmap stays in the library. <strong>Cancel</strong> puts the bitmap back and leaves nothing in the undo history. With several bitmaps selected, all of them are previewed and traced with the same settings.</p>
+
+<h3 id="trace-settings">Choosing Trace Bitmap settings</h3>
+
+<p>To try it, download the <a href="assets/img/trace-sample.png" download>sample picture</a> (320 by 240 pixels) and import it with <span class="menu-path">File &rsaquo; Import &rsaquo; Import to Stage</span>. It is flat colors with soft edges and a little noise, like a scanned drawing or a compressed export. Here it is traced at three color thresholds:</p>
+
+<figure>
+  <img src="assets/shots/trace-bitmap-thresholds.webp" alt="The sample traced three times: at threshold 10 it is crazed with tiny shapes, at 30 each flat color is one clean shape, at 100 the two blues of the sky, the two greens of the tree and the two sides of the house have each run together" width="1008" height="264">
+  <figcaption>Color threshold 10, 30 and 100, Minimum area 8 px, Curve fit Normal</figcaption>
+</figure>
+
+<ul>
+  <li><strong>Too low (10):</strong> the noise splits every flat color into specks, 1,058 areas in all. It is slow to draw and impossible to edit.</li>
+  <li><strong>Right (30):</strong> each flat color is one area, 17 in all, and the tree's shadow side stays apart from its lit side.</li>
+  <li><strong>Too high (100):</strong> 10 areas are left. The two blues of the sky have run together, and so have the two greens of the tree, the hills, and the lit and shaded sides of the house.</li>
+</ul>
+
+<p>Curve fit decides how the outlines are drawn. Here is the tree, enlarged, before tracing and traced at threshold 30 with three curve fits:</p>
+
+<figure>
+  <img src="assets/shots/trace-bitmap-curve-fit.webp" alt="The sample's tree enlarged four times: the original bitmap, soft and noisy; traced with Pixels, a crisp shape with stair-stepped edges; with Normal, smooth rounded outlines; with Very Smooth, a lumpier outline with few points" width="1100" height="284">
+  <figcaption>The bitmap, then Curve fit Pixels, Normal and Very Smooth</figcaption>
+</figure>
+
+<ul>
+  <li><strong>Pixels</strong> follows every pixel step: right for pixel art, heavy for anything else.</li>
+  <li><strong>Normal</strong> rounds the crown into curves that follow the drawing closely.</li>
+  <li><strong>Very Smooth</strong> uses the fewest points, and the crown loses its round shape.</li>
+</ul>
+
+<p>For this picture, the ideal trace is Color threshold 30, Minimum area 8 px and Curve fit Normal: 17 areas and 173 points, with the sun and the tree as smooth curves and the house as straight lines.</p>
+
+<p>For a picture of your own, turn on Auto Preview and zoom in on a detailed part of the stage. Raise Color threshold until the shades of each flat color become one area, and stop before colors you want to keep apart run together; the area count falls steeply as specks merge, then levels off. Then raise Minimum area if specks are left. Last, choose a Curve fit with as few points as still follow the shapes.</p>
+
+<p>Trace Bitmap suits flat-colored artwork: logos, cartoons and scanned inked drawings. A photograph or a gradient becomes many areas at any setting.</p>
+
+<h2>Bitmaps on the stage</h2>
+
+<p>Select a bitmap instance and the Properties panel's Object tab shows the library item it shows, with a <strong>Swap...</strong> button, and its position and size. Right-click a bitmap on the stage for <strong>Trace Bitmap</strong>, <strong>Swap Bitmap</strong> and <strong>Break Apart</strong>.</p>
+
+<h3>Swap Bitmap</h3>
+
+<div class="split">
+  <figure style="margin:0"><img src="assets/shots/swap-bitmap.webp" alt="The Swap Bitmap dialog: a preview of the chosen bitmap beside a list of the library's bitmaps, with OK and Cancel" width="428" height="314"></figure>
+  <div>
+    <p>To show a different picture in the same place, select one or more bitmaps on the stage and choose <span class="menu-path">Modify &rsaquo; Bitmap &rsaquo; Swap Bitmap...</span>, or click <strong>Swap...</strong> in the Properties panel. Pick a bitmap from the library's list, with a preview of each, and click <strong>OK</strong>.</p>
+    <p>Every selected bitmap takes the new picture, keeping its position, scale and rotation. To change a picture everywhere it is used, update the library bitmap instead; see <a href="#update-bitmaps">Keep bitmaps up to date</a>.</p>
+  </div>
+</div>
+
+<h3 id="break-apart-bitmaps">Break apart and bitmap fills</h3>
+
+<p><span class="menu-path">Modify &rsaquo; Break Apart</span> (<kbd>Ctrl</kbd>+<kbd>B</kbd>) turns a selected bitmap into a rectangle of merge artwork filled with the picture, in the same place. The pixels are no longer a separate object, so you can:</p>
+
+<ul>
+  <li>Select parts with the <a href="selecting.html#lasso-tools">Lasso</a>, or click an area of like color with the Magic Wand, and delete or move them.</li>
+  <li>Erase parts with the Eraser.</li>
+  <li>Pick up the bitmap fill with the Eyedropper and paint it into other shapes with the Paint Bucket, where it tiles.</li>
+  <li>Move, scale or rotate the picture inside its shape with the <a href="color.html#the-gradient-transform-tool">Gradient Transform tool</a>.</li>
+</ul>
+
+<p>You can also choose <strong>Bitmap Fill</strong> in the Color panel and draw new shapes filled with a library bitmap; see <a href="color.html#bitmap-fills">Bitmap fills</a>. A bitmap used in a fill stays in the library while the fill uses it.</p>
+
+<h2 id="bitmap-properties">Bitmap Properties</h2>
+
+<p>Double-click a bitmap in the library, or right-click it and choose <strong>Properties...</strong>. The dialog shows a preview, the bitmap's name, the file it came from (its <strong>Source</strong>), its size in pixels and when it was imported, and these settings:</p>
+
+<dl class="defs">
+  <dt>Allow smoothing</dt><dd>On by default. Draws the bitmap smoothly when it is scaled or turned. Turn it off for pixel art, so pixels stay hard-edged.</dd>
+  <dt>Compression</dt><dd><strong>Photo (JPEG)</strong> or <strong>Lossless (PNG/GIF)</strong>: how a published movie should compress the bitmap. Use Photo for photographs and painted pictures, Lossless for flat colors and sharp edges.</dd>
+  <dt>Quality</dt><dd>For Photo compression, the JPEG quality from 1 to 100, or <strong>Document default</strong> (0) to use the quality in the publish settings.</dd>
+</dl>
+
+<p>Phoenix keeps Compression and Quality with the bitmap, in FLA files too, so other tools that publish the file use them. Phoenix's own SWF export stores every bitmap without loss. The buttons below the settings act at once:</p>
+
+<dl class="defs">
+  <dt>Update</dt><dd>Reads the bitmap again from its source file. Available when that file still exists.</dd>
+  <dt>Import...</dt><dd>Replaces the picture with another image file, which becomes the new source. Every use of the bitmap shows the new picture.</dd>
+  <dt>Edit With...</dt><dd>Opens the bitmap in an image editor; see below.</dd>
+</dl>
+
+<p>Name and linkage are not set here: rename a bitmap in the library (<kbd>F2</kbd>). Bitmaps have no linkage in the Library panel; see <a href="library.html#linkage">Linkage</a>.</p>
+
+<h3 id="update-bitmaps">Keep bitmaps up to date</h3>
+
+<p>When you change an imported picture in another program, bring the change in without placing it again:</p>
+
+<ul>
+  <li><strong>Update.</strong> Select one or more bitmaps in the library, right-click and choose <strong>Update</strong>. Phoenix reads each from the file it came from, and every use of it changes. If a file has moved, Phoenix lists the bitmaps it could not find; choose the file again with <strong>Import...</strong> in the bitmap's Properties.</li>
+  <li><strong>Edit With.</strong> Right-click a bitmap and choose <strong>Edit With...</strong>, then pick the image editor to use; Phoenix remembers it. Cancel to use the program your system opens PNG files with. Phoenix hands the editor a PNG copy of the bitmap, and each time you save it there, Phoenix takes the change, as a step you can undo.</li>
+</ul>
+
+<p>Update works for images imported from their own files. Bitmaps that came from a Photoshop layer, from inside vector artwork, or from the clipboard have no source file to read again: import the file again, or use Edit With.</p>
+
+<div class="callout">
+  <span class="label">Not available</span>
+  <p>Some import choices other tools offer do not exist in Phoenix: choosing which Photoshop or Illustrator layers to bring in, flattening a file to one bitmap, turning layers into keyframes, or importing text as outlines. Files are not linked live: change the source and import it again (or Update a bitmap). For a PDF, only the first page is read.</p>
+</div>
+
+</article>
+</main>
+</body>
+</html>
