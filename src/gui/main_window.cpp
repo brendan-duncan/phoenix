@@ -35,6 +35,7 @@
 #include "behavior_library.h"
 #include "behaviors_panel.h"
 #include "../edit/behaviors.h"
+#include "../edit/bone_corrections.h"
 #include "../edit/controllers.h"
 #include "../jsfl/behavior_frames.h"
 #include "../edit/shape_operators.h"
@@ -91,6 +92,7 @@
 #include "cep_panel.h"
 #include "claude_code_panel.h"
 #include "ik_poser.h"
+#include "bone_corrector.h"
 #include "script_window.h"
 #include "theme_editor.h"
 #include "output_panel.h"
@@ -5003,12 +5005,27 @@ void MainWindow::editJointLimits(fla::Frame* frame, size_t child, int joint)
     connect(strength, &HotText::valueChanged, &dialog, [damping](double value) { damping->setEnabled(value > 0); });
     form->addRow("Spring", strength);
     form->addRow("Damping", damping);
+    // What the bone drives as it turns (bone_corrector.h), in a dialog of
+    // its own.
+    bool corrections = false;
+    QPushButton* correctionsButton = new QPushButton("Corrections...", &dialog);
+    correctionsButton->setAutoDefault(false);
+    correctionsButton->setToolTip("Shape corrections, drawing swaps and fades this bone drives as it turns");
+    connect(correctionsButton, &QPushButton::clicked, &dialog, [&]() {
+        corrections = true;
+        dialog.reject();
+    });
+    form->addRow("Drives", correctionsButton);
     QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
     connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
     connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
     form->addRow(buttons);
     if (dialog.exec() != QDialog::Accepted)
+    {
+        if (corrections && boneCorrector())
+            boneCorrector()->open(frame, child, joint);
         return;
+    }
 
     fla::JointLimit chosen;
     chosen.constrained = constrain->isChecked();
@@ -5190,6 +5207,18 @@ void MainWindow::smoothShapeJoints()
     }
     else
         rebindShape(span, child, fla::smoothJoints(binding, bound.anchors, joints, amount), amount);
+}
+
+BoneCorrector* MainWindow::boneCorrector()
+{
+    if (!_boneCorrector && _phoenixView)
+    {
+        _boneCorrector = new BoneCorrector(this, _phoenixView, &_editContext.commandStack(),
+            [this](const QString& message, int timeout) { statusBar()->showMessage(message, timeout); });
+        // Leaving a boned shape being corrected keeps the correction.
+        connect(_phoenixView, &PhoenixView::scopeChanged, _boneCorrector, [this]() { _boneCorrector->scopeChanged(); });
+    }
+    return _boneCorrector;
 }
 
 void MainWindow::addCamera()
@@ -6032,7 +6061,7 @@ bool MainWindow::publishHtml5(const Html5Publish::Settings& settings, QStringLis
     bool published = false;
     // Compiled clips carrying their movie come in as symbols of it.
     const std::map<std::string, std::vector<uint8_t>> compiled = fla::html5::compiledClips(*document);
-    if (fla::otherapps::needsTemplateBaking(*document) || !compiled.empty())
+    if (fla::otherapps::needsTemplateBaking(*document) || !compiled.empty() || fla::corrections::anyIn(*document))
     {
         // Template values, responsive time and compiled clips are written
         // into a copy read back from a temporary file, published through a
@@ -6050,6 +6079,8 @@ bool MainWindow::publishHtml5(const Html5Publish::Settings& settings, QStringLis
                 std::vector<std::string> baking;
                 const fla::otherapps::Measure measure = measureForCopies();
                 fla::otherapps::bakeTemplates(*copy->document, baking, &measure);
+                // Bone corrections go as the frames and symbols they make.
+                fla::corrections::bake(*copy->document, baking);
                 for (const std::string& each : baking)
                     notes << QString::fromStdString(each);
                 // A compiled clip's movie read as Phoenix imports SWF movies.
@@ -6110,7 +6141,8 @@ bool MainWindow::writeForOtherApps(const QString& path, QString& error, int* bak
     if (document->symbolList)
         for (const fla::Symbol* symbol : document->symbolList->symbols)
             graphs = graphs || (symbol && !symbol->timelines.empty() && fla::nodegraph::active(*symbol->timelines.front()));
-    if (fla::otherapps::needsBaking(*document) || graphs)
+    // And the bones' corrections, drawn into the copy's frames.
+    if (fla::otherapps::needsBaking(*document) || graphs || fla::corrections::anyIn(*document))
     {
         // Mattes, adjustment layers and template values are baked into a
         // copy read back from a temporary file, so the document stays as
@@ -6181,6 +6213,7 @@ bool MainWindow::writeForOtherApps(const QString& path, QString& error, int* bak
                     }
                     return picture;
                 };
+                fla::corrections::bake(*copy->document, notes);
                 fla::otherapps::bakeCompositing(*copy->document, notes, render, &measure);
                 view.setDocument(nullptr);
                 bakeNodeGraphs(*copy->document, notes);
@@ -7140,6 +7173,17 @@ void MainWindow::setupMenus()
     QAction* smoothAction = poseMenu->addAction("&Smooth Joints...");
     smoothAction->setStatusTip("Blend a boned shape's points between the bones at each joint, for smooth bends");
     connect(smoothAction, &QAction::triggered, this, &MainWindow::smoothShapeJoints);
+    QAction* correctionsAction = poseMenu->addAction("Bone C&orrections...");
+    correctionsAction->setStatusTip("Correct the shape, swap drawings or fade instances as the armature's bones turn");
+    connect(correctionsAction, &QAction::triggered, this, [this]() {
+        size_t child = 0;
+        int into = 0;
+        fla::Frame* span = currentPoseSpan(child, into);
+        if (!span)
+            statusBar()->showMessage("Bone corrections are set on an armature layer's frames.", 4000);
+        else if (boneCorrector())
+            boneCorrector()->open(span, child, -1);
+    });
     _framesMenu->addSeparator();
     QAction* poseMenuAction = _framesMenu->addMenu(poseMenu);
     connect(_framesMenu, &QMenu::aboutToShow, this, [this, poseMenuAction]() {

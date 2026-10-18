@@ -52,6 +52,7 @@ set(PHOENIX_CORE_SOURCES
     edit/asset_warp.cpp
     edit/brush_presets.cpp
     edit/brush_stroke.cpp
+    edit/bone_corrections.cpp
     edit/brush_texture.cpp
     edit/camera.cpp
     edit/color_art.cpp

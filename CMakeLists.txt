@@ -195,6 +195,7 @@ set(HEADERS
     src/gui/gradient_transform_tool.h
     src/gui/anchor_point_tool.h
     src/gui/ik_poser.h
+    src/gui/bone_corrector.h
     src/gui/movie_export.h
     src/gui/sprite_sheet_dialog.h
     src/gui/brush_properties_dialog.h
@@ -348,6 +349,7 @@ set(HEADERS
     src/edit/safe_zones.h
     src/edit/pegs.h
     src/edit/controllers.h
+    src/edit/bone_corrections.h
     src/edit/palettes.h
     src/edit/color_art.h
     src/edit/layer_effects.h
@@ -497,6 +499,7 @@ set(SOURCES
     src/gui/gradient_transform_tool.cpp
     src/gui/anchor_point_tool.cpp
     src/gui/ik_poser.cpp
+    src/gui/bone_corrector.cpp
     src/gui/movie_export.cpp
     src/gui/sprite_sheet_dialog.cpp
     src/gui/brush_properties_dialog.cpp

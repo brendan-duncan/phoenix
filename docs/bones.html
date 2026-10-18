@@ -151,6 +151,48 @@
 
 <p>Each is one step to undo; boned shapes bend and symbol instances move as they do when you pose by dragging.</p>
 
+<h2 id="corrections">Bone corrections</h2>
+
+<p>A bone can do more than bend its art. As it turns, it can <strong>correct</strong> the shape it bends, <strong>swap</strong> a graphic's drawing or <strong>fade</strong> an instance: an elbow keeps a clean crease and the arm bulges as it bends, a hand turns through its drawings as the wrist turns, a head turns through its drawings as one bone turns.</p>
+
+<figure>
+  <img src="assets/shots/bone-corrections.webp" alt="A blue arm bent at the elbow with two bones drawn in it, the elbow joint ringed in orange, and a blue box beside it showing the hand drawing the elbow has swapped in" width="1005" height="640">
+  <figcaption>The elbow bone, ringed in orange, rounds the outside of the elbow as it bends and swaps the hand's drawing.</figcaption>
+</figure>
+
+<p>Each correction blends in between two angles of its bone. At the first angle nothing changes, at the second the correction is in full, and in between it is part way. A bone's angle is how far it is turned from the bone above it, or, for the bone at the top of the armature, how far it is turned itself. A bone that drives something has an orange ring where it turns.</p>
+
+<h3>Correcting a boned shape</h3>
+
+<ol>
+  <li>With the Selection tool, turn the bone to where the correction should be in full, for example the arm bent all the way.</li>
+  <li>Click the bone with the Bone tool and click <strong>Corrections...</strong> in the Joint Rotation and Spring dialog. Or right-click a frame of the armature layer and choose <span class="menu-path">Pose &rsaquo; Bone Corrections...</span> and pick the bone.</li>
+  <li>Click <strong>Add Shape Correction</strong>. The boned shape opens in place on the frame you are on.</li>
+  <li>Move the shape's points with the Subselection tool until it looks right at this angle.</li>
+  <li>Leave the symbol, by double-clicking outside it or clicking the scene's name above the stage. What you drew is kept as the correction.</li>
+</ol>
+
+<p>Now the shape blends from its plain bend at the bone's resting angle to what you drew at the angle you drew it. The moved points turn with their bones, so the correction stays in place when the whole arm turns at the shoulder too. Everything you did while drawing is one step to undo.</p>
+
+<p>Only move points: points added or taken away while drawing mean the correction is not kept. To draw a correction again, add it again at any angle; the new one takes the old one's place. Each bone can correct the shape once, and corrections from several bones add up.</p>
+
+<h3>Swapping drawings and fading</h3>
+
+<p>For a hand or a head that turns, draw each view on its own frame of a graphic symbol and place the graphic on the armature's timeline. Then, in the Bone Corrections dialog, click <strong>Add Drawing Swap...</strong>, pick the graphic, give the bone's two angles and the frame to show at each. The frames between show in turn as the bone turns, whatever the graphic's own looping. <strong>Add Fade...</strong> fades any symbol instance between two alphas the same way.</p>
+
+<p>A bone used only as a handle, such as a head-turn control that bends no art, works the same way. Join two small symbol instances off the side of the stage into an armature of their own, or add a bone to a boned shape and unbind its points with the Bind tool, then pose that bone to drive the drawings.</p>
+
+<figure>
+  <img src="assets/shots/bone-corrections-dialog.webp" alt="The Bone Corrections dialog with Bone 2 chosen, listing a shape correction in full at 60 degrees and a drawing swap of Hand from frame 1 to 5, with buttons to add, edit and remove corrections" width="546" height="370">
+  <figcaption>The Bone Corrections dialog lists what the chosen bone drives.</figcaption>
+</figure>
+
+<p>The dialog lists what the chosen bone drives. <strong>Edit...</strong> changes a correction's angles, frames or alphas, and <strong>Remove</strong> takes it away. Each change is one step to undo.</p>
+
+<h3>Saving and exporting</h3>
+
+<p>Corrections are kept in the file as Phoenix's own settings, so FLA and XFL files keep them; another FLA editor shows the art without them. They play on the stage, in Test Movie and in exported images and movies. Publishing HTML5, exporting an SWF movie and <span class="menu-path">File &rsaquo; Export &rsaquo; Export FLA for Other Apps</span> draw them in: each frame of a boned shape is corrected, and a swapped or faded instance shows a new graphic symbol keyed frame by frame, so the copy plays the same anywhere.</p>
+
 <h2>Asset Warp</h2>
 
 <p><strong>Asset Warp</strong> puppets, where artwork bends around pins, are drawn deformed by their pins, vector and bitmap art alike. A turned pin turns the art right round it, a frozen pin keeps the art round it at its own angle, and a bone between two pins keeps the art along it on the line between them.</p>

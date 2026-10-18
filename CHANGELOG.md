@@ -14,6 +14,10 @@ What changed in each release of Phoenix, newest first.
 - Sort by Depth (right-click a layer): its movie clips are drawn by their Z, the furthest behind, and swap places as Z tweens
 - Export FLA for Other Apps lists a depth-sorted layer's clips in depth order, a keyframe a frame where they pass each other
 - Export FLA for Other Apps draws bent instances (corner pins, curve and envelope deformers) into bitmaps, so other apps show them bent
+- Bone corrections: as a bone turns, it can correct the boned shape it bends, such as an elbow that keeps its crease, drawn with the bone turned
+- A bone can swap a graphic's drawings as it turns, for a hand or a head that turns, or fade an instance in or out
+- Bones that drive a correction are ringed in orange; the Bone Corrections dialog lists, changes and removes what each bone drives
+- Bone corrections play in exported movies and images, and are drawn in when publishing HTML5, exporting SWF and exporting FLA for other apps
 
 ## 0.19.0
 
