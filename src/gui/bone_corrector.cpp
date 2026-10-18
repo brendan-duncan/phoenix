@@ -576,6 +576,8 @@ void BoneCorrector::startShape(fla::Frame* pose, size_t child, int joint)
     s.to = std::round(now * 10.0) / 10.0;
     s.depth = _view->scopeDepth();
     s.sceneFrame = frame;
+    // Nothing done from here merges into a step from before.
+    _stack->breakMergeChain();
     s.entry = _stack->index();
     _view->pauseCorrections(container);
     // Each shape drawn as the corrections make it on this frame, to be
