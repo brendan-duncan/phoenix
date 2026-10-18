@@ -67,8 +67,6 @@ const std::vector<Feature>& all()
                 "phoenixShadows", "phoenixExtrude"}},
         {"parenting-options", "Layer parenting options", "child layers taking on all of the parent's transform",
             {"phoenixParentScale", "phoenixParentSkew", "phoenixParentFlip"}},
-        {"joint-limits", "Bone joint limits", "bones that turn freely when posed",
-            {"phoenixMinRotation", "phoenixMaxRotation"}},
         {"shape-binding", "Bones bound in Phoenix", "boned shapes as drawn; posing them may bend them differently",
             {"phoenixBinding"}},
         {"shape-hints", "Shape hints", "shape tweens without the hints steering them", {"phoenixShapeHints"}},

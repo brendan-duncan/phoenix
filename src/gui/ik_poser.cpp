@@ -106,7 +106,7 @@ bool IKPoser::begin(PhoenixView& view, const QPointF& documentPos)
     const PhoenixView::IKBoneHit hit = view.ikBoneAt(documentPos);
     if (!hit || hit.locked)
         return false;
-    if (!setUp(hit.frame, hit.child))
+    if (!setUp(view, hit.frame, hit.child))
         return false;
     _joint = hit.joint;
     _into = hit.into;
@@ -118,7 +118,7 @@ bool IKPoser::change(PhoenixView& view, fla::CommandStack& commandStack, fla::Fr
     const std::function<bool(fla::IKArmature&)>& edit, const std::string& name)
 {
     reset();
-    if (!setUp(frame, child))
+    if (!setUp(view, frame, child))
         return false;
     _posed = _original;
     if (!edit(_posed))
@@ -134,10 +134,13 @@ bool IKPoser::change(PhoenixView& view, fla::CommandStack& commandStack, fla::Fr
     return true;
 }
 
-bool IKPoser::setUp(fla::Frame* frame, size_t child)
+bool IKPoser::setUp(PhoenixView& view, fla::Frame* frame, size_t child)
 {
     if (!frame || child >= frame->extraChildren.size() || !_original.parse(frame->extraChildren[child]))
         return false;
+    // Springs swing at the document's own pace.
+    if (view.flaDocument() && view.flaDocument()->document)
+        _original.setFrameRate(view.flaDocument()->document->frameRate);
     _frame = frame;
     _child = child;
     _xml = frame->extraChildren[child];
@@ -154,19 +157,19 @@ bool IKPoser::setUp(fla::Frame* frame, size_t child)
     // them from its joints (IKArmature::carried).
     if (!_original.bendsShape())
     {
-        for (int joint = 0; joint < static_cast<int>(_original.jointsAt(0).size()); ++joint)
+        // In the order the frame lists them, as the betweenFrameMatrixList
+        // keeps them.
+        for (fla::Element* element : _frame->elements)
         {
-            const std::string reference = _original.referenceOf(joint);
-            if (reference.empty())
+            if (!element || element->elementType() != fla::Element::Type::SymbolInstance)
                 continue;
-            for (fla::Element* element : _frame->elements)
+            fla::SymbolInstance* instance = static_cast<fla::SymbolInstance*>(element);
+            for (int joint = 0; joint < static_cast<int>(_original.jointsAt(0).size()); ++joint)
             {
-                if (!element || element->elementType() != fla::Element::Type::SymbolInstance)
-                    continue;
-                fla::SymbolInstance* instance = static_cast<fla::SymbolInstance*>(element);
+                const std::string reference = _original.referenceOf(joint);
                 for (const auto& attribute : instance->extraAttributes)
                 {
-                    if (attribute.first == "referenceID" && attribute.second == reference)
+                    if (!reference.empty() && attribute.first == "referenceID" && attribute.second == reference)
                         _carried.push_back({instance, instance->transform, joint});
                 }
             }
@@ -220,16 +223,29 @@ bool IKPoser::setUp(fla::Frame* frame, size_t child)
     // A shape bound to its bones point by point, as the Bone tool binds it,
     // bends every frame from the span's first: its points follow their
     // bones from the first frame's joints to the frame's own.
+    // So does one the reference app bound, its points found by where they
+    // were bound.
     _binding.clear();
     _rest = nullptr;
-    if (_original.bendsShape() && _original.bindsAnchors())
+    if (_original.bendsShape())
     {
+        const Bent* first = nullptr;
         for (const Bent& bent : _bent)
         {
-            if (bent.frame == 0)
-                _rest = bent.original.get();
+            if (bent.frame == 0 && !first)
+                first = &bent;
         }
-        _binding = _original.binding();
+        if (first && _original.bindsAnchors())
+            _binding = _original.binding();
+        else if (first)
+        {
+            std::vector<fla::Point> anchors = fla::shapeAnchors(*first->original);
+            const fla::Transform placed = toArmature(*first->shape);
+            for (fla::Point& anchor : anchors)
+                anchor = anchor.transformed(placed);
+            _binding = _original.bindingFor(anchors);
+        }
+        _rest = first ? first->original.get() : nullptr;
         if (!_rest || fla::shapeAnchors(*_rest).size() != _binding.size())
         {
             _binding.clear();
@@ -312,16 +328,13 @@ void IKPoser::finish(PhoenixView& view, fla::CommandStack& commandStack)
         bend(bent, *reshaped);
         compound->addCommand(fla::CommandPtr(new fla::SetShapeContentsCommand(bent.shape, *reshaped, "Pose Armature")));
     }
-    // The instances' places in their joints' frames, for every frame.
+    // How the instances move from the first frame, for every frame.
     std::vector<std::string> children = _frame->extraChildren;
     if (!_carried.empty())
     {
-        std::vector<const fla::Transform*> placed(_posed.jointsAt(0).size(), nullptr);
+        std::vector<std::pair<int, const fla::Transform*>> placed;
         for (const Carried& carried : _carried)
-        {
-            if (carried.joint >= 0 && static_cast<size_t>(carried.joint) < placed.size())
-                placed[static_cast<size_t>(carried.joint)] = &carried.instance->transform;
-        }
+            placed.emplace_back(carried.joint, &carried.instance->transform);
         fla::setBetweenFrames(children, _posed.betweenFrameMatrixList(placed));
     }
     for (Carried& carried : _carried)

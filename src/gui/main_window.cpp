@@ -4515,17 +4515,17 @@ std::string betweenFramesOf(const fla::Frame& frame, const std::string& xml)
     fla::IKArmature armature;
     if (!armature.parse(xml) || armature.bendsShape())
         return std::string();
-    std::vector<const fla::Transform*> placed(armature.jointsAt(0).size(), nullptr);
-    for (size_t joint = 0; joint < placed.size(); ++joint)
+    std::vector<std::pair<int, const fla::Transform*>> placed;
+    for (const fla::Element* element : frame.elements)
     {
-        const std::string reference = armature.referenceOf(static_cast<int>(joint));
-        for (const fla::Element* element : frame.elements)
+        const fla::SymbolInstance* instance = dynamic_cast<const fla::SymbolInstance*>(element);
+        for (int joint = 0; instance && joint < static_cast<int>(armature.jointsAt(0).size()); ++joint)
         {
-            const fla::SymbolInstance* instance = dynamic_cast<const fla::SymbolInstance*>(element);
-            for (const auto& attribute : instance ? instance->extraAttributes : std::vector<std::pair<std::string, std::string>>())
+            const std::string reference = armature.referenceOf(joint);
+            for (const auto& attribute : instance->extraAttributes)
             {
                 if (!reference.empty() && attribute.first == "referenceID" && attribute.second == reference)
-                    placed[joint] = &instance->transform;
+                    placed.emplace_back(joint, &instance->transform);
             }
         }
     }
@@ -4949,20 +4949,26 @@ void MainWindow::editJointLimits(fla::Frame* frame, size_t child, int joint)
     chosen.constrained = constrain->isChecked();
     chosen.min = minimum->value() / kDegrees;
     chosen.max = maximum->value() / kDegrees;
-    armature.setLimit(joint, chosen);
     fla::BoneSpring springChosen;
     springChosen.present = strength->value() > 0;
     springChosen.strength = strength->value();
     springChosen.damping = damping->value();
-    if (springChosen.strength != spring.strength || (springChosen.present && springChosen.damping != spring.damping))
-        armature.setSpring(joint, springChosen);
+    const bool springChanged =
+        springChosen.strength != spring.strength || (springChosen.present && springChosen.damping != spring.damping);
+    // A new spring works every frame's joints out again: the shapes the
+    // armature bends and the instances it carries follow, as posing does.
     const std::string before = frame->extraChildren[child];
-    const std::string after = armature.xml();
-    if (before == after)
+    if (!_phoenixView)
         return;
-    const std::string poses = poseLocationsOf(*frame);
-    _editContext.commandStack().push(fla::CommandPtr(new fla::PoseArmatureCommand(frame, child, before, after, poses, poses)));
-    _editContext.commandStack().breakMergeChain();
+    IKPoser poser;
+    poser.change(*_phoenixView, _editContext.commandStack(), frame, child,
+        [=](fla::IKArmature& edited) {
+            edited.setLimit(joint, chosen);
+            if (springChanged)
+                edited.setSpring(joint, springChosen);
+            return edited.xml() != before;
+        },
+        "Joint Rotation and Spring");
 }
 
 void MainWindow::addCamera()

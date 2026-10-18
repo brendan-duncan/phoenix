@@ -82,7 +82,7 @@ private:
     std::string posesOf(const fla::IKArmature& armature) const;
     /// Gathers what posing \a frame's armature changes; false when it has
     /// none there.
-    bool setUp(fla::Frame* frame, size_t child);
+    bool setUp(PhoenixView& view, fla::Frame* frame, size_t child);
     fla::Transform toArmature(const fla::Shape& shape) const;
     void reset();
 
