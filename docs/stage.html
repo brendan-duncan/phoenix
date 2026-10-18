@@ -4,11 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Stage, zoom and view · Phoenix User Guide</title>
-<meta name="description" content="Zoom, pan and rotate the view, use rulers, guides and grids, snap artwork, and switch scenes.">
+<meta name="description" content="The stage and pasteboard: zoom, pan and rotate the view, use rulers, guides and grids, snap artwork, move the camera, and switch scenes.">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Phoenix">
 <meta property="og:title" content="Stage, zoom and view · Phoenix User Guide">
-<meta property="og:description" content="Zoom, pan and rotate the view, use rulers, guides and grids, snap artwork, and switch scenes.">
+<meta property="og:description" content="The stage and pasteboard: zoom, pan and rotate the view, use rulers, guides and grids, snap artwork, move the camera, and switch scenes.">
 <meta property="og:url" content="https://phoenixanimate.com/stage.html">
 <meta property="og:image" content="https://phoenixanimate.com/assets/shots/hero.webp">
 <meta property="og:image:type" content="image/webp">
@@ -17,7 +17,7 @@
 <meta property="og:image:alt" content="The Phoenix window with three flower characters on the stage, the timeline below and the Properties panel on the right">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:image" content="https://phoenixanimate.com/assets/shots/hero.webp">
-<meta name="keywords" content="zoom magnification fit in window pan hand space rotate view rotation tool time scrub rulers guides grid snap snapping pixels objects pasteboard dim outside anti-aliasing scenes camera tool camera view light table">
+<meta name="keywords" content="stage pasteboard zoom magnification fit in window show all pan hand space rotate view rotation tool time scrub rulers guides lock guides edit guides clear guides grid edit grid snap snapping snap to objects snap to pixels snap to grid dim outside clip outside stage anti-aliasing scenes scene panel camera tool camera layer camera view light table safe zones">
 <link rel="icon" href="assets/img/logo.png">
 <link rel="stylesheet" href="assets/site.css">
 <script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
@@ -30,6 +30,16 @@
 <p class="eyebrow">Workspace</p>
 <h1>Stage, zoom and view</h1>
 <p class="lead">How to move around your artwork, line things up precisely, and control what the stage shows. These are view settings, except guides, the grid and the guide and object snap settings, which are saved with the document.</p>
+
+<h2>The stage and pasteboard</h2>
+
+<p>The <strong>stage</strong> is the rectangle in the middle of the window: what a movie or image export shows, at the size and color set on the Doc tab of the Properties panel or in <span class="menu-path">Modify &rsaquo; Document...</span> (<kbd>Ctrl</kbd>+<kbd>J</kbd>). Around it is the <strong>pasteboard</strong>, where artwork can wait off screen, ready to walk on, without being seen in the export.</p>
+
+<ul>
+  <li><span class="menu-path">View &rsaquo; Pasteboard</span> (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>W</kbd>) shows or hides the pasteboard and what is on it.</li>
+  <li><strong>Dim Outside Document</strong> darkens it, and <strong>Clip Content Outside Stage</strong> hides what is on it; see <a href="#display-options">Display options</a>.</li>
+  <li><span class="menu-path">View &rsaquo; Magnification &rsaquo; Show All</span> (<kbd>Ctrl</kbd>+<kbd>3</kbd>) zooms out to everything, on the stage and off it, which is how to find artwork that has wandered far away.</li>
+</ul>
 
 <h2>Zoom</h2>
 
@@ -87,11 +97,20 @@
 
 <h2>The camera</h2>
 
-<p>The <strong>Camera</strong> tool (<kbd>C</kbd>), the last in the Hand tool's slot, moves the scene's camera rather than your view of it: drag to pan, <kbd>Shift</kbd>-drag to zoom in and out, and <kbd>Alt</kbd>-drag to turn it about the middle of the stage. Each move is keyed on the frame shown, so the camera animates from one key to the next. If the scene has no camera yet, the first drag adds one (as <span class="menu-path">Insert &rsaquo; Camera</span> does). While the tool is in use, the Tool tab of the Properties panel shows the camera's keyframe at the playhead: its position, zoom and turn, and its <a href="rigging.html#multiplane-camera">color effect</a>.</p>
+<p>A scene can be filmed through a camera, which pans, zooms and turns over the artwork without moving it. Your view of the stage (zoom, scroll and rotation) is separate: it never changes what is exported, while the camera does.</p>
+
+<figure>
+  <img src="assets/shots/camera-tool-stage.webp" alt="The stage seen through a camera that has turned and moved in, with a readout reading Camera 854, 540, 124%, -12 degrees at the top left, and the timeline below with a Camera layer of three classic tweens" width="900" height="530">
+  <figcaption>With the Camera tool, a readout at the top left shows where the camera looks, its zoom and its turn on the frame shown.</figcaption>
+</figure>
+
+<p>The <strong>Camera</strong> tool (<kbd>C</kbd>), the last in the Hand tool's slot, moves the scene's camera rather than your view of it: drag to pan, <kbd>Shift</kbd>-drag to zoom in and out, and <kbd>Alt</kbd>-drag to turn it about the middle of the stage. Each move is keyed on the frame shown, so the camera animates from one key to the next. If the scene has no camera yet, the first drag adds one (as <span class="menu-path">Insert &rsaquo; Camera</span> does).</p>
+
+<p>Phoenix's own camera is a layer named <em>Camera</em> at the top of the scene, running its full length; a scene has one camera. Its keyframes hold the camera's place, zoom and turn, and tween from one to the next. While the Camera tool is in use, the Tool tab of the Properties panel shows Phoenix's camera's keyframe at the playhead: its position, zoom and turn, and its <a href="rigging.html#multiplane-camera">color effect</a>. Layers can sit at depths behind or in front of the stage, for parallax: see <a href="rigging.html#multiplane-camera">Multiplane camera</a>. Other FLA editors see Phoenix's camera layer as a guide layer, so they show the scene without it.</p>
 
 <p>With <span class="menu-path">View &rsaquo; Camera View</span> on, as it is by default, the stage shows the scene through its camera. Turn it off to see the scene as laid out, without the camera's moves. For layers at different depths from the camera, see <a href="rigging.html#multiplane-camera">Multiplane camera</a>.</p>
 
-<p>An FLA file's own camera layer plays the same way: its pans, zoom (about the middle of the stage), turns and color effect, tweened between its keyframes, in the view and in every export. A layer attached to that camera stays where it is drawn, neither moved nor colored, as a title or a frame over the shot does. The Camera tool moves that camera, keying its keyframes as the file keeps them, so the file opens again with the moves made in Phoenix. An SWF movie gets a scene filmed by a camera as frames of shapes.</p>
+<p>An FLA file's own camera layer, made in another app, plays the same way: its pans, zoom (about the middle of the stage), turns and color effect, tweened between its keyframes, in the view and in every export. A layer attached to that camera stays where it is drawn, neither moved nor colored, as a title or a frame over the shot does. The Camera tool moves that camera, keying its keyframes as the file keeps them, so the file opens again with the moves made in Phoenix. An SWF movie gets a scene filmed by a camera as frames of shapes.</p>
 
 <h2>Rulers and guides</h2>
 
@@ -105,10 +124,21 @@
 
 <p>Guides are saved with the document, and creating, moving or removing one can be undone. The <span class="menu-path">View &rsaquo; Guides</span> menu has:</p>
 
+<div class="grid-2">
+<figure>
+  <img src="assets/shots/edit-guides.webp" alt="Guides dialog with the color #00ff00, Show guides and Snap to guides checked, Lock guides unchecked, and Clear All, OK and Cancel" width="277" height="170">
+  <figcaption>Edit Guides</figcaption>
+</figure>
+<figure>
+  <img src="assets/shots/edit-grid.webp" alt="Grid dialog with the color #c0c0c0, Show grid, Show over objects and Snap to grid, and spacing across and down of 18 px" width="234" height="230">
+  <figcaption>Edit Grid</figcaption>
+</figure>
+</div>
+
 <dl class="defs">
   <dt>Show Guides</dt><dd><kbd>Ctrl</kbd>+<kbd>;</kbd>. Hides guides without deleting them.</dd>
   <dt>Snap to Guides</dt><dd><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>;</kbd>. Artwork snaps to guides as you drag it.</dd>
-  <dt>Lock Guides</dt><dd><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>;</kbd>. Guides stay where they are while you work near them.</dd>
+  <dt>Lock Guides</dt><dd><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>;</kbd>. Guides stay where they are while you work near them. Phoenix remembers this for every document, rather than saving it in one.</dd>
   <dt>Edit Guides...</dt><dd><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>G</kbd>. The guides' color, whether they show, snap and are locked, and <strong>Clear All</strong>. The color is saved with the document.</dd>
   <dt>Clear Guides</dt><dd>Removes every guide. This can be undone too.</dd>
 </dl>
@@ -120,14 +150,16 @@
 <table>
   <thead><tr><th>Option</th><th>Default</th><th>Snaps to</th></tr></thead>
   <tbody>
-    <tr><td>Snap to Objects</td><td>On</td><td class="wrap">The corners, edges and centers of other artwork; a scale handle also snaps to shapes' anchor points and outlines</td></tr>
+    <tr><td>Snap to Objects</td><td>On</td><td class="wrap">The corners, edges and centers of other artwork, and the stage's (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>/</kbd>); a scale handle also snaps to shapes' anchor points and outlines</td></tr>
     <tr><td>Snap to Guides</td><td>On</td><td class="wrap">Ruler guides</td></tr>
     <tr><td>Snap to Grid</td><td>Off</td><td class="wrap">The document grid (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>'</kbd>). Use <strong>Show Grid</strong> (<kbd>Ctrl</kbd>+<kbd>'</kbd>) to see it.</td></tr>
     <tr><td>Snap to Pixels</td><td>Off</td><td class="wrap">Whole pixels, for crisp artwork at 100%</td></tr>
   </tbody>
 </table>
 
-<p><span class="menu-path">View &rsaquo; Edit Grid...</span> (<kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>G</kbd>) sets the grid's color and its spacing across and down, saved with the document, and whether it shows, shows over the artwork instead of under it, and snaps.</p>
+<p><span class="menu-path">View &rsaquo; Edit Grid...</span> (<kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>G</kbd>) sets the grid's color and its spacing across and down in pixels, saved with the document, and whether it shows, shows over the artwork instead of under it, and snaps.</p>
+
+<p>Snapping shows only the ring at the point snapped to; Phoenix draws no alignment lines between objects as you drag. To line objects up exactly after placing them, use the <a href="selecting.html#align">Align panel</a> (<kbd>Ctrl</kbd>+<kbd>K</kbd>). Snapping to objects matches edges and centers but has no settings for a gap to keep between them.</p>
 
 <h2>Safe zones and aspect-ratio frames</h2>
 
@@ -181,7 +213,14 @@
 
 <h2>Scenes</h2>
 
+<figure class="narrow">
+  <img src="assets/shots/scene-panel.webp" alt="The Scene panel listing characters, 01_title, 02_establishing shot, 03_help ya? and 04_teddy bear?, with Add, Duplicate and Delete buttons" width="391" height="201">
+  <figcaption>The Scene panel for a document with seven scenes.</figcaption>
+</figure>
+
 <p>A document can be split into scenes, which play one after another. Phoenix shows one scene at a time; playback runs on from each scene into the next, switching the scene shown as it goes. Switch scenes from <span class="menu-path">View &rsaquo; Scene</span> or the <span class="menu-path">Window &rsaquo; Scene</span> panel (<kbd>Shift</kbd>+<kbd>F2</kbd>), or press <kbd>Shift</kbd>+<kbd>Page Up</kbd> and <kbd>Shift</kbd>+<kbd>Page Down</kbd> for the previous and next scene. The current scene's name appears in the edit bar above the stage. To add, rename, reorder and delete scenes, see <a href="documents.html#scenes">Scenes</a>; to export every scene at once, see <a href="export.html#export-movie">Export Movie</a>.</p>
+
+<p>In short: click a scene in the panel to edit it, <strong>Add</strong> (or <span class="menu-path">Insert &rsaquo; Scene</span>) puts an empty one after the current one, <strong>Duplicate</strong> copies it, drag to reorder, double-click to rename, and <strong>Delete</strong> removes the current scene after asking. Each scene has its own <a href="timeline.html#many-timelines">timeline</a> and its own camera; the library is shared by all of them. Test Movie plays the scenes in turn, and a script can jump between them.</p>
 
 </article>
 </main>

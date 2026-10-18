@@ -4,11 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>The workspace · Phoenix User Guide</title>
-<meta name="description" content="A tour of the Phoenix window: menus, Tools panel, outliner, stage, timeline and panels, with workspaces, themes and history.">
+<meta name="description" content="A tour of the Phoenix window: menus, Tools panel, stage, timeline and every panel, with docking, workspaces, themes, History, the Commands menu, Find and Replace and Movie Explorer.">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Phoenix">
 <meta property="og:title" content="The workspace · Phoenix User Guide">
-<meta property="og:description" content="A tour of the Phoenix window: menus, Tools panel, outliner, stage, timeline and panels, with workspaces, themes and history.">
+<meta property="og:description" content="A tour of the Phoenix window: menus, Tools panel, stage, timeline and every panel, with docking, workspaces, themes, History, the Commands menu, Find and Replace and Movie Explorer.">
 <meta property="og:url" content="https://phoenixanimate.com/workspace.html">
 <meta property="og:image" content="https://phoenixanimate.com/assets/shots/hero.webp">
 <meta property="og:image:type" content="image/webp">
@@ -17,7 +17,7 @@
 <meta property="og:image:alt" content="The Phoenix window with three flower characters on the stage, the timeline below and the Properties panel on the right">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:image" content="https://phoenixanimate.com/assets/shots/hero.webp">
-<meta name="keywords" content="panels dock toolbox outliner properties library color swatches align transform info frame picker motion editor menu bar status bar edit bar breadcrumb hot text window menu workspaces theme dark light ui scale edit toolbar history repeat hide panels document tabs">
+<meta name="keywords" content="panels dock float toolbox outliner properties library color swatches align transform info frame picker motion editor actions output behaviors node graph menu bar status bar edit bar breadcrumb hot text window menu workspaces reset workspace theme dark light ui scale edit toolbar history undo levels repeat commands menu run command saved commands find and replace find next movie explorer context menus hide panels document tabs">
 <link rel="icon" href="assets/img/logo.png">
 <link rel="stylesheet" href="assets/site.css">
 <script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
@@ -37,7 +37,7 @@
 </figure>
 
 <ol>
-  <li><strong>Menu bar</strong>: File, Edit, Insert, Modify, View, Control, Window and Help.</li>
+  <li><strong>Menu bar</strong>: File, Edit, Insert, Modify, Text, View, Control, Commands, Window and Help.</li>
   <li><strong>Tools panel</strong>: drawing and editing tools, the stroke and fill colors, and the Object Drawing switch.</li>
   <li><strong>Edit bar</strong>: where you are in the document (the scene, and any symbol you have opened), with a Back button and the <strong>Edit Symbols</strong> list, then the <a href="stage.html#the-stage-controls">stage controls</a>: Center Stage, Rotation, whether content outside the stage is shown, dimmed or clipped, and the zoom box with its magnification menu. When more than one document is open, their tabs sit above it; right-click a tab to close it or others, copy its path, or move it to a window of its own (see <a href="documents.html#several-documents">Several documents</a>).</li>
   <li><strong>Stage</strong>: the visible area of your animation, on a gray pasteboard where you can park artwork off screen.</li>
@@ -129,17 +129,21 @@
     <tr><td><a href="tweens.html#the-motion-editor">Motion Editor</a></td><td>&mdash;</td><td class="wrap">Edit a motion tween's property curves</td></tr>
     <tr><td><a href="rigging.html#multiplane-camera">Layer Depth</a></td><td>&mdash;</td><td class="wrap">Set how far each layer sits from the multiplane camera</td></tr>
     <tr><td><a href="rigging.html#x-sheet">X-Sheet</a></td><td>&mdash;</td><td class="wrap">Type each layer's exposures frame by frame, by drawing number</td></tr>
+    <tr><td><a href="actionscript.html#actions">Actions</a></td><td><kbd>F9</kbd></td><td class="wrap">Write the script of a frame, a button or a movie clip</td></tr>
+    <tr><td><a href="actionscript.html#errors">Output</a></td><td><kbd>F2</kbd></td><td class="wrap">Read what scripts trace, and the errors they stop on</td></tr>
     <tr><td><a href="#history-and-repeat">History</a></td><td><kbd>Ctrl</kbd>+<kbd>F10</kbd></td><td class="wrap">See every step you can undo, and go back or forward to one</td></tr>
     <tr><td><a href="pipeline.html#review-notes">Review Notes</a></td><td>&mdash;</td><td class="wrap">Read and add notes on frames that never export</td></tr>
     <tr><td><a href="rigging.html#master-controllers">Controllers</a></td><td>&mdash;</td><td class="wrap">Drive properties on several layers with one slider</td></tr>
+    <tr><td><a href="behaviors.html">Behaviors</a></td><td>&mdash;</td><td class="wrap">Give the selected symbols motion worked out every frame: wiggle, oscillate, follow with lag and more</td></tr>
     <tr><td><a href="stage.html#scenes">Scene</a></td><td><kbd>Shift</kbd>+<kbd>F2</kbd></td><td class="wrap">Switch, add, duplicate, delete, rename and reorder scenes</td></tr>
     <tr><td><a href="#movie-explorer">Movie Explorer</a></td><td><kbd>Alt</kbd>+<kbd>F3</kbd></td><td class="wrap">Browse the whole document as a tree</td></tr>
     <tr><td><a href="rigging.html#function-curves">Function Curves</a></td><td>&mdash;</td><td class="wrap">Edit any property of the current layer as a curve over time</td></tr>
+    <tr><td><a href="node-graph.html">Node Graph</a></td><td>&mdash;</td><td class="wrap">Composite the timeline's layers through a graph of effects, merges and mattes</td></tr>
     <tr><td><a href="ink-and-paint.html#linked-palettes">Palettes</a></td><td>&mdash;</td><td class="wrap">Recolor everything linked to a palette's named colors</td></tr>
   </tbody>
 </table>
 
-<p>The Window menu also opens <a href="tweens.html#motion-presets">Motion Presets</a>, <a href="drawing-tools.html#paint-brush">Document Brushes</a> and the <a href="export.html#render-queue">Render Queue</a>, and has <strong>Workspaces</strong>, <strong>Hide Panels</strong>, <strong>Theme</strong> and <strong>Edit Toolbar...</strong>, described below.</p>
+<p>The Window menu also opens <a href="tweens.html#motion-presets">Motion Presets</a>, the <a href="drawing-tools.html#brush-library">Brush Library</a>, <a href="drawing-tools.html#document-brushes">Document Brushes</a> and the <a href="export.html#render-queue">Render Queue</a>, lists the panels of installed <a href="scripting.html#extensions">extensions</a> under <strong>Extensions</strong>, and has <strong>Workspaces</strong>, <strong>Collapse Right Panels to Icons</strong> and <strong>Left</strong>, <strong>Hide Panels</strong>, <strong>Theme</strong> and <strong>Edit Toolbar...</strong>, described below.</p>
 
 <figure class="narrow">
   <img src="assets/shots/menu-view.webp" alt="The View menu, with the light table, camera view, scene and onion skin options, rulers, guides, zoom and snapping" width="281" height="600">
@@ -199,15 +203,72 @@
 
 <h2>History and Repeat</h2>
 
-<p><span class="menu-path">Window &rsaquo; History</span> (<kbd>Ctrl</kbd>+<kbd>F10</kbd>) lists every step you can undo, from <strong>Opened</strong> at the top to your latest change. Click a step to undo or redo back to it. Steps you have undone are grayed until you redo them or make a new change. The Undo and Redo commands in the Edit menu also name the step they undo or redo.</p>
+<div class="split">
+  <figure style="margin:0"><img src="assets/shots/history-panel.webp" alt="The History panel listing Opened NinjaGirl.fla and one step, Move Ninja, which is current" width="391" height="173"><figcaption>After opening a file and running a command named Move Ninja: a whole command is one step.</figcaption></figure>
+  <div>
+    <p><span class="menu-path">Window &rsaquo; History</span> (<kbd>Ctrl</kbd>+<kbd>F10</kbd>) lists every step you can undo, from <strong>Opened</strong> at the top to your latest change. Click a step to undo or redo back to it. Steps you have undone are grayed until you redo them or make a new change, which drops them.</p>
+    <p><span class="menu-path">Edit &rsaquo; Undo</span> (<kbd>Ctrl</kbd>+<kbd>Z</kbd>) and <strong>Redo</strong> (<kbd>Ctrl</kbd>+<kbd>Y</kbd>) step one at a time, and name the step they undo or redo.</p>
+  </div>
+</div>
+
+<ul>
+  <li>Each open document has a history of its own, kept while you switch between their tabs. Closing the document ends it.</li>
+  <li>How far back you can go is <strong>Undo levels</strong> in <a href="preferences.html#preferences">Preferences</a> (<kbd>Ctrl</kbd>+<kbd>U</kbd>): 200 steps unless you change it, or <strong>No limit</strong>.</li>
+  <li>A change made in one go is one step: a drag, a change in the Properties panel, a dialog's OK, or a whole script run from the <a href="#the-commands-menu">Commands menu</a>. Changing the view (zoom, scrolling, the playhead) and selecting are not steps.</li>
+</ul>
+
+<p>The History panel is for going back and forth. It does not replay steps on another selection or save them as a command. To repeat the last command, use Repeat below; to keep a task you do often, write it as a <a href="scripting.html">script</a> and put it in your Commands folder.</p>
 
 <p><span class="menu-path">Edit &rsaquo; Repeat</span> (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Y</kbd>) runs the last command you chose from the Insert or Modify menu, or from <span class="menu-path">Edit &rsaquo; Timeline</span>, again on what is selected now. The menu names the command it will repeat.</p>
 
+<h2 id="the-commands-menu">The Commands menu</h2>
+
+<div class="split">
+  <figure class="inline" style="margin:0"><img src="assets/shots/menu-commands.webp" alt="The Commands menu: Open Claude Code, Script Editor, Run Command, Manage Saved Commands, Manage Extensions and Open Commands Folder" width="174" height="156"></figure>
+  <dl class="defs" style="grid-template-columns:1fr">
+    <dt>Open Claude Code</dt><dd>Opens Claude Code in a panel, connected to Phoenix. See <a href="ai-assistants.html#open-claude-code-from-phoenix">AI assistants</a>.</dd>
+    <dt>Script Editor...</dt><dd>Writes, opens and runs JSFL and Python scripts. See <a href="scripting.html#script-editor">Write a script</a>.</dd>
+    <dt>Run Command...</dt><dd>Picks a script file and runs it on the open document, as one step to undo.</dd>
+    <dt>Your commands</dt><dd>The scripts in your Commands folder, by file name, between Run Command and the items below. Click one to run it.</dd>
+    <dt>Manage Saved Commands...</dt><dd>Renames or deletes them.</dd>
+    <dt>Manage Extensions...</dt><dd>Installs and removes <a href="scripting.html#extensions">extension</a> packages, whose commands and tools join Phoenix.</dd>
+    <dt>Open Commands Folder</dt><dd>Shows the folder. Put <code>.jsfl</code> or <code>.py</code> files there to add commands.</dd>
+  </dl>
+</div>
+
+<p>The menu's items, your own commands among them, can have keys like any other command: see <span class="menu-path">Edit &rsaquo; Keyboard Shortcuts...</span>. See <a href="scripting.html">Scripting</a> for what scripts can do.</p>
+
 <h2>Find and Replace</h2>
 
-<p>Choose <span class="menu-path">Edit &rsaquo; Find and Replace</span> (<kbd>Ctrl</kbd>+<kbd>F</kbd>) to search the whole document, every scene and every symbol, for <strong>Text</strong> (with Match case and Whole word), a <strong>Font</strong>, a <strong>Color</strong> (in fills, strokes, gradients and text), a <strong>Symbol</strong>'s instances, a <strong>Sound</strong> on the keyframes that play it, or a <strong>Bitmap</strong> in its instances and bitmap fills. <strong>Find All</strong> lists where each is; click one to go there. <strong>Replace All</strong> changes them all as one step you can undo. <span class="menu-path">Edit &rsaquo; Find Next</span> (<kbd>F3</kbd>) goes to the next place it is found, with the dialog closed.</p>
+<div class="split">
+  <figure style="margin:0"><img src="assets/shots/find-replace.webp" alt="Find and Replace dialog: Search for Text, Find and Replace with boxes, Match case and Whole word, an empty list of Location and Found, and Find All, Replace All and Close" width="460" height="440"></figure>
+  <div>
+    <p>Choose <span class="menu-path">Edit &rsaquo; Find and Replace</span> (<kbd>Ctrl</kbd>+<kbd>F</kbd>) to search the whole document: every scene and every symbol, inside groups too. Pick what to look for under <strong>Search for</strong>, fill in <strong>Find</strong> and <strong>Replace with</strong>, and click <strong>Find All</strong> or <strong>Replace All</strong>.</p>
+    <p>The dialog stays open while you work, so you can keep it beside the stage.</p>
+  </div>
+</div>
+
+<table>
+  <thead><tr><th>Search for</th><th>Looks in</th></tr></thead>
+  <tbody>
+    <tr><td>Text</td><td class="wrap">The words of text fields, static, dynamic and input. <strong>Match case</strong> and <strong>Whole word</strong> narrow it</td></tr>
+    <tr><td>Font</td><td class="wrap">Text set in a font, picked from those the document uses</td></tr>
+    <tr><td>Color</td><td class="wrap">Fills, strokes, gradient colors and text, matched on red, green and blue; each keeps its own alpha</td></tr>
+    <tr><td>Symbol</td><td class="wrap">The instances of a symbol. Replacing swaps them to another</td></tr>
+    <tr><td>Sound</td><td class="wrap">The keyframes that play a library sound</td></tr>
+    <tr><td>Bitmap</td><td class="wrap">A bitmap's instances, and fills that paint with it</td></tr>
+  </tbody>
+</table>
+
+<p><strong>Find All</strong> lists each object that has it, with its <strong>Location</strong> (such as <em>Scene 1 &gt; Layer 1 &gt; Frame 3</em>, or the symbol it is in) and how many times it is <strong>Found</strong> there. Click a row to go there: Phoenix opens the scene or symbol, moves the playhead and selects the object. <strong>Replace All</strong> changes every one as a single step you can undo. <span class="menu-path">Edit &rsaquo; Find Next</span> (<kbd>F3</kbd>) goes to the next place it is found, with the dialog closed.</p>
+
+<p>Find and Replace does not look in scripts, frame labels or instance names, and always searches the whole document rather than one scene. To find a label or a script, use <a href="#movie-explorer">Movie Explorer</a>'s search, or the <a href="actionscript.html#actions">Actions panel</a>'s script navigator.</p>
 
 <h2>Movie Explorer</h2>
+
+<figure class="narrow">
+  <img src="assets/shots/movie-explorer.webp" alt="Movie Explorer with the Text, Symbols, Scripts, Media and Frames buttons, a Find by name or text box, and a tree of Scene 1 with its layers" width="391" height="235">
+</figure>
 
 <p><span class="menu-path">Window &rsaquo; Movie Explorer</span> (<kbd>Alt</kbd>+<kbd>F3</kbd>) shows the whole document as a tree: each scene's layers, their keyframes with labels, scripts and sounds, and what is on them, with symbol instances by symbol and instance name and text by what it says. <strong>Symbol Definitions</strong> lists every symbol's own contents the same way. The buttons above choose what is listed: <strong>Text</strong>, <strong>Symbols</strong>, <strong>Scripts</strong>, <strong>Media</strong> (bitmaps and sounds) and <strong>Frames</strong> (layers and labeled frames with nothing else shown). Type in the search box to narrow it to names and text that match. Click an entry to go to it on the stage. The &#9776; menu has <strong>Show in Library</strong>, <strong>Expand All</strong>, <strong>Collapse All</strong> and <strong>Copy All Text to Clipboard</strong>.</p>
 
@@ -224,11 +285,13 @@
 <p>Right-click almost anywhere for the commands that apply there:</p>
 
 <ul>
-  <li><strong>On the stage</strong>: cut, copy and paste; arrange; transform; distribute to layers; convert to symbol; edit, edit in place or swap a symbol; break apart; group and ungroup.</li>
-  <li><strong>On a layer</strong>: insert and delete layers and folders; cut, copy, paste and duplicate layers; guide and mask types; the parent layer; show all, hide others and lock others; and layer properties.</li>
+  <li><strong>On the stage</strong>: cut, copy and paste; arrange; transform; distribute to layers; convert to symbol; edit, edit in place or swap a symbol, fill in its template fields or pin a part to text; break apart; group and ungroup.</li>
+  <li><strong>On a layer</strong>: insert and delete layers and folders; cut, copy, paste and duplicate layers; guide and mask types; track mattes, adjustment layers and layer modes; echo and motion blur; the parent layer; show all, hide others and lock others; and layer properties. See <a href="timeline.html#add-delete-and-reorder">Timeline and layers</a>.</li>
   <li><strong>On frames</strong>: tweens, frames and keyframes, cut, copy and paste frames, paste and overwrite, reverse frames, convert to frame-by-frame, and copy and paste motion.</li>
   <li><strong>In the Library</strong>: rename, duplicate, delete, copy and paste items, new symbols, folders and fonts, properties, and selecting unused items.</li>
   <li><strong>On the Tools panel</strong>: Edit Toolbar.</li>
+  <li><strong>On a document tab</strong>: close it or the others, copy its path, or move it to a window of its own.</li>
+  <li><strong>On the onion skin button</strong>: the onion skin settings.</li>
 </ul>
 
 <div class="tool-grid">

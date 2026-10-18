@@ -4,11 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Symbols and instances · Phoenix User Guide</title>
-<meta name="description" content="Make reusable symbols, place and edit their instances, swap symbols, and control which frames a graphic plays.">
+<meta name="description" content="Make graphic, movie clip and button symbols, edit them in place or on their own, set instance properties, swap and duplicate symbols, and control which frames a graphic plays.">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Phoenix">
 <meta property="og:title" content="Symbols and instances · Phoenix User Guide">
-<meta property="og:description" content="Make reusable symbols, place and edit their instances, swap symbols, and control which frames a graphic plays.">
+<meta property="og:description" content="Make graphic, movie clip and button symbols, edit them in place or on their own, set instance properties, swap and duplicate symbols, and control which frames a graphic plays.">
 <meta property="og:url" content="https://phoenixanimate.com/symbols.html">
 <meta property="og:image" content="https://phoenixanimate.com/assets/shots/hero.webp">
 <meta property="og:image:type" content="image/webp">
@@ -17,7 +17,7 @@
 <meta property="og:image:alt" content="The Phoenix window with three flower characters on the stage, the timeline below and the Properties panel on the right">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:image" content="https://phoenixanimate.com/assets/shots/hero.webp">
-<meta name="keywords" content="symbol instance graphic movie clip button convert to symbol F8 new symbol registration edit in place edit symbols breadcrumb swap symbol duplicate looping play once single frame loop reverse play once reverse ping pong first frame last frame frame picker 9-slice scale instance name">
+<meta name="keywords" content="symbol instance graphic movie clip button up over down hit area button states convert to symbol F8 new symbol ctrl+F8 registration point reg x reg y edit in place edit symbols symbol editing mode breadcrumb edit bar swap symbol duplicate symbol looping play once single frame loop reverse play once reverse ping pong first frame last frame frame picker 9-slice scale instance name instance behavior visible blending filters 3d position symbol properties linkage class master file copy frames into a symbol">
 <link rel="icon" href="assets/img/logo.png">
 <link rel="stylesheet" href="assets/site.css">
 <script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
@@ -38,9 +38,19 @@
   <tbody>
     <tr><td>Graphic</td><td class="wrap">Character parts, props, lip-sync mouths: anything animated in step with the main timeline</td><td class="wrap">Plays in sync with the timeline it is placed on, so you see its animation as you scrub</td></tr>
     <tr><td>Movie Clip</td><td class="wrap">Self-contained loops, and anything that needs filters or <a href="3d.html">3D rotation</a></td><td class="wrap">Plays on its own clock, independent of the timeline it is placed on</td></tr>
-    <tr><td>Button</td><td class="wrap">Interactive content for players that support it</td><td class="wrap">Four frames: Up, Over, Down and Hit</td></tr>
+    <tr><td>Button</td><td class="wrap">Things to click in a movie or game, such as menu choices and dress-up options</td><td class="wrap">Four frames: Up, Over, Down and Hit (see <a href="#button-symbols">Button symbols</a>)</td></tr>
   </tbody>
 </table>
+
+<p>Some rules of thumb for choosing:</p>
+
+<ul>
+  <li>For character animation that you scrub and check frame by frame, use <strong>graphics</strong>. A blink, a walk cycle or a set of mouth shapes inside a graphic plays exactly in step with the scene, and exports the same way.</li>
+  <li>For something that runs on its own, such as a flag waving behind a whole scene, or anything a script talks to by name, use a <strong>movie clip</strong>. Filters, the <strong>Visible</strong> switch and 3D position are for movie clips (and filters for buttons too).</li>
+  <li>For anything the viewer clicks in <a href="actionscript.html#test-movie">Test Movie</a>, a published SWF or an HTML5 page, use a <strong>button</strong>, or a movie clip with a script.</li>
+</ul>
+
+<p>The type you give the symbol is a starting point. Each instance has its own <strong>Type</strong> in the Properties panel, so one symbol can be placed as a graphic in one spot and as a movie clip in another.</p>
 
 <div class="callout">
   <span class="label">Note</span>
@@ -65,7 +75,24 @@
 
 <h3>From scratch</h3>
 
-<p>Choose <span class="menu-path">Insert &rsaquo; New Symbol...</span> (<kbd>Ctrl</kbd>+<kbd>F8</kbd>), name it and pick its type. Phoenix opens the empty symbol so you can draw in it. It is added to the library; drag it onto the stage to use it.</p>
+<p>Choose <span class="menu-path">Insert &rsaquo; New Symbol...</span> (<kbd>Ctrl</kbd>+<kbd>F8</kbd>), or <strong>New Symbol...</strong> on the Library panel's right-click menu, then name it and pick its type. Phoenix opens the empty symbol, with one layer and one empty keyframe, so you can draw in it. It is added to the library; drag it onto the stage to use it.</p>
+
+<h3>From an animation on the timeline</h3>
+
+<p>To turn frames you have already animated into a graphic or movie clip:</p>
+
+<ol class="steps">
+  <li>Select the layers that hold the animation and choose <span class="menu-path">Edit &rsaquo; Timeline &rsaquo; Copy Layers</span> (or <strong>Cut Layers</strong> to take them out of the scene).</li>
+  <li>Choose <span class="menu-path">Insert &rsaquo; New Symbol...</span>, name it and pick its type.</li>
+  <li>In the new symbol, choose <span class="menu-path">Edit &rsaquo; Timeline &rsaquo; Paste Layers</span>. The layers come in with every frame and setting. Delete the symbol's empty <em>Layer 1</em> if you like.</li>
+  <li>Go back to the scene and drag the symbol from the library onto the stage.</li>
+</ol>
+
+<p>For part of one layer, copy just those frames instead (<span class="menu-path">Edit &rsaquo; Timeline &rsaquo; Copy Frames</span>, <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>C</kbd>), click frame 1 in the new symbol and choose <strong>Paste Frames</strong> (<kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>V</kbd>). Frames copied from several layers paste into the selected layer and the ones below it, so add layers to the symbol first.</p>
+
+<h3>The registration point</h3>
+
+<p>Every symbol has an origin, its <strong>registration point</strong>, shown as a small crosshair when you edit the symbol. It is the point an instance is placed by: <strong>Reg X</strong> and <strong>Reg Y</strong> in the Properties panel are where it sits. The Registration grid in Convert to Symbol puts it at a corner, the middle of an edge or the center of the artwork. To move it later, edit the symbol and move the artwork itself the other way: the crosshair stays where it is.</p>
 
 <h2>Edit a symbol</h2>
 
@@ -85,18 +112,68 @@
 
 <p>To go back, double-click an empty part of the stage, click the Back arrow or a name in the edit bar, or press <kbd>Ctrl</kbd>+<kbd>E</kbd> (which reads <strong>Edit Document</strong> while you are inside a symbol). Symbols can contain other symbols, and the edit bar shows each level you have opened.</p>
 
+<p>The right-click menu on an instance has both ways in: <strong>Edit Symbol</strong> opens it on its own, <strong>Edit in Place</strong> in context. Groups open in place the same way, by double-clicking them. Phoenix edits symbols in the document's own window; there is no separate window for one symbol.</p>
+
+<p>Whatever you change inside a symbol changes every instance of it, in every scene. To change one instance only, change its properties on the stage, or <a href="#duplicate-a-symbol">duplicate the symbol</a> and swap that instance to the copy.</p>
+
+<h2 id="button-symbols">Button symbols</h2>
+
+<p>A button's timeline has four frames, one for each state:</p>
+
+<table>
+  <thead><tr><th>Frame</th><th>State</th><th>Shows</th></tr></thead>
+  <tbody>
+    <tr><td>1</td><td>Up</td><td class="wrap">The button as it sits, with the pointer elsewhere. This is also what the stage shows while you edit.</td></tr>
+    <tr><td>2</td><td>Over</td><td class="wrap">While the pointer is over it. With no frame 2, the Up frame stays.</td></tr>
+    <tr><td>3</td><td>Down</td><td class="wrap">While it is pressed. With no frame 3, the Up frame stays.</td></tr>
+    <tr><td>4</td><td>Hit</td><td class="wrap">Never shown. Its artwork is the area that answers the pointer. Leave it empty and the Up frame's artwork is the area instead.</td></tr>
+  </tbody>
+</table>
+
+<figure>
+  <img src="assets/shots/button-symbol-timeline.webp" alt="A button symbol open for editing: a hat badge on the stage, and a timeline four frames long with keyframes on frame 1 and frame 4 and an empty layer keyed on every frame" width="953" height="480">
+  <figcaption>A button open for editing. Its timeline ends after frame 4; the keyframe on frame 4 of the top layer draws the hit area.</figcaption>
+</figure>
+
+<ol class="steps">
+  <li>Convert artwork to a symbol of type <strong>Button</strong>, or make a new one, and open it.</li>
+  <li>Frame 1 is the Up state. Press <kbd>F6</kbd> on frames 2 and 3 to add keyframes for Over and Down, and change the artwork on each: a lighter color, a pressed-in look.</li>
+  <li>On frame 4, add a keyframe and draw a filled shape over the area that should be clickable. For a text button, a filled rectangle behind the words makes the whole area clickable.</li>
+</ol>
+
+<p>The timeline does not name the four frames, so a <a href="frames.html#frame-labels">frame label</a> on each can help you keep track.</p>
+
+<p>On the stage, buttons show their Up frame and do not react to the pointer, so you can select and move them. To try them, choose <span class="menu-path">Control &rsaquo; Test Movie</span> (<kbd>Ctrl</kbd>+<kbd>Enter</kbd>): the buttons light up under the pointer and run their scripts when clicked. What a click does is written in ActionScript, on the button instance or on the frame; see <a href="actionscript.html">ActionScript and Test Movie</a>.</p>
+
 <h2>Instance properties</h2>
 
-<p>Select an instance to see its settings on the Object tab:</p>
+<p>Select an instance to see its settings on the Object tab of the Properties panel. What it shows depends on the instance's type:</p>
+
+<div class="grid-2">
+<figure>
+  <img src="assets/shots/instance-movie-clip.webp" alt="Object tab for a movie clip instance named head: Instance, Position and Size, Color Effect, Display with Visible checked, Filters, and 3D Position and View" width="391" height="750">
+  <figcaption>A movie clip instance</figcaption>
+</figure>
+<figure>
+  <img src="assets/shots/instance-button.webp" alt="Object tab for a button instance with an empty instance name box: Instance, Position and Size, Color Effect, Display and Filters" width="391" height="575">
+  <figcaption>A button instance</figcaption>
+</figure>
+</div>
 
 <dl class="defs">
-  <dt>Instance name</dt><dd>For movie clips and buttons, a name that scripts can use to find the instance. It is in the header at the top of the tab.</dd>
+  <dt>Instance name</dt><dd>For movie clips and buttons, a name that scripts can use to find the instance. It is in the header at the top of the tab; graphics have none.</dd>
   <dt>Symbol and Swap...</dt><dd>The symbol this instance shows. <strong>Swap...</strong> replaces it, keeping the instance's position, transform and effects.</dd>
-  <dt>Type</dt><dd>Whether this instance acts as a graphic, movie clip or button, independent of the symbol's own type.</dd>
-  <dt>Position and Size</dt><dd>X, Y, width and height.</dd>
-  <dt>Color Effect and Display</dt><dd>Brightness, tint, alpha and blend modes. See <a href="effects.html">Filters, blends and color effects</a>.</dd>
-  <dt>Filters</dt><dd>Drop shadows, blurs, glows and more, for movie clips and buttons.</dd>
+  <dt>Type</dt><dd>Whether this instance acts as a graphic, movie clip or button, independent of the symbol's own type. The tab changes to match.</dd>
+  <dt>Position and Size</dt><dd>X, Y, width and height. The chain button keeps width and height in proportion.</dd>
+  <dt>Template</dt><dd>The words, colors and choices a <a href="#templates">template</a> symbol leaves to each instance. Shown only for such symbols.</dd>
+  <dt>Color Effect</dt><dd>Brightness, tint, alpha or advanced color for this instance. See <a href="effects.html#color-effects">Color effects</a>.</dd>
+  <dt>Display</dt><dd>The blend mode, <strong>Visible</strong> and the registration point; see <a href="#display">Display</a> below.</dd>
+  <dt>Filters</dt><dd>Drop shadows, blurs, glows and more, for movie clips and buttons. See <a href="effects.html#filters">Filters</a>.</dd>
+  <dt>3D Position and View</dt><dd>For movie clips: the depth (Z) and the document's perspective angle and vanishing point, set with the <a href="3d.html">3D tools</a>.</dd>
+  <dt>Looping</dt><dd>For graphics: which of the symbol's frames play, below.</dd>
 </dl>
+
+<p>There is no Cache as Bitmap or Export as Bitmap setting on the tab. A file that has them keeps them when you save.</p>
 
 <h3>Looping for graphics</h3>
 
@@ -116,6 +193,10 @@
 
 <p><strong>First</strong> sets the frame of the symbol to start from. <strong>Last</strong> sets where playing stops or turns around: the loops run between First and Last, and the Play Once options hold on Last. Leave Last at 0 to play to the symbol's end.</p>
 
+<p>The count starts at the instance's keyframe. A graphic placed on frame 10 of the scene shows its own frame First on frame 10, the next one on frame 11, and so on, for as long as the scene's span lasts: if the span is shorter than the symbol, the rest never shows. A new keyframe on the scene's layer starts the count again, so to carry on a cycle across keyframes, set First on the new keyframe to where it left off. A <a href="tweens.html">classic or motion tween</a> between two keyframes keeps counting, so a walk cycle keeps walking while the tween moves it.</p>
+
+<p>A movie clip has none of these settings. It plays from its first frame when it appears and keeps looping on its own clock, however long the span it sits on, until a script stops it. That is why a movie clip's animation shows when the document plays or exports, but not while you scrub.</p>
+
 <h2>Display</h2>
 
 <p>The Object tab's <strong>Display</strong> section has the instance's blend mode, and for a movie clip or button, <strong>Visible</strong>: turned off, the instance is not drawn, though it stays on the stage for scripts. <strong>Reg X</strong> and <strong>Reg Y</strong> place the instance by its registration point rather than by the corner of its bounds.</p>
@@ -126,13 +207,25 @@
 
 <h2>Swap Symbol</h2>
 
-<p><span class="menu-path">Modify &rsaquo; Symbol &rsaquo; Swap Symbol...</span> lists every symbol with a preview. The current one is shown in bold. Pick another and click <strong>OK</strong>, or double-click it. <strong>Duplicate Symbol...</strong> makes a copy of the selected symbol to swap to, which is handy when one instance needs a variation.</p>
+<div class="split">
+  <figure style="margin:0"><img src="assets/shots/swap-symbol.webp" alt="Swap Symbol dialog: a preview of a head symbol above a Duplicate Symbol button, and a list of symbols with head in bold" width="428" height="314"></figure>
+  <div>
+    <p><span class="menu-path">Modify &rsaquo; Symbol &rsaquo; Swap Symbol...</span>, <strong>Swap...</strong> on the Object tab, or <strong>Swap Symbol...</strong> on the stage's right-click menu lists every symbol with a preview. The current one is shown in bold. Pick another and click <strong>OK</strong>, or double-click it. Select several instances first to swap them all at once.</p>
+    <p><strong>Duplicate Symbol...</strong> makes a copy of the selected symbol to swap to, asking for its name, which is handy when one instance needs a variation.</p>
+  </div>
+</div>
+
+<p>Swapping is how you change a character's outfit or a prop without redoing its animation: the instance keeps its position, transform and effects.</p>
+
+<h3 id="duplicate-a-symbol">Duplicate a symbol</h3>
+
+<p>To copy a symbol without swapping anything, right-click it in the Library panel and choose <strong>Duplicate</strong>. The copy is named after it with <em>copy</em> (then <em>copy 2</em> and so on), and has its own timeline: change it and the original stays as it was. To rename it, right-click it and choose <strong>Rename</strong>, or press <kbd>F2</kbd>.</p>
 
 <p>Bitmaps swap the same way: select one or more bitmaps on the stage and choose <span class="menu-path">Modify &rsaquo; Bitmap &rsaquo; Swap Bitmap...</span>, or click <strong>Swap...</strong> in the Properties panel. The new bitmap takes the old one's place, scale and rotation.</p>
 
 <h2 id="templates">Templates</h2>
 
-<p>A symbol can be a template: one lower third, title card or sign that each instance fills in with its own words and colors. Its named parts are its fields:</p>
+<p>A symbol can be a template: one lower third, title card or sign that each instance fills in with its own words and colors. (To start whole documents from a saved layout, see <a href="documents.html#templates">document templates</a> instead.) Its named parts are its fields:</p>
 
 <ul>
   <li>A <b>dynamic text</b> field with an instance name is a text field. Each instance can give it other words, in the field's size and color, and another font if it likes (the <i>name</i> font box under the field, or a <code>name.font</code> column in a CSV).</li>
@@ -193,7 +286,19 @@ grace,Grace Hopper,Rear Admiral,#C02040</code></pre>
   <li>With the Selection tool, drag each guide to where the corner should end: the left and right guides across, the top and bottom ones up and down. Each move is one step to undo, and a guide stops short of its partner.</li>
 </ol>
 
-<p>The same dialog sets the symbol's type (movie clip, button or graphic) and its ActionScript class.</p>
+<h2>Symbol properties and linkage</h2>
+
+<p>Right-click a symbol in the Library panel and choose <strong>Properties...</strong> for its <strong>Symbol Properties</strong>:</p>
+
+<dl class="defs">
+  <dt>Type</dt><dd>Movie clip, button or graphic. Instances placed from now on take the new type; those already placed keep their own <strong>Type</strong> until you change it in the Properties panel.</dd>
+  <dt>Class</dt><dd>The name scripts create the symbol by, which exports it for ActionScript. Leave it empty for none. <strong>Linkage...</strong> on the same menu sets just this, and the name shows in the library's Linkage column. See <a href="actionscript.html#actionscript-3">ActionScript 3</a>.</dd>
+  <dt>Enable guides for 9-slice scaling</dt><dd>See <a href="#9-slice-scaling">9-slice scaling</a> above.</dd>
+</dl>
+
+<p>Each change is one step to undo. To rename the symbol, use <strong>Rename</strong> on the library's menu.</p>
+
+<p>To share a symbol between documents, so that a change in one file reaches the others, use <strong>Link to Master File...</strong> on the same menu: see <a href="pipeline.html#linked-shared-assets">Linked shared assets</a>. Symbols are shared as you work, when you update them; Phoenix does not set up runtime shared libraries that a published movie loads from another file.</p>
 
 </article>
 </main>
