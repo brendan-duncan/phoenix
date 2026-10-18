@@ -1298,6 +1298,12 @@ ShapeBinding IKArmature::binding() const
             found.resize(static_cast<size_t>(number) + 1);
         found[static_cast<size_t>(number)].push_back(bound);
     });
+    // As many points as the outline has, though its last points are bound
+    // to no bone.
+    const tinyxml2::XMLElement* tree = _document->FirstChildElement("IKTree");
+    const std::vector<double> indices = numbers(tree ? tree->Attribute("connectionIndices") : nullptr);
+    if (!found.empty() && !indices.empty() && indices[0] > static_cast<double>(found.size()) && indices[0] <= 100000.0)
+        found.resize(static_cast<size_t>(indices[0]));
     return found;
 }
 

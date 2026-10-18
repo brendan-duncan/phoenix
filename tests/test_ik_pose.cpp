@@ -463,6 +463,16 @@ TEST(boned_shapes_bind_points_to_their_nearest_bones)
         if (!read[i].empty())
             CHECK(read[i][0].bone == binding[i][0].bone && std::fabs(read[i][0].weight - 1.0) < 1.0e-9);
     }
+    // A last point bound to no bone still counts, so the others keep theirs.
+    fla::IKArmature lastFree;
+    CHECK(lastFree.parse(armature.xml()));
+    fla::ShapeBinding unbound = binding;
+    unbound.back().clear();
+    lastFree.setBinding(unbound, anchors, fla::Transform(), fla::contourStyle(*shape));
+    fla::IKArmature looseAgain;
+    CHECK(looseAgain.parse(lastFree.xml()));
+    const fla::ShapeBinding looseRead = looseAgain.binding();
+    CHECK(looseRead.size() == 4 && looseRead[3].empty() && looseRead[1].size() == 1 && looseRead[1][0].bone == 2);
     const std::string xml = again.xml();
     CHECK(xml.find("connectionIndices=\"4.000000,0.000000,1.000000,0.000000,1.000000,4.000000,8.000000,-1.000000") !=
         std::string::npos);

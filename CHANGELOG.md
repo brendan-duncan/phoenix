@@ -4,6 +4,7 @@ What changed in each release of Phoenix, newest first.
 
 ## Unreleased
 
+- A boned shape whose last points are bound to no bone keeps the binding of its other points when posed or rebound
 - Gravity and wind for springy bones (Pose > Gravity and Wind): hair, tails and plants hang and sway with no poses, gusting the same way every time
 - Smooth Joints (Pose > Smooth Joints) blends a boned shape's points between the bones at each joint, so elbows and knees bend in a curve
 - The Bind tool shows how much of each point the chosen bone moves, and Alt-click or Alt+Shift-click gives it more or less
