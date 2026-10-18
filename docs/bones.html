@@ -4,11 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Bones and inverse kinematics · Phoenix User Guide</title>
-<meta name="description" content="Build armatures of symbols and bone shapes with the Bone tool, bind shape points with the Bind tool, limit their joints, pose and play armatures, and play Asset Warp puppets.">
+<meta name="description" content="Build armatures of symbols and bone shapes with the Bone tool, bind shape points with the Bind tool, limit their joints, lock bones, give them targets, squash and stretch them, pose and play armatures, and play Asset Warp puppets.">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Phoenix">
 <meta property="og:title" content="Bones and inverse kinematics · Phoenix User Guide">
-<meta property="og:description" content="Build armatures of symbols and bone shapes with the Bone tool, bind shape points with the Bind tool, limit their joints, pose and play armatures, and play Asset Warp puppets.">
+<meta property="og:description" content="Build armatures of symbols and bone shapes with the Bone tool, bind shape points with the Bind tool, limit their joints, lock bones, give them targets, squash and stretch them, pose and play armatures, and play Asset Warp puppets.">
 <meta property="og:url" content="https://phoenixanimate.com/bones.html">
 <meta property="og:image" content="https://phoenixanimate.com/assets/shots/hero.webp">
 <meta property="og:image:type" content="image/webp">
@@ -17,7 +17,7 @@
 <meta property="og:image:alt" content="The Phoenix window with three flower characters on the stage, the timeline below and the Properties panel on the right">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:image" content="https://phoenixanimate.com/assets/shots/hero.webp">
-<meta name="keywords" content="bones ik inverse kinematics armature pose layer bone tool bind tool shape bones control points joint limits constrain rotation springs asset warp tool puppet pins rig">
+<meta name="keywords" content="bones ik inverse kinematics armature pose layer bone tool bind tool shape bones control points joint limits constrain rotation springs lock bone pin foot target reach independent angle squash stretch ik stretch asset warp tool puppet pins rig">
 <link rel="icon" href="assets/img/logo.png">
 <link rel="stylesheet" href="assets/site.css">
 <script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
@@ -98,6 +98,74 @@
   <li><strong>Boned shapes</strong> bend the points of the shape, each with the bones it is bound to.</li>
   <li><strong>Springs</strong> swing the bones on top of their poses: a boned shape bends where its sprung bones swing, and an armature of symbols carries its instances with them (see <a href="#springs">Springs</a>). Dragging a bone poses it from where it shows, swing and all.</li>
 </ul>
+
+<p>To move the whole armature, drag the joint at its root (the first joint, where the chain starts). Locked bones stay put while you do, so dragging the hips of a character with its feet locked bends its knees. <kbd>Alt</kbd>-drag a bone to turn just that bone, without the bones above it following.</p>
+
+<h3 id="bone-menu">The bone menu</h3>
+
+<p>Right-click a bone on the stage, with any tool, for the commands below, and for <strong>Joint Rotation and Spring</strong>, which opens the dialog the Bone tool does. Each change is one step to undo, and the shape or the instances follow it on every frame.</p>
+
+<h3 id="lock">Locking a bone</h3>
+
+<p>A locked bone stays where it is on the stage while you pose the rest of the armature. Lock a foot, then drag the hips: the foot stays planted on the ground and the leg bends to keep it there.</p>
+
+<ol class="steps">
+  <li>Move the playhead to the frame where the foot lands, and right-click the foot bone.</li>
+  <li>Choose <strong>Lock Bone</strong>. The bone shows a small red square, and it is locked from this frame on.</li>
+  <li>Pose the later frames. The foot stays where it landed on every frame in between, while the hips move.</li>
+  <li>On the frame where the foot should lift, right-click it again and turn <strong>Lock Bone</strong> off. From the last locked pose to this one, the foot is free to move.</li>
+</ol>
+
+<figure>
+  <img src="assets/shots/bone-lock.webp" alt="A boned leg shape standing straight, and beside it the same leg with its hip moved down and forward, the knee bent and the foot, marked with a red square, in the same place" width="736" height="460">
+  <figcaption>The foot is locked. Dragging the hip's joint bends the knee while the foot stays planted.</figcaption>
+</figure>
+
+<h3 id="targets">Reaching for a target</h3>
+
+<p>A bone can reach for a target: the end of the bone, and the bones above it up to the nearest place where the armature branches, turn so the end touches the target on every frame. Right-click the bone and choose from <strong>Reach For</strong>:</p>
+
+<dl class="defs">
+  <dt>A Point Here</dt><dd>The target is a point on the stage, where the bone's end is now. Drag the bone to move the point. Move it on another frame and the point glides from pose to pose in a straight line, with the limb following it, which is handy for a hand sliding along a table or a foot stepping.</dd>
+  <dt>Another bone</dt><dd>The end reaches for the end of that bone wherever it goes, such as two hands holding one stick.</dd>
+  <dt>Nothing</dt><dd>The bone goes back to its poses.</dd>
+</dl>
+
+<p>The target applies from the frame you set it on to the end of the armature, until you change it on a later frame. The target shows as a blue ring, with a dashed line from the bone when it cannot reach.</p>
+
+<figure>
+  <img src="assets/shots/bone-target.webp" alt="A boned leg shape standing straight, and beside it the same leg kicking forward with its ankle on a blue target ring" width="736" height="460">
+  <figcaption>The ankle reaches for a point. Moving the point on a later frame moves the leg with it.</figcaption>
+</figure>
+
+<h3 id="independent">Independent angle</h3>
+
+<p>Normally a bone turns with the bone above it, as a hand turns with the arm. Turn on <strong>Independent Angle</strong> in the bone menu and the bone keeps its own angle on the stage instead: a foot stays flat as the leg swings, or a head stays upright as the body leans. Drag the bone itself to change its angle.</p>
+
+<figure>
+  <img src="assets/shots/bone-independent.webp" alt="A boned leg shape standing straight, and beside it the same leg swung forward from the hip with the foot still flat" width="936" height="460">
+  <figcaption>The leg swings forward from the hip, and the foot keeps its angle.</figcaption>
+</figure>
+
+<h3 id="squash-and-stretch">Squash and stretch</h3>
+
+<p>With <strong>Squash and Stretch</strong> on, a bone can change length, and its artwork stretches along with it. <kbd>Alt</kbd>-drag the end of the bone: it turns toward the cursor and grows or shrinks to reach it. Choose <strong>Stretch, Keep Volume</strong> to make the art thinner as it stretches and fatter as it squashes, like a rubber ball. Turning the option off puts the bone back to its own length.</p>
+
+<figure>
+  <img src="assets/shots/bone-squash.webp" alt="A boned post shape, and beside it the same post with its lower half stretched long and thin" width="736" height="550">
+  <figcaption>The lower bone stretched to almost twice its length, keeping its volume.</figcaption>
+</figure>
+
+<h3 id="ik-stretch">IK stretch</h3>
+
+<p><strong>IK Stretch</strong> lets a bone grow, up to the amount you choose, when its chain has to reach further than it can: a cartoon arm that stretches to grab something just out of reach. Give each bone of the limb IK stretch, then drag its end, or give it a target, past where it could reach. Within reach, the bones keep their own length.</p>
+
+<figure>
+  <img src="assets/shots/bone-stretch.webp" alt="A boned leg shape standing straight, and beside it the same leg stretched longer, reaching down and forward to a blue target ring" width="936" height="550">
+  <figcaption>The ankle reaches for a point past the leg's length, and the thigh and shin stretch to get there.</figcaption>
+</figure>
+
+<p>Locks, targets and bone options work with armatures of symbols and with boned shapes. On an armature of symbols, a stretched bone stretches the instance it starts from. Phoenix keeps them in the file as its own settings. What they do is worked into the poses and into every frame of the armature, so other apps that open the file play the same motion, though only Phoenix keeps the bones locked, reaching or stretching when you pose them again.</p>
 
 <h3 id="pose-commands">Pose commands</h3>
 
