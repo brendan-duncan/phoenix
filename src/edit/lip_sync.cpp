@@ -5,9 +5,12 @@
 
 #include "../data/frame.h"
 #include "../data/layer.h"
+#include "../data/symbol.h"
 #include "../data/symbol_instance.h"
+#include "../data/timeline.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstdlib>
 #include <sstream>
@@ -87,12 +90,16 @@ std::vector<Cue> listen(const std::vector<int16_t>& samples, int channels, int s
         shapes.push_back(shape);
     }
     // A dip to closed between two open shapes reads as a syllable break;
-    // anything else held under two frames takes the shape before it.
+    // anything else held under two frames takes the shape before it, or
+    // the one after it where the voice starts from rest, so the mouth opens
+    // with the first sound rather than frames late.
+    const std::vector<std::string> heard = shapes;
     for (size_t i = 1; i < shapes.size(); ++i)
     {
-        const bool lone = shapes[i] != shapes[i - 1] && (i + 1 >= shapes.size() || shapes[i + 1] != shapes[i]);
-        if (lone && shapes[i] != "A")
-            shapes[i] = shapes[i - 1];
+        const bool lone = heard[i] != heard[i - 1] && (i + 1 >= heard.size() || heard[i + 1] != heard[i]);
+        if (!lone || heard[i] == "A")
+            continue;
+        shapes[i] = shapes[i - 1] == "X" && i + 1 < heard.size() ? heard[i + 1] : shapes[i - 1];
     }
     for (size_t i = 0; i < shapes.size(); ++i)
     {
@@ -172,13 +179,38 @@ std::vector<std::string> shapesOf(const std::vector<Cue>& cues)
     return shapes;
 }
 
-std::map<std::string, int> defaultChart(const std::vector<std::string>& shapes)
+std::map<std::string, int> defaultChart(const std::vector<std::string>& shapes, const std::map<std::string, int>& labels)
 {
+    const auto lower = [](std::string text) {
+        for (char& c : text)
+            c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        return text;
+    };
     std::map<std::string, int> chart;
     int frame = 1;
     for (const std::string& shape : shapes)
-        chart[shape] = frame++;
+    {
+        int labeled = 0;
+        for (const auto& [label, at] : labels)
+            if (label == shape || (!labeled && lower(label) == lower(shape)))
+                labeled = at;
+        chart[shape] = labeled > 0 ? labeled : frame;
+        ++frame;
+    }
     return chart;
+}
+
+std::map<std::string, int> labelsOf(const SymbolInstance& mouth)
+{
+    std::map<std::string, int> labels;
+    if (!mouth.symbol || mouth.symbol->timelines.empty() || !mouth.symbol->timelines.front())
+        return labels;
+    for (const Layer* layer : mouth.symbol->timelines.front()->layers)
+        if (layer)
+            for (const Frame* frame : layer->frames)
+                if (frame && !frame->name.empty() && frame->labelType != "comment" && !labels.count(frame->name))
+                    labels[frame->name] = frame->index + 1;
+    return labels;
 }
 
 std::string chartText(const std::map<std::string, int>& chart)

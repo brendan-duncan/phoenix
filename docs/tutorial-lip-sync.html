@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lip sync · Phoenix User Guide</title>
+<meta name="description" content="Make a character say a line: Phoenix listens to the voice and keys a mouth symbol's shapes to it, then you touch up a shape with the Frame Picker.">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Phoenix">
+<meta property="og:title" content="Lip sync · Phoenix User Guide">
+<meta property="og:description" content="Make a character say a line: Phoenix listens to the voice and keys a mouth symbol's shapes to it, then you touch up a shape with the Frame Picker.">
+<meta property="og:url" content="https://phoenixanimate.com/tutorial-lip-sync.html">
+<meta property="og:image" content="https://phoenixanimate.com/assets/shots/hero.webp">
+<meta property="og:image:type" content="image/webp">
+<meta property="og:image:width" content="1704">
+<meta property="og:image:height" content="1061">
+<meta property="og:image:alt" content="The Phoenix window with three flower characters on the stage, the timeline below and the Properties panel on the right">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://phoenixanimate.com/assets/shots/hero.webp">
+<meta name="keywords" content="tutorial lesson step by step lip sync lip-sync talking dialogue voice mouth shapes mouth chart phonemes visemes frame labels frame picker rhubarb sound">
+<link rel="icon" href="assets/img/logo.png">
+<link rel="stylesheet" href="assets/site.css">
+<script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<main>
+<article class="content">
+
+<p class="eyebrow">Tutorials</p>
+
+<h1>Lip sync</h1>
+
+<p class="lead">Make a character say a line: Phoenix listens to the voice and keys a mouth symbol's shapes to it, then you touch up a shape with the Frame Picker.</p>
+
+<div class="callout">
+  <span class="label">Try it in Phoenix</span>
+  <p>This page is also a lesson inside Phoenix: choose <span class="menu-path">Help &rsaquo; Tutorials...</span> and start <strong>Lip sync</strong>, and Phoenix points at each control as you go. It takes about 6 minutes.</p>
+</div>
+
+<p>To follow along here instead, download the starting document, <a href="assets/tutorials/lip-sync.fla" download>lip-sync.fla</a>, and open it with <span class="menu-path">File &rsaquo; Open...</span>.</p>
+
+<figure>
+  <img src="assets/shots/tutorial-lip-sync.webp" alt="Four copies of a round yellow face, each with a different mouth: wide open, closed, teeth together, and a small rounded opening" width="1000" height="261">
+  <figcaption>The same face on four frames of the line, each showing the mouth shape Phoenix heard there.</figcaption>
+</figure>
+
+<p>A character looks as if it is talking when its mouth changes shape in time with the words. Phoenix can listen to a voice and put the right mouth shape on each frame for you.</p><p>The <i>Voice</i> layer holds a short line of dialogue. The <i>Face</i> layer holds the face, and the <i>Mouth</i> layer a graphic symbol, <i>Mouth</i>, with a different mouth shape on each of its frames.</p>
+
+<h2>1. Play it</h2>
+
+<p>Turn your sound up, then press <kbd>Enter</kbd>, or click the play button in the timeline header. You hear "Hello, I'm Phoenix. Let's make a cartoon!", but the mouth does not move.</p>
+
+<h2>2. Look inside the mouth</h2>
+
+<p>Press <kbd>Enter</kbd> again to stop. In the <b>Library</b> panel, double-click <i>Mouth</i>.</p><p>Its timeline has nine frames, one mouth shape on each. Each frame is labeled with its shape's letter: <b>A</b> closed for M, B and P; <b>B</b> teeth together for most other consonants; <b>C</b> open; <b>D</b> wide open; <b>E</b> rounded; <b>F</b> puckered for OO and W; <b>G</b> teeth on the lip for F and V; <b>H</b> the tongue up for L; and <b>X</b> at rest. The labels tell Phoenix which frame shows which shape.</p>
+
+<figure>
+  <img src="assets/shots/lip-sync-mouth-shapes.webp" alt="Nine cartoon mouths labeled A to H and X: a closed line, teeth together, open, wide open with a tongue, rounded, puckered, teeth on the lip, tongue up, and a resting smile" width="1000" height="346">
+  <figcaption>The nine frames of <i>Mouth</i>, one for each shape, labeled with its letter.</figcaption>
+</figure>
+
+<h2>3. Back to the scene</h2>
+
+<p>Click <b>Scene 1</b> at the left of the edit bar, or press <kbd>Ctrl</kbd>+<kbd>E</kbd>.</p>
+
+<h2>4. Select the mouth</h2>
+
+<p>In the timeline, click frame 1 of the <i>Mouth</i> layer. That selects what is on it: the mouth, with a box around it on the stage.</p>
+
+<h2>5. Lip sync it</h2>
+
+<p>Choose <span class="menu-path">Modify &rsaquo; Lip Sync...</span>.</p><p><b>Sound</b> already shows <i>hello.wav</i>, the voice on the <i>Voice</i> layer. Click <b>Read Mouth Shapes</b>: Phoenix listens and lists the shapes it heard in the mouth chart, each on the frame labeled with its letter. Leave <b>Starts on frame</b> at 1 and click <b>Key the Mouth</b>.</p>
+
+<figure class="narrow">
+  <img src="assets/shots/lip-sync-dialog.webp" alt="The Lip Sync window: Sound set to hello.wav, empty Rhubarb and Words fields, the Read Mouth Shapes button, 26 mouth shapes over 3.0 seconds, and a mouth chart with A to E on frames 1 to 5" width="560" height="620">
+  <figcaption>The Lip Sync window after <b>Read Mouth Shapes</b>. Scroll the chart to see X on frame 9.</figcaption>
+</figure>
+
+<h2>6. Look at the keyframes</h2>
+
+<p>The <i>Mouth</i> layer now has a keyframe wherever the mouth changes, each showing one frame of <i>Mouth</i>. Drag the playhead along the frame numbers above the layers to watch the shapes go by.</p>
+
+<figure>
+  <img src="assets/shots/lip-sync-timeline.webp" alt="The timeline: the Mouth layer with a keyframe every few frames, the Face layer, and the Voice layer showing the waveform of the line" width="900" height="150">
+  <figcaption>The mouth's keyframes line up with the bursts of sound on the <i>Voice</i> layer.</figcaption>
+</figure>
+
+<h2>7. Play it</h2>
+
+<p>Press <kbd>Enter</kbd>, or click the play button in the timeline header. The mouth opens and closes with the words.</p>
+
+<h2>8. Find the last sound</h2>
+
+<p>Press <kbd>Enter</kbd> again to stop. Click frame 73 of the <i>Mouth</i> layer: the hum of the N at the end of "cartoon". Phoenix closed the lips here (shape A), and the mouth is selected.</p>
+
+<h2>9. Change the shape</h2>
+
+<div class="split">
+  <figure style="margin:0"><img src="assets/shots/lip-sync-frame-picker.webp" alt="The Frame Picker panel for Mouth: Single Frame, Create Keyframe unchecked, and nine mouth pictures numbered 1 to 9" width="386" height="380"></figure>
+  <div>
+    <p>Choose <span class="menu-path">Window &rsaquo; Frame Picker</span>. It shows the frames of <i>Mouth</i> as pictures. Click the second, <b>B</b>: an N is said with the teeth together, not with the lips closed.</p>
+  </div>
+</div>
+
+<h2>10. Play it again</h2>
+
+<p>Press <kbd>Enter</kbd>. The line ends on the teeth before the mouth comes to rest.</p>
+
+<h2>What you did</h2>
+
+<p>You keyed a whole line of dialogue at once, then touched up one shape by hand. Lip Sync is one step: <span class="menu-path">Edit &rsaquo; Undo</span> takes it all back. Phoenix keeps the mouth chart with the symbol for next time.</p><p>Phoenix's own listening goes by how loud and how hissy the voice is, so it uses A to E and X. For sharper results, download <a href="https://github.com/DanielSWolf/rhubarb-lip-sync">Rhubarb Lip Sync</a> (free) and choose it under <b>Rhubarb</b> in the Lip Sync window; it uses all nine shapes, and typing the words under <b>Words</b> helps it more.</p><p>For your own character, draw each mouth shape on a frame of a graphic symbol and label the frame with the shape's letter (see <a href="frames.html#frame-labels">Frame labels</a>). A recording that is not in the library yet can be read straight from disk: choose <b>A recording on disk</b> under <b>Sound</b>.</p>
+
+<p>For everything this tutorial touches on, see <a href="sound.html#lip-sync">Lip sync</a> and <a href="symbols.html#the-frame-picker">The Frame Picker</a>.</p>
+
+</article>
+</main>
+</body>
+</html>

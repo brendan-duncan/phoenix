@@ -4367,7 +4367,22 @@ void MainWindow::lipSync()
             if (key == "phoenixMouthChart")
                 saved = fla::lipsync::chartFrom(value);
     const double fps = _flaDocument->document->frameRate > 0.0 ? _flaDocument->document->frameRate : 24.0;
-    LipSyncDialog dialog(QString::fromStdString(mouth->libraryItemName), saved, _player ? _player->currentFrame() : 0, fps, this);
+    // The library's sounds, starting with the voice on the mouth's timeline.
+    QStringList sounds;
+    for (const fla::Document::SoundInfo& info : _flaDocument->document->sounds)
+        sounds << QString::fromStdString(info.name);
+    QString voice;
+    if (const auto* timeline = dynamic_cast<const fla::Timeline*>(layer->parent))
+        for (const fla::Layer* other : timeline->layers)
+            if (other)
+                for (const fla::Frame* key : other->frames)
+                    if (key && voice.isEmpty())
+                        voice = QString::fromStdString(fla::frame_sound::read(*key).name);
+    LipSyncDialog::SoundSource soundOf;
+    if (_timelineAudio)
+        soundOf = [this](const QString& name) { return _timelineAudio->librarySound(name.toStdString()); };
+    LipSyncDialog dialog(QString::fromStdString(mouth->libraryItemName), saved, fla::lipsync::labelsOf(*mouth), sounds,
+        voice, soundOf, _player ? _player->currentFrame() : 0, fps, this);
     if (dialog.exec() != QDialog::Accepted || dialog.cues().empty())
         return;
     const std::map<std::string, int> chart = dialog.chart();

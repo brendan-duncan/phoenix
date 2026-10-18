@@ -1,0 +1,78 @@
+{
+  "title": "Lip sync",
+  "summary": "Make a character say a line: Phoenix listens to the voice and keys a mouth symbol's shapes to it, then you touch up a shape with the Frame Picker.",
+  "minutes": 6,
+  "order": 29,
+  "guide": "sound.html",
+  "tags": ["Animation", "Sound", "Symbols"],
+  "start": {"document": "start"},
+  "final": "final",
+  "steps": [
+    {
+      "title": "Welcome",
+      "text": "<p>A character looks as if it is talking when its mouth changes shape in time with the words. Phoenix can listen to a voice and put the right mouth shape on each frame for you.</p><p>The <i>Voice</i> layer holds a short line of dialogue. The <i>Face</i> layer holds the face, and the <i>Mouth</i> layer a graphic symbol, <i>Mouth</i>, with a different mouth shape on each of its frames.</p>"
+    },
+    {
+      "title": "Play it",
+      "text": "<p>Turn your sound up, then press <kbd>Enter</kbd>, or click the play button in the timeline header. You hear \"Hello, I'm Phoenix. Let's make a cartoon!\", but the mouth does not move.</p>",
+      "target": "widget:timelinePlay",
+      "wait": {"playing": true}
+    },
+    {
+      "title": "Look inside the mouth",
+      "text": "<p>Press <kbd>Enter</kbd> again to stop. In the <b>Library</b> panel, double-click <i>Mouth</i>.</p><p>Its timeline has nine frames, one mouth shape on each. Each frame is labeled with its shape's letter: <b>A</b> closed for M, B and P; <b>B</b> teeth together for most other consonants; <b>C</b> open; <b>D</b> wide open; <b>E</b> rounded; <b>F</b> puckered for OO and W; <b>G</b> teeth on the lip for F and V; <b>H</b> the tongue up for L; and <b>X</b> at rest. The labels tell Phoenix which frame shows which shape.</p>",
+      "target": "dock:Library",
+      "wait": {"scope": "symbol"}
+    },
+    {
+      "title": "Back to the scene",
+      "text": "<p>Click <b>Scene 1</b> at the left of the edit bar, or press <kbd>Ctrl</kbd>+<kbd>E</kbd>.</p>",
+      "wait": {"scope": "scene"}
+    },
+    {
+      "title": "Select the mouth",
+      "text": "<p>In the timeline, click frame 1 of the <i>Mouth</i> layer. That selects what is on it: the mouth, with a box around it on the stage.</p>",
+      "target": "frame:Mouth:1",
+      "wait": {"selection": "instance"}
+    },
+    {
+      "title": "Lip sync it",
+      "text": "<p>Choose <b>Modify &gt; Lip Sync...</b>.</p><p><b>Sound</b> already shows <i>hello.wav</i>, the voice on the <i>Voice</i> layer. Click <b>Read Mouth Shapes</b>: Phoenix listens and lists the shapes it heard in the mouth chart, each on the frame labeled with its letter. Leave <b>Starts on frame</b> at 1 and click <b>Key the Mouth</b>.</p>",
+      "target": "menu:Modify/Lip Sync...",
+      "wait": {"command": "Lip Sync"}
+    },
+    {
+      "title": "Look at the keyframes",
+      "text": "<p>The <i>Mouth</i> layer now has a keyframe wherever the mouth changes, each showing one frame of <i>Mouth</i>. Drag the playhead along the frame numbers above the layers to watch the shapes go by.</p>",
+      "target": "frame:Mouth:1-80"
+    },
+    {
+      "title": "Play it",
+      "text": "<p>Press <kbd>Enter</kbd>, or click the play button in the timeline header. The mouth opens and closes with the words.</p>",
+      "target": "widget:timelinePlay",
+      "wait": {"playing": true}
+    },
+    {
+      "title": "Find the last sound",
+      "text": "<p>Press <kbd>Enter</kbd> again to stop. Click frame 73 of the <i>Mouth</i> layer: the hum of the N at the end of \"cartoon\". Phoenix closed the lips here (shape A), and the mouth is selected.</p>",
+      "target": "frame:Mouth:73",
+      "wait": {"frame": 73}
+    },
+    {
+      "title": "Change the shape",
+      "text": "<p>Choose <b>Window &gt; Frame Picker</b>. It shows the frames of <i>Mouth</i> as pictures. Click the second, <b>B</b>: an N is said with the teeth together, not with the lips closed.</p>",
+      "target": "dock:Frame Picker",
+      "wait": {"command": "Pick Frame"}
+    },
+    {
+      "title": "Play it again",
+      "text": "<p>Press <kbd>Enter</kbd>. The line ends on the teeth before the mouth comes to rest.</p>",
+      "target": "widget:timelinePlay",
+      "wait": {"playing": true}
+    },
+    {
+      "title": "What you did",
+      "text": "<p>You keyed a whole line of dialogue at once, then touched up one shape by hand. Lip Sync is one step: <b>Edit &gt; Undo</b> takes it all back. Phoenix keeps the mouth chart with the symbol for next time.</p><p>Phoenix's own listening goes by how loud and how hissy the voice is, so it uses A to E and X. For sharper results, download Rhubarb Lip Sync (free) and choose it under <b>Rhubarb</b> in the Lip Sync window; it uses all nine shapes, and typing the words under <b>Words</b> helps it more.</p><p>For your own character, draw each mouth shape on a frame of a graphic symbol and label the frame with the shape's letter. A recording that is not in the library yet can be read straight from disk: choose <b>A recording on disk</b> under <b>Sound</b>.</p>"
+    }
+  ]
+}

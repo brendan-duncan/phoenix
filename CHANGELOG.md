@@ -13,6 +13,10 @@ What changed in each release of Phoenix, newest first.
 - Bone springs and joint limits are saved the way FLA files keep them, so other apps read them
 - Springs are worked into every frame of an armature, so the bones swing with the art, and an armature can end swung past its last pose
 - Posing a boned shape from an FLA file bends it by the binding saved with it
+- The guide has a Lip Sync tutorial, also a lesson in Help > Tutorials: key a talking face's mouth to a line of dialogue, then touch up a shape with the Frame Picker
+- Lip Sync listens to a sound already in the library, starting with the one on the timeline, as well as to a recording on disk
+- Lip Sync's mouth chart fills itself in from the mouth symbol's frame labels: label each frame A, B, C... and each shape goes to its frame
+- Lip sync without Rhubarb opens the mouth with the first sound of a word, rather than a frame or two late
 
 ## 0.18.2
 

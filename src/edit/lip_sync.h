@@ -45,9 +45,14 @@ std::string tsvOf(const std::vector<Cue>& cues);
 /// A to H and X, Papagayo's phonemes, then any others.
 std::vector<std::string> shapesOf(const std::vector<Cue>& cues);
 
-/// A chart's starting guess: the shapes on the graphic's frames 1, 2, 3...
-/// in that order.
-std::map<std::string, int> defaultChart(const std::vector<std::string>& shapes);
+/// A chart's starting guess: each shape on the frame of the graphic
+/// labeled with its name (\a labels, by label, from 1; case ignored), and
+/// the others on frames 1, 2, 3... in the order given.
+std::map<std::string, int> defaultChart(const std::vector<std::string>& shapes,
+    const std::map<std::string, int>& labels = {});
+
+/// The frame labels of \a mouth's graphic, by label, each frame from 1.
+std::map<std::string, int> labelsOf(const SymbolInstance& mouth);
 
 /// A mouth chart as kept on a symbol ("A=1;B=2;X=9") and read back.
 std::string chartText(const std::map<std::string, int>& chart);

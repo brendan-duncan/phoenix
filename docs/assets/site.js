@@ -40,6 +40,7 @@ const NAV = [
     { href: "tutorial-template-fit.html", title: "A template that fits" },
     { href: "tutorial-node-graph.html", title: "Glow through a node graph" },
     { href: "tutorial-instance-effects.html", title: "Effects on one instance" },
+    { href: "tutorial-lip-sync.html", title: "Lip sync" },
   ] },
   { group: "Workspace", pages: [
     { href: "workspace.html", title: "The workspace" },
