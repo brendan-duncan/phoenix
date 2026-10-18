@@ -2,6 +2,10 @@
 
 What changed in each release of Phoenix, newest first.
 
+## Unreleased
+
+- Six new tutorials, also lessons in Help > Tutorials: a head turn on a master controller, a multiplane camera move, a cycle with Loop and Function Curves, linked palettes, linked master symbols, and timing with the X-sheet
+
 ## 0.19.0
 
 - The scene name above the stage drops down: switch scenes, add, duplicate or delete one, or open the Scene panel
