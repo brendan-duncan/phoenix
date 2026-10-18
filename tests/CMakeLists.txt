@@ -135,6 +135,7 @@ if(PHOENIX_TESTS_HAVE_PARSER)
         test_other_apps.cpp
         test_node_graph.cpp
         test_paint_brushes.cpp
+        test_bone_corrections.cpp
     )
 endif()
 
