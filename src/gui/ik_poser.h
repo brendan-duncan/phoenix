@@ -32,11 +32,18 @@ class PhoenixView;
 /// An armature of symbols turns and moves the instances its joints name, each
 /// with its joint: posing the span's first frame moves their saved matrices,
 /// and any other frame shows them where its joints put them.
+///
+/// Locked bones stay where they are, bones reach for their targets and keep
+/// their independent angles, and bones with IK stretch grow to reach (see
+/// fla::PoseGoals). Dragging a bone that reaches for a point moves the
+/// point. Pressed on the joint at an armature's root, the drag moves the
+/// whole armature, and with \a alone (Alt) it turns just the bone dragged,
+/// stretching it when it has squash and stretch.
 class IKPoser
 {
 public:
     /// Starts on the bone under \a documentPos; false when there is none.
-    bool begin(PhoenixView& view, const QPointF& documentPos);
+    bool begin(PhoenixView& view, const QPointF& documentPos, bool alone = false);
 
     bool active() const { return _frame != nullptr; }
 
@@ -104,4 +111,13 @@ private:
     /// every frame bends from that.
     fla::ShapeBinding _binding;
     const fla::Shape* _rest = nullptr;
+    /// What the drag does: reach for the cursor by IK, turn (and stretch)
+    /// just the bone, or move the whole armature by its root.
+    enum class Mode
+    {
+        Reach,
+        Turn,
+        Move
+    };
+    Mode _mode = Mode::Reach;
 };

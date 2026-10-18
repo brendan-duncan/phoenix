@@ -79,6 +79,10 @@ const std::vector<Feature>& all()
         {"bone-forces", "Gravity and wind on bones", "the bones' sway as baked into their frames, no longer worked out again",
             {"phoenixGravity", "phoenixGravityAngle", "phoenixWind", "phoenixWindAngle", "phoenixWindGusts",
                 "phoenixWindRate", "phoenixWindSeed"}},
+        {"bone-controls", "Bone locks, targets and stretch",
+            "the poses as made, which play the same, but the bones no longer lock, reach, keep their angles or stretch when posed",
+            {"phoenixLocked", "phoenixTarget", "phoenixTargetPoint", "phoenixIndependent", "phoenixSquash", "phoenixStretch",
+                "phoenixLength"}},
         {"shape-hints", "Shape hints", "shape tweens without the hints steering them", {"phoenixShapeHints"}},
         {"mouth-charts", "Lip sync mouth charts", "the mouth frames as set, without the chart",
             {"phoenixMouthChart"}},
@@ -202,9 +206,16 @@ std::vector<Use> used(const Document& document)
                     tinyxml2::XMLDocument tree;
                     const tinyxml2::XMLElement* root =
                         tree.Parse(child.c_str()) == tinyxml2::XML_SUCCESS ? tree.FirstChildElement("IKTree") : nullptr;
+                    // The tree's own, and its nodes' and their poses'.
                     Attributes attributes;
-                    for (const tinyxml2::XMLAttribute* each = root ? root->FirstAttribute() : nullptr; each; each = each->Next())
-                        attributes.emplace_back(each->Name(), each->Value());
+                    std::function<void(const tinyxml2::XMLElement*)> gather = [&](const tinyxml2::XMLElement* element) {
+                        for (const tinyxml2::XMLAttribute* each = element->FirstAttribute(); each; each = each->Next())
+                            attributes.emplace_back(each->Name(), each->Value());
+                        for (const tinyxml2::XMLElement* below = element->FirstChildElement(); below; below = below->NextSiblingElement())
+                            gather(below);
+                    };
+                    if (root)
+                        gather(root);
                     note(attributes, at);
                 }
                 for (const Element* item : frame->elements)

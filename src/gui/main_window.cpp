@@ -5053,6 +5053,142 @@ void MainWindow::editJointLimits(fla::Frame* frame, size_t child, int joint)
         "Joint Rotation and Spring");
 }
 
+void MainWindow::showBoneMenu(const QPoint& globalPos, const PhoenixView::IKBoneHit& bone)
+{
+    fla::IKArmature armature;
+    if (!_phoenixView || !bone.frame || bone.child >= bone.frame->extraChildren.size() ||
+        !armature.parse(bone.frame->extraChildren[bone.child]))
+    {
+        return;
+    }
+    fla::Frame* frame = bone.frame;
+    const size_t child = bone.child;
+    const int joint = bone.joint;
+    const int into = bone.into;
+    const std::vector<fla::IKJoint> shown = armature.shownAt(into);
+    if (joint < 0 || static_cast<size_t>(joint) >= shown.size() || shown[static_cast<size_t>(joint)].parent < 0)
+        return;
+    // Each change works every frame's joints out again, the shapes bent and
+    // the instances carried as posing does, as one step to undo.
+    const auto change = [this, frame, child](const std::function<bool(fla::IKArmature&)>& edit, const std::string& name) {
+        IKPoser poser;
+        poser.change(*_phoenixView, _editContext.commandStack(), frame, child, edit, name);
+        _phoenixView->update();
+    };
+    // A bone by the instance at its tail, in an armature of symbols.
+    const auto boneName = [&](int each) {
+        const std::string reference = armature.referenceOf(each);
+        for (const fla::Element* element : frame->elements)
+        {
+            const auto* instance = dynamic_cast<const fla::SymbolInstance*>(element);
+            for (const auto& attribute : instance && !reference.empty() ? instance->extraAttributes
+                                                                        : std::vector<std::pair<std::string, std::string>>())
+            {
+                if (attribute.first == "referenceID" && attribute.second == reference)
+                    return QString::fromStdString(instance->libraryItemName);
+            }
+        }
+        return QString::fromStdString(armature.nodeName(each));
+    };
+
+    QMenu menu(this);
+    QAction* lock = menu.addAction("Lock Bone");
+    lock->setCheckable(true);
+    lock->setChecked(armature.locked(joint, into));
+    lock->setStatusTip("Keep this bone where it is on the stage from this frame on as the other bones move");
+    connect(lock, &QAction::triggered, this, [=](bool on) {
+        change([=](fla::IKArmature& edited) { return edited.setLocked(joint, into, on); }, on ? "Lock Bone" : "Unlock Bone");
+    });
+
+    // What its tail reaches for, from this frame on.
+    QMenu* reach = menu.addMenu("Reach For");
+    const fla::BoneTarget aim = armature.target(joint, into);
+    QActionGroup* aims = new QActionGroup(reach);
+    const auto aimAction = [&](const QString& text, bool checked, const fla::BoneTarget& target) {
+        QAction* action = reach->addAction(text);
+        action->setCheckable(true);
+        action->setChecked(checked);
+        aims->addAction(action);
+        connect(action, &QAction::triggered, this, [=]() {
+            change([=](fla::IKArmature& edited) { return edited.setTarget(joint, into, target); }, "Bone Target");
+        });
+    };
+    aimAction("Nothing", !aim.any(), fla::BoneTarget());
+    fla::BoneTarget point;
+    point.point = true;
+    point.at = shown[static_cast<size_t>(joint)].position;
+    aimAction("A Point Here", aim.point && aim.joint < 0, point);
+    reach->addSeparator();
+    for (size_t other = 0; other < shown.size(); ++other)
+    {
+        // Not a bone below this one, which would move as it reaches.
+        bool below = false;
+        for (int at = static_cast<int>(other); at >= 0 && !below; at = shown[static_cast<size_t>(at)].parent)
+            below = at == joint;
+        if (below || shown[other].parent < 0)
+            continue;
+        fla::BoneTarget target;
+        target.joint = static_cast<int>(other);
+        aimAction(boneName(static_cast<int>(other)), aim.joint == static_cast<int>(other), target);
+    }
+
+    menu.addSeparator();
+    const fla::BoneOptions options = armature.options(joint);
+    const auto setOptions = [=](const fla::BoneOptions& chosen, const std::string& name) {
+        change([=](fla::IKArmature& edited) {
+            const std::string before = edited.xml();
+            edited.setOptions(joint, chosen);
+            return edited.xml() != before;
+        }, name);
+    };
+    QAction* independent = menu.addAction("Independent Angle");
+    independent->setCheckable(true);
+    independent->setChecked(options.independent);
+    independent->setStatusTip("Keep this bone's angle on the stage as the bones above it turn");
+    connect(independent, &QAction::triggered, this, [=](bool on) {
+        fla::BoneOptions chosen = options;
+        chosen.independent = on;
+        setOptions(chosen, "Independent Angle");
+    });
+    QMenu* squash = menu.addMenu("Squash and Stretch");
+    QActionGroup* squashes = new QActionGroup(squash);
+    const std::vector<std::pair<QString, int>> squashChoices = {{"Off", 0}, {"Stretch", 1}, {"Stretch, Keep Volume", 2}};
+    for (const auto& [text, kind] : squashChoices)
+    {
+        QAction* action = squash->addAction(text);
+        action->setCheckable(true);
+        action->setChecked(kind == (options.squash ? (options.keepVolume ? 2 : 1) : 0));
+        squashes->addAction(action);
+        const int chosenKind = kind;
+        connect(action, &QAction::triggered, this, [=]() {
+            fla::BoneOptions chosen = options;
+            chosen.squash = chosenKind > 0;
+            chosen.keepVolume = chosenKind == 2;
+            setOptions(chosen, "Squash and Stretch");
+        });
+    }
+    squash->addSeparator();
+    squash->addAction("Alt-drag the bone to stretch it")->setEnabled(false);
+    QMenu* stretch = menu.addMenu("IK Stretch");
+    QActionGroup* stretches = new QActionGroup(stretch);
+    for (double most : {1.0, 1.25, 1.5, 2.0, 3.0})
+    {
+        QAction* action = stretch->addAction(most == 1.0 ? QString("Off") : QString("Up to %1%").arg(std::lround(most * 100.0)));
+        action->setCheckable(true);
+        action->setChecked(std::fabs(options.maxStretch - most) < 1.0e-6);
+        stretches->addAction(action);
+        connect(action, &QAction::triggered, this, [=]() {
+            fla::BoneOptions chosen = options;
+            chosen.maxStretch = most;
+            setOptions(chosen, "IK Stretch");
+        });
+    }
+    menu.addSeparator();
+    const int head = shown[static_cast<size_t>(joint)].parent;
+    menu.addAction("Joint Rotation and Spring...", this, [=]() { editJointLimits(frame, child, head); });
+    menu.exec(globalPos);
+}
+
 void MainWindow::editBoneForces()
 {
     size_t child = 0;
@@ -16411,6 +16547,12 @@ void MainWindow::showStageMenu(const QPoint& globalPos, const QPointF& documentP
 {
     if (!_phoenixView || !_flaDocument || !_flaDocument->document)
         return;
+    // A right-click on a bone of an armature on show: what the bone does.
+    if (const PhoenixView::IKBoneHit bone = _phoenixView->ikBoneAt(documentPos); bone && !bone.locked)
+    {
+        showBoneMenu(globalPos, bone);
+        return;
+    }
     // A right-click on something not selected selects it, as a click would.
     const HitResult hit = _phoenixView->hitTest(documentPos, _phoenixView->pickTolerance());
     if (hit.element && !_selection.contains(hit.element))

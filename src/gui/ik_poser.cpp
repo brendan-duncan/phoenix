@@ -68,22 +68,9 @@ void IKPoser::carry(const std::vector<fla::IKJoint>& before, const std::vector<f
         {
             continue;
         }
-        const fla::IKJoint& from = before[carried.joint];
-        const fla::IKJoint& to = after[carried.joint];
-        const double turn = to.angle - from.angle;
-        const double c = std::cos(turn);
-        const double s = std::sin(turn);
-        const fla::Transform rotation(c, s, -s, c, 0.0, 0.0);
-        fla::Transform linear = carried.original;
-        linear.tx = 0.0;
-        linear.ty = 0.0;
-        fla::Transform moved = then(linear, rotation);
-        // The registration point keeps its place relative to the joint.
-        const double dx = carried.original.tx - from.position.x;
-        const double dy = carried.original.ty - from.position.y;
-        moved.tx = to.position.x + c * dx - s * dy;
-        moved.ty = to.position.y + s * dx + c * dy;
-        carried.instance->transform = moved;
+        // Turned with the joint, the registration point keeping its place
+        // from it, and scaled with the bone below when that stretches.
+        carried.instance->transform = then(carried.original, fla::boneMove(before, after, carried.joint));
     }
 }
 
@@ -100,7 +87,7 @@ void IKPoser::reset()
     _name = "Pose Armature";
 }
 
-bool IKPoser::begin(PhoenixView& view, const QPointF& documentPos)
+bool IKPoser::begin(PhoenixView& view, const QPointF& documentPos, bool alone)
 {
     reset();
     const PhoenixView::IKBoneHit hit = view.ikBoneAt(documentPos);
@@ -111,6 +98,20 @@ bool IKPoser::begin(PhoenixView& view, const QPointF& documentPos)
     _joint = hit.joint;
     _into = hit.into;
     _offset = hit.tail - documentPos;
+    _mode = alone ? Mode::Turn : Mode::Reach;
+    // Pressed on the joint at the root, the whole armature moves.
+    const std::vector<fla::IKJoint> shown = _original.shownAt(_into);
+    const int head = _joint >= 0 && static_cast<size_t>(_joint) < shown.size() ? shown[_joint].parent : -1;
+    if (!alone && head >= 0 && shown[head].parent < 0)
+    {
+        const QPointF root(shown[head].position.x, shown[head].position.y);
+        if (std::hypot(documentPos.x() - root.x(), documentPos.y() - root.y()) <= 7.0 / std::max(view.zoom(), 1.0e-6))
+        {
+            _mode = Mode::Move;
+            _joint = head;
+            _offset = root - documentPos;
+        }
+    }
     return true;
 }
 
@@ -273,16 +274,51 @@ void IKPoser::drag(PhoenixView& view, const QPointF& documentPos)
     if (!_frame)
         return;
     const QPointF target = documentPos + _offset;
+    const fla::Point to(target.x(), target.y());
     const std::vector<fla::IKJoint> start = _original.shownAt(_into);
-    const std::vector<fla::IKJoint> solved = fla::solveIK(start, _joint, fla::Point(target.x(), target.y()), 16, _original.limits());
+    if (_joint < 0 || static_cast<size_t>(_joint) >= start.size())
+        return;
+    // Locked bones, targets and independent angles kept as it moves.
+    const fla::PoseGoals goals = _original.goalsAt(_into, start, _mode == Mode::Move ? -1 : _joint);
+    std::vector<fla::IKJoint> solved = start;
+    if (_mode == Mode::Move)
+    {
+        // Every joint of the root's armature moves with it.
+        const fla::Point by(to.x - start[_joint].position.x, to.y - start[_joint].position.y);
+        for (fla::IKJoint& joint : solved)
+        {
+            int root = static_cast<int>(&joint - solved.data());
+            while (solved[root].parent >= 0)
+                root = solved[root].parent;
+            if (root == _joint)
+                joint.position = fla::Point(joint.position.x + by.x, joint.position.y + by.y);
+        }
+        solved = fla::solvePose(solved, goals, -1, fla::Point(), _original.limits());
+    }
+    else if (_mode == Mode::Turn)
+        solved = fla::stretchBone(start, _joint, to, goals, _original.limits());
+    else
+        solved = fla::solvePose(start, goals, _joint, to, _original.limits());
+
+    _posed = _original;
+    // Where gravity or wind bend the bones, only what the drag changed is
+    // posed; locks and targets are kept again as every frame is worked out.
     std::vector<double> angles;
     for (const fla::IKJoint& joint : solved)
         angles.push_back(joint.angle);
-
-    _posed = _original;
-    // Where gravity or wind bend the bones, only what the drag changed.
-    if (!_posed.setPose(_into, _original.poseFromShown(_into, angles)))
+    const std::vector<double> posing = _original.poseFromShown(_into, angles);
+    if (!_posed.setPlacedPose(_into, solved, posing != angles ? &posing : nullptr))
         return;
+    // A bone that reaches for a point takes the point where it is dragged.
+    if (_mode == Mode::Reach)
+    {
+        fla::BoneTarget aim = _original.target(_joint, _into);
+        if (aim.point && aim.joint < 0)
+        {
+            aim.at = to;
+            _posed.setTarget(_joint, _into, aim, false);
+        }
+    }
     _moved = true;
     fla::PoseArmatureCommand::apply(_frame, _child, _posed.xml(), posesOf(_posed));
 

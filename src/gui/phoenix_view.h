@@ -2067,6 +2067,9 @@ private:
     /// The bones of the armature on a pose frame, read from the IKTree the
     /// frame keeps, drawn while its art is selected.
     void drawIKBones(QPainter& painter, const fla::Frame& frame, double scale);
+    /// Marks the armature's locked bones, and what its bones reach for, \a
+    /// into frames into its span.
+    void drawBoneGoals(QPainter& painter, const fla::Frame& frame, int into, double scale);
 
     /// Draws the marks that show what is selected, plus whatever the active tool
     /// wants on top. Runs in document coordinates after the stage is drawn.
