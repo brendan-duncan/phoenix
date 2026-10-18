@@ -4,11 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Color, fills and strokes · Phoenix User Guide</title>
-<meta name="description" content="Choose colors, build linear and radial gradients, use bitmap fills, adjust them with the Gradient Transform tool, and keep colors in swatches.">
+<meta name="description" content="Choose colors, build linear and radial gradients with stops, flow and focal points, use bitmap fills, adjust them with the Gradient Transform tool, lock fills, keep colors in swatches and style strokes.">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Phoenix">
 <meta property="og:title" content="Color, fills and strokes · Phoenix User Guide">
-<meta property="og:description" content="Choose colors, build linear and radial gradients, use bitmap fills, adjust them with the Gradient Transform tool, and keep colors in swatches.">
+<meta property="og:description" content="Choose colors, build linear and radial gradients with stops, flow and focal points, use bitmap fills, adjust them with the Gradient Transform tool, lock fills, keep colors in swatches and style strokes.">
 <meta property="og:url" content="https://phoenixanimate.com/color.html">
 <meta property="og:image" content="https://phoenixanimate.com/assets/shots/hero.webp">
 <meta property="og:image:type" content="image/webp">
@@ -17,7 +17,7 @@
 <meta property="og:image:alt" content="The Phoenix window with three flower characters on the stage, the timeline below and the Properties panel on the right">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:image" content="https://phoenixanimate.com/assets/shots/hero.webp">
-<meta name="keywords" content="color panel fill stroke solid linear radial gradient stops flow extend reflect repeat linear rgb bitmap fill gradient transform tool swatches alpha transparency hex stroke style dashed dotted ragged stipple hatched hsb rgb channels focal point skew tagged swatch act gpl lock fill find replace color">
+<meta name="keywords" content="color panel fill stroke solid linear radial gradient stops add move remove flow overflow extend reflect repeat linear rgb bitmap fill tiled clipped gradient transform tool handles focal point skew rotate lock fill swatches default palette web 216 sort import export act gpl alpha transparency hex hsb rgb channels black and white swap colors no color stroke style dashed dotted ragged stipple hatched hairline cap join miter limit scale hinting width profile taper swell pinch eyedropper ink bottle paint bucket gap size tagged swatch find replace color">
 <link rel="icon" href="assets/img/logo.png">
 <link rel="stylesheet" href="assets/site.css">
 <script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
@@ -29,11 +29,19 @@
 
 <p class="eyebrow">Drawing</p>
 <h1>Color, fills and strokes</h1>
-<p class="lead">Every shape has a fill, a stroke, or both. Fills can be solid colors, gradients or bitmaps; strokes have a color, a width and a style.</p>
+<p class="lead">Every shape has a fill, a stroke, or both. Fills can be solid colors, gradients or bitmaps; strokes have a color, a width, a style and a width profile. This page covers choosing colors, building gradients and bitmap fills, placing them, keeping colors in swatches, and styling strokes.</p>
 
 <h2>Picking colors</h2>
 
-<p>The quickest way to set colors is the pair of overlapping swatches after the tools in the toolbox: the fill, a solid square, at the top left, and the stroke, a square ring, at the bottom right. Click either one to bring it to the front and open a color picker, where you can also set transparency (alpha). A red line across a swatch means no fill or no stroke. The two small buttons beside them set a black stroke and white fill, or swap the stroke and fill colors.</p>
+<p>The quickest way to set colors is the pair of overlapping swatches after the tools in the toolbox: the fill, a solid square, at the top left, and the stroke, a square ring, at the bottom right. Click either one to bring it to the front and open a color picker, where you can also set transparency (alpha). The color picker can also take a color from anywhere on your screen.</p>
+
+<dl class="defs">
+  <dt>Black and white</dt><dd>The small button beside the swatches sets a black stroke and a white fill, turns both on, and makes the fill a solid color again.</dd>
+  <dt>Swap colors</dt><dd>The other button swaps the stroke and fill colors. Whether each is on swaps too: with only the fill on, only the stroke is on after a swap.</dd>
+  <dt>No color</dt><dd>A red line across a swatch means no fill or no stroke. To draw without one, uncheck <strong>Fill</strong> or <strong>Stroke</strong> on the Tool tab, or choose <strong>None</strong> in the <a href="#the-color-panel">Color panel</a> for the fill.</dd>
+</dl>
+
+<p>These buttons have no keys by default; there is no command for them in Keyboard Shortcuts.</p>
 
 <p>The Tool tab shows the same two colors under <strong>Color and Style</strong>, each with a checkbox to turn it off. To change the colors of artwork that is already drawn, select it with the Selection tool and use the swatches on the Object tab, where the fill also has an alpha percentage. A shape filled with a gradient or bitmap shows <strong>Edit...</strong> there, which opens its fill in the Color panel; change it and click <strong>Apply to Selection</strong> to put it back.</p>
 
@@ -41,27 +49,36 @@
 
 <p>To change one color everywhere it is used in the document, in fills, strokes, gradients and text, use <a href="workspace.html#find-and-replace">Find and Replace</a> with <strong>Color</strong>.</p>
 
-<p>To take a color from existing artwork, use the <a href="drawing-tools.html#eyedropper">Eyedropper</a>.</p>
+<p>To take a color from existing artwork, use the <a href="#the-eyedropper">Eyedropper</a>.</p>
 
 <h2>The Color panel</h2>
 
-<p>Open it from the Color tab in the panel dock, or <span class="menu-path">Window &rsaquo; Color</span> (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>F9</kbd>). The <strong>Fill</strong> list chooses the type of fill new artwork gets:</p>
+<p>Open it from the Color tab in the panel dock, or <span class="menu-path">Window &rsaquo; Color</span> (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>F9</kbd>). It edits the fill: the <strong>Fill</strong> list chooses the type of fill new artwork gets, and the page under it changes to match.</p>
 
 <figure class="narrow">
   <img src="assets/shots/color-panel-solid.webp" alt="Color panel set to Solid Color, with the hex value, R, G and B channels and alpha" width="391" height="240">
 </figure>
 
 <dl class="defs">
-  <dt>None</dt><dd>No fill.</dd>
+  <dt>None</dt><dd>No fill. New shapes are drawn as outlines only.</dd>
   <dt>Solid Color</dt><dd>A single color, with its hex value and its channels.</dd>
   <dt>Linear Gradient</dt><dd>Colors blending along a straight line.</dd>
   <dt>Radial Gradient</dt><dd>Colors blending outward from a center.</dd>
   <dt>Bitmap Fill</dt><dd>An image from the library, tiled across the shape.</dd>
 </dl>
 
-<p>To apply the panel's fill to artwork that is already drawn, select it and click <strong>Apply to Selection</strong>. <strong>Apply to Strokes</strong> draws the selected shapes' strokes with it instead: a gradient or bitmap along a line, fitted to the lines it strokes.</p>
+<p>What you set in the panel is the fill for the next thing you draw with the shape tools, the Pen, the brushes and the Paint Bucket. To apply it to artwork that is already drawn, select it and click <strong>Apply to Selection</strong>. <strong>Apply to Strokes</strong> draws the selected shapes' strokes with it instead: a gradient or bitmap along a line, fitted to the lines it strokes. The panel has no stroke mode of its own; the stroke color comes from the toolbox and the Tool tab.</p>
 
-<p>For a solid color, the panel also shows its channels: choose <strong>RGB</strong> for red, green and blue (0 to 255) or <strong>HSB</strong> for hue (0 to 359&deg;), saturation and brightness (percent), and set its <strong>Alpha</strong>.</p>
+<h3>Solid colors</h3>
+
+<ul>
+  <li><strong>The swatch</strong> opens the color picker, with alpha.</li>
+  <li><strong>The hex field</strong> takes a six-digit color such as <code>#FF8800</code>. Typing one keeps the current alpha.</li>
+  <li><strong>RGB</strong> shows red, green and blue, each 0 to 255. <strong>HSB</strong> shows hue (0 to 359&deg;), saturation and brightness (0 to 100%). Switching between them changes only how the color is shown.</li>
+  <li><strong>Alpha</strong> is the opacity, from 0% (clear) to 100% (solid). Partly clear colors show over a checkerboard.</li>
+</ul>
+
+<p>Each channel is <a href="workspace.html#hot-text">hot text</a>: drag across it to change it, or click and type.</p>
 
 <h3>Editing a gradient</h3>
 
@@ -69,24 +86,59 @@
   <img src="assets/shots/color-panel.webp" alt="Color panel set to Linear Gradient, with Flow and Linear RGB options, a white to black gradient bar and a selected color stop" width="391" height="255">
 </figure>
 
+<p>A new gradient runs from white to black. Each color in it is a <strong>stop</strong>, shown as a pointer under the bar and filled with its color; the selected one has a highlighted outline.</p>
+
 <ul>
-  <li><strong>Click the gradient bar</strong> to add a color stop. A gradient can have up to 15 stops.</li>
-  <li><strong>Click a stop</strong> to select it, then set its color with the swatch or hex field below the bar, or double-click the stop to pick its color.</li>
-  <li><strong>Drag a stop</strong> sideways to move it, or drag it down off the bar to remove it.</li>
+  <li><strong>Add a stop:</strong> click the bar where there is no pointer. The new stop takes the color the gradient already has there, so the gradient looks the same until you change it. A gradient can have up to 15 stops.</li>
+  <li><strong>Set a stop's color:</strong> click the stop to select it, then click the swatch under the bar or type in the hex field beside it. Double-click a stop to open the color picker straight away. Each stop has its own alpha, set in the color picker, so a gradient can fade to clear.</li>
+  <li><strong>Move a stop:</strong> drag it sideways. A stop can pass its neighbors; the order follows where you drop it.</li>
+  <li><strong>Remove a stop:</strong> drag it well down off the bar and let go. It disappears while you hold it there. A gradient always keeps at least two stops.</li>
 </ul>
 
 <dl class="defs">
-  <dt>Flow</dt><dd>What happens past the ends of the gradient: <strong>Extend</strong> continues the end colors, <strong>Reflect</strong> mirrors the gradient back and forth, and <strong>Repeat</strong> starts it over.</dd>
-  <dt>Linear RGB</dt><dd>Blends in linear light, which gives brighter, more natural mid-tones between saturated colors.</dd>
+  <dt>Flow</dt><dd>What happens past the ends of the gradient, when a shape reaches beyond the gradient's span: <strong>Extend</strong> continues the end colors, <strong>Reflect</strong> mirrors the gradient back and forth, and <strong>Repeat</strong> starts it over each time.</dd>
+  <dt>Linear RGB</dt><dd>Blends in linear light, which gives brighter, more natural mid-tones between saturated colors. Without it, colors blend as their values are stored, which can look darker in the middle.</dd>
 </dl>
+
+<figure>
+  <img src="assets/shots/gradient-flow-reflect-repeat.webp" alt="Two rectangles filled with a short red to blue linear gradient: on the left the gradient reflects, running red, blue, red; on the right it repeats, jumping from blue back to red each time" width="740" height="130">
+  <figcaption>A short red-to-blue gradient set to Reflect (left) and Repeat (right). With Extend, the area past each end would be solid red or blue.</figcaption>
+</figure>
+
+<p>A radial gradient's center can be moved off the middle of its circle with the <strong>focal point</strong>, which gives a lit, off-center look. You set it on the stage with the <a href="#the-gradient-transform-tool">Gradient Transform tool</a>.</p>
 
 <h3>Bitmap fills</h3>
 
-<p>Choose <strong>Bitmap Fill</strong>, then pick an image from the list of library bitmaps, or click <strong>Import...</strong> to bring one in. New shapes are filled with the image, tiled.</p>
+<p>Choose <strong>Bitmap Fill</strong>, then pick an image from the list of library bitmaps, or click <strong>Import...</strong> to bring one in. New shapes are filled with the image, tiled: it is placed at its own size from the top-left corner of the shape and repeats across it. Use the Gradient Transform tool to scale, turn, skew or move it.</p>
+
+<p>Breaking apart a bitmap on the stage (<span class="menu-path">Modify &rsaquo; Break Apart</span>, <kbd>Ctrl</kbd>+<kbd>B</kbd>) also gives a bitmap fill: a shape of the image's size, filled with the image once rather than tiled, which you can then cut, erase and reshape like any other shape.</p>
 
 <h2>The Gradient Transform tool</h2>
 
-<p>Gradients and bitmap fills are fitted to the shape when you draw it. To change how they sit, press <kbd>F</kbd> for the <strong>Gradient Transform</strong> tool (it shares a slot with Free Transform) and click the fill. Drag its handles to move the center, stretch the gradient or bitmap, and rotate it. A radial gradient also has a handle that scales it evenly and a triangle that moves its focal point off center. The two diamonds, on the top and left edges, skew it: drag one along its edge to slant the fill.</p>
+<p>Gradients and bitmap fills are fitted to the shape when you draw it: a linear gradient spans the shape from left to right, a radial one fills it from the center, and a bitmap starts at its top-left corner. To change how they sit, press <kbd>F</kbd> for the <strong>Gradient Transform</strong> tool (it shares a slot with Free Transform) and click inside the fill. Its handles appear, and dragging any of them reshapes the fill live:</p>
+
+<table>
+  <thead><tr><th>Handle</th><th>Drag it to</th></tr></thead>
+  <tbody>
+    <tr><td>Center circle</td><td class="wrap">Move the whole fill</td></tr>
+    <tr><td>Square on the side</td><td class="wrap">Stretch or squeeze the fill along its width. For a linear gradient, this sets how long the run of color is</td></tr>
+    <tr><td>Square on the bottom</td><td class="wrap">Bitmap fills only: stretch the image along its height</td></tr>
+    <tr><td>Ring</td><td class="wrap">Turn the fill about its center. It sits at a corner for linear gradients and bitmaps, and at the bottom for a radial gradient</td></tr>
+    <tr><td>Circle with an arrow</td><td class="wrap">Radial gradients only: scale it evenly in every direction</td></tr>
+    <tr><td>Triangle</td><td class="wrap">Radial gradients only: slide the focal point along the gradient's width, off the center toward either edge</td></tr>
+    <tr><td>Diamonds on the top and left edges</td><td class="wrap">Skew the fill: drag one along its edge to slant it</td></tr>
+  </tbody>
+</table>
+
+<p>For a linear gradient, two lines show where its colors begin and end; past them, the <strong>Flow</strong> setting takes over. Each drag is one step to undo.</p>
+
+<p>The tool works on the fills of shapes, merge drawn or drawing objects. It does not reach a gradient or bitmap drawn along a stroke, or the fill of a rectangle or oval primitive; break a primitive apart first to adjust its gradient.</p>
+
+<p>The <a href="drawing-tools.html#paint-bucket-and-ink-bottle">Paint Bucket</a> can also place a gradient as it fills: drag instead of clicking to lay it along the drag.</p>
+
+<h2>Lock fill</h2>
+
+<p>Normally each shape gets its own copy of a gradient or bitmap, fitted to that shape. With <strong>Lock fill</strong> on, a gradient or bitmap is laid over the whole stage instead, and each area you paint shows the part of it that lies there. Paint several separate areas and they read as one sweep of color, as if cut from one sheet. Lock fill is on the Tool tab of the Paint Bucket and of the three brushes (Brush, Nib Brush and Ink Brush); solid colors are not affected.</p>
 
 <h2>Swatches</h2>
 
@@ -94,7 +146,7 @@
   <img src="assets/shots/swatches-panel.webp" alt="The Swatches panel showing a grid of color swatches" width="391" height="255">
 </figure>
 
-<p>The Swatches panel (<span class="menu-path">Window &rsaquo; Swatches</span>, <kbd>Ctrl</kbd>+<kbd>F9</kbd>) shows the document's saved colors. Click a swatch to make it the fill color, or the stroke color when the panel's <strong>Stroke</strong> option is checked. <strong>Add Swatch</strong> saves the current fill color. Right-click a swatch to duplicate or delete it. Swatches are saved with the document, including FLA files.</p>
+<p>The Swatches panel (<span class="menu-path">Window &rsaquo; Swatches</span>, <kbd>Ctrl</kbd>+<kbd>F9</kbd>) shows the document's saved colors. Hover over a swatch to see its hex value, and its alpha if it is partly clear. Click a swatch to make it the fill color, or the stroke color when the panel's <strong>Stroke</strong> option is checked. <strong>Add Swatch</strong> saves the current fill color. Right-click a swatch to duplicate or delete it. Swatches are saved with the document, including FLA files. They hold solid colors; gradients are not kept as swatches.</p>
 
 <p>The <strong>&#9776;</strong> menu beside Add Swatch has the rest:</p>
 
@@ -103,8 +155,10 @@
   <dt>Clear Colors</dt><dd>Leaves only black and white.</dd>
   <dt>Load Default Colors, Save as Default</dt><dd>Your own default palette, kept by Phoenix for every document, or the built-in one until you save one.</dd>
   <dt>Web 216</dt><dd>The 216 web-safe colors.</dd>
-  <dt>Add Colors..., Replace Colors..., Save Colors...</dt><dd>Color tables in and out: Adobe Color Table (<code>.act</code>) files and GIMP palettes (<code>.gpl</code>).</dd>
+  <dt>Add Colors..., Replace Colors..., Save Colors...</dt><dd>Color tables in and out: Adobe Color Table (<code>.act</code>) files and GIMP palettes (<code>.gpl</code>). Add Colors puts a file's colors after the ones you have; Replace Colors puts them in place of yours. An <code>.act</code> file holds at most 256 colors, so Save Colors keeps the first 256 if you have more.</dd>
 </dl>
+
+<p>The built-in palette is a gray ramp of six steps from black to white, then red, green, blue, yellow, cyan and magenta, then the 216 web-safe colors. Adding, sorting, clearing and loading colors are each one step to undo.</p>
 
 <h3>Tagged swatches</h3>
 
@@ -112,9 +166,29 @@
 
 <h2>Stroke styles</h2>
 
-<p>Besides solid lines, strokes can be <strong>Hairline</strong>, which stays one screen pixel wide at any zoom, <strong>Dashed</strong>, <strong>Dotted</strong>, and three hand-drawn styles: <strong>Ragged</strong>, <strong>Stipple</strong> and <strong>Hatched</strong>. Set the style on the Tool tab before drawing, or on the Object tab for selected strokes. The <a href="drawing-tools.html#paint-bucket-and-ink-bottle">Ink Bottle</a> applies the whole current stroke style to a stroke you click.</p>
+<p>Set a stroke's look on the Tool tab before drawing, or on the Object tab for selected strokes. The same settings appear in both places:</p>
 
-<p>The <strong>...</strong> button beside the Style list, on either tab, opens <strong>Custom Stroke Style</strong>, with a preview stroke drawn as you change it. <strong>Style</strong> chooses what the stroke is: Solid, Hairline, Dashed, Dotted, Ragged, Stipple, Hatched, Paint brush or Symbol brush; a line under it says what that is, and <strong>Weight</strong> sets the stroke's weight. Then come the kind's own settings: the dash and gap lengths of a dashed stroke; the dot spacing of a dotted one; a ragged line's pattern, wave height and wave length; a stipple's dot size, dot variation and density; a hatched stroke's thickness, space, jiggle, rotation, curve and length; and for a symbol brush, the graphic symbol and whether it is stretched or repeated. A solid stroke and a hairline have none beyond their weight; their cap, join and width are on the Properties panel.</p>
+<dl class="defs">
+  <dt>Stroke size</dt><dd>The weight, from 0.1 to 200 pixels.</dd>
+  <dt>Style</dt><dd><strong>Solid</strong>; <strong>Hairline</strong>, which stays one screen pixel wide at any zoom; <strong>Dashed</strong>; <strong>Dotted</strong>; and three hand-drawn styles, <strong>Ragged</strong>, <strong>Stipple</strong> and <strong>Hatched</strong>.</dd>
+  <dt>Cap</dt><dd>How the ends of an open line look: <strong>Round</strong>, <strong>None</strong> (cut off flat at the end point) or <strong>Square</strong> (flat, but reaching half the stroke's width past the end).</dd>
+  <dt>Join</dt><dd>How corners look: <strong>Round</strong>, <strong>Miter</strong> (a sharp point) or <strong>Bevel</strong> (the point cut off). For Miter, the <strong>Miter</strong> limit beside it, from 1 to 60, is how many stroke widths the point may reach before it is beveled instead, so very sharp corners don't spike.</dd>
+  <dt>Scale</dt><dd>Whether the stroke thickens when its object is scaled: <strong>Normal</strong> (it scales with the object), <strong>Horizontal</strong> or <strong>Vertical</strong> (it follows scaling one way only), or <strong>None</strong> (it keeps its width).</dd>
+  <dt>Hinting</dt><dd>Marks the stroke for pixel hinting. It is saved with the stroke for players that snap thin lines to whole pixels; Phoenix draws the stroke the same either way.</dd>
+  <dt>Width</dt><dd>The width profile: <strong>Even</strong>, <strong>Taper Both Ends</strong>, <strong>Taper Start</strong>, <strong>Taper End</strong>, <strong>Swell</strong> (fat in the middle) or <strong>Pinch</strong> (thin in the middle). A stroke shaped with the <a href="drawing-tools.html#width-tool">Width tool</a> shows <strong>Custom</strong>. Variable-width strokes in FLA files keep their profiles.</dd>
+  <dt>Brush</dt><dd>A paint brush or graphic symbol drawn along the stroke instead of a line; see <a href="drawing-tools.html#paint-brush">Paint Brush</a>.</dd>
+</dl>
+
+<figure>
+  <img src="assets/shots/stroke-styles-stage.webp" alt="Six wavy strokes on the stage: two ragged lines with different patterns, two stipple lines of fine and coarse dots, and two hatched lines, one of even close hatching and one of jiggled, uneven hatching" width="515" height="375">
+  <figcaption>Ragged, stipple and hatched strokes, two settings of each.</figcaption>
+</figure>
+
+<p>The <a href="drawing-tools.html#paint-bucket-and-ink-bottle">Ink Bottle</a> applies the whole current stroke style to a stroke you click, and the <a href="#the-eyedropper">Eyedropper</a> picks up a stroke's color and weight.</p>
+
+<h3>Custom Stroke Style</h3>
+
+<p>The <strong>...</strong> button beside the Style list, on either tab, opens <strong>Custom Stroke Style</strong>, with a preview stroke drawn as you change it. <strong>Style</strong> chooses what the stroke is: Solid, Hairline, Dashed, Dotted, Ragged, Stipple, Hatched, Paint brush or Symbol brush; a line under it says what that is, and <strong>Weight</strong> sets the stroke's weight. Then come the kind's own settings: the dash and gap lengths of a dashed stroke; the dot spacing of a dotted one; a ragged line's pattern, wave height and wave length; a stipple's dot size, dot variation and density; a hatched stroke's thickness, space, jiggle, rotation, curve and length; and for a symbol brush, the graphic symbol and whether it is stretched or repeated. A solid stroke and a hairline have none beyond their weight; their cap, join and width are on the Properties panel. Choosing another style starts its settings from their defaults.</p>
 
 <figure>
   <img src="assets/shots/custom-stroke-style.webp" alt="Custom Stroke Style for a paint brush stroke: a preview of the Chain brush along a curve; Style set to Paint brush, the weight, and the Brush menu; the brush's options, Fit, Spacing, Corners, Flip along, Flip across and the widths for pressure and tilt; and a check box to keep the changes as a new brush" width="441" height="728">
@@ -122,8 +196,26 @@
 
 <p>For a <strong>Paint brush</strong> stroke, <strong>Brush</strong> chooses the brush, from the document's own and the <a href="drawing-tools.html#brush-library">Brush Library</a>'s (one from the library is copied into the document when you click OK). Under it are the brush's options: for an art brush, which way its art runs, how it fits the stroke's length (scaled proportionately, stretched to fit, or stretched between guides, the ends past the guides keeping their proportions), flipping it across, and bending it round sharp corners; for a pattern brush, how its tiles fit (stretched, spaced out, or approximating the path), the spacing between them, how they turn corners, and flipping them along or across; for both, the narrowest and widest a pen's pressure and tilt draw the stroke. The options belong to the brush, so changing them changes every stroke drawn with it, as the dialog says; to change only the strokes being edited, check <strong>Keep the changes for these strokes only</strong>, and they draw with a new copy of the brush instead.</p>
 
-<p>A stroke can vary in width along its length. Choose a profile from the <strong>Width</strong> setting, or shape one with the <a href="drawing-tools.html#width-tool">Width tool</a>. Variable-width strokes in FLA files keep their profiles.</p>
+<p>A stroke can vary in width along its length. Choose a profile from the <strong>Width</strong> setting, or shape one with the <a href="drawing-tools.html#width-tool">Width tool</a>.</p>
 
+<h2>The Eyedropper</h2>
+
+<p>Press <kbd>I</kbd> and click artwork to take its color as the current one:</p>
+
+<ul>
+  <li><strong>A solid fill</strong> becomes the fill color.</li>
+  <li><strong>A gradient fill</strong> becomes the fill: its stops, its Flow and its Linear RGB setting, as a linear or radial gradient.</li>
+  <li><strong>A bitmap fill</strong> makes that bitmap the fill.</li>
+  <li><strong>A stroke</strong> gives its color and weight to the stroke. Its style is not taken.</li>
+</ul>
+
+<p>It samples shapes and rectangle and oval primitives. Then Phoenix switches to the Paint Bucket after a fill, or the Ink Bottle after a stroke, so you can apply what you picked up straight away. See <a href="drawing-tools.html#eyedropper">Eyedropper</a> on the drawing tools page.</p>
+
+<h2>Paint Bucket and Ink Bottle</h2>
+
+<p>The <strong>Paint Bucket</strong> (<kbd>K</kbd>) fills an enclosed area, or recolors a fill, with the current fill: a solid color, gradient or bitmap. Its <strong>Gap size</strong> lets it fill an outline that doesn't quite close: <strong>Close Small Gaps</strong>, <strong>Close Medium Gaps</strong> and <strong>Close Large Gaps</strong> bridge openings of about 3, 8 and 20 screen pixels. Because the gap is measured on screen, zooming out closes wider gaps and zooming in closes narrower ones. <strong>Don't Close Gaps</strong> fills only areas that are fully closed.</p>
+
+<p>The <strong>Ink Bottle</strong> (<kbd>S</kbd>) gives the current stroke color, size and style to a stroke you click, or adds a stroke around a fill. Both tools are described in full under <a href="drawing-tools.html#paint-bucket-and-ink-bottle">Paint Bucket and Ink Bottle</a>.</p>
 
 </article>
 </main>
