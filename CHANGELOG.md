@@ -5,6 +5,8 @@ What changed in each release of Phoenix, newest first.
 ## Unreleased
 
 - The guide has six new tutorials, also lessons in Help > Tutorials: bones between symbols, bones inside a shape and the Bind tool, bone springs, Asset Warp pins on a picture, the Curve Deformer, and the Frame Picker
+- Ctrl-click with the Bind tool unbinds a point, and with the Asset Warp tool joins two pins with a bone, instead of calling up the Selection tool
+- A symbol bent by a deformer is picked by clicking where it shows bent, not where it was drawn
 
 ## 0.19.0
 
