@@ -578,9 +578,9 @@ MainWindow::MainWindow(const QString& initialFile, QWidget* parent, bool startup
         fla::Timeline* scene = document ? document->currentScene() : nullptr;
         if (!scene)
             return nullptr;
-        if (!fla::camera::cameraOf(*scene))
+        if (!fla::camera::filmingOf(*scene))
             addCamera();
-        return fla::camera::cameraOf(*scene);
+        return fla::camera::filmingOf(*scene);
     });
     _brushTool = std::make_unique<BrushTool>(BrushTool::Kind::Fluid, _selection, stack, _drawingStyle);
     _classicBrushTool = std::make_unique<BrushTool>(BrushTool::Kind::Classic, _selection, stack, _drawingStyle);
@@ -4971,7 +4971,7 @@ void MainWindow::addCamera()
     fla::Timeline* scene = document ? document->currentScene() : nullptr;
     if (!scene)
         return;
-    if (fla::camera::cameraOf(*scene))
+    if (fla::camera::filmingOf(*scene))
     {
         statusBar()->showMessage("The scene has its camera already.", 3000);
         return;

@@ -1762,6 +1762,11 @@ TEST(the_files_camera_layer_plays_as_phoenixs_camera)
     const double turn = 20.0 * 3.14159265358979323846 / 180.0;
     CHECK(std::fabs(t.m11 * 1060.0 + t.m21 * 540.0 + t.tx - (960.0 + 150.0 * std::cos(turn))) < 0.05);
     CHECK(std::fabs(t.m12 * 1060.0 + t.m22 * 540.0 + t.ty - (540.0 + 150.0 * std::sin(turn))) < 0.05);
+    // The Camera tool keys a state back into the camera's instance.
+    const fla::Transform keyed = fla::camera::fileTransformOf(state);
+    CHECK(std::fabs(keyed.m11 - 0.62640380859375) < 1.0e-6 && std::fabs(keyed.m12 + 0.227981567382812) < 1.0e-6);
+    CHECK(std::fabs(keyed.m21 - 0.227981567382812) < 1.0e-6 && near(keyed.tx, 960.0) && near(keyed.ty, 540.0));
+    CHECK(fla::camera::fileCameraOf(*cameraLayer->frames[2]) != nullptr);
     // Half way there, as a classic tween has it: the instance half way in
     // size and turn.
     state = fla::camera::stateAt(scene, 17, 1920.0, 1080.0);

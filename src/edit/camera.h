@@ -11,6 +11,7 @@ namespace fla {
 
 class Frame;
 class Layer;
+class SymbolInstance;
 class Timeline;
 
 /// Phoenix's multiplane camera, kept so that other apps can open the file:
@@ -69,6 +70,12 @@ State stateAt(const Timeline& timeline, int frame, double width, double height);
 /// A camera keyframe's state, and setting it in a frame's attributes. A
 /// keyframe of the FLA's camera layer is read from its instance.
 State stateOf(const Frame& frame, double width, double height);
+
+/// The camera's instance on a keyframe of the FLA's camera layer, or null;
+/// and the matrix it has for \a state (its color effect is the state's
+/// color).
+SymbolInstance* fileCameraOf(const Frame& frame);
+Transform fileTransformOf(const State& state);
 void set(std::vector<std::pair<std::string, std::string>>& attributes, const State& state);
 
 /// A layer's depth in pixels (0 for the stage's plane; more is farther).

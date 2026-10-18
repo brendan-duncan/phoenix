@@ -6,6 +6,7 @@
 #include "../data/fla_document.h"
 #include "../data/frame.h"
 #include "../data/layer.h"
+#include "../data/symbol_instance.h"
 #include "../edit/command_stack.h"
 #include "../edit/property_command.h"
 #include "../edit/timeline_edit.h"
@@ -80,7 +81,16 @@ bool CameraTool::mousePress(PhoenixView& view, QMouseEvent* event, const QPointF
         return true;
     }
     _before = _frame->extraAttributes;
-    fla::camera::set(_frame->extraAttributes, _start);
+    const fla::Layer* keyed = dynamic_cast<const fla::Layer*>(_frame->parent);
+    _instance = keyed && fla::camera::isFileCamera(*keyed) ? fla::camera::fileCameraOf(*_frame) : nullptr;
+    if (_instance)
+    {
+        // A keyframe made in a tween holds the color tweened to there.
+        if (_madeKey)
+            _instance->colorTransform = _start.color;
+        _beforeMatrix = _instance->transform;
+    }
+    key(_start);
     _grab = documentPos;
     _dragging = true;
     return true;
@@ -120,7 +130,7 @@ bool CameraTool::mouseMove(PhoenixView& view, QMouseEvent* event, const QPointF&
         state.x = _start.x - (delta.x() * std::cos(r) - delta.y() * std::sin(r)) * scale;
         state.y = _start.y - (delta.x() * std::sin(r) + delta.y() * std::cos(r)) * scale;
     }
-    fla::camera::set(_frame->extraAttributes, state);
+    key(state);
     view.clearCaches();
     view.update();
     return true;
@@ -150,7 +160,15 @@ void CameraTool::finish(PhoenixView& view, bool keep)
     if (!_dragging)
         return;
     _dragging = false;
-    if (_frame)
+    if (_frame && _instance)
+    {
+        const fla::Transform after = _instance->transform;
+        _instance->transform = _beforeMatrix;
+        if (keep)
+            _commands.push(fla::CommandPtr(
+                new fla::SetPropertyCommand<fla::Transform>(_instance->transform, _beforeMatrix, after, "Camera")));
+    }
+    else if (_frame)
     {
         const auto after = _frame->extraAttributes;
         _frame->extraAttributes = _before;
@@ -164,8 +182,17 @@ void CameraTool::finish(PhoenixView& view, bool keep)
         _commands.discardLast();
     _commands.breakMergeChain();
     _frame = nullptr;
+    _instance = nullptr;
     view.clearCaches();
     view.update();
+}
+
+void CameraTool::key(const fla::camera::State& state)
+{
+    if (_instance)
+        _instance->transform = fla::camera::fileTransformOf(state);
+    else if (_frame)
+        fla::camera::set(_frame->extraAttributes, state);
 }
 
 void CameraTool::deactivate(PhoenixView& view)
@@ -182,7 +209,7 @@ void CameraTool::paintOverlay(PhoenixView& view, QPainter& painter, double scale
     if (!scene || view.inSymbol())
         return;
     const fla::camera::State state = fla::camera::stateAt(*scene, view.playheadFrame(), document->width, document->height);
-    const QString text = fla::camera::cameraOf(*scene)
+    const QString text = fla::camera::filmingOf(*scene)
         ? QString("Camera  %1, %2   %3%   %4\u00b0")
               .arg(state.x, 0, 'f', 0)
               .arg(state.y, 0, 'f', 0)

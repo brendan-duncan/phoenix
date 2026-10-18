@@ -206,6 +206,23 @@ State fileStateOf(const Frame& frame, double width, double height)
 
 } // namespace
 
+SymbolInstance* fileCameraOf(const Frame& frame)
+{
+    for (Element* element : frame.elements)
+        if (auto* instance = dynamic_cast<SymbolInstance*>(element))
+            return instance;
+    return nullptr;
+}
+
+Transform fileTransformOf(const State& state)
+{
+    // Shrunk as far as the camera has moved in, and turned with it.
+    const double scale = 100.0 / std::max(state.zoom, 1.0e-6);
+    const double r = state.rotation * kPi / 180.0;
+    return Transform(scale * std::cos(r), scale * std::sin(r), -scale * std::sin(r), scale * std::cos(r), state.x,
+        state.y);
+}
+
 State stateOf(const Frame& frame, double width, double height)
 {
     if (const auto* layer = dynamic_cast<const Layer*>(frame.parent))
