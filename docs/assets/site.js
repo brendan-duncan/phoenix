@@ -42,6 +42,7 @@ const NAV = [
     { href: "tutorial-instance-effects.html", title: "Effects on one instance" },
     { href: "tutorial-lip-sync.html", title: "Lip sync" },
     { href: "tutorial-head-turn.html", title: "A head turn on a controller" },
+    { href: "tutorial-multiplane-camera.html", title: "Multiplane camera" },
     { href: "tutorial-loop-cycle.html", title: "A cycle with Loop" },
   ] },
   { group: "Workspace", pages: [
