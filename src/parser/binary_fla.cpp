@@ -225,6 +225,8 @@ struct Object
     int duration = 1;
     int keyMode = 0;
     int ease = 0;
+    int rotate = 0;
+    int rotateTimes = 0;
     int sound = 0;
     int soundSync = 0;
     int soundLoop = 0;
@@ -1618,7 +1620,11 @@ void readFrame(Reader& r, Object& o)
         o.script = readActions(r);
     else
         o.script = flash5Script(readFlash5Actions(r));
-    r.skip(12);
+    // A motion tween's rotation: 0 auto, 1 clockwise, 2 counterclockwise,
+    // and how many turns. A u32 (0, or 1 on a few frames) follows. [S]
+    o.rotate = static_cast<int>(r.u32());
+    o.rotateTimes = static_cast<int>(r.u32());
+    r.u32();
     o.morph = r.readObject(kTimeline) != nullptr;
     r.u32();
     r.readObject(kTimeline);
@@ -2669,6 +2675,11 @@ private:
             node->SetAttribute("tweenType", "motion");
         if ((motion || frame.morph) && frame.ease != 0)
             node->SetAttribute("acceleration", frame.ease);
+        if (motion && (frame.rotate == 1 || frame.rotate == 2))
+        {
+            node->SetAttribute("motionTweenRotate", frame.rotate == 1 ? "clockwise" : "counter-clockwise");
+            node->SetAttribute("motionTweenRotateTimes", frame.rotateTimes);
+        }
         node->SetAttribute("keyMode", frame.keyMode | (motion ? 0x4000 : 0x2000));
         if (!frame.label.empty())
             node->SetAttribute("name", frame.label.c_str());

@@ -680,6 +680,98 @@ TEST(binary_fla_reads_flash_5_layers_frames_and_actions)
     CHECK(document.find("allowscale") != std::string::npos);
 }
 
+TEST(binary_fla_opens_on_the_saved_scene_and_reads_tween_rotation)
+{
+    // Contents 0x1B naming two scenes, then the next scene number, a u16
+    // and the scene open at the save, by reference: the second. Its page
+    // holds a motion tween turning counterclockwise three times.
+    std::vector<uint8_t> c = {0x1B, 0, 0, 0, 0, 0, 0};
+    const auto u32 = [](std::vector<uint8_t>& b, uint32_t v) {
+        for (int i = 0; i < 4; ++i)
+            b.push_back(static_cast<uint8_t>(v >> (8 * i)));
+    };
+    const auto text = [](std::vector<uint8_t>& b, const std::string& s) {
+        b.push_back(static_cast<uint8_t>(s.size()));
+        b.insert(b.end(), s.begin(), s.end());
+    };
+    const auto declare = [](std::vector<uint8_t>& b, const std::string& cls) {
+        b.insert(b.end(), {0xFF, 0xFF, 1, 0, static_cast<uint8_t>(cls.size()), 0});
+        b.insert(b.end(), cls.begin(), cls.end());
+    };
+    const auto scene = [&](const std::string& stream, const std::string& name) {
+        c.push_back(8); // schema
+        text(c, stream);
+        text(c, name);
+        u32(c, 0);
+        c.push_back(0);
+        text(c, "");
+        u32(c, 1);
+        u32(c, 4); // item header
+        u32(c, 1);
+        c.insert(c.end(), 8, 0);
+        u32(c, 1);
+        c.insert(c.end(), 8, 0);
+        u32(c, 0);
+        u32(c, 0); // last modified
+    };
+    declare(c, "CDocumentPage"); // class 1, the first scene 2
+    scene("Page 1", "Scene 1");
+    c.insert(c.end(), {0x01, 0x80}); // the second scene, 3
+    scene("Page 2", "Scene 2");
+    c.insert(c.end(), {0, 0});              // the end of the list
+    c.insert(c.end(), {3, 0, 1, 0, 3, 0}); // next scene 3, 1, the second scene
+    c.resize(c.size() + 400, 0);
+
+    std::vector<uint8_t> body = {1, 0}; // the page's CPicObj
+    declare(body, "CPicLayer");
+    body.insert(body.end(), {1, 0});
+    declare(body, "CPicFrame");
+    body.insert(body.end(), {1, 0, 0, 0}); // CPicObj: schema 1, flags, no children
+    body.insert(body.end(), 8, 0);
+    body.push_back(2);              // shape schema
+    body.insert(body.end(), 24, 0); // matrix
+    body.push_back(4);              // shape data schema: no cubics
+    u32(body, 0);
+    body.insert(body.end(), {0, 0, 0, 0, 0});
+    body.push_back(18);                      // frame schema
+    body.insert(body.end(), {10, 0, 1, 0}); // ten frames, a motion tween
+    body.insert(body.end(), 9, 0);
+    u32(body, 0);
+    u32(body, 0);
+    body.insert(body.end(), {0, 0});
+    text(body, "");
+    u32(body, 0); // no actions
+    u32(body, 2); // counterclockwise
+    u32(body, 3); // three times
+    u32(body, 0);
+    body.insert(body.end(), {0, 0, 0, 0, 0, 0, 0, 0, 0}); // no morph, u32, no hints, CString
+    body.insert(body.end(), {0, 0});                      // no more frames
+    body.insert(body.end(), 8, 0);
+    body.push_back(8); // layer schema
+    text(body, "Turning");
+    body.insert(body.end(), 3 + 4 + 4 + 4 + 4, 0);
+    body.push_back(0);                  // type
+    body.insert(body.end(), {0, 0});
+    body.insert(body.end(), {0, 0, 0}); // no link, a byte
+    body.insert(body.end(), {0, 0});    // no more layers
+    body.insert(body.end(), 8, 0);
+    body.insert(body.end(), {2, 0, 0}); // page schema 2: no guide list
+    std::map<std::string, std::vector<uint8_t>> streams;
+    streams["Contents"] = c;
+    streams["Page 2"] = pageStream(body);
+    std::map<std::string, std::vector<uint8_t>> files;
+    std::string error;
+    std::string warning;
+    CHECK(BinaryFla::convert(streams, files, error, &warning));
+    CHECK(warning.empty());
+    const auto xml = files["DOMDocument.xml"];
+    const std::string document(xml.begin(), xml.end());
+    CHECK(document.find("currentTimeline=\"2\"") != std::string::npos);
+    CHECK(document.find("name=\"Turning\"") != std::string::npos);
+    CHECK(document.find("motionTweenRotate=\"counter-clockwise\"") != std::string::npos);
+    CHECK(document.find("motionTweenRotateTimes=\"3\"") != std::string::npos);
+}
+
 TEST(binary_fla_reads_mx_normal_mode_actions)
 {
     // An MX 2004 frame whose script was written in normal mode: an action
