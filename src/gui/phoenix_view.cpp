@@ -3514,7 +3514,7 @@ const PhoenixView::ShapeSwap* PhoenixView::sprungShapes(const fla::Frame& pose, 
         auto armature = std::make_shared<fla::IKArmature>();
         entry.xml = *xml;
         entry.frames.clear();
-        entry.armature = armature->parse(*xml) && armature->bendsShape() && armature->hasSprings() ? armature : nullptr;
+        entry.armature = armature->parse(*xml) && armature->bendsShape() && armature->playsSprings() ? armature : nullptr;
         // Springs swing at the document's own pace.
         if (entry.armature && _flaDocument && _flaDocument->document)
             armature->setFrameRate(_flaDocument->document->frameRate);

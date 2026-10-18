@@ -9,6 +9,10 @@ What changed in each release of Phoenix, newest first.
 - Text runs of only spaces, such as the space between two differently styled words, are no longer lost when an FLA opens
 - Fill and stroke colors with transparency open at exactly the opacity the FLA gives, not one step lower
 - View > Guides > Lock Guides is kept in the document, as FLA files keep it, instead of being one setting for every file
+- Bone springs and joint limits from FLA files play as saved: an arm or tail swings, overshoots and settles just as the file has it
+- Bone springs and joint limits are saved the way FLA files keep them, so other apps read them
+- Springs are worked into every frame of an armature, so the bones swing with the art, and an armature can end swung past its last pose
+- Posing a boned shape from an FLA file bends it by the binding saved with it
 
 ## 0.18.2
 

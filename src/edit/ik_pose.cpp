@@ -86,6 +86,26 @@ double wrapAngle(double angle)
     return angle;
 }
 
+/// \a angle as a rotation limit is stored: from 0 up to a whole turn.
+double turnFromZero(double angle)
+{
+    angle = std::fmod(angle, 2.0 * kPi);
+    return angle < 0.0 ? angle + 2.0 * kPi : angle;
+}
+
+/// Writes a joint's rotation limits as FLA files keep them: rotationMin and
+/// rotationMax in radians from 0 up to a whole turn (-45 degrees is 315).
+void writeLimit(tinyxml2::XMLElement* element, const JointLimit& limit)
+{
+    for (const char* name : {"rotationConstrained", "rotationMin", "rotationMax", "phoenixMinRotation", "phoenixMaxRotation"})
+        element->DeleteAttribute(name);
+    if (!limit.constrained)
+        return;
+    element->SetAttribute("rotationConstrained", "true");
+    setNumber(element, "rotationMin", turnFromZero(std::min(limit.min, limit.max)));
+    setNumber(element, "rotationMax", turnFromZero(std::max(limit.min, limit.max)));
+}
+
 /// One coordinate of a node's location, in pixels: "#1F.8F" (hex fixed
 /// point, a 24-bit signed whole part) or plain, in units of 256 twips.
 bool locationCoordinate(std::string text, double& pixels)
@@ -306,18 +326,43 @@ void IKArmature::index()
         walk.children(root, -1);
     }
 
-    // An armature of symbols keeps each instance's registration point in
-    // xArray and the joint, as saved, in location: how far apart they are
-    // turns with the joint.
-    if (_bendsShape)
-        return;
+    // Phoenix once kept limits under names of its own (phoenixMinRotation,
+    // phoenixMaxRotation, in radians from -180 degrees): now as FLA files
+    // keep them. And springs on the joint they turn (springStrength,
+    // springDamping), played as the armature plays rather than stored in
+    // its frames: those stay until the joints are worked out again.
+    _legacySprings = false;
     for (Node& node : _nodes)
     {
+        tinyxml2::XMLElement* element = node.element;
+        if (element->Attribute("phoenixMinRotation") && element->Attribute("phoenixMaxRotation"))
+        {
+            writeLimit(element, {true, element->DoubleAttribute("phoenixMinRotation", 0.0),
+                element->DoubleAttribute("phoenixMaxRotation", 0.0)});
+        }
+        if (element->Attribute("springDamping"))
+            _legacySprings = true;
+    }
+
+    // An armature of symbols keeps each instance's registration point in
+    // xArray, and the joint where its first pose puts it: how far apart they
+    // are turns with the joint. (A node's location is the joint for the
+    // root, but not always below it.)
+    if (_bendsShape)
+        return;
+    const std::vector<IKJoint> first = posedAt(0);
+    for (size_t i = 0; i < _nodes.size(); ++i)
+    {
+        Node& node = _nodes[i];
         const std::vector<double> xs = numbers(node.element->Attribute("xArray"));
         const std::vector<double> ys = numbers(node.element->Attribute("yArray"));
         const std::vector<double> angles = numbers(node.element->Attribute("angleArray"));
         Point joint;
-        if (xs.empty() || ys.empty() || !parseLocation(node.element->Attribute("location"), joint))
+        if (xs.empty() || ys.empty())
+            continue;
+        if (i < first.size() && node.element->FirstChildElement("states")->FirstChildElement("State"))
+            joint = first[i].position;
+        else if (!parseLocation(node.element->Attribute("location"), joint))
             continue;
         node.registration = rotated(Point(xs[0] / 20.0 - joint.x, ys[0] / 20.0 - joint.y), angles.empty() ? 0.0 : -angles[0]);
     }
@@ -540,11 +585,20 @@ std::vector<IKJoint> IKArmature::posedAt(int frame) const
 void IKArmature::storeJoints()
 {
     _sprung.clear();
+    if (_legacySprings)
+        upgradeSprings();
     const int count = frames();
+    // The poses, and the springs at work on them: FLA files store the
+    // joints as the springs swing them.
+    std::vector<std::vector<IKJoint>> posed(static_cast<size_t>(std::max(0, count)));
+    for (int frame = 0; frame < count; ++frame)
+        posed[static_cast<size_t>(frame)] = posedAt(frame);
+    if (hasSprings())
+        posed = simulate([&posed](int frame) { return posed[static_cast<size_t>(frame)]; });
     std::vector<std::vector<double>> xs(_nodes.size()), ys(_nodes.size()), angles(_nodes.size());
     for (int frame = 0; frame < count; ++frame)
     {
-        const std::vector<IKJoint> joints = posedAt(frame);
+        const std::vector<IKJoint>& joints = posed[static_cast<size_t>(frame)];
         for (size_t i = 0; i < joints.size(); ++i)
         {
             Point at = joints[i].position;
@@ -693,10 +747,15 @@ std::vector<JointLimit> IKArmature::limits() const
     std::vector<JointLimit> found;
     for (const Node& node : _nodes)
     {
+        // Stored from 0 up to a whole turn: the least from -180 degrees,
+        // and the most that far or less round from it.
         JointLimit limit;
-        limit.constrained = node.element->Attribute("phoenixMinRotation") && node.element->Attribute("phoenixMaxRotation");
-        limit.min = node.element->DoubleAttribute("phoenixMinRotation", 0.0);
-        limit.max = node.element->DoubleAttribute("phoenixMaxRotation", 0.0);
+        limit.constrained = node.element->BoolAttribute("rotationConstrained", false);
+        if (limit.constrained)
+        {
+            limit.min = wrapAngle(node.element->DoubleAttribute("rotationMin", 0.0));
+            limit.max = limit.min + turnFromZero(node.element->DoubleAttribute("rotationMax", 0.0) - limit.min);
+        }
         found.push_back(limit);
     }
     return found;
@@ -706,15 +765,7 @@ void IKArmature::setLimit(int joint, const JointLimit& limit)
 {
     if (joint < 0 || static_cast<size_t>(joint) >= _nodes.size())
         return;
-    tinyxml2::XMLElement* element = _nodes[joint].element;
-    if (!limit.constrained)
-    {
-        element->DeleteAttribute("phoenixMinRotation");
-        element->DeleteAttribute("phoenixMaxRotation");
-        return;
-    }
-    setNumber(element, "phoenixMinRotation", std::min(limit.min, limit.max));
-    setNumber(element, "phoenixMaxRotation", std::max(limit.min, limit.max));
+    writeLimit(_nodes[joint].element, limit);
 }
 
 std::string IKArmature::name() const
@@ -777,9 +828,10 @@ Transform IKArmature::carried(int joint, const Transform& stored, int frame) con
     double nowAngle = 0.0;
     if (_bendsShape || frame <= 0 || !storedAt(joint, 0, first, firstAngle) || !storedAt(joint, frame, now, nowAngle))
         return stored;
-    // Springs swing the joint from where its poses have it: its sprung
-    // angle, and the registration point that hangs off it.
-    if (hasSprings())
+    // Springs Phoenix once played rather than stored swing the joint from
+    // where its poses have it: its sprung angle, and the registration point
+    // that hangs off it.
+    if (playsSprings())
     {
         const std::vector<IKJoint> sprung = sprungAt(frame);
         if (joint >= 0 && static_cast<size_t>(joint) < sprung.size())
@@ -800,31 +852,23 @@ Transform IKArmature::carried(int joint, const Transform& stored, int frame) con
     return moved;
 }
 
-std::string IKArmature::betweenFrameMatrixList(const std::vector<const Transform*>& instances) const
+std::string IKArmature::betweenFrameMatrixList(const std::vector<std::pair<int, const Transform*>>& instances) const
 {
     tinyxml2::XMLDocument document;
     tinyxml2::XMLElement* list = document.NewElement("betweenFrameMatrixList");
     document.InsertEndChild(list);
-    std::vector<Transform> between;
-    for (size_t i = 0; i < _nodes.size(); ++i)
-    {
-        Point registration;
-        double angle = 0.0;
-        if (i >= instances.size() || !instances[i] || !storedAt(static_cast<int>(i), 0, registration, angle))
-            continue;
-        Transform local = *instances[i];
-        local.tx -= registration.x;
-        local.ty -= registration.y;
-        between.push_back(then(local, turn(-angle)));
-    }
     const int count = std::max(1, frames());
-    for (int frame = 0; frame < count; ++frame)
+    for (const auto& [joint, stored] : instances)
     {
-        for (const Transform& matrix : between)
+        Transform back;
+        if (!stored || joint < 0 || static_cast<size_t>(joint) >= _nodes.size() || !inverse(*stored, back))
+            continue;
+        // Each frame's: the move from where the first frame has it.
+        for (int frame = 0; frame < count; ++frame)
         {
             tinyxml2::XMLElement* element = document.NewElement("Matrix");
             list->InsertEndChild(element);
-            writeMatrix(element, matrix);
+            writeMatrix(element, then(back, carried(joint, *stored, frame)));
         }
     }
     tinyxml2::XMLPrinter printer(nullptr, true);
@@ -836,23 +880,70 @@ void IKArmature::setSpring(int joint, const BoneSpring& spring)
 {
     if (joint < 0 || static_cast<size_t>(joint) >= _nodes.size())
         return;
-    tinyxml2::XMLElement* element = _nodes[static_cast<size_t>(joint)].element;
-    for (const char* name : {"springStrength", "springDamping", "strength", "damping"})
-        element->DeleteAttribute(name);
-    if (spring.strength > 0.0)
+    if (_legacySprings)
+        upgradeSprings();
+    // On the node at each bone's tail: springStrength, and dampingValue
+    // unless it is 0.
+    for (const Node& node : _nodes)
     {
-        element->SetAttribute("springStrength", std::clamp(spring.strength, 0.0, 100.0));
-        element->SetAttribute("springDamping", std::clamp(spring.damping, 0.0, 100.0));
+        if (node.parent != joint)
+            continue;
+        for (const char* name : {"springStrength", "dampingValue", "springDamping"})
+            node.element->DeleteAttribute(name);
+        if (spring.strength <= 0.0)
+            continue;
+        setNumber(node.element, "springStrength", std::clamp(spring.strength, 0.0, 100.0));
+        if (spring.damping > 0.0)
+            setNumber(node.element, "dampingValue", std::clamp(spring.damping, 0.0, 100.0));
     }
+    storeJoints();
+}
+
+void IKArmature::upgradeSprings()
+{
+    // Each joint's spring moves to the nodes at the tails of its bones.
+    std::vector<BoneSpring> springs(_nodes.size());
+    for (size_t i = 0; i < _nodes.size(); ++i)
+    {
+        tinyxml2::XMLElement* element = _nodes[i].element;
+        if (!element->Attribute("springDamping"))
+            continue;
+        springs[i].present = true;
+        springs[i].strength = element->DoubleAttribute("springStrength", 0.0);
+        springs[i].damping = element->DoubleAttribute("springDamping", 0.0);
+        element->DeleteAttribute("springStrength");
+        element->DeleteAttribute("springDamping");
+    }
+    for (const Node& node : _nodes)
+    {
+        if (node.parent < 0 || !springs[static_cast<size_t>(node.parent)].present)
+            continue;
+        const BoneSpring& spring = springs[static_cast<size_t>(node.parent)];
+        if (spring.strength <= 0.0)
+            continue;
+        setNumber(node.element, "springStrength", spring.strength);
+        if (spring.damping > 0.0)
+            setNumber(node.element, "dampingValue", spring.damping);
+    }
+    _legacySprings = false;
     _sprung.clear();
 }
 
 bool IKArmature::hasSprings() const
 {
+    // The armature's springs can be turned off as a whole.
+    const tinyxml2::XMLElement* tree = _document ? _document->FirstChildElement("IKTree") : nullptr;
+    if (tree && !tree->BoolAttribute("physicsEnabled", true))
+        return false;
     for (size_t i = 0; i < _nodes.size(); ++i)
         if (spring(static_cast<int>(i)).strength > 0.0)
             return true;
     return false;
+}
+
+bool IKArmature::playsSprings() const
+{
+    return _legacySprings && hasSprings();
 }
 
 void IKArmature::setFrameRate(double fps)
@@ -866,46 +957,50 @@ void IKArmature::setFrameRate(double fps)
 
 std::vector<IKJoint> IKArmature::sprungAt(int frame) const
 {
-    if (!hasSprings())
+    // Stored with the springs at work, as FLA files keep them.
+    if (!playsSprings())
         return shownAt(frame);
     const int count = std::max(1, frames());
     if (_sprung.empty())
+        _sprung = simulate([this](int f) { return shownAt(f); });
+    return _sprung[static_cast<size_t>(std::clamp(frame, 0, count - 1))];
+}
+
+std::vector<std::vector<IKJoint>> IKArmature::simulate(const std::function<std::vector<IKJoint>(int)>& posedOn) const
+{
+    const int count = std::max(1, frames());
+    // Each joint's spring: how fast it swings (a stiffer one swings faster
+    // and lags less) and how much of each swing it loses.
+    constexpr double kTau = 6.28318530717958647692;
+    std::vector<double> omega(_nodes.size(), 0.0);
+    std::vector<double> zeta(_nodes.size(), 1.0);
+    for (size_t i = 0; i < _nodes.size(); ++i)
     {
-        // Each joint's spring: how fast it swings (a stiffer one swings
-        // faster and lags less) and how much of each swing it loses.
-        constexpr double kTau = 6.28318530717958647692;
-        std::vector<double> omega(_nodes.size(), 0.0);
-        std::vector<double> zeta(_nodes.size(), 1.0);
-        for (size_t i = 0; i < _nodes.size(); ++i)
+        const BoneSpring each = spring(static_cast<int>(i));
+        if (each.strength <= 0.0)
+            continue;
+        omega[i] = kTau * (0.5 + 4.5 * std::min(each.strength, 100.0) / 100.0);
+        zeta[i] = 0.05 + 0.9 * std::clamp(each.damping, 0.0, 100.0) / 100.0;
+    }
+    std::vector<double> angle(_nodes.size(), 0.0);
+    std::vector<double> speed(_nodes.size(), 0.0);
+    std::vector<double> target(_nodes.size(), 0.0);
+    constexpr int kSteps = 8;
+    const double dt = 1.0 / (_fps * kSteps);
+    std::vector<std::vector<IKJoint>> sprung(static_cast<size_t>(count));
+    for (int f = 0; f < count; ++f)
+    {
+        const std::vector<IKJoint> posed = posedOn(f);
+        std::vector<IKJoint> joints = posed;
+        // Parents come before their children, so each joint hangs off its
+        // parent as the springs have already moved it; a root turns toward
+        // its pose.
+        for (size_t i = 0; i < joints.size(); ++i)
         {
-            const BoneSpring each = spring(static_cast<int>(i));
-            if (each.strength <= 0.0)
-                continue;
-            omega[i] = kTau * (0.5 + 4.5 * std::min(each.strength, 100.0) / 100.0);
-            zeta[i] = 0.05 + 0.9 * std::clamp(each.damping, 0.0, 100.0) / 100.0;
-        }
-        std::vector<double> angle(_nodes.size(), 0.0);
-        std::vector<double> speed(_nodes.size(), 0.0);
-        std::vector<double> target(_nodes.size(), 0.0);
-        constexpr int kSteps = 8;
-        const double dt = 1.0 / (_fps * kSteps);
-        _sprung.assign(static_cast<size_t>(count), {});
-        for (int f = 0; f < count; ++f)
-        {
-            // From the joints the art shows: a shape's at its eased entry.
-            const std::vector<IKJoint> posed = shownAt(f);
-            std::vector<IKJoint> joints = posed;
-            // Parents come before their children, so each joint hangs off
-            // its parent as the springs have already moved it.
-            for (size_t i = 0; i < joints.size(); ++i)
+            const int parent = posed[i].parent;
+            double wanted = posed[i].angle;
+            if (parent >= 0 && static_cast<size_t>(parent) < i)
             {
-                const int parent = posed[i].parent;
-                if (parent < 0 || static_cast<size_t>(parent) >= i)
-                {
-                    angle[i] = posed[i].angle;
-                    speed[i] = 0.0;
-                    continue;
-                }
                 const IKJoint& above = posed[static_cast<size_t>(parent)];
                 const IKJoint& moved = joints[static_cast<size_t>(parent)];
                 // Its place and turn from its parent, as posed.
@@ -913,33 +1008,33 @@ std::vector<IKJoint> IKArmature::sprungAt(int frame) const
                     posed[i].position.y - above.position.y), -above.angle);
                 const Point placed = rotated(offset, moved.angle);
                 joints[i].position = Point(moved.position.x + placed.x, moved.position.y + placed.y);
-                double wanted = moved.angle + (posed[i].angle - above.angle);
-                if (omega[i] <= 0.0 || f == 0)
-                {
-                    angle[i] = wanted;
-                    speed[i] = 0.0;
-                    target[i] = wanted;
-                    joints[i].angle = wanted;
-                    continue;
-                }
-                // The nearest turn of the angle wanted, so a pose that
-                // crosses half a turn does not send it the long way round.
-                wanted += kTau * std::round((angle[i] - wanted) / kTau);
-                const double from = target[i];
-                for (int s = 1; s <= kSteps; ++s)
-                {
-                    const double goal = from + (wanted - from) * s / kSteps;
-                    const double pull = omega[i] * omega[i] * (goal - angle[i]) - 2.0 * zeta[i] * omega[i] * speed[i];
-                    speed[i] += pull * dt;
-                    angle[i] += speed[i] * dt;
-                }
-                target[i] = wanted;
-                joints[i].angle = angle[i];
+                wanted = moved.angle + (posed[i].angle - above.angle);
             }
-            _sprung[static_cast<size_t>(f)] = std::move(joints);
+            if (omega[i] <= 0.0 || f == 0)
+            {
+                angle[i] = wanted;
+                speed[i] = 0.0;
+                target[i] = wanted;
+                joints[i].angle = wanted;
+                continue;
+            }
+            // The nearest turn of the angle wanted, so a pose that crosses
+            // half a turn does not send it the long way round.
+            wanted += kTau * std::round((angle[i] - wanted) / kTau);
+            const double from = target[i];
+            for (int s = 1; s <= kSteps; ++s)
+            {
+                const double goal = from + (wanted - from) * s / kSteps;
+                const double pull = omega[i] * omega[i] * (goal - angle[i]) - 2.0 * zeta[i] * omega[i] * speed[i];
+                speed[i] += pull * dt;
+                angle[i] += speed[i] * dt;
+            }
+            target[i] = wanted;
+            joints[i].angle = angle[i];
         }
+        sprung[static_cast<size_t>(f)] = std::move(joints);
     }
-    return _sprung[static_cast<size_t>(std::clamp(frame, 0, count - 1))];
+    return sprung;
 }
 
 BoneSpring IKArmature::spring(int joint) const
@@ -947,12 +1042,25 @@ BoneSpring IKArmature::spring(int joint) const
     BoneSpring found;
     if (joint < 0 || static_cast<size_t>(joint) >= _nodes.size())
         return found;
-    const tinyxml2::XMLElement* element = _nodes[static_cast<size_t>(joint)].element;
-    const char* strength = element->Attribute("springStrength") ? "springStrength" : "strength";
-    const char* damping = element->Attribute("springDamping") ? "springDamping" : "damping";
-    found.present = element->Attribute(strength) || element->Attribute(damping);
-    found.strength = element->DoubleAttribute(strength, 0.0);
-    found.damping = element->DoubleAttribute(damping, 0.0);
+    // Phoenix's own, once: on the joint itself.
+    if (_legacySprings)
+    {
+        const tinyxml2::XMLElement* element = _nodes[static_cast<size_t>(joint)].element;
+        found.present = element->Attribute("springDamping") != nullptr;
+        found.strength = element->DoubleAttribute("springStrength", 0.0);
+        found.damping = element->DoubleAttribute("springDamping", 0.0);
+        return found;
+    }
+    // On the node at the tail of a bone the joint turns.
+    for (const Node& node : _nodes)
+    {
+        if (node.parent != joint || !node.element->Attribute("springStrength"))
+            continue;
+        found.present = true;
+        found.strength = node.element->DoubleAttribute("springStrength", 0.0);
+        found.damping = node.element->DoubleAttribute("dampingValue", 0.0);
+        break;
+    }
     return found;
 }
 
@@ -1008,14 +1116,13 @@ void IKArmature::keepAttributesOf(const IKArmature& other)
     index();
 }
 
-ShapeBinding IKArmature::binding() const
+void IKArmature::readBinding(const std::function<void(int, const BoneWeight&, const double*)>& each) const
 {
-    ShapeBinding found;
     const tinyxml2::XMLElement* tree = _document->FirstChildElement("IKTree");
     const std::vector<double> indices = numbers(tree ? tree->Attribute("connectionIndices") : nullptr);
     const std::vector<double> data = numbers(tree ? tree->Attribute("connectionData") : nullptr);
     if (indices.empty())
-        return found;
+        return;
     // The number of points; then each point's number and, for each of its
     // bones, the bone, where its group of four sits in connectionData, a
     // count of handle pairs and where each handle's group sits; -1 ends a
@@ -1027,21 +1134,82 @@ ShapeBinding IKArmature::binding() const
         const int number = static_cast<int>(indices[at++]);
         if (number < 0 || number > 100000)
             break;
-        if (found.size() <= static_cast<size_t>(number))
-            found.resize(static_cast<size_t>(number) + 1);
         while (at < indices.size() && indices[at] >= 0.0)
         {
             BoneWeight bound;
             bound.bone = static_cast<int>(indices[at]);
             const size_t group = at + 1 < indices.size() ? static_cast<size_t>(std::max(0.0, indices[at + 1])) : 0;
             const size_t handles = at + 2 < indices.size() ? static_cast<size_t>(std::max(0.0, indices[at + 2])) : 0;
-            bound.weight = group + 3 < data.size() ? data[group + 3] : 1.0;
-            found[static_cast<size_t>(number)].push_back(bound);
+            const bool grouped = group + 3 < data.size();
+            bound.weight = grouped ? data[group + 3] : 1.0;
+            each(number, bound, grouped ? &data[group] : nullptr);
             at += 3 + 2 * handles;
         }
         ++at;
     }
+}
+
+ShapeBinding IKArmature::binding() const
+{
+    ShapeBinding found;
+    readBinding([&found](int number, const BoneWeight& bound, const double*) {
+        if (found.size() <= static_cast<size_t>(number))
+            found.resize(static_cast<size_t>(number) + 1);
+        found[static_cast<size_t>(number)].push_back(bound);
+    });
     return found;
+}
+
+ShapeBinding IKArmature::bindingFor(const std::vector<Point>& anchors) const
+{
+    // Where each bound point was: along its first bone, and to its side, as
+    // the span's first frame has the bones.
+    const std::vector<IKJoint> joints = jointsAt(0);
+    std::map<int, Point> places;
+    ShapeBinding bound;
+    readBinding([&](int number, const BoneWeight& weight, const double* group) {
+        if (static_cast<size_t>(number) >= bound.size())
+            bound.resize(static_cast<size_t>(number) + 1);
+        bound[static_cast<size_t>(number)].push_back(weight);
+        if (!group || places.count(number) || weight.bone < 0 || static_cast<size_t>(weight.bone) >= joints.size() ||
+            joints[weight.bone].parent < 0)
+        {
+            return;
+        }
+        const Point& head = joints[joints[weight.bone].parent].position;
+        const Point& tail = joints[weight.bone].position;
+        const double length = std::hypot(tail.x - head.x, tail.y - head.y);
+        if (length < 1.0e-9)
+            return;
+        const Point along((tail.x - head.x) / length, (tail.y - head.y) / length);
+        places[number] = Point(head.x + (tail.x - head.x) * group[0] - along.y * group[1],
+            head.y + (tail.y - head.y) * group[0] + along.x * group[1]);
+    });
+    if (places.empty())
+        return ShapeBinding();
+    // Each anchor takes the bones of the point bound on it; one with none
+    // there, its nearest bones.
+    const ShapeBinding nearest = bindToNearestBones(anchors, joints);
+    ShapeBinding found(anchors.size());
+    size_t matched = 0;
+    for (size_t i = 0; i < anchors.size(); ++i)
+    {
+        double best = 1.0;
+        for (const auto& [number, place] : places)
+        {
+            const double distance = std::hypot(anchors[i].x - place.x, anchors[i].y - place.y);
+            if (distance < best)
+            {
+                best = distance;
+                found[i] = bound[static_cast<size_t>(number)];
+            }
+        }
+        if (found[i].empty())
+            found[i] = nearest[i];
+        else
+            ++matched;
+    }
+    return matched * 2 >= anchors.size() ? found : ShapeBinding();
 }
 
 bool IKArmature::bindsAnchors() const
@@ -1244,11 +1412,7 @@ std::string armatureXml(const std::string& name, const std::string& treeName, co
         if (!joints[i].reference.empty())
             element->SetAttribute("referenceID", joints[i].reference.c_str());
         element->SetAttribute("speed", "1");
-        if (joints[i].limit.constrained)
-        {
-            setNumber(element, "phoenixMinRotation", std::min(joints[i].limit.min, joints[i].limit.max));
-            setNumber(element, "phoenixMaxRotation", std::max(joints[i].limit.min, joints[i].limit.max));
-        }
+        writeLimit(element, joints[i].limit);
         // The pose: the angle from the parent's, and the place in the
         // parent's frame (on the stage for the root), in twips.
         const int parent = joints[i].parent;
@@ -1400,7 +1564,7 @@ void reskinShape(Shape& shape, const Transform& toArmature, const std::vector<IK
 
 bool springShape(Shape& shape, const Shape& first, const Transform& toArmature, const IKArmature& armature, int frame)
 {
-    if (!armature.bendsShape() || !armature.hasSprings())
+    if (!armature.bendsShape() || !armature.playsSprings())
         return false;
     const std::vector<IKJoint> sprung = armature.sprungAt(frame);
     // Bound by the Bind tool: bent from the first frame's shape, as posing

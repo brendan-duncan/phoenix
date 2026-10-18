@@ -5,8 +5,10 @@
 #include "../data/point.h"
 #include "../data/transform.h"
 
+#include <functional>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace tinyxml2 {
@@ -39,8 +41,9 @@ struct IKJoint
 };
 
 /// How far a joint may turn from its parent bone, in radians, when it is
-/// constrained. Kept on the joint's node for Phoenix (phoenixMinRotation,
-/// phoenixMaxRotation); other FLA files carry no limits there.
+/// constrained (min from -180 degrees, max no more than a turn past it).
+/// Kept on the joint's node as rotationConstrained="true", rotationMin and
+/// rotationMax, those in radians from 0 up to a whole turn.
 struct JointLimit
 {
     bool constrained = false;
@@ -75,7 +78,8 @@ struct BoneWeight
 /// number (see shapeAnchors); a point with none stays where it is.
 using ShapeBinding = std::vector<std::vector<BoneWeight>>;
 
-/// A bone's spring, as a node may carry one (0 to 100 each): how stiffly it
+/// A bone's spring, as the node at its tail carries one (springStrength,
+/// and dampingValue unless it is 0; 0 to 100 each): how stiffly it
 /// pulls back to its pose, 0 for no spring at all, and how quickly its
 /// swinging dies away. With a spring, the bone lags behind the motion of the
 /// bones above it and of its own poses, overshoots and settles (see sprungAt),
@@ -98,8 +102,10 @@ struct BoneSpring
 /// out and stored on the node, as xArray and yArray (twips) and angleArray
 /// (radians, absolute): the poses' angles and offsets eased from each pose to
 /// the next, a simple quadratic ease of strength s running time as
-/// (1 - s) t + s (2t - t^2), and the joints placed down the tree from them.
-/// Free of Qt.
+/// (1 - s) t + s (2t - t^2), and the joints placed down the tree from them,
+/// then swung by the bones' springs (unless the IKTree has physicsEnabled
+/// "false"): the stored joints have the springs at work, so a span's last
+/// pose may show past where it was posed. Free of Qt.
 class IKArmature
 {
 public:
@@ -144,16 +150,23 @@ public:
     std::vector<IKJoint> shownAt(int frame) const;
 
     /// The joints \a frame frames into the span with their springs at work:
-    /// from the root down, each joint with a spring turns toward the angle
-    /// its pose gives it from its parent as the parent now is, on a damped
-    /// spring, so it trails, overshoots and settles; a joint without one
-    /// keeps its pose from its parent. Worked from the joints the art shows
-    /// (shownAt), and those themselves when no joint has a spring. Worked
+    /// the joints the art shows (shownAt), which have them, except in an
+    /// armature Phoenix saved before it stored springs (see playsSprings).
+    /// There, from the root down, each joint with a spring turns toward the
+    /// angle its pose gives it from its parent as the parent now is (a root,
+    /// toward its pose), on a damped spring, so it trails, overshoots and
+    /// settles; a joint without one keeps its pose from its parent. Worked
     /// out for the whole span at once and kept until the armature changes.
     std::vector<IKJoint> sprungAt(int frame) const;
 
     /// Whether any joint has a spring that moves it.
     bool hasSprings() const;
+
+    /// Whether the springs are worked out as the armature plays rather than
+    /// stored in its frames: in an armature Phoenix saved before it stored
+    /// them, with each joint's spring on its own node (springStrength and
+    /// springDamping), until its joints are worked out again.
+    bool playsSprings() const;
 
     /// The frame rate springs are worked out at (24 unless set).
     void setFrameRate(double fps);
@@ -165,12 +178,12 @@ public:
     /// (xArray, yArray, angleArray) of the frame against the first's.
     Transform carried(int joint, const Transform& stored, int frame) const;
 
-    /// The betweenFrameMatrixList of an armature of symbols: for every
-    /// frame of the span, each joint's instance (\a instances, by joint; a
-    /// null leaves one out) as it sits in its joint's frame, its matrix with
-    /// the joint's turn and registration point taken off. The instances
-    /// keep that place on every frame, so the list repeats it.
-    std::string betweenFrameMatrixList(const std::vector<const Transform*>& instances) const;
+    /// The betweenFrameMatrixList of an armature of symbols: for each of
+    /// \a instances (in the order the pose frame lists them, each with the
+    /// joint it follows and its matrix as saved), a Matrix for every frame
+    /// of the span, the move from where the first frame has it to where
+    /// that frame does (see carried).
+    std::string betweenFrameMatrixList(const std::vector<std::pair<int, const Transform*>>& instances) const;
 
     /// The joints \a frame frames into the span as the poses make them.
     std::vector<IKJoint> posedAt(int frame) const;
@@ -204,11 +217,12 @@ public:
     /// again with a bone more (see armatureXml).
     std::vector<ArmatureJoint> symbolJoints() const;
 
-    /// A joint's spring, read from its node (springStrength and
-    /// springDamping, or strength and damping).
+    /// The spring of the bones a joint turns, read from the node at a
+    /// bone's tail.
     BoneSpring spring(int joint) const;
-    /// Sets a joint's spring (springStrength and springDamping); a strength
-    /// of 0 takes it away.
+    /// Sets the spring of the bones a joint turns, on the nodes at their
+    /// tails; a strength of 0 takes it away. Every frame's joints are worked
+    /// out again, with the springs.
     void setSpring(int joint, const BoneSpring& spring);
 
     /// Copies onto this armature's nodes, matched by name, the attributes
@@ -220,6 +234,16 @@ public:
     /// The bones each point of a boned shape follows, read from the tree's
     /// connectionIndices and connectionData; empty when it has none.
     ShapeBinding binding() const;
+
+    /// The binding for a shape's points, \a anchors (in the armature's
+    /// space as the span's first frame has the shape), when the tree numbers
+    /// its points otherwise, as the reference app binds a shape: each
+    /// anchor takes the bones of the point bound on it, found from the
+    /// point's place along its bone and to its side (connectionData) on the
+    /// first frame's bones; an anchor with none there, its nearest bones.
+    /// Empty when the tree binds no points or fewer than half the anchors
+    /// are found.
+    ShapeBinding bindingFor(const std::vector<Point>& anchors) const;
 
     /// Whether the binding numbers its points as shapeAnchors does, as
     /// Phoenix writes it (phoenixBinding="anchors"), so a shape's points can
@@ -264,10 +288,21 @@ private:
     Pose poseOf(size_t node, int frame) const;
     double easedTime(int pose, double t) const;
     void storeJoints();
+    /// Each frame's joints, from \a posedOn's, swung by the springs.
+    std::vector<std::vector<IKJoint>> simulate(const std::function<std::vector<IKJoint>(int)>& posedOn) const;
+    /// Walks connectionIndices: \a each gets a point's number, one of its
+    /// bones and that bone's group of four in connectionData (null when
+    /// there is none).
+    void readBinding(const std::function<void(int, const BoneWeight&, const double*)>& each) const;
+    /// Moves springs Phoenix kept on the joint they turn to the nodes at
+    /// its bones' tails, under the names FLA files use.
+    void upgradeSprings();
 
     std::unique_ptr<tinyxml2::XMLDocument> _document;
     std::vector<Node> _nodes;
     bool _bendsShape = false;
+    /// Springs kept as Phoenix once kept them (see playsSprings).
+    bool _legacySprings = false;
     double _fps = 24.0;
     /// The span's joints with their springs, by frame, once worked out.
     mutable std::vector<std::vector<IKJoint>> _sprung;
@@ -339,7 +374,8 @@ void reskinShape(Shape& shape, const Transform& toArmature, const std::vector<IK
 /// shape, by its binding; one bound otherwise is carried from where it is
 /// by the bones nearest each point. \a toArmature takes the shape's own
 /// space to the armature's. False, and the shape left as it is, when the
-/// armature has no spring.
+/// armature plays no springs (see IKArmature::playsSprings): the shapes it
+/// keeps for each frame have them already.
 bool springShape(Shape& shape, const Shape& first, const Transform& toArmature, const IKArmature& armature, int frame);
 
 /// A new armature layer for \a timeline, to go above \a below: empty up to

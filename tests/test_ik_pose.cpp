@@ -18,11 +18,14 @@
 #include "../src/parser/path_parser.h"
 #include "../src/writer/xfl_folder_writer.h"
 
+#include <tinyxml2.h>
+
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
 #include <memory>
+#include <tuple>
 #include <string>
 #include <vector>
 
@@ -380,14 +383,34 @@ TEST(symbol_armatures_play_between_poses)
     const fla::IKJoint last = eased.shownAt(10)[2];
     CHECK(near(last.position, 0.0, 200.0, 0.01));
 
-    // The instances' places in their joints' frames, for every frame.
+    // How each instance moves from the first frame, frame by frame, the
+    // instances in the order given: the first frame's no move at all.
     const fla::Transform a(1.0, 0.0, 0.0, 1.0, 90.0, 60.0);
     const fla::Transform b(1.0, 0.0, 0.0, 1.0, 190.0, 60.0);
-    const std::string list = eased.betweenFrameMatrixList({&a, &b, nullptr});
+    const std::string list = eased.betweenFrameMatrixList({{1, &b}, {0, &a}});
     size_t matrices = 0;
     for (size_t at = list.find("<Matrix"); at != std::string::npos; at = list.find("<Matrix", at + 1))
         ++matrices;
-    CHECK(list.find("<betweenFrameMatrixList>") == 0 && matrices == 22);
+    CHECK(list.find("<betweenFrameMatrixList><Matrix/>") == 0 && matrices == 22);
+    tinyxml2::XMLDocument moves;
+    CHECK(moves.Parse(list.c_str()) == tinyxml2::XML_SUCCESS);
+    std::vector<fla::Transform> move;
+    for (const tinyxml2::XMLElement* m = moves.RootElement()->FirstChildElement("Matrix"); m; m = m->NextSiblingElement("Matrix"))
+    {
+        move.emplace_back(m->DoubleAttribute("a", 1.0), m->DoubleAttribute("b", 0.0), m->DoubleAttribute("c", 0.0),
+            m->DoubleAttribute("d", 1.0), m->DoubleAttribute("tx", 0.0), m->DoubleAttribute("ty", 0.0));
+    }
+    // The first eleven are b's, then a's: each frame's matrix is the first
+    // frame's followed by the move.
+    for (int frame : {3, 10})
+    {
+        for (const auto& [index, joint, stored] : {std::tuple(frame, 1, b), std::tuple(11 + frame, 0, a)})
+        {
+            const fla::Transform shown = eased.carried(joint, stored, frame);
+            const fla::Point origin = mapped(move[static_cast<size_t>(index)], fla::Point(stored.tx, stored.ty));
+            CHECK(near(origin, shown.tx, shown.ty, 0.01));
+        }
+    }
     std::vector<std::string> children = {"<IKTree/>"};
     fla::setBetweenFrames(children, list);
     CHECK(children.size() == 2 && children[0] == list);
@@ -464,6 +487,57 @@ TEST(boned_shapes_bind_points_to_their_nearest_bones)
     CHECK(near(fla::shapeAnchors(*other)[1], 200.0, 0.0, 0.01));
 }
 
+TEST(shapes_the_reference_app_bound_bend_by_its_binding)
+{
+    // Bones along the middle of a 200 by 40 rectangle, its corners bound as
+    // the reference app binds them: numbered its own way round, each with
+    // its place along its bone and to its side, and two handle groups.
+    std::vector<fla::ArmatureJoint> joints(3);
+    for (int i = 0; i < 3; ++i)
+    {
+        joints[i].position = fla::Point(100.0 * i, 20.0);
+        joints[i].registration = joints[i].position;
+        joints[i].parent = i - 1;
+        joints[i].node = "ikNode_" + std::to_string(i + 1);
+    }
+    std::string xml = fla::armatureXml("Armature_5", "ikTreeName6", joints, 11, true);
+    const std::string corner[4] = {"1.000000,-20.000000,20.000000,1.000000,", "1.000000,20.000000,20.000000,1.000000,",
+        "0.000000,20.000000,20.000000,1.000000,", "0.000000,-20.000000,20.000000,1.000000,"};
+    std::string data;
+    for (int point = 0; point < 4; ++point)
+        for (int copy = 0; copy < 3; ++copy)
+            data += corner[point];
+    data.pop_back();
+    xml.insert(xml.find(" physicsEnabled"), " connectionIndices=\"4.000000,0.000000,2.000000,0.000000,1.000000,4.000000,"
+        "8.000000,-1.000000,1.000000,2.000000,12.000000,1.000000,16.000000,20.000000,-1.000000,2.000000,1.000000,"
+        "24.000000,1.000000,28.000000,32.000000,-1.000000,3.000000,1.000000,36.000000,1.000000,40.000000,44.000000,"
+        "-1.000000\" connectionData=\"" + data + "\"");
+    fla::IKArmature armature;
+    CHECK(armature.parse(xml) && armature.bendsShape() && !armature.bindsAnchors());
+    // Numbered from the top right corner: bones 2, 2, 1, 1.
+    const fla::ShapeBinding raw = armature.binding();
+    CHECK(raw.size() == 4 && raw[0][0].bone == 2 && raw[2][0].bone == 1);
+
+    // Found by where they were bound, the rectangle's own corners (top
+    // left first) take bones 1, 2, 2, 1.
+    std::unique_ptr<fla::Shape> shape = rectangle();
+    const std::vector<fla::Point> anchors = fla::shapeAnchors(*shape);
+    const fla::ShapeBinding found = armature.bindingFor(anchors);
+    CHECK(found.size() == 4);
+    const int bones[4] = {1, 2, 2, 1};
+    for (size_t i = 0; i < found.size(); ++i)
+        CHECK(found[i].size() == 1 && found[i][0].bone == bones[i]);
+
+    // Posed with the middle joint turned a quarter, the far corners swing
+    // round it and the near ones stay.
+    const std::vector<fla::IKJoint> before = armature.shownAt(0);
+    CHECK(armature.setPose(10, {before[0].angle, before[1].angle + kPi / 2.0, before[2].angle + kPi / 2.0}));
+    fla::bindShape(*shape, fla::Transform(), found, before, armature.shownAt(10));
+    const std::vector<fla::Point> bent = fla::shapeAnchors(*shape);
+    CHECK(near(bent[0], 0.0, 0.0, 0.01) && near(bent[3], 0.0, 40.0, 0.01));
+    CHECK(near(bent[1], 120.0, 120.0, 0.01) && near(bent[2], 80.0, 120.0, 0.01));
+}
+
 TEST(sprung_bones_trail_overshoot_and_settle)
 {
     // An arm of three joints that swings a quarter turn up over ten frames
@@ -484,32 +558,43 @@ TEST(sprung_bones_trail_overshoot_and_settle)
     CHECK(armature.setPose(10, {kPi / 2.0, kPi / 2.0, kPi / 2.0}));
     // No spring: the joints as posed.
     CHECK(!armature.hasSprings());
-    CHECK(std::fabs(armature.sprungAt(5)[2].angle - armature.jointsAt(5)[2].angle) < 1.0e-9);
+    CHECK(std::fabs(armature.jointsAt(5)[1].angle - armature.posedAt(5)[1].angle) < 1.0e-6);
 
+    // On the bone the middle joint turns, kept at its tail as FLA files
+    // keep it, and every frame stored with the spring at work.
     fla::BoneSpring spring;
     spring.present = true;
     spring.strength = 20.0;
     spring.damping = 20.0;
-    armature.setSpring(2, spring);
-    CHECK(armature.hasSprings() && armature.spring(2).strength == 20.0);
+    armature.setSpring(1, spring);
+    CHECK(armature.hasSprings() && !armature.playsSprings() && armature.spring(1).strength == 20.0);
+    CHECK(armature.xml().find("referenceID=\"C\" speed=\"1\" springStrength=\"20\" dampingValue=\"20\"") != std::string::npos);
+    CHECK(armature.xml().find("springDamping") == std::string::npos);
     // It trails the swing, then overshoots it, then settles where posed.
-    CHECK(armature.sprungAt(10)[2].angle < kPi / 2.0 - 0.05);
+    CHECK(armature.jointsAt(10)[1].angle < kPi / 2.0 - 0.05);
     double most = 0.0;
     for (int frame = 10; frame < 40; ++frame)
-        most = std::max(most, armature.sprungAt(frame)[2].angle);
+        most = std::max(most, armature.jointsAt(frame)[1].angle);
     CHECK(most > kPi / 2.0 + 0.02);
-    CHECK(std::fabs(armature.sprungAt(59)[2].angle - kPi / 2.0) < 0.02);
-    // It hangs where its parent puts it, and the joints above it keep
-    // their pose.
-    const std::vector<fla::IKJoint> mid = armature.sprungAt(10);
-    CHECK(std::fabs(mid[1].angle - armature.jointsAt(10)[1].angle) < 1.0e-9);
-    CHECK(near(mid[2].position, armature.jointsAt(10)[2].position.x, armature.jointsAt(10)[2].position.y));
+    CHECK(std::fabs(armature.jointsAt(59)[1].angle - kPi / 2.0) < 0.02);
+    // The joint above keeps its pose; the one below hangs off the sprung one.
+    const std::vector<fla::IKJoint> mid = armature.jointsAt(10);
+    CHECK(std::fabs(mid[0].angle - armature.posedAt(10)[0].angle) < 1.0e-6);
+    CHECK(std::fabs(mid[2].angle - mid[1].angle) < 1.0e-6);
+    CHECK(std::fabs(armature.sprungAt(10)[1].angle - mid[1].angle) < 1.0e-9);
     // Its instance turns with the sprung joint.
-    const fla::Transform carried = armature.carried(2, fla::Transform(1, 0, 0, 1, 200, 0), 10);
-    CHECK(std::fabs(std::atan2(carried.m12, carried.m11) - mid[2].angle) < 1.0e-6);
+    const fla::Transform carried = armature.carried(1, fla::Transform(1, 0, 0, 1, 100, 0), 10);
+    CHECK(std::fabs(std::atan2(carried.m12, carried.m11) - mid[1].angle) < 1.0e-6);
+    // Turned off for the armature, the poses alone.
+    fla::IKArmature off;
+    std::string xml = armature.xml();
+    xml.replace(xml.find("physicsEnabled=\"true\""), 21, "physicsEnabled=\"false\"");
+    CHECK(off.parse(xml) && !off.hasSprings() && off.setFrames(60));
+    CHECK(std::fabs(off.jointsAt(10)[1].angle - kPi / 2.0) < 1.0e-6);
     // Taken away: the pose again.
-    armature.setSpring(2, fla::BoneSpring());
+    armature.setSpring(1, fla::BoneSpring());
     CHECK(!armature.hasSprings());
+    CHECK(std::fabs(armature.jointsAt(10)[1].angle - kPi / 2.0) < 1.0e-6);
 }
 
 TEST(sprung_bones_swing_the_shape_they_bend)
@@ -533,34 +618,233 @@ TEST(sprung_bones_swing_the_shape_they_bend)
     const std::vector<fla::IKJoint> start = armature.shownAt(0);
     CHECK(armature.setPose(10, {start[0].angle, start[1].angle + kPi / 2.0, start[2].angle + kPi / 2.0}));
 
-    // No spring: nothing to bend again.
-    std::unique_ptr<fla::Shape> shown(fla::cloneShape(*rest, nullptr));
-    CHECK(!armature.hasSprings());
-    CHECK(!fla::springShape(*shown, *rest, fla::Transform(), armature, 10));
-
     fla::BoneSpring spring;
     spring.present = true;
     spring.strength = 20.0;
     spring.damping = 20.0;
     // On the joint the far bone turns about, as the joint dialog sets it.
     armature.setSpring(1, spring);
-    CHECK(armature.hasSprings());
-    CHECK(armature.sprungAt(10)[1].angle < armature.shownAt(10)[1].angle - 0.05);
-    // The bone trails its swing: on the pose frame the far corner has not
-    // come all the way round, where the pose alone takes it.
+    CHECK(armature.hasSprings() && !armature.playsSprings());
+    CHECK(armature.shownAt(10)[1].angle < armature.posedAt(10)[1].angle - 0.05);
+    // The shapes the container keeps for each frame are bent to the joints
+    // stored: on the pose frame the far corner has not come all the way
+    // round, where the pose alone takes it; nothing more is bent in play.
     std::unique_ptr<fla::Shape> posed(fla::cloneShape(*rest, nullptr));
-    fla::bindShape(*posed, fla::Transform(), armature.binding(), start, armature.shownAt(10));
+    fla::bindShape(*posed, fla::Transform(), armature.binding(), start, armature.posedAt(10));
     CHECK(near(fla::shapeAnchors(*posed)[1], 120.0, 120.0, 0.01));
     std::unique_ptr<fla::Shape> sprung(fla::cloneShape(*rest, nullptr));
-    CHECK(fla::springShape(*sprung, *rest, fla::Transform(), armature, 10));
+    fla::bindShape(*sprung, fla::Transform(), armature.binding(), start, armature.shownAt(10));
     const fla::Point lagging = fla::shapeAnchors(*sprung)[1];
     CHECK(lagging.x > 121.0 && lagging.y < 119.0);
-    // The near corners keep to the bone that has no spring.
     CHECK(near(fla::shapeAnchors(*sprung)[0], 0.0, 0.0, 0.01));
+    CHECK(!fla::springShape(*sprung, *rest, fla::Transform(), armature, 10));
     // Long after, it has settled where posed.
     std::unique_ptr<fla::Shape> settled(fla::cloneShape(*rest, nullptr));
-    CHECK(fla::springShape(*settled, *rest, fla::Transform(), armature, 59));
+    fla::bindShape(*settled, fla::Transform(), armature.binding(), start, armature.shownAt(59));
     CHECK(near(fla::shapeAnchors(*settled)[1], 120.0, 120.0, 3.0));
+}
+
+TEST(springs_phoenix_saved_on_their_joints_still_play)
+{
+    // As Phoenix 0.12 to 0.18 saved them: the spring on the joint it turns,
+    // as springStrength and springDamping, and limits as phoenixMinRotation
+    // and phoenixMaxRotation; the stored joints as posed.
+    std::vector<fla::ArmatureJoint> joints(3);
+    for (int i = 0; i < 3; ++i)
+    {
+        joints[i].position = fla::Point(100.0 * i, 0.0);
+        joints[i].registration = joints[i].position;
+        joints[i].parent = i - 1;
+        joints[i].node = "ikNode_" + std::to_string(i + 1);
+        joints[i].reference = std::string(1, static_cast<char>('A' + i));
+    }
+    fla::IKArmature posed;
+    CHECK(posed.parse(fla::symbolArmatureXml("Armature_1", "ikTreeName1", joints, 60)));
+    CHECK(posed.setPose(10, {kPi / 2.0, kPi / 2.0, kPi / 2.0}));
+    std::string xml = posed.xml();
+    const size_t middle = xml.find("referenceID=\"B\"");
+    CHECK(middle != std::string::npos);
+    xml.insert(middle, "springStrength=\"20\" springDamping=\"20\" phoenixMinRotation=\"-0.5\" phoenixMaxRotation=\"0.5\" ");
+
+    fla::IKArmature armature;
+    CHECK(armature.parse(xml));
+    CHECK(armature.hasSprings() && armature.playsSprings());
+    const fla::BoneSpring spring = armature.spring(1);
+    CHECK(spring.present && spring.strength == 20.0 && spring.damping == 20.0);
+    const fla::JointLimit limit = armature.limits()[1];
+    CHECK(limit.constrained && std::fabs(limit.min + 0.5) < 1.0e-9 && std::fabs(limit.max - 0.5) < 1.0e-9);
+    // Limits take the names FLA files use at once.
+    CHECK(armature.xml().find("phoenixMinRotation") == std::string::npos);
+    CHECK(armature.xml().find("rotationConstrained=\"true\" rotationMin=\"5.78318530717959\" rotationMax=\"0.5\"") !=
+        std::string::npos);
+    // Stored as posed, the springs play: the instance trails.
+    CHECK(std::fabs(armature.jointsAt(10)[1].angle - kPi / 2.0) < 1.0e-6);
+    CHECK(armature.sprungAt(10)[1].angle < kPi / 2.0 - 0.05);
+    const fla::Transform carried = armature.carried(1, fla::Transform(1, 0, 0, 1, 100, 0), 10);
+    CHECK(std::fabs(std::atan2(carried.m12, carried.m11) - armature.sprungAt(10)[1].angle) < 1.0e-6);
+
+    // Worked out again, the spring moves to the bone's tail under the FLA
+    // names and is stored in the frames.
+    CHECK(armature.setFrames(60));
+    CHECK(!armature.playsSprings() && armature.hasSprings());
+    CHECK(armature.spring(1).strength == 20.0 && armature.spring(1).damping == 20.0);
+    const std::string upgraded = armature.xml();
+    CHECK(upgraded.find("springDamping") == std::string::npos);
+    CHECK(upgraded.find("referenceID=\"C\" speed=\"1\" springStrength=\"20\" dampingValue=\"20\"") != std::string::npos);
+    CHECK(armature.jointsAt(10)[1].angle < kPi / 2.0 - 0.05);
+}
+
+namespace {
+
+/// Twenty numbers, one a frame: \a first, running evenly to \a tenth at
+/// frame 10 and on to \a twentieth at frame 20.
+std::string twenty(double first, double tenth, double twentieth)
+{
+    std::string text;
+    for (int i = 0; i < 20; ++i)
+    {
+        const double value = i <= 9 ? first + (tenth - first) * i / 9.0 : tenth + (twentieth - tenth) * (i - 9) / 10.0;
+        char buffer[32];
+        std::snprintf(buffer, sizeof(buffer), "%s%.6f", i ? "," : "", value);
+        text += buffer;
+    }
+    return text;
+}
+
+/// An arm of three movie clips as the reference app saves one (after
+/// bones_springs.fla): the upper arm's joint limited to -45..90 degrees,
+/// springs of 60 (damping 20) and 100 on the two bones, posed at frame 20
+/// with the hand raised. The stored joints, which carry the springs, are
+/// the file's at frames 1, 10 and 20.
+std::string armSample()
+{
+    return "<IKTree name=\"Armature_3\" treeName=\"ikTreeName4\" physicsEnabled=\"true\">"
+        "<IKNode name=\"ikNode_1\" boneName=\"ikBoneName1\" location=\"#7.9, #F.C8\" referenceID=\"U\" speed=\"1\">"
+        "<childNodes><ChildNode name=\"ikNode_1\" boneName=\"ikBoneName1\" location=\"#7.9, #F.C8\" xArray=\"" +
+        twenty(2300.0, 2287.953487, 2211.618076) + "\" yArray=\"" + twenty(4000.0, 3999.815771, 3806.952802) +
+        "\" angleArray=\"" + twenty(0.0, -0.006623, -0.651389) +
+        "\" referenceID=\"U\" speed=\"1\" rotationConstrained=\"true\" rotationMin=\"5.497787296772\" "
+        "rotationMax=\"1.57079637050629\"><states><State duration=\"19\" x=\"1939\" y=\"4020\" blendMode=\"1\"/>"
+        "<State duration=\"1\" angle=\"-0.398666504170809\" x=\"1959.00000000962\" y=\"4020.00009123025\" "
+        "blendMode=\"1\"/></states><childNodes>"
+        "<ChildNode name=\"ikNode_2\" boneName=\"ikBoneName2\" location=\"#F.74, #9.A6\" xArray=\"" +
+        twenty(4700.0, 4655.284877, 3854.903477) + "\" yArray=\"" + twenty(4000.0, 3871.366394, 2298.089003) +
+        "\" angleArray=\"" + twenty(0.0, -0.597908, -2.107464) +
+        "\" referenceID=\"F\" speed=\"1\" springStrength=\"60\" dampingValue=\"20\"><states>"
+        "<State duration=\"19\" x=\"2560\" y=\"-20\" blendMode=\"1\"/>"
+        "<State duration=\"1\" angle=\"-1.38119753133563\" x=\"2560.00000001443\" y=\"-19.9999999995447\" "
+        "blendMode=\"1\"/></states><childNodes>"
+        "<ChildNode name=\"ikNode_4\" location=\"#A.43, #0.EA\" xArray=\"" + twenty(7100.0, 6638.920403, 2627.843380) +
+        "\" yArray=\"" + twenty(4000.0, 2520.370427, 235.487849) + "\" angleArray=\"" + twenty(0.0, -0.406590, -1.703570) +
+        "\" referenceID=\"H\" speed=\"1\" springStrength=\"100\"><states>"
+        "<State duration=\"19\" x=\"2601\" blendMode=\"1\"/>"
+        "<State duration=\"1\" angle=\"0.403894164501524\" x=\"2601\" blendMode=\"1\"/></states></ChildNode>"
+        "</childNodes></ChildNode></childNodes></ChildNode></childNodes></IKNode>"
+        "<states><IKState duration=\"19\" blendMode=\"1\"/><IKState duration=\"1\" blendMode=\"1\"/></states></IKTree>";
+}
+
+} // namespace
+
+TEST(armatures_read_limits_and_springs_as_the_reference_app_saves_them)
+{
+    fla::IKArmature armature;
+    CHECK(armature.parse(armSample()) && !armature.bendsShape() && armature.frames() == 20);
+    // Limits on the joint the bone turns about, in radians from 0 up to a
+    // whole turn: -45 degrees is stored as 315.
+    const std::vector<fla::JointLimit> limits = armature.limits();
+    CHECK(limits.size() == 3 && limits[0].constrained && !limits[1].constrained && !limits[2].constrained);
+    CHECK(std::fabs(limits[0].min + kPi / 4.0) < 1.0e-6 && std::fabs(limits[0].max - kPi / 2.0) < 1.0e-6);
+    // Springs at each bone's tail: the upper arm's on the forearm's node,
+    // the forearm's on the hand's, its damping of 0 left out.
+    const fla::BoneSpring upper = armature.spring(0);
+    const fla::BoneSpring fore = armature.spring(1);
+    CHECK(upper.present && upper.strength == 60.0 && upper.damping == 20.0);
+    CHECK(fore.present && fore.strength == 100.0 && fore.damping == 0.0);
+    CHECK(!armature.spring(2).present);
+    CHECK(armature.hasSprings() && !armature.playsSprings());
+
+    // A range across 180 degrees: from 240 to 300 is -120 to -60.
+    fla::IKArmature shape;
+    std::string xml = armSample();
+    xml.replace(xml.find("rotationMin=\"5.497787296772\""), 28, "rotationMin=\"4.18879036506149\"");
+    xml.replace(xml.find("rotationMax=\"1.57079637050629\""), 30, "rotationMax=\"5.23598794539901\"");
+    CHECK(shape.parse(xml));
+    CHECK(std::fabs(shape.limits()[0].min + 2.0 * kPi / 3.0) < 1.0e-6);
+    CHECK(std::fabs(shape.limits()[0].max + kPi / 3.0) < 1.0e-6);
+
+    // Written back as they were read.
+    fla::IKArmature written;
+    CHECK(written.parse(armSample()));
+    written.setLimit(0, limits[0]);
+    CHECK(written.xml().find("rotationConstrained=\"true\" rotationMin=\"5.4977872967") !=
+        std::string::npos);
+}
+
+TEST(the_reference_app_joins_a_bone_where_it_was_dragged)
+{
+    // The forearm's transformation point had been moved to its far end; the
+    // bone was dragged from the upper arm to near the forearm's near end,
+    // and the joint is there: the instance (at 235, 200) has its
+    // transformation point moved to it, 10.05 to the left. The upper arm's
+    // joint likewise sits where its bone started, the hand's at its own
+    // transformation point (its middle).
+    fla::IKArmature armature;
+    CHECK(armature.parse(armSample()));
+    const std::vector<fla::IKJoint> joints = armature.jointsAt(0);
+    CHECK(joints.size() == 3);
+    CHECK(near(joints[0].position, 96.95, 201.0, 0.01));
+    CHECK(near(joints[1].position, 224.95, 200.0, 0.01));
+    CHECK(near(joints[2].position, 355.0, 200.0, 0.01));
+    const std::vector<fla::ArmatureJoint> built = armature.symbolJoints();
+    CHECK(near(built[1].registration, 235.0, 200.0, 0.01));
+}
+
+TEST(reference_armatures_play_the_springs_they_store)
+{
+    // The stored joints already swing on their springs: frame 20 is not the
+    // pose there (the arm has swung past it), and Phoenix shows what is
+    // stored rather than swinging it again.
+    fla::IKArmature armature;
+    CHECK(armature.parse(armSample()));
+    const std::vector<fla::IKJoint> posed = armature.posedAt(19);
+    CHECK(std::fabs(posed[0].angle + 0.398667) < 1.0e-5);
+    CHECK(std::fabs(posed[1].angle + 1.779864) < 1.0e-5);
+    CHECK(std::fabs(posed[2].angle + 1.375970) < 1.0e-5);
+    const double stored[2][3] = {{-0.006623, -0.597908, -0.406590}, {-0.651389, -2.107464, -1.703570}};
+    for (int k = 0; k < 2; ++k)
+    {
+        const int frame = k == 0 ? 9 : 19;
+        const std::vector<fla::IKJoint> shown = armature.shownAt(frame);
+        const std::vector<fla::IKJoint> sprung = armature.sprungAt(frame);
+        for (int joint = 0; joint < 3; ++joint)
+        {
+            CHECK(std::fabs(shown[joint].angle - stored[k][joint]) < 1.0e-6);
+            CHECK(std::fabs(sprung[joint].angle - stored[k][joint]) < 1.0e-6);
+        }
+    }
+    CHECK(std::fabs(armature.shownAt(19)[0].angle - posed[0].angle) > 0.2);
+
+    // The instances follow the stored joints: the upper arm's registration
+    // point and turn at frames 10 and 20, the forearm's joint (its
+    // transformation point) where the stored joint is.
+    const fla::Transform upper(1.0, 0.0, 0.0, 1.0, 115.0, 200.0);
+    const fla::Transform fore(1.0, 0.0, 0.0, 1.0, 235.0, 200.0);
+    const fla::Transform upper10 = armature.carried(0, upper, 9);
+    CHECK(near(fla::Point(upper10.tx, upper10.ty), 114.397674, 199.990789, 1.0e-4));
+    const fla::Transform upper20 = armature.carried(0, upper, 19);
+    CHECK(near(fla::Point(upper20.tx, upper20.ty), 110.580904, 190.347640, 1.0e-4));
+    CHECK(std::fabs(std::atan2(upper20.m12, upper20.m11) + 0.651389) < 1.0e-6);
+    for (int frame : {9, 19})
+    {
+        const fla::Transform shown = armature.carried(1, fore, frame);
+        const fla::IKJoint joint = armature.shownAt(frame)[1];
+        CHECK(near(mapped(shown, fla::Point(-10.05, 0.0)), joint.position.x, joint.position.y, 1.0e-3));
+    }
+
+    // The betweenFrameMatrixList the file keeps: frame 20's move of the
+    // upper arm from where frame 1 has it.
+    const std::string list = armature.betweenFrameMatrixList({{0, &upper}});
+    CHECK(list.find("<Matrix a=\"0.795242") != std::string::npos);
 }
 
 TEST(rebuilt_armatures_keep_springs_and_other_attributes)
@@ -708,7 +992,7 @@ TEST(a_symbol_armature_posed_twice_saves_and_plays)
     fla::PoseArmatureCommand::apply(pose, child, armature.xml(), "0,29");
 
     // Every instance at frame 15 has its joint where the armature does.
-    std::vector<const fla::Transform*> placed(start.size(), nullptr);
+    std::vector<std::pair<int, const fla::Transform*>> placed;
     for (fla::Element* element : pose->elements)
     {
         const fla::SymbolInstance* instance = dynamic_cast<const fla::SymbolInstance*>(element);
@@ -720,7 +1004,7 @@ TEST(a_symbol_armature_posed_twice_saves_and_plays)
             {
                 if (attribute.first != "referenceID" || attribute.second != armature.referenceOf(static_cast<int>(joint)))
                     continue;
-                placed[joint] = &instance->transform;
+                placed.emplace_back(static_cast<int>(joint), &instance->transform);
                 const fla::Transform shown = armature.carried(static_cast<int>(joint), instance->transform, 15);
                 const fla::IKJoint at = armature.shownAt(15)[joint];
                 CHECK(near(mapped(shown, instance->transformationPoint), at.position.x, at.position.y, 0.2));
