@@ -1,0 +1,109 @@
+{
+  "title": "Linked palettes",
+  "summary": "Recolor a cat by changing one named color, link the parts that were left out, and swap between Day, Night and a ginger palette of your own.",
+  "minutes": 7,
+  "order": 39,
+  "guide": "ink-and-paint.html#linked-palettes",
+  "tags": [
+    "Drawing"
+  ],
+  "start": {
+    "document": "start"
+  },
+  "final": "final",
+  "steps": [
+    {
+      "title": "Welcome",
+      "text": "<p>A character is painted with a handful of colors used over and over: the same fur on the head, the body, the ears and the tail. In a linked palette each of those colors has a name, and every fill and line painted with it is linked to that name. Change the color once and everything linked to it follows; swap to another palette and the whole picture recolors.</p><p>The cat on the <i>Cat</i> layer and the hill and sky on the <i>Background</i> layer are already linked to a palette called <i>Day</i>. The document has a second palette, <i>Night</i>.</p>"
+    },
+    {
+      "title": "Open the Palettes panel",
+      "text": "<p>The Palettes panel opens from <b>Window &gt; Palettes</b>. In the lesson, Phoenix opens it for you.</p><p>The list at the top shows <i>Day</i>, the palette in use. Under it are its colors, each with its name and, in brackets, how many fills and lines are linked to it: <i>Fur</i> is used 5 times. <i>Collar</i> and <i>Bell</i> show 0: nothing is linked to them yet. Scroll the list to see the rest, or drag the panel's top edge to make it taller.</p>",
+      "target": "dock:Palettes"
+    },
+    {
+      "title": "Try the night",
+      "text": "<p>In the list at the top of the panel, choose <i>Night</i>. Everything linked takes the night's colors at once: a dark sky, a pale moon, a dusky cat with glowing eyes.</p><p>The collar stays bright red and the bell gray. They are not linked, so no palette reaches them.</p>",
+      "target": "dock:Palettes",
+      "wait": {
+        "command": "Swap Palette"
+      }
+    },
+    {
+      "title": "Back to day",
+      "text": "<p>Choose <i>Day</i> in the same list. The sun comes back up.</p>",
+      "target": "dock:Palettes",
+      "wait": {
+        "command": "Swap Palette"
+      }
+    },
+    {
+      "title": "Link the collar",
+      "text": "<p>Click <i>Collar</i> in the list of colors, then click <b>Link Matching</b>. Every fill and line in the document that has the collar's red is now linked to <i>Collar</i>, and its number goes up to 1. The collar looks the same: linking keeps the color it has.</p>",
+      "target": "dock:Palettes",
+      "wait": {
+        "command": "Link to Palette"
+      }
+    },
+    {
+      "title": "Select the bell",
+      "text": "<p>Press <kbd>V</kbd> for the Selection tool, then click the gray bell under the cat's chin. A box goes round it.</p>",
+      "target": "stage:610,410,60,60",
+      "wait": {
+        "selection": "shape"
+      }
+    },
+    {
+      "title": "Paint it from the palette",
+      "text": "<p>Click <i>Bell</i> in the list, then click <b>Fill</b>. The bell turns gold, the <i>Bell</i> color, and is linked to it. Its outline keeps its own link, to <i>Outline</i>: <b>Fill</b> paints fills, <b>Stroke</b> paints lines.</p>",
+      "target": "dock:Palettes",
+      "wait": {
+        "command": "Paint from Palette"
+      }
+    },
+    {
+      "title": "Change a color",
+      "text": "<p>Double-click <i>Collar</i> in the list. In the color window, type <code>#3A7BD5</code> in the <b>HTML</b> box and click <b>OK</b>. The collar turns blue, and anything else linked to <i>Collar</i> would too. The change is made to <i>Day</i> only; <i>Night</i> keeps its own collar color.</p>",
+      "target": "dock:Palettes",
+      "wait": {
+        "command": "Edit Color"
+      }
+    },
+    {
+      "title": "Make a new palette",
+      "text": "<p>Click the <b>...</b> button at the right of the palette list and choose <b>New Palette...</b>. A new palette starts as a copy of the one in use. Type <code>Ginger</code> in place of <i>Night</i> and click <b>OK</b>.</p><p><i>Ginger</i> is now in use. Nothing changes on the stage yet, since its colors are the same as <i>Day</i>'s.</p>",
+      "target": "dock:Palettes",
+      "wait": {
+        "command": "New Palette"
+      }
+    },
+    {
+      "title": "Ginger fur",
+      "text": "<p>Double-click <i>Fur</i>, type <code>#E8913A</code> in the <b>HTML</b> box and click <b>OK</b>. The head, the body, both ears and the tail turn orange together.</p>",
+      "target": "dock:Palettes",
+      "wait": {
+        "command": "Edit Color"
+      }
+    },
+    {
+      "title": "Ginger stripes",
+      "text": "<p>Double-click <i>Stripes</i>, type <code>#B85F1E</code> and click <b>OK</b>. All seven stripes darken to match.</p>",
+      "target": "dock:Palettes",
+      "wait": {
+        "command": "Edit Color"
+      }
+    },
+    {
+      "title": "Swap palettes",
+      "text": "<p>Choose <i>Night</i> in the palette list, then <i>Day</i>, then <i>Ginger</i> again. Each one recolors the cat and the scene in one step, the collar and the bell too.</p>",
+      "target": "dock:Palettes",
+      "wait": {
+        "command": "Swap Palette"
+      }
+    },
+    {
+      "title": "What you did",
+      "text": "<p>You linked art to named colors, then recolored it by changing one color and by swapping whole palettes. Each change is one step: <b>Edit &gt; Undo</b> takes it back.</p><p>Every palette in a document has the same color names, so a swap always finds a color for everything linked. <b>Add...</b> makes a new named color from the current fill color and puts it in every palette; select some art and click <b>Fill</b> or <b>Stroke</b> to paint it with that color. The colors are written into the art too, so the file looks as you last colored it wherever it opens.</p><p>To keep a character the same color in every scene of a show, choose <b>Save Palette to File...</b> from the <b>...</b> menu, and <b>Link Palette File...</b> in each other document: a change made in any of them reaches them all.</p>"
+    }
+  ]
+}
