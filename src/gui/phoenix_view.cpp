@@ -10452,6 +10452,55 @@ void PhoenixView::drawIKBones(QPainter& painter, const fla::Frame& frame, double
         painter.drawEllipse(QPointF(bone.tail.x, bone.tail.y), tailRadius, tailRadius);
     }
     painter.restore();
+    drawBoneGoals(painter, frame, into, scale);
+}
+
+void PhoenixView::drawBoneGoals(QPainter& painter, const fla::Frame& frame, int into, double scale)
+{
+    // A locked bone shows a square pin across its middle; a bone that
+    // reaches shows a dashed line from its tail to what it reaches for, and
+    // a ring there.
+    painter.save();
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    const QColor pin(230, 70, 40);
+    const QColor aim(40, 150, 230);
+    for (const std::string& child : frame.extraChildren)
+    {
+        const size_t at = child.find('<');
+        fla::IKArmature armature;
+        if (at == std::string::npos || child.compare(at, 7, "<IKTree") != 0 || !armature.parse(child) || !armature.hasGoals())
+            continue;
+        const std::vector<fla::IKJoint> joints = armature.shownAt(into);
+        for (size_t i = 0; i < joints.size(); ++i)
+        {
+            const int parent = joints[i].parent;
+            if (parent < 0)
+                continue;
+            const QPointF head(joints[static_cast<size_t>(parent)].position.x, joints[static_cast<size_t>(parent)].position.y);
+            const QPointF tail(joints[i].position.x, joints[i].position.y);
+            if (armature.locked(static_cast<int>(i), into))
+            {
+                const double size = 4.5 * scale;
+                painter.setPen(QPen(pin.darker(150), 1.0 * scale));
+                painter.setBrush(pin);
+                painter.drawRect(QRectF((head + tail) / 2.0 - QPointF(size, size), QSizeF(2.0 * size, 2.0 * size)));
+            }
+            const fla::BoneTarget target = armature.target(static_cast<int>(i), into);
+            if (!target.any())
+                continue;
+            const fla::Point goal = target.joint >= 0 && static_cast<size_t>(target.joint) < joints.size()
+                ? joints[static_cast<size_t>(target.joint)].position : target.at;
+            QPen dashed(aim, 1.5 * scale, Qt::DashLine);
+            painter.setPen(dashed);
+            painter.setBrush(Qt::NoBrush);
+            painter.drawLine(tail, QPointF(goal.x, goal.y));
+            painter.setPen(QPen(aim, 1.5 * scale));
+            painter.drawEllipse(QPointF(goal.x, goal.y), 6.0 * scale, 6.0 * scale);
+            painter.drawLine(QPointF(goal.x - 9.0 * scale, goal.y), QPointF(goal.x + 9.0 * scale, goal.y));
+            painter.drawLine(QPointF(goal.x, goal.y - 9.0 * scale), QPointF(goal.x, goal.y + 9.0 * scale));
+        }
+    }
+    painter.restore();
 }
 
 void PhoenixView::drawShapeHighlight(QPainter& painter, const fla::Shape* shape, const QColor& color)

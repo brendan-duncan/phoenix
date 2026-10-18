@@ -99,7 +99,7 @@ bool SelectionTool::mousePress(PhoenixView& view, QMouseEvent* event, const QPoi
 
     // A bone of an armature on show poses it, rather than picking what is
     // under it.
-    if (!_additive && _poser.begin(view, documentPos))
+    if (!_additive && _poser.begin(view, documentPos, (event->modifiers() & Qt::AltModifier) != 0))
         return true;
 
     const HitResult hit = view.hitTest(documentPos, view.pickTolerance());

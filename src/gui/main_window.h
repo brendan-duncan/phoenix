@@ -361,6 +361,9 @@ private slots:
 
     /// How far a joint of the armature on \a frame may turn, in a dialog.
     void editJointLimits(fla::Frame* frame, size_t child, int joint);
+    /// The menu for a bone right-clicked on the stage: locking it, what it
+    /// reaches for and its options.
+    void showBoneMenu(const QPoint& globalPos, const PhoenixView::IKBoneHit& bone);
 
     /// Every stroke style in the document's shapes, main timelines and
     /// symbols alike.
