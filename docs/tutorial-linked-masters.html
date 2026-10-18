@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Linked master symbols · Phoenix User Guide</title>
+<meta name="description" content="Keep a character in one master file and link it into a shot, then change the master and update the shot to match.">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Phoenix">
+<meta property="og:title" content="Linked master symbols · Phoenix User Guide">
+<meta property="og:description" content="Keep a character in one master file and link it into a shot, then change the master and update the shot to match.">
+<meta property="og:url" content="https://phoenixanimate.com/tutorial-linked-masters.html">
+<meta property="og:image" content="https://phoenixanimate.com/assets/shots/hero.webp">
+<meta property="og:image:type" content="image/webp">
+<meta property="og:image:width" content="1704">
+<meta property="og:image:height" content="1061">
+<meta property="og:image:alt" content="The Phoenix window with three flower characters on the stage, the timeline below and the Properties panel on the right">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://phoenixanimate.com/assets/shots/hero.webp">
+<meta name="keywords" content="tutorial lesson step by step linked symbols master file shared assets character rig link to master file update from master update all linked items unlink change master file shot pipeline library swatches save as">
+<link rel="icon" href="assets/img/logo.png">
+<link rel="stylesheet" href="assets/site.css">
+<script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<main>
+<article class="content">
+
+<p class="eyebrow">Tutorials</p>
+
+<h1>Linked master symbols</h1>
+
+<p class="lead">Keep a character in one master file and link it into a shot, then change the master and update the shot to match.</p>
+
+<div class="callout">
+  <span class="label">Try it in Phoenix</span>
+  <p>This page is also a lesson inside Phoenix: choose <span class="menu-path">Help &rsaquo; Tutorials...</span> and start <strong>Linked master symbols</strong>, and Phoenix points at each control as you go. It takes about 8 minutes.</p>
+</div>
+
+<p>To follow along here instead, download the starting document, <a href="assets/tutorials/linked-masters.fla" download>linked-masters.fla</a>, and open it with <span class="menu-path">File &rsaquo; Open...</span>. You make the master file from it yourself in step 2, so there is nothing else to download.</p>
+
+<figure>
+  <img src="assets/shots/tutorial-linked-masters.webp" alt="Two pictures of Pip, a round orange bird, on a green meadow: on the left in a red scarf, on the right, after the update, in a blue one" width="1000" height="340">
+  <figcaption>Pip in the shot before and after: the scarf changed in the master file, and one update brought it into the shot.</figcaption>
+</figure>
+
+<p>On a show, the same character appears in many shots. When the design changes, nobody wants to redraw it in every one. Instead, the character lives in a <i>master file</i>, and each shot links its copy to it. Change the master, update the shot, and the shot follows.</p><p>This document is a shot: <i>Pip</i>, a graphic symbol, hops across a meadow. You will make a master file for Pip, link the shot to it, play the art director and change the master, then bring the change into the shot.</p>
+
+<h2>1. Play it</h2>
+
+<p>Press <kbd>Enter</kbd>, or click the play button in the timeline header. Pip hops across in a red scarf.</p>
+
+<h2>2. Make the master file</h2>
+
+<p>Press <kbd>Enter</kbd> again to stop. A master is any file with Pip in its library, so the quickest way to make one is to save a copy of this document.</p><p>Choose <span class="menu-path">File &rsaquo; Save As...</span>. Make a new folder for the show, called <i>Pip show</i> (in your Documents folder, say), go into it, name the file <i>Pip</i> and click <b>Save</b>. The window's title now reads <i>Pip</i>.</p>
+
+<h2>3. Save the shot</h2>
+
+<p>Choose <span class="menu-path">File &rsaquo; Save As...</span> again, and save into the same <i>Pip show</i> folder as <i>Shot 1</i>.</p><p>The folder now holds two files: <i>Pip</i>, the master, and <i>Shot 1</i>, the shot you go on working in.</p>
+
+<h2>4. Link Pip to the master</h2>
+
+<p>In the <b>Library</b> panel, right-click <i>Pip</i> and choose <b>Link to Master File...</b>. Choose <i>Pip</i> in the <i>Pip show</i> folder and click <b>Open</b>. Phoenix lists the master's symbols with <i>Pip</i> already picked: click <b>OK</b>.</p>
+
+<div class="split">
+  <figure style="margin:0"><img src="assets/shots/linked-masters-library.webp" alt="The Library panel listing one item, Pip, whose type reads Graphic (linked), used 9 times" width="392" height="113"></figure>
+  <div>
+    <p>When Phoenix offers to update Pip from the master now, click <b>No</b>: the master is the same as the shot for now. In the Library, Pip's type reads <b>Graphic (linked)</b>.</p>
+  </div>
+</div>
+
+<h2>5. Save the link</h2>
+
+<p>If Phoenix is still asking whether to update Pip, click <b>No</b>.</p><p>Press <kbd>Ctrl</kbd>+<kbd>S</kbd> to save <i>Shot 1</i>. The link is saved in the shot, with the master's place written relative to it, so the <i>Pip show</i> folder can move as a whole.</p>
+
+<h2>6. Open the master</h2>
+
+<p>Now play the art director, who wants Pip in a blue scarf. Choose <span class="menu-path">File &rsaquo; Open...</span> and open <i>Pip</i> from the <i>Pip show</i> folder. It opens in a tab of its own.</p><p>In the lesson inside Phoenix, the lesson window then asks you to go back to the lesson's tab. You will, in two steps; carry on here meanwhile.</p>
+
+<h2>7. Change the master</h2>
+
+<p>In the <i>Pip</i> tab, double-click <i>Pip</i> in the <b>Library</b> to edit the symbol. Press <kbd>V</kbd> for the Selection tool and click the red scarf.</p>
+
+<figure>
+  <img src="assets/shots/linked-masters-change.webp" alt="Editing the symbol Pip in the master file: the edit bar reads Scene 1 then Pip, the red scarf is selected with a box around it, and the Swatches panel on the right shows a grid of colors" width="1000" height="303">
+  <figcaption>Inside <i>Pip</i> in the master, with the scarf selected. A click on a swatch recolors it.</figcaption>
+</figure>
+
+<p>Click the <b>Swatches</b> tab beside the Library (or choose <span class="menu-path">Window &rsaquo; Swatches</span>) and click a blue color. The scarf turns blue. Choose <span class="menu-path">File &rsaquo; Save</span> to save the master.</p>
+
+<h2>8. Back to the shot</h2>
+
+<p>Choose <span class="menu-path">File &rsaquo; Close</span> to close the master. You are back in <i>Shot 1</i>, and its Pip still wears the red scarf: a shot keeps its own copy of a linked symbol until you update it, so a change to the master never surprises you in the middle of a shot.</p>
+
+<h2>9. Update from the master</h2>
+
+<p>Click the <b>Library</b> tab. Right-click <i>Pip</i> and choose <b>Update from Master</b>. Phoenix warns that the update replaces Pip with the master's version and cannot be undone: click <b>Yes</b>.</p><p>Phoenix reports that Pip was updated; click <b>OK</b>. The scarf on the stage is blue, and Pip still hops exactly as before: only what is inside the symbol changed.</p>
+
+<h2>10. Play it</h2>
+
+<p>Press <kbd>Enter</kbd>. Pip hops across in the new blue scarf, on every frame of the shot.</p>
+
+<h2>What you did</h2>
+
+<p>You kept a character in a master file, linked a shot's copy to it, and brought a design change from the master into the shot. In the shot, Pip is still an ordinary symbol, so the shot opens and plays without the master; it only remembers where Pip came from.</p><p>A real master usually holds just the character, its rig and the symbols inside it; those come along on an update too. With many linked symbols, right-click anywhere in the Library and choose <b>Update All Linked Items</b>. <b>Change Master File...</b> links a symbol elsewhere, and <b>Unlink from Master</b> lets it go its own way.</p><p>To bring a change into a whole episode at once, update every shot from the command line: <code>Phoenix batch "Pip show" --update-links --save</code> (see <a href="command-line.html">Command line</a>).</p>
+
+<p>For everything this tutorial touches on, see <a href="pipeline.html#linked-shared-assets">Linked shared assets</a> and <a href="library.html">The library</a>.</p>
+
+</article>
+</main>
+</body>
+</html>
