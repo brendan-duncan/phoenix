@@ -65,6 +65,7 @@ set(PHOENIX_CORE_SOURCES
     edit/drawing_style.cpp
     edit/edit_context.cpp
     edit/editable_path.cpp
+    edit/path_bend.cpp
     edit/element_clone.cpp
     edit/element_commands.cpp
     edit/filter_presets.cpp

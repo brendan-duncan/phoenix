@@ -391,6 +391,7 @@ set(HEADERS
     src/geom/fill_tracing.h
     src/geom/nine_slice.h
     src/edit/editable_path.h
+    src/edit/path_bend.h
     src/writer/edge_writer.h
     src/writer/fla_writer.h
     src/writer/xfl_content.h

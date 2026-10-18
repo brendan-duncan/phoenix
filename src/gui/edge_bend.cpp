@@ -5,6 +5,7 @@
 #include "../data/shape.h"
 #include "../edit/command_stack.h"
 #include "../edit/element_commands.h"
+#include "../edit/path_bend.h"
 
 #include <algorithm>
 #include <cmath>
@@ -21,10 +22,6 @@ constexpr double kHalfTwip = 1.0 / 40.0;
 
 /// A drag shorter than this, in screen pixels, is a click.
 constexpr double kDragThresholdPixels = 3.0;
-
-/// How far from a segment's ends a grab is pushed, so the lever 3t(1-t) never
-/// gets small enough to fling the controls away.
-constexpr double kMinimumT = 0.05;
 
 } // namespace
 
@@ -180,9 +177,8 @@ void EdgeBender::begin(PhoenixView& view, const Probe& probe, const QPointF& doc
 
         const fla::EditablePath before = fla::EditablePath::fromPath(*probe.edge->paths[probe.pathIndex]);
         _grab = Grab::Curve;
-        _segment = probe.segment;
-        _t = std::clamp(probe.t, kMinimumT, 1.0 - kMinimumT);
         _edited.push_back({probe.edge, probe.pathIndex, before, before, 0});
+        _bend.emplace(before, probe.segment, probe.t);
     }
 
     if (_edited.empty())
@@ -224,36 +220,8 @@ void EdgeBender::update(PhoenixView& view, const QPointF& documentPos)
             continue;
         }
 
-        size_t from = 0;
-        size_t to = 0;
-        if (!edited.current.segmentAnchors(_segment, from, to))
-            continue;
-
-        fla::Anchor& a = edited.current.anchors[from];
-        fla::Anchor& b = edited.current.anchors[to];
-
-        // A straight segment becomes a curve with its controls on the chord,
-        // which draws the same line and gives the bend something to move.
-        if (!a.hasOutCurve() && !b.hasInCurve())
-        {
-            a.outHandle = fla::Point(a.position.x + (b.position.x - a.position.x) / 3.0,
-                                     a.position.y + (b.position.y - a.position.y) / 3.0);
-            b.inHandle = fla::Point(b.position.x - (b.position.x - a.position.x) / 3.0,
-                                    b.position.y - (b.position.y - a.position.y) / 3.0);
-        }
-
-        // Moving both inner controls by d moves the point at t by 3t(1-t)d, so
-        // dividing the drag by that lever keeps the grabbed point under the
-        // cursor.
-        const double lever = 3.0 * _t * (1.0 - _t);
-        const double dx = delta.x() / lever;
-        const double dy = delta.y() / lever;
-        a.outHandle = fla::Point(a.outHandle.x + dx, a.outHandle.y + dy);
-        b.inHandle = fla::Point(b.inHandle.x + dx, b.inHandle.y + dy);
-
-        // The bend is this segment's alone; the neighbors' handles stay put.
-        a.smooth = false;
-        b.smooth = false;
+        if (_bend)
+            edited.current = _bend->apply(delta.x(), delta.y());
     }
 
     applyCurrent(view);

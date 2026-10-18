@@ -22,6 +22,7 @@ set(TEST_SOURCES
     test_edge_writer.cpp
     test_edit_context.cpp
     test_editable_path.cpp
+    test_path_bend.cpp
     test_element_commands.cpp
     test_fill_attribution.cpp
     test_geometry.cpp

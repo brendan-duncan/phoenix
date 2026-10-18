@@ -4,11 +4,13 @@
 
 #include "../data/point.h"
 #include "../edit/editable_path.h"
+#include "../edit/path_bend.h"
 
 #include <QPointF>
 #include <QTransform>
 
 #include <cstddef>
+#include <optional>
 #include <vector>
 
 namespace fla {
@@ -20,12 +22,11 @@ class Shape;
 /// Reshaping artwork by dragging its outline, the way the Selection tool
 /// does on merge-drawn shapes.
 ///
-/// Dragging a segment bends it: the curve is moved so that the point grabbed
-/// stays exactly under the cursor, which for a cubic means moving both inner
-/// control points by the drag divided by 3t(1-t). A straight segment first
-/// becomes a curve with its controls on the chord. Dragging an end point moves
-/// the corner, taking every piece of outline that meets there, and ctrl-drag
-/// on a segment inserts a new corner there and drags it.
+/// Dragging a segment bends it, along with the smooth run of outline either
+/// side, keeping the point grabbed under the cursor (see fla::PathBend).
+/// Dragging an end point moves the corner, taking every piece of outline that
+/// meets there, and ctrl-drag on a segment inserts a new corner there and
+/// drags it.
 ///
 /// The fills follow on their own: they are rebuilt from the same edges.
 class EdgeBender
@@ -100,8 +101,8 @@ private:
     Grab _grab = Grab::None;
     fla::Shape* _shape = nullptr;
     QTransform _shapeToDocument;
-    size_t _segment = 0;
-    double _t = 0.0;
+    /// The bend a segment drag is making.
+    std::optional<fla::PathBend> _bend;
     QPointF _startLocal;
     bool _moved = false;
     std::vector<Edited> _edited;

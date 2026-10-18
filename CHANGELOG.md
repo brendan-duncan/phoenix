@@ -2,6 +2,10 @@
 
 What changed in each release of Phoenix, newest first.
 
+## Unreleased
+
+- Dragging the edge of a brush stroke or other smooth outline with the Selection tool bends it in one smooth curve, spreading along the outline instead of creasing at the point grabbed
+
 ## 0.18.1
 
 - Old binary FLA files: scripts written in normal mode, and the action records of the oldest files, open as the ActionScript they stand for, so their buttons, frames and clips work in Test Movie
