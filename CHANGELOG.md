@@ -17,6 +17,8 @@ What changed in each release of Phoenix, newest first.
 - Lip Sync listens to a sound already in the library, starting with the one on the timeline, as well as to a recording on disk
 - Lip Sync's mouth chart fills itself in from the mouth symbol's frame labels: label each frame A, B, C... and each shape goes to its frame
 - Lip sync without Rhubarb opens the mouth with the first sound of a word, rather than a frame or two late
+- The Frame Picker captions each picture with its frame label as well as its number, such as "2 B" on a mouth chart
+- The Lip Sync window shows a whole mouth chart without scrolling
 
 ## 0.18.2
 

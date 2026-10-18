@@ -144,7 +144,11 @@ LipSyncDialog::LipSyncDialog(const QString& mouthName, const std::map<std::strin
     _chart->setHorizontalHeaderLabels({"Shape", "Frame"});
     _chart->horizontalHeader()->setStretchLastSection(true);
     _chart->verticalHeader()->setVisible(false);
-    _chart->setMinimumHeight(160);
+    // Rows as tall as a line of text, and room for the nine shapes of the
+    // usual mouth chart (A to H and X) without scrolling.
+    const int row = fontMetrics().height() + 10;
+    _chart->verticalHeader()->setDefaultSectionSize(row);
+    _chart->setMinimumHeight(_chart->horizontalHeader()->sizeHint().height() + 9 * row + 2 * _chart->frameWidth());
     layout->addWidget(_chart, 1);
 
     QFormLayout* startForm = new QFormLayout();
@@ -190,7 +194,7 @@ LipSyncDialog::LipSyncDialog(const QString& mouthName, const std::map<std::strin
         accept();
     });
     connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
-    resize(560, 620);
+    resize(560, 700);
 }
 
 bool LipSyncDialog::runRhubarb(std::string& text)

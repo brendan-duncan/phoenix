@@ -1,5 +1,8 @@
 #include "frame_picker_panel.h"
 
+#include "../data/frame.h"
+#include "../data/layer.h"
+#include "../data/symbol.h"
 #include "../data/symbol_instance.h"
 
 #include <QCheckBox>
@@ -11,6 +14,8 @@
 #include <QPixmap>
 #include <QTimer>
 #include <QVBoxLayout>
+
+#include <map>
 
 namespace {
 
@@ -93,8 +98,24 @@ void FramePickerPanel::setInstance(const fla::SymbolInstance* instance, int fram
     _title->setText(QString::fromStdString(instance->libraryItemName));
     QPixmap blank(kThumbnail);
     blank.fill(Qt::transparent);
+    // Each picture is captioned with its frame, and the label set on it if
+    // any (a mouth chart's "A", "B" ...); comments are left out.
+    std::map<int, QString> labels;
+    if (!shown->symbol->timelines.empty() && shown->symbol->timelines.front())
+        for (const fla::Layer* layer : shown->symbol->timelines.front()->layers)
+            if (layer)
+                for (const fla::Frame* frame : layer->frames)
+                    if (frame && !frame->name.empty() && frame->labelType != "comment" && !labels.count(frame->index))
+                        labels[frame->index] = QString::fromStdString(frame->name);
     for (int i = 0; i < frameCount; ++i)
-        _frames->addItem(new QListWidgetItem(QIcon(blank), QString::number(i + 1)));
+    {
+        const auto label = labels.find(i);
+        QListWidgetItem* item = new QListWidgetItem(QIcon(blank),
+            label == labels.end() ? QString::number(i + 1) : QString("%1 %2").arg(i + 1).arg(label->second));
+        if (label != labels.end())
+            item->setToolTip(QString("Frame %1, labeled %2").arg(i + 1).arg(label->second));
+        _frames->addItem(item);
+    }
     _nextToRender = 0;
     _renderTimer->start();
     refresh();

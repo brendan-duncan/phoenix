@@ -60,7 +60,7 @@
     },
     {
       "title": "Change the shape",
-      "text": "<p>Choose <b>Window &gt; Frame Picker</b>. It shows the frames of <i>Mouth</i> as pictures. Click the second, <b>B</b>: an N is said with the teeth together, not with the lips closed.</p>",
+      "text": "<p>Choose <b>Window &gt; Frame Picker</b>. It shows the frames of <i>Mouth</i> as pictures, each with its frame number and label. Click <b>2 B</b>: an N is said with the teeth together, not with the lips closed.</p>",
       "target": "dock:Frame Picker",
       "wait": {"command": "Pick Frame"}
     },
