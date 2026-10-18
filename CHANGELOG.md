@@ -2,6 +2,17 @@
 
 What changed in each release of Phoenix, newest first.
 
+## Unreleased
+
+- Right-click a bone for a bone menu: lock it, give it a target, and set its options
+- Lock a bone, such as a foot, and it stays planted on the stage while you pose the rest; unlock it on the frame where it lifts
+- Drag the joint at an armature's root to move the whole armature, its locked bones staying put
+- A bone can reach for a point on the stage, which glides from pose to pose, or for another bone
+- Independent Angle keeps a bone's angle on the stage as the bones above it turn, so a foot stays flat as the leg swings
+- Squash and Stretch: Alt-drag a bone to stretch it and its art, optionally thinning as it grows
+- IK Stretch lets a limb grow, up to the amount you choose, to reach past its length
+- Locks, targets and stretches are worked into ordinary poses, so other apps play the same motion
+
 ## 0.19.0
 
 - The scene name above the stage drops down: switch scenes, add, duplicate or delete one, or open the Scene panel
