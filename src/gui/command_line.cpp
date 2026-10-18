@@ -153,7 +153,8 @@ const char* const kHelp =
     "\n"
     "  capture-window <file|-> --out <png> [--script <jsfl>] [--size WxH]\n"
     "                 [--show <panel>] [--panel <name>] [--menu <path>]\n"
-    "                 [--action <path>] [--crop x,y,w,h] [--theme <name>]\n"
+    "                 [--action <path>] [--crop x,y,w,h] [--dock-width N]\n"
+    "                 [--theme <name>]\n"
     "      Draws the window with the file open, unseen, with default\n"
     "      settings, after the script has set it up (selected something,\n"
     "      gone to a frame), for the guide's pictures. --show opens a panel\n"
@@ -1368,6 +1369,18 @@ int captureWindow(const QStringList& args)
     if (args.at(0) != "-")
         window.openDocumentPath(QFileInfo(args.at(0)).absoluteFilePath());
     settle(500);
+    // The side panels as wide as the guide's other pictures (--dock-width),
+    // so the Properties panel's rows fit.
+    const int dockWidth = option(args, "--dock-width").toInt() > 0 ? option(args, "--dock-width").toInt() : 391;
+    QList<QDockWidget*> side;
+    for (QDockWidget* dock : window.findChildren<QDockWidget*>())
+    {
+        const Qt::DockWidgetArea area = window.dockWidgetArea(dock);
+        if ((area == Qt::RightDockWidgetArea || area == Qt::LeftDockWidgetArea) && dock->objectName() != "toolsDock")
+            side.append(dock);
+    }
+    window.resizeDocks(side, QList<int>(side.size(), dockWidth), Qt::Horizontal);
+    settle(200);
     for (int i = 0; i + 1 < args.size(); ++i)
         if (args.at(i) == "--show")
         {
