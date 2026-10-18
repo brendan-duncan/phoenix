@@ -1284,7 +1284,12 @@ void settle(int ms)
     QElapsedTimer timer;
     timer.start();
     while (timer.elapsed() < ms)
+    {
         QApplication::processEvents(QEventLoop::AllEvents, 20);
+        // Widgets let go of with deleteLater, which an event loop of its own
+        // would delete: left alone they would still draw where they were.
+        QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    }
 }
 
 /// The menu bar's action at \a path ("Modify>Bitmap>Trace Bitmap..."),
@@ -1295,6 +1300,8 @@ QAction* menuAction(QMainWindow& window, const QString& path)
         text.remove('&');
         if (text.endsWith("..."))
             text.chop(3);
+        else if (text.endsWith(QChar(0x2026)))
+            text.chop(1);
         return text.trimmed();
     };
     QList<QAction*> actions = window.menuBar()->actions();
@@ -1369,18 +1376,6 @@ int captureWindow(const QStringList& args)
     if (args.at(0) != "-")
         window.openDocumentPath(QFileInfo(args.at(0)).absoluteFilePath());
     settle(500);
-    // The side panels as wide as the guide's other pictures (--dock-width),
-    // so the Properties panel's rows fit.
-    const int dockWidth = option(args, "--dock-width").toInt() > 0 ? option(args, "--dock-width").toInt() : 391;
-    QList<QDockWidget*> side;
-    for (QDockWidget* dock : window.findChildren<QDockWidget*>())
-    {
-        const Qt::DockWidgetArea area = window.dockWidgetArea(dock);
-        if ((area == Qt::RightDockWidgetArea || area == Qt::LeftDockWidgetArea) && dock->objectName() != "toolsDock")
-            side.append(dock);
-    }
-    window.resizeDocks(side, QList<int>(side.size(), dockWidth), Qt::Horizontal);
-    settle(200);
     for (int i = 0; i + 1 < args.size(); ++i)
         if (args.at(i) == "--show")
         {
@@ -1393,6 +1388,27 @@ int captureWindow(const QStringList& args)
             dock->show();
             dock->raise();
         }
+    // The panel to be drawn comes to the front of its tabs, as --show does.
+    // (An empty name would match any panel.)
+    QDockWidget* drawn = option(args, "--panel").isEmpty() ? nullptr : window.findChild<QDockWidget*>(option(args, "--panel"));
+    if (drawn)
+    {
+        drawn->show();
+        drawn->raise();
+    }
+    // The right-hand panels as wide as the guide's other pictures (--dock-width),
+    // so the Properties panel's rows fit.
+    const int dockWidth = option(args, "--dock-width").toInt() > 0 ? option(args, "--dock-width").toInt() : 391;
+    QList<QDockWidget*> side;
+    for (QDockWidget* dock : window.findChildren<QDockWidget*>())
+    {
+        const Qt::DockWidgetArea area = window.dockWidgetArea(dock);
+        if (area == Qt::RightDockWidgetArea &&
+            !dock->isHidden())
+            side.append(dock);
+    }
+    window.resizeDocks(side, QList<int>(side.size(), dockWidth), Qt::Horizontal);
+    settle(200);
     const QString script = option(args, "--script");
     if (!script.isEmpty() && !window.scripts()->runFile(QFileInfo(script).absoluteFilePath()))
     {

@@ -162,12 +162,12 @@ int main(int argc, char *argv[])
     // capture-window draws the whole window for the guide with settings of
     // its own, so the panels sit in their default places and the user's
     // own layout and recent files are left alone.
-    if (argc > 1 && std::strcmp(argv[1], "capture-window") == 0)
+    QString captureSettings;
+    if (argc > 1 && std::strcmp(argv[1], "capture-window") == 0 && qEnvironmentVariableIsEmpty("PHOENIX_SETTINGS_DIR"))
     {
-        if (qEnvironmentVariableIsEmpty("PHOENIX_SETTINGS_DIR"))
-            qputenv("PHOENIX_SETTINGS_DIR",
-                QDir(QDir::tempPath()).filePath("phoenix-capture-" + QString::number(QCoreApplication::applicationPid()))
-                    .toLocal8Bit());
+        captureSettings =
+            QDir(QDir::tempPath()).filePath("phoenix-capture-" + QString::number(QCoreApplication::applicationPid()));
+        qputenv("PHOENIX_SETTINGS_DIR", captureSettings.toLocal8Bit());
     }
 
 #ifdef Q_OS_WIN
@@ -247,7 +247,13 @@ int main(int argc, char *argv[])
     const QStringList arguments = a.arguments();
 
     if (command)
-        return commands::run(arguments);
+    {
+        const int result = commands::run(arguments);
+        // The settings capture-window kept apart go with it.
+        if (!captureSettings.isEmpty())
+            QDir(captureSettings).removeRecursively();
+        return result;
+    }
 
     // Phoenix --export-movie <document> <output.png|output.mp4>: writes
     // every frame and exits, without showing a window.
