@@ -38,6 +38,8 @@ void writeSample(const fs::path& folder)
         "<timelines><DOMTimeline name=\"Scene 1\" phoenixNodeGraph=\"&lt;graph/&gt;\"><layers>"
         "<DOMLayer name=\"Camera\" layerType=\"guide\" phoenixCamera=\"true\"><frames>"
         "<DOMFrame index=\"0\" phoenixCameraX=\"275\" phoenixCameraY=\"200\"><elements/></DOMFrame></frames></DOMLayer>"
+        "<DOMLayer name=\"Armature_1\"><frames><DOMFrame index=\"0\"><elements/>"
+        "<IKTree phoenixGravity=\"40\" phoenixWind=\"20\" phoenixSmoothness=\"50\"/></DOMFrame></frames></DOMLayer>"
         "<DOMLayer name=\"Notes\" layerType=\"guide\" phoenixReview=\"true\"><frames><DOMFrame index=\"0\"><elements>"
         "<DOMStaticText phoenixTextAnimators=\"wave\" phoenixNote=\"true\" phoenixNoteAuthor=\"Sam\" phoenixNoteDone=\"false\"><textRuns><DOMTextRun>"
         "<characters>Fix the arm</characters><textAttrs><DOMTextAttrs face=\"Arial\" size=\"12\" phoenixColor=\"ink\"/>"

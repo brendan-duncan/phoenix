@@ -92,6 +92,28 @@ struct BoneSpring
     double damping = 0.0;
 };
 
+/// Gravity and wind on an armature's sprung bones, Phoenix's own (kept on
+/// the IKTree as phoenixGravity, phoenixGravityAngle, phoenixWind,
+/// phoenixWindAngle, phoenixWindGusts, phoenixWindRate and phoenixWindSeed).
+/// Each pulls a bone with a spring toward its direction, so hair, tails and
+/// plants hang and blow with no poses; a stiffer spring gives less. Angles
+/// are in degrees on the stage: 0 toward the right, 90 down. Gusts (0 to
+/// 100) make the wind rise and fall and veer, about \a gustRate times a
+/// second, the same every time for the same \a seed. Worked into the stored
+/// joints with the springs, so FLA files and every export have the motion.
+struct BoneForces
+{
+    double gravity = 0.0;
+    double gravityAngle = 90.0;
+    double wind = 0.0;
+    double windAngle = 0.0;
+    double gusts = 0.0;
+    double gustRate = 0.5;
+    int seed = 1;
+
+    bool any() const { return gravity > 0.0 || wind > 0.0; }
+};
+
 /// An IK armature's pose span, read from and written back to the IKTree
 /// the FLA keeps on a pose frame (as XML text).
 ///
@@ -260,6 +282,25 @@ public:
     /// of the outline's stroke and fill, kept as given.
     void setBinding(const ShapeBinding& binding, const std::vector<Point>& anchors, const Transform& contour,
         const std::string& style = std::string());
+
+    // Gravity and wind -------------------------------------------------------
+
+    /// The gravity and wind on the armature's sprung bones.
+    BoneForces forces() const;
+    /// Sets them on the IKTree and works every frame's joints out again.
+    void setForces(const BoneForces& forces);
+    /// \a angles, absolute angles for every joint, as posing changes what
+    /// shownAt(\a frame) shows, made the angles to pose: where gravity or
+    /// wind bend the bones, each joint keeps the turn from its parent its
+    /// pose gives it, plus what posing changed, so the bend they add is not
+    /// posed in on top of itself. As given otherwise.
+    std::vector<double> poseFromShown(int frame, const std::vector<double>& angles) const;
+
+    /// The smoothness the Smooth Joints command last bent every joint with
+    /// (phoenixSmoothness, 0 to 100), so a rebinding can do it again; 0 when
+    /// it has none.
+    double smoothness() const;
+    void setSmoothness(double smoothness);
 
 private:
     struct Node
@@ -434,5 +475,26 @@ private:
     std::string _posesBefore;
     std::string _posesAfter;
 };
+
+// Smooth binding --------------------------------------------------------------
+
+/// \a binding with the points about \a joint shared out smoothly between the
+/// bone into it and the bones out of it, so the shape bends round the joint
+/// in a curve rather than a crease: a point on the line across the joint
+/// follows both evenly, and the weight passes from one bone to the other
+/// over \a smoothness (0 to 100) percent of half the shorter bone either
+/// side. Only points bound to just those bones change. \a anchors and \a
+/// joints are in the armature's space, as the binding was made.
+ShapeBinding smoothJoint(const ShapeBinding& binding, const std::vector<Point>& anchors,
+    const std::vector<IKJoint>& joints, int joint, double smoothness);
+
+/// smoothJoint for every joint that has a bone into it and out of it.
+ShapeBinding smoothJoints(const ShapeBinding& binding, const std::vector<Point>& anchors,
+    const std::vector<IKJoint>& joints, double smoothness);
+
+/// \a bones, a point's, with \a bone's weight changed by \a change (-1 to 1)
+/// and the others' scaled to make up the rest: the bone is added when it
+/// was not there and taken away at nothing. Weights that come to 1.
+std::vector<BoneWeight> reweighted(const std::vector<BoneWeight>& bones, int bone, double change);
 
 } // namespace fla

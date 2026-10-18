@@ -12,6 +12,8 @@
 #include "../data/symbol_list.h"
 #include "../data/timeline.h"
 
+#include <tinyxml2.h>
+
 #include <functional>
 #include <map>
 
@@ -68,7 +70,10 @@ const std::vector<Feature>& all()
         {"parenting-options", "Layer parenting options", "child layers taking on all of the parent's transform",
             {"phoenixParentScale", "phoenixParentSkew", "phoenixParentFlip"}},
         {"shape-binding", "Bones bound in Phoenix", "boned shapes as drawn; posing them may bend them differently",
-            {"phoenixBinding"}},
+            {"phoenixBinding", "phoenixSmoothness"}},
+        {"bone-forces", "Gravity and wind on bones", "the bones' sway as baked into their frames, no longer worked out again",
+            {"phoenixGravity", "phoenixGravityAngle", "phoenixWind", "phoenixWindAngle", "phoenixWindGusts",
+                "phoenixWindRate", "phoenixWindSeed"}},
         {"shape-hints", "Shape hints", "shape tweens without the hints steering them", {"phoenixShapeHints"}},
         {"mouth-charts", "Lip sync mouth charts", "the mouth frames as set, without the chart",
             {"phoenixMouthChart"}},
@@ -184,6 +189,19 @@ std::vector<Use> used(const Document& document)
                     continue;
                 const std::string at = where + ", frame " + std::to_string(frame->index + 1);
                 note(frame->extraAttributes, at);
+                // An armature's own, on the IKTree its pose frame keeps.
+                for (const std::string& child : frame->extraChildren)
+                {
+                    if (child.compare(0, 7, "<IKTree") != 0 || child.find("phoenix") == std::string::npos)
+                        continue;
+                    tinyxml2::XMLDocument tree;
+                    const tinyxml2::XMLElement* root =
+                        tree.Parse(child.c_str()) == tinyxml2::XML_SUCCESS ? tree.FirstChildElement("IKTree") : nullptr;
+                    Attributes attributes;
+                    for (const tinyxml2::XMLAttribute* each = root ? root->FirstAttribute() : nullptr; each; each = each->Next())
+                        attributes.emplace_back(each->Name(), each->Value());
+                    note(attributes, at);
+                }
                 for (const Element* item : frame->elements)
                     element(item, at);
             }
