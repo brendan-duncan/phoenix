@@ -1,0 +1,443 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<DOMDocument xmlns="http://ns.adobe.com/xfl/2008/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" width="1280" height="720" frameRate="24" creatorInfo="Phoenix" backgroundColor="#2E4766" guidesColor="#00FF00">
+    <media>
+        <DOMSoundItem name="hello.wav" itemID="00000000-0000-0000-0000-000000000029" href="hello.wav" soundDataHRef="M 1.dat" format="22kHz 16bit Mono" sampleCount="77616" dataLength="155232"/>
+    </media>
+    <symbols>
+        <Include href="Mouth.xml"/>
+    </symbols>
+    <timelines>
+        <DOMTimeline name="Scene 1">
+            <layers>
+                <DOMLayer name="Mouth" color="#000000" current="true" isSelected="true">
+                    <frames>
+                        <DOMFrame index="0" duration="9" keyMode="9728">
+                            <elements>
+                                <DOMSymbolInstance libraryItemName="Mouth" firstFrame="8" symbolType="graphic" loop="single frame">
+                                    <matrix>
+                                        <Matrix tx="640" ty="450"/>
+                                    </matrix>
+                                    <transformationPoint>
+                                        <Point/>
+                                    </transformationPoint>
+                                </DOMSymbolInstance>
+                            </elements>
+                        </DOMFrame>
+                        <DOMFrame index="9" duration="2" keyMode="9728">
+                            <elements>
+                                <DOMSymbolInstance libraryItemName="Mouth" firstFrame="3" symbolType="graphic" loop="single frame">
+                                    <matrix>
+                                        <Matrix tx="640" ty="450"/>
+                                    </matrix>
+                                    <transformationPoint>
+                                        <Point/>
+                                    </transformationPoint>
+                                </DOMSymbolInstance>
+                            </elements>
+                        </DOMFrame>
+                        <DOMFrame index="11" duration="5" keyMode="9728">
+                            <elements>
+                                <DOMSymbolInstance libraryItemName="Mouth" firstFrame="4" symbolType="graphic" loop="single frame">
+                                    <matrix>
+                                        <Matrix tx="640" ty="450"/>
+                                    </matrix>
+                                    <transformationPoint>
+                                        <Point/>
+                                    </transformationPoint>
+                                </DOMSymbolInstance>
+                            </elements>
+                        </DOMFrame>
+                        <DOMFrame index="16" keyMode="9728">
+                            <elements>
+                                <DOMSymbolInstance libraryItemName="Mouth" firstFrame="0" symbolType="graphic" loop="single frame">
+                                    <matrix>
+                                        <Matrix tx="640" ty="450"/>
+                                    </matrix>
+                                    <transformationPoint>
+                                        <Point/>
+                                    </transformationPoint>
+                                </DOMSymbolInstance>
+                            </elements>
+                        </DOMFrame>
+                        <DOMFrame index="17" duration="8" keyMode="9728">
+                            <elements>
+                                <DOMSymbolInstance libraryItemName="Mouth" firstFrame="8" symbolType="graphic" loop="single frame">
+                                    <matrix>
+                                        <Matrix tx="640" ty="450"/>
+                                    </matrix>
+                                    <transformationPoint>
+                                        <Point/>
+                                    </transformationPoint>
+                                </DOMSymbolInstance>
+                            </elements>
+                        </DOMFrame>
+                        <DOMFrame index="25" duration="4" keyMode="9728">
+                            <elements>
+                                <DOMSymbolInstance libraryItemName="Mouth" firstFrame="3" symbolType="graphic" loop="single frame">
+                                    <matrix>
+                                        <Matrix tx="640" ty="450"/>
+                                    </matrix>
+                                    <transformationPoint>
+                                        <Point/>
+                                    </transformationPoint>
+                                </DOMSymbolInstance>
+                            </elements>
+                        </DOMFrame>
+                        <DOMFrame index="29" duration="2" keyMode="9728">
+                            <elements>
+                                <DOMSymbolInstance libraryItemName="Mouth" firstFrame="8" symbolType="graphic" loop="single frame">
+                                    <matrix>
+                                        <Matrix tx="640" ty="450"/>
+                                    </matrix>
+                                    <transformationPoint>
+                                        <Point/>
+                                    </transformationPoint>
+                                </DOMSymbolInstance>
+                            </elements>
+                        </DOMFrame>
+                        <DOMFrame index="31" duration="6" keyMode="9728">
+                            <elements>
+                                <DOMSymbolInstance libraryItemName="Mouth" firstFrame="3" symbolType="graphic" loop="single frame">
+                                    <matrix>
+                                        <Matrix tx="640" ty="450"/>
+                                    </matrix>
+                                    <transformationPoint>
+                                        <Point/>
+                                    </transformationPoint>
+                                </DOMSymbolInstance>
+                            </elements>
+                        </DOMFrame>
+                        <DOMFrame index="37" keyMode="9728">
+                            <elements>
+                                <DOMSymbolInstance libraryItemName="Mouth" firstFrame="0" symbolType="graphic" loop="single frame">
+                                    <matrix>
+                                        <Matrix tx="640" ty="450"/>
+                                    </matrix>
+                                    <transformationPoint>
+                                        <Point/>
+                                    </transformationPoint>
+                                </DOMSymbolInstance>
+                            </elements>
+                        </DOMFrame>
+                        <DOMFrame index="38" duration="2" keyMode="9728">
+                            <elements>
+                                <DOMSymbolInstance libraryItemName="Mouth" firstFrame="1" symbolType="graphic" loop="single frame">
+                                    <matrix>
+                                        <Matrix tx="640" ty="450"/>
+                                    </matrix>
+                                    <transformationPoint>
+                                        <Point/>
+                                    </transformationPoint>
+                                </DOMSymbolInstance>
+                            </elements>
+                        </DOMFrame>
+                        <DOMFrame index="40" keyMode="9728">
+                            <elements>
+                                <DOMSymbolInstance libraryItemName="Mouth" firstFrame="0" symbolType="graphic" loop="single frame">
+                                    <matrix>
+                                        <Matrix tx="640" ty="450"/>
+                                    </matrix>
+                                    <transformationPoint>
+                                        <Point/>
+                                    </transformationPoint>
+                                </DOMSymbolInstance>
+                            </elements>
+                        </DOMFrame>
+                        <DOMFrame index="41" duration="6" keyMode="9728">
+                            <elements>
+                                <DOMSymbolInstance libraryItemName="Mouth" firstFrame="8" symbolType="graphic" loop="single frame">
+                                    <matrix>
+                                        <Matrix tx="640" ty="450"/>
+                                    </matrix>
+                                    <transformationPoint>
+                                        <Point/>
+                                    </transformationPoint>
+                                </DOMSymbolInstance>
+                            </elements>
+                        </DOMFrame>
+                        <DOMFrame index="47" keyMode="9728">
+                            <elements>
+                                <DOMSymbolInstance libraryItemName="Mouth" firstFrame="0" symbolType="graphic" loop="single frame">
+                                    <matrix>
+                                        <Matrix tx="640" ty="450"/>
+                                    </matrix>
+                                    <transformationPoint>
+                                        <Point/>
+                                    </transformationPoint>
+                                </DOMSymbolInstance>
+                            </elements>
+                        </DOMFrame>
+                        <DOMFrame index="48" duration="4" keyMode="9728">
+                            <elements>
+                                <DOMSymbolInstance libraryItemName="Mouth" firstFrame="3" symbolType="graphic" loop="single frame">
+                                    <matrix>
+                                        <Matrix tx="640" ty="450"/>
+                                    </matrix>
+                                    <transformationPoint>
+                                        <Point/>
+                                    </transformationPoint>
+                                </DOMSymbolInstance>
+                            </elements>
+                        </DOMFrame>
+                        <DOMFrame index="52" keyMode="9728">
+                            <elements>
+                                <DOMSymbolInstance libraryItemName="Mouth" firstFrame="0" symbolType="graphic" loop="single frame">
+                                    <matrix>
+                                        <Matrix tx="640" ty="450"/>
+                                    </matrix>
+                                    <transformationPoint>
+                                        <Point/>
+                                    </transformationPoint>
+                                </DOMSymbolInstance>
+                            </elements>
+                        </DOMFrame>
+                        <DOMFrame index="53" duration="3" keyMode="9728">
+                            <elements>
+                                <DOMSymbolInstance libraryItemName="Mouth" firstFrame="3" symbolType="graphic" loop="single frame">
+                                    <matrix>
+                                        <Matrix tx="640" ty="450"/>
+                                    </matrix>
+                                    <transformationPoint>
+                                        <Point/>
+                                    </transformationPoint>
+                                </DOMSymbolInstance>
+                            </elements>
+                        </DOMFrame>
+                        <DOMFrame index="56" keyMode="9728">
+                            <elements>
+                                <DOMSymbolInstance libraryItemName="Mouth" firstFrame="0" symbolType="graphic" loop="single frame">
+                                    <matrix>
+                                        <Matrix tx="640" ty="450"/>
+                                    </matrix>
+                                    <transformationPoint>
+                                        <Point/>
+                                    </transformationPoint>
+                                </DOMSymbolInstance>
+                            </elements>
+                        </DOMFrame>
+                        <DOMFrame index="57" duration="2" keyMode="9728">
+                            <elements>
+                                <DOMSymbolInstance libraryItemName="Mouth" firstFrame="4" symbolType="graphic" loop="single frame">
+                                    <matrix>
+                                        <Matrix tx="640" ty="450"/>
+                                    </matrix>
+                                    <transformationPoint>
+                                        <Point/>
+                                    </transformationPoint>
+                                </DOMSymbolInstance>
+                            </elements>
+                        </DOMFrame>
+                        <DOMFrame index="59" duration="3" keyMode="9728">
+                            <elements>
+                                <DOMSymbolInstance libraryItemName="Mouth" firstFrame="0" symbolType="graphic" loop="single frame">
+                                    <matrix>
+                                        <Matrix tx="640" ty="450"/>
+                                    </matrix>
+                                    <transformationPoint>
+                                        <Point/>
+                                    </transformationPoint>
+                                </DOMSymbolInstance>
+                            </elements>
+                        </DOMFrame>
+                        <DOMFrame index="62" duration="2" keyMode="9728">
+                            <elements>
+                                <DOMSymbolInstance libraryItemName="Mouth" firstFrame="4" symbolType="graphic" loop="single frame">
+                                    <matrix>
+                                        <Matrix tx="640" ty="450"/>
+                                    </matrix>
+                                    <transformationPoint>
+                                        <Point/>
+                                    </transformationPoint>
+                                </DOMSymbolInstance>
+                            </elements>
+                        </DOMFrame>
+                        <DOMFrame index="64" keyMode="9728">
+                            <elements>
+                                <DOMSymbolInstance libraryItemName="Mouth" firstFrame="0" symbolType="graphic" loop="single frame">
+                                    <matrix>
+                                        <Matrix tx="640" ty="450"/>
+                                    </matrix>
+                                    <transformationPoint>
+                                        <Point/>
+                                    </transformationPoint>
+                                </DOMSymbolInstance>
+                            </elements>
+                        </DOMFrame>
+                        <DOMFrame index="65" duration="2" keyMode="9728">
+                            <elements>
+                                <DOMSymbolInstance libraryItemName="Mouth" firstFrame="2" symbolType="graphic" loop="single frame">
+                                    <matrix>
+                                        <Matrix tx="640" ty="450"/>
+                                    </matrix>
+                                    <transformationPoint>
+                                        <Point/>
+                                    </transformationPoint>
+                                </DOMSymbolInstance>
+                            </elements>
+                        </DOMFrame>
+                        <DOMFrame index="67" duration="2" keyMode="9728">
+                            <elements>
+                                <DOMSymbolInstance libraryItemName="Mouth" firstFrame="3" symbolType="graphic" loop="single frame">
+                                    <matrix>
+                                        <Matrix tx="640" ty="450"/>
+                                    </matrix>
+                                    <transformationPoint>
+                                        <Point/>
+                                    </transformationPoint>
+                                </DOMSymbolInstance>
+                            </elements>
+                        </DOMFrame>
+                        <DOMFrame index="69" duration="3" keyMode="9728">
+                            <elements>
+                                <DOMSymbolInstance libraryItemName="Mouth" firstFrame="4" symbolType="graphic" loop="single frame">
+                                    <matrix>
+                                        <Matrix tx="640" ty="450"/>
+                                    </matrix>
+                                    <transformationPoint>
+                                        <Point/>
+                                    </transformationPoint>
+                                </DOMSymbolInstance>
+                            </elements>
+                        </DOMFrame>
+                        <DOMFrame index="72" keyMode="9728">
+                            <elements>
+                                <DOMSymbolInstance libraryItemName="Mouth" firstFrame="1" symbolType="graphic" loop="single frame">
+                                    <matrix>
+                                        <Matrix tx="640" ty="450"/>
+                                    </matrix>
+                                    <transformationPoint>
+                                        <Point/>
+                                    </transformationPoint>
+                                </DOMSymbolInstance>
+                            </elements>
+                        </DOMFrame>
+                        <DOMFrame index="73" duration="17" keyMode="9728">
+                            <elements>
+                                <DOMSymbolInstance libraryItemName="Mouth" firstFrame="8" symbolType="graphic" loop="single frame">
+                                    <matrix>
+                                        <Matrix tx="640" ty="450"/>
+                                    </matrix>
+                                    <transformationPoint>
+                                        <Point/>
+                                    </transformationPoint>
+                                </DOMSymbolInstance>
+                            </elements>
+                        </DOMFrame>
+                    </frames>
+                </DOMLayer>
+                <DOMLayer name="Face" color="#000000">
+                    <frames>
+                        <DOMFrame index="0" duration="90" keyMode="9728">
+                            <elements>
+                                <DOMShape isDrawingObject="true">
+                                    <fills>
+                                        <FillStyle index="1">
+                                            <SolidColor color="#FFD27A"/>
+                                        </FillStyle>
+                                    </fills>
+                                    <strokes>
+                                        <StrokeStyle index="1">
+                                            <SolidStroke weight="6" scaleMode="normal" caps="round">
+                                                <fill>
+                                                    <SolidColor color="#3A2A1A"/>
+                                                </fill>
+                                            </SolidStroke>
+                                        </StrokeStyle>
+                                    </strokes>
+                                    <edges>
+                                        <Edge fillStyle1="1" strokeStyle="1" edges="!17200 6800[17200 8705 15911 10053[14623 11400 12800 11400[10977 11400 9689 10053[8400 8705 8400 6800[8400 4895 9689 3547[10977 2200 12800 2200[14623 2200 15911 3547[17200 4895 17200 6800"/>
+                                    </edges>
+                                </DOMShape>
+                                <DOMShape isDrawingObject="true">
+                                    <fills>
+                                        <FillStyle index="1">
+                                            <SolidColor color="#FFB08A"/>
+                                        </FillStyle>
+                                    </fills>
+                                    <edges>
+                                        <Edge fillStyle1="1" edges="!10680 8400[10680 8566 10481 8683[10282 8800 10000 8800[9718 8800 9519 8683[9320 8566 9320 8400[9320 8234 9519 8117[9718 8000 10000 8000[10282 8000 10481 8117[10680 8234 10680 8400"/>
+                                    </edges>
+                                </DOMShape>
+                                <DOMShape isDrawingObject="true">
+                                    <fills>
+                                        <FillStyle index="1">
+                                            <SolidColor color="#FFB08A"/>
+                                        </FillStyle>
+                                    </fills>
+                                    <edges>
+                                        <Edge fillStyle1="1" edges="!16280 8400[16280 8566 16081 8683[15882 8800 15600 8800[15318 8800 15119 8683[14920 8566 14920 8400[14920 8234 15119 8117[15318 8000 15600 8000[15882 8000 16081 8117[16280 8234 16280 8400"/>
+                                    </edges>
+                                </DOMShape>
+                                <DOMShape isDrawingObject="true">
+                                    <fills>
+                                        <FillStyle index="1">
+                                            <SolidColor color="#FFFFFF"/>
+                                        </FillStyle>
+                                    </fills>
+                                    <strokes>
+                                        <StrokeStyle index="1">
+                                            <SolidStroke weight="4" scaleMode="normal" caps="round">
+                                                <fill>
+                                                    <SolidColor color="#3A2A1A"/>
+                                                </fill>
+                                            </SolidStroke>
+                                        </StrokeStyle>
+                                    </strokes>
+                                    <edges>
+                                        <Edge fillStyle1="1" strokeStyle="1" edges="!11880 5400[11880 5765 11681 6022[11482 6280 11200 6280[10918 6280 10719 6022[10520 5765 10520 5400[10520 5035 10719 4778[10918 4520 11200 4520[11482 4520 11681 4778[11880 5035 11880 5400"/>
+                                    </edges>
+                                </DOMShape>
+                                <DOMShape isDrawingObject="true">
+                                    <fills>
+                                        <FillStyle index="1">
+                                            <SolidColor color="#2A1E14"/>
+                                        </FillStyle>
+                                    </fills>
+                                    <edges>
+                                        <Edge fillStyle1="1" edges="!11620 5640[11620 5806 11532 5923[11444 6040 11320 6040[11196 6040 11108 5923[11020 5806 11020 5640[11020 5474 11108 5357[11196 5240 11320 5240[11444 5240 11532 5357[11620 5474 11620 5640"/>
+                                    </edges>
+                                </DOMShape>
+                                <DOMShape isDrawingObject="true">
+                                    <fills>
+                                        <FillStyle index="1">
+                                            <SolidColor color="#FFFFFF"/>
+                                        </FillStyle>
+                                    </fills>
+                                    <strokes>
+                                        <StrokeStyle index="1">
+                                            <SolidStroke weight="4" scaleMode="normal" caps="round">
+                                                <fill>
+                                                    <SolidColor color="#3A2A1A"/>
+                                                </fill>
+                                            </SolidStroke>
+                                        </StrokeStyle>
+                                    </strokes>
+                                    <edges>
+                                        <Edge fillStyle1="1" strokeStyle="1" edges="!15080 5400[15080 5765 14881 6022[14682 6280 14400 6280[14118 6280 13919 6022[13720 5765 13720 5400[13720 5035 13919 4778[14118 4520 14400 4520[14682 4520 14881 4778[15080 5035 15080 5400"/>
+                                    </edges>
+                                </DOMShape>
+                                <DOMShape isDrawingObject="true">
+                                    <fills>
+                                        <FillStyle index="1">
+                                            <SolidColor color="#2A1E14"/>
+                                        </FillStyle>
+                                    </fills>
+                                    <edges>
+                                        <Edge fillStyle1="1" edges="!14820 5640[14820 5806 14732 5923[14644 6040 14520 6040[14396 6040 14308 5923[14220 5806 14220 5640[14220 5474 14308 5357[14396 5240 14520 5240[14644 5240 14732 5357[14820 5474 14820 5640"/>
+                                    </edges>
+                                </DOMShape>
+                            </elements>
+                        </DOMFrame>
+                    </frames>
+                </DOMLayer>
+                <DOMLayer name="Voice" color="#000000">
+                    <frames>
+                        <DOMFrame index="0" duration="90" keyMode="9728" soundName="hello.wav" soundSync="stream">
+                            <elements/>
+                        </DOMFrame>
+                    </frames>
+                </DOMLayer>
+            </layers>
+        </DOMTimeline>
+    </timelines>
+</DOMDocument>
