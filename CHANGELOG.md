@@ -4,7 +4,7 @@ What changed in each release of Phoenix, newest first.
 
 ## Unreleased
 
-- Old binary FLA files: scripts written in normal mode, and Flash 5 action records, open as the ActionScript they stand for, so their buttons, frames and clips work in Test Movie
+- Old binary FLA files: scripts written in normal mode, and the action records of the oldest files, open as the ActionScript they stand for, so their buttons, frames and clips work in Test Movie
 - Test Movie runs ActionScript 1 as old movies use it: a variable never set reads as undefined, `add`, `eq`, `ne`, `and`, `or` and `not` work, and so do `set()`, `eval()` and `call()`
 - Saving as XFL works when a library item's name has a character no file name can hold, such as `?`: its file gets a safe name and the item keeps its own
 - Command line: `play --click` and `--drag` press ActionScript 1 and 2 buttons as the window does, so drag and drop movies can be checked
