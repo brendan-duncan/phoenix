@@ -50,6 +50,7 @@ const NAV = [
     { href: "drawing-models.html", title: "Merge and object drawing" },
     { href: "drawing-tools.html", title: "Drawing tools" },
     { href: "selecting.html", title: "Selecting and transforming" },
+    { href: "3d.html", title: "3D rotation and translation" },
     { href: "color.html", title: "Color, fills and strokes" },
     { href: "ink-and-paint.html", title: "Ink, paint and palettes" },
     { href: "text.html", title: "Text" },
