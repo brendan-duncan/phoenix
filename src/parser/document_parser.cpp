@@ -36,6 +36,34 @@ std::string _currentFile;
 
 bool parseGroup(const tinyxml2::XMLElement* element, fla::Group* group);
 
+/// The XML parser drops text that is only whitespace, so a text run of a
+/// single space between two words would lose it. Each such run's characters
+/// become character references, which the parser keeps.
+std::string keepBlankCharacters(const std::string& xml)
+{
+    static const std::string open = "<characters>";
+    static const std::string close = "</characters>";
+    std::string out;
+    size_t copied = 0;
+    for (size_t at = xml.find(open); at != std::string::npos; at = xml.find(open, at + open.size()))
+    {
+        const size_t start = at + open.size();
+        const size_t end = xml.find(close, start);
+        if (end == std::string::npos)
+            break;
+        if (end == start || xml.find_first_not_of(" \t\r\n", start) != end)
+            continue;
+        out.append(xml, copied, start - copied);
+        for (size_t i = start; i < end; ++i)
+            out += "&#" + std::to_string(static_cast<int>(xml[i])) + ";";
+        copied = end;
+    }
+    if (copied == 0)
+        return xml;
+    out.append(xml, copied, std::string::npos);
+    return out;
+}
+
 // Helper function to safely get attribute as string
 std::string getAttribute(const tinyxml2::XMLElement* element, const char* name, const char* defaultValue = "")
 {
@@ -100,7 +128,9 @@ void keepAttributes(const tinyxml2::XMLElement* element, std::initializer_list<c
 
 void parseHexColor(const std::string& hexColor, uint8_t rgba[4], double alpha = 1.0)
 {
-    uint8_t a = static_cast<uint8_t>(std::max(0.0, std::min(1.0, alpha)) * 255);
+    // Rounded, not truncated: files write 85/255 as 0.333333333333333, which
+    // truncates to 84.
+    uint8_t a = static_cast<uint8_t>(std::lround(std::max(0.0, std::min(1.0, alpha)) * 255));
     // Remove '#' if present
     if (hexColor.size() == 0)
     {
@@ -2084,7 +2114,7 @@ bool parseSymbolInclude(const tinyxml2::XMLElement* element, fla::SymbolList* sy
         return false;
     }
 
-    std::string content = zipReader->readTextFile(libraryPath);
+    std::string content = keepBlankCharacters(zipReader->readTextFile(libraryPath));
 
     _currentFile = href;
 
@@ -2412,6 +2442,7 @@ bool parseDocument(fla::Document* document, const tinyxml2::XMLElement* element,
     document->gridSpacingY = getIntAttribute(element, "gridSpacingY", 18);
     document->objectsSnapTo = getBoolAttribute(element, "objectsSnapTo", true);
     document->guidesSnapTo = getBoolAttribute(element, "guidesSnapTo", true);
+    document->guidesLocked = getBoolAttribute(element, "guidesLocked", false);
     document->snapAlignBorderSpacing = getIntAttribute(element, "snapAlignBorderSpacing", 18);
     getColorAttribute(element, "guidesColor", document->guidesColor);
     document->vanishingPoint3DX = getDoubleAttribute(element, "vanishingPoint3DX", 0.0);
@@ -2424,7 +2455,7 @@ bool parseDocument(fla::Document* document, const tinyxml2::XMLElement* element,
     keepAttributes(element, {"xmlns", "xmlns:xsi", "filetypeGUID", "fileGUID", "width", "height", "frameRate",
         "currentTimeline", "xflVersion", "creatorInfo", "platform", "versionInfo", "majorVersion", "buildNumber",
         "viewAngle3D", "backgroundColor", "phoenixStageAlpha", "gridColor", "gridSpacingX", "gridSpacingY", "objectsSnapTo", "guidesSnapTo",
-        "snapAlignBorderSpacing", "guidesColor", "vanishingPoint3DX", "vanishingPoint3DY", "nextSceneIdentifier",
+        "guidesLocked", "snapAlignBorderSpacing", "guidesColor", "vanishingPoint3DX", "vanishingPoint3DY", "nextSceneIdentifier",
         "playOptionsPlayLoop", "playOptionsPlayPages", "playOptionsPlayFrameActions"}, document);
 
     // Parse child elements
@@ -2537,7 +2568,7 @@ fla::Document* DocumentParser::parse(const std::string& xmlContent, fla::DOMElem
     _currentFile.clear();
 
     tinyxml2::XMLDocument doc;
-    if (doc.Parse(xmlContent.c_str()) != tinyxml2::XML_SUCCESS)
+    if (doc.Parse(keepBlankCharacters(xmlContent).c_str()) != tinyxml2::XML_SUCCESS)
     {
         _errorString = "Failed to parse XML content";
         return nullptr;

@@ -1147,6 +1147,7 @@ private:
     /// The snapping switches the document keeps.
     QAction* _snapToObjectsAction = nullptr;
     QAction* _snapGuidesAction = nullptr;
+    QAction* _lockGuidesAction = nullptr;
     QAction* _deselectAllAction = nullptr;
     QAction* _cutAction = nullptr;
     QAction* _copyAction = nullptr;

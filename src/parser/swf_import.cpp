@@ -4125,11 +4125,15 @@ private:
                     item->SetAttribute("linkageClassName", c.linkage.c_str());
                 }
                 item->SetAttribute("allowSmoothing", "true");
-                item->SetAttribute("originalCompressionType", c.jpeg ? "photo" : "lossless");
+                if (!c.jpeg)
+                    item->SetAttribute("originalCompressionType", "lossless");
                 item->SetAttribute("href", nameOf(id).c_str());
                 item->SetAttribute("bitmapDataHRef", dat.c_str());
                 item->SetAttribute("frameRight", c.width * 20);
                 item->SetAttribute("frameBottom", c.height * 20);
+                // The format marks a JPEG's data with isJPEG.
+                if (c.jpeg)
+                    item->SetAttribute("isJPEG", "true");
                 media->InsertEndChild(item);
             }
             else if (c.kind == Character::Kind::Sound)

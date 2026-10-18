@@ -94,6 +94,36 @@ void trimNul(std::string& name)
         name.pop_back();
 }
 
+/// The pixel size a JPEG's start-of-frame marker gives, or false when the
+/// data has none.
+bool jpegSize(const std::vector<uint8_t>& data, int& width, int& height)
+{
+    size_t at = 2;
+    while (at + 9 < data.size())
+    {
+        if (data[at] != 0xFF)
+            return false;
+        const uint8_t marker = data[at + 1];
+        if (marker == 0xFF)
+        {
+            ++at;
+            continue;
+        }
+        const size_t length = (data[at + 2] << 8) | data[at + 3];
+        // SOF0 to SOF15, leaving out DHT (C4), JPG (C8) and DAC (CC).
+        if (marker >= 0xC0 && marker <= 0xCF && marker != 0xC4 && marker != 0xC8 && marker != 0xCC)
+        {
+            height = (data[at + 5] << 8) | data[at + 6];
+            width = (data[at + 7] << 8) | data[at + 8];
+            return width > 0 && height > 0;
+        }
+        if (marker == 0xD9 || marker == 0xDA)
+            return false;
+        at += 2 + length;
+    }
+    return false;
+}
+
 // ---------------------------------------------------------------------------
 // The model read from the streams
 
@@ -2479,10 +2509,22 @@ private:
                 item->SetAttribute("allowSmoothing", "true");
             const bool jpeg = data != _streams.end() && data->second.size() > 2 && data->second[0] == 0xFF &&
                 data->second[1] == 0xD8;
-            item->SetAttribute("originalCompressionType", jpeg ? "photo" : "lossless");
+            if (!jpeg)
+                item->SetAttribute("originalCompressionType", "lossless");
             item->SetAttribute("quality", m.quality);
             item->SetAttribute("href", path.c_str());
             item->SetAttribute("bitmapDataHRef", dat.c_str());
+            // A JPEG's size comes from its frame header and goes in twips,
+            // and the item says the data is a JPEG, as the format has it.
+            int width = 0;
+            int height = 0;
+            if (jpeg && jpegSize(data->second, width, height))
+            {
+                item->SetAttribute("frameRight", width * 20);
+                item->SetAttribute("frameBottom", height * 20);
+            }
+            if (jpeg)
+                item->SetAttribute("isJPEG", "true");
             // A lossless bitmap's header gives its size in twips.
             if (!jpeg && data != _streams.end() && data->second.size() >= 26 && data->second[0] == 0x03)
             {

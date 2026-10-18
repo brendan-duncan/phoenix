@@ -52,6 +52,9 @@ public:
     /// document; both on unless the file says otherwise.
     bool objectsSnapTo = true;
     bool guidesSnapTo = true;
+    /// View > Guides > Lock Guides, which the FLA also keeps; off unless the
+    /// file says otherwise.
+    bool guidesLocked = false;
     int timelineHeight = 197;
     int timelineLabelWidth = 256;
     double vanishingPoint3DX = 400.0;

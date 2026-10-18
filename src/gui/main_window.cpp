@@ -950,6 +950,9 @@ void MainWindow::adoptDocument(fla::FLADocument* document, const QString& filePa
             _snapToObjectsAction->setChecked(objects);
         if (_snapGuidesAction)
             _snapGuidesAction->setChecked(guides);
+        if (_lockGuidesAction)
+            _lockGuidesAction->setChecked(document->guidesLocked);
+        _phoenixView->setGuidesLocked(document->guidesLocked);
         _snapper.setObjectSnapEnabled(objects);
         _snapper.setGuideSnapEnabled(guides);
     }
@@ -7359,13 +7362,14 @@ void MainWindow::setupMenus()
             _flaDocument->document->guidesSnapTo = on;
     });
     QAction* lockGuidesAction = guidesMenu->addAction("&Lock Guides");
+    _lockGuidesAction = lockGuidesAction;
     lockGuidesAction->setCheckable(true);
     lockGuidesAction->setShortcut(QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_Semicolon));
-    lockGuidesAction->setChecked(QSettings().value("view/guidesLocked", false).toBool());
-    _phoenixView->setGuidesLocked(lockGuidesAction->isChecked());
     connect(lockGuidesAction, &QAction::toggled, this, [this](bool on) {
         _phoenixView->setGuidesLocked(on);
-        QSettings().setValue("view/guidesLocked", on);
+        // A setting of the document, saved with it.
+        if (_flaDocument && _flaDocument->document)
+            _flaDocument->document->guidesLocked = on;
     });
     QAction* editGuidesAction = guidesMenu->addAction("&Edit Guides...");
     editGuidesAction->setShortcut(QKeySequence(Qt::CTRL | Qt::ALT | Qt::SHIFT | Qt::Key_G));
