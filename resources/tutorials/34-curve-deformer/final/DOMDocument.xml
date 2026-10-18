@@ -1,0 +1,205 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<DOMDocument xmlns="http://ns.adobe.com/xfl/2008/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" width="1280" height="720" frameRate="24" currentTimeline="1" xflVersion="23.0" creatorInfo="Phoenix" backgroundColor="#2C7DA0" guidesColor="#00FF00">
+    <symbols>
+        <Include href="Octopus.xml"/>
+        <Include href="Tentacle.xml"/>
+    </symbols>
+    <timelines>
+        <DOMTimeline name="Scene 1">
+            <layers>
+                <DOMLayer name="Octopus" color="#FF8000">
+                    <frames>
+                        <DOMFrame index="0" duration="48" keyMode="9728">
+                            <elements>
+                                <DOMSymbolInstance libraryItemName="Octopus" symbolType="graphic" loop="loop">
+                                    <matrix>
+                                        <Matrix tx="640" ty="330"/>
+                                    </matrix>
+                                    <transformationPoint>
+                                        <Point/>
+                                    </transformationPoint>
+                                </DOMSymbolInstance>
+                            </elements>
+                        </DOMFrame>
+                    </frames>
+                </DOMLayer>
+                <DOMLayer name="Tentacle" color="#FF4FFF" current="true" isSelected="true">
+                    <frames>
+                        <DOMFrame index="0" duration="11" keyMode="9728" tweenType="motion">
+                            <elements>
+                                <DOMSymbolInstance libraryItemName="Tentacle" symbolType="graphic" loop="loop" phoenixDeformer="curve 0 -4.5 0 101.5 0 207.5 0 313.5 / 0 -4.5 0 101.5 -8 218.5 72 298.5">
+                                    <matrix>
+                                        <Matrix tx="728" ty="300"/>
+                                    </matrix>
+                                    <transformationPoint>
+                                        <Point/>
+                                    </transformationPoint>
+                                </DOMSymbolInstance>
+                            </elements>
+                        </DOMFrame>
+                        <DOMFrame index="11" duration="12" keyMode="9728" tweenType="motion">
+                            <elements>
+                                <DOMSymbolInstance libraryItemName="Tentacle" symbolType="graphic" loop="loop" phoenixDeformer="curve 0 -4.5 0 101.5 0 207.5 0 313.5 / 0 -4.5 0 101.5 132 258.5 172 118.5">
+                                    <matrix>
+                                        <Matrix tx="728" ty="300"/>
+                                    </matrix>
+                                    <transformationPoint>
+                                        <Point/>
+                                    </transformationPoint>
+                                </DOMSymbolInstance>
+                            </elements>
+                        </DOMFrame>
+                        <DOMFrame index="23" duration="25" keyMode="9728">
+                            <elements>
+                                <DOMSymbolInstance libraryItemName="Tentacle" symbolType="graphic" loop="loop" phoenixDeformer="curve 0 -4.5 0 101.5 0 207.5 0 313.5 / 0 -4.5 0 101.5 0 207.5 0 313.5">
+                                    <matrix>
+                                        <Matrix tx="728" ty="300"/>
+                                    </matrix>
+                                    <transformationPoint>
+                                        <Point/>
+                                    </transformationPoint>
+                                </DOMSymbolInstance>
+                            </elements>
+                        </DOMFrame>
+                    </frames>
+                </DOMLayer>
+                <DOMLayer name="Sea" color="#4FFFFF" locked="true">
+                    <frames>
+                        <DOMFrame index="0" duration="48" keyMode="9728">
+                            <elements>
+                                <DOMShape isDrawingObject="true">
+                                    <fills>
+                                        <FillStyle index="1">
+                                            <SolidColor color="#2C7DA0"/>
+                                        </FillStyle>
+                                    </fills>
+                                    <edges>
+                                        <Edge fillStyle1="1" edges="!0 0|25600 0|25600 14400|0 14400|0 0"/>
+                                    </edges>
+                                </DOMShape>
+                                <DOMShape isDrawingObject="true">
+                                    <fills>
+                                        <FillStyle index="1">
+                                            <SolidColor color="#E9D8A6"/>
+                                        </FillStyle>
+                                    </fills>
+                                    <edges>
+                                        <Edge fillStyle1="1" edges="!-2000 14500[-2000 13000 2000 12500[6000 12000 10000 12400[14000 12800 18000 12400[22000 12000 25000 12600[28000 13200 28000 14600[28000 16000 13000 16000[-2000 16000 -2000 14500"/>
+                                    </edges>
+                                </DOMShape>
+                                <DOMShape isDrawingObject="true">
+                                    <fills>
+                                        <FillStyle index="1">
+                                            <SolidColor color="#52B788"/>
+                                        </FillStyle>
+                                    </fills>
+                                    <strokes>
+                                        <StrokeStyle index="1">
+                                            <SolidStroke weight="4" scaleMode="normal" caps="round" joints="round">
+                                                <fill>
+                                                    <SolidColor color="#1B4332"/>
+                                                </fill>
+                                            </SolidStroke>
+                                        </StrokeStyle>
+                                    </strokes>
+                                    <edges>
+                                        <Edge fillStyle1="1" strokeStyle="1" edges="!3350 12800[3000 12800 2700 11600[2400 10400 2800 9400[3200 8400 2900 7500[2600 6600 3050 7500[3500 8400 3250 9400[3000 10400 3350 11600[3700 12800 3350 12800"/>
+                                    </edges>
+                                </DOMShape>
+                                <DOMShape isDrawingObject="true">
+                                    <fills>
+                                        <FillStyle index="1">
+                                            <SolidColor color="#52B788"/>
+                                        </FillStyle>
+                                    </fills>
+                                    <strokes>
+                                        <StrokeStyle index="1">
+                                            <SolidStroke weight="4" scaleMode="normal" caps="round" joints="round">
+                                                <fill>
+                                                    <SolidColor color="#1B4332"/>
+                                                </fill>
+                                            </SolidStroke>
+                                        </StrokeStyle>
+                                    </strokes>
+                                    <edges>
+                                        <Edge fillStyle1="1" strokeStyle="1" edges="!22800 12600[22400 12600 22700 11300[23000 10000 22600 9000[22200 8000 22700 8800[23200 9600 23450 10400[23700 11200 23450 11900[23200 12600 22800 12600"/>
+                                    </edges>
+                                </DOMShape>
+                                <DOMShape isDrawingObject="true">
+                                    <strokes>
+                                        <StrokeStyle index="1">
+                                            <SolidStroke weight="3" scaleMode="normal" caps="round" joints="round">
+                                                <fill>
+                                                    <SolidColor color="#A9D6E5"/>
+                                                </fill>
+                                            </SolidStroke>
+                                        </StrokeStyle>
+                                    </strokes>
+                                    <edges>
+                                        <Edge strokeStyle="1" edges="!4480 3200[4480 3316 4398 3398[4316 3480 4200 3480[4084 3480 4002 3398[3920 3316 3920 3200[3920 3084 4002 3002[4084 2920 4200 2920[4316 2920 4398 3002[4480 3084 4480 3200"/>
+                                    </edges>
+                                </DOMShape>
+                                <DOMShape isDrawingObject="true">
+                                    <strokes>
+                                        <StrokeStyle index="1">
+                                            <SolidStroke weight="3" scaleMode="normal" caps="round" joints="round">
+                                                <fill>
+                                                    <SolidColor color="#A9D6E5"/>
+                                                </fill>
+                                            </SolidStroke>
+                                        </StrokeStyle>
+                                    </strokes>
+                                    <edges>
+                                        <Edge strokeStyle="1" edges="!4980 2200[4980 2275 4927 2327[4875 2380 4800 2380[4725 2380 4673 2327[4620 2275 4620 2200[4620 2125 4673 2073[4725 2020 4800 2020[4875 2020 4927 2073[4980 2125 4980 2200"/>
+                                    </edges>
+                                </DOMShape>
+                                <DOMShape isDrawingObject="true">
+                                    <strokes>
+                                        <StrokeStyle index="1">
+                                            <SolidStroke weight="3" scaleMode="normal" caps="round" joints="round">
+                                                <fill>
+                                                    <SolidColor color="#A9D6E5"/>
+                                                </fill>
+                                            </SolidStroke>
+                                        </StrokeStyle>
+                                    </strokes>
+                                    <edges>
+                                        <Edge strokeStyle="1" edges="!4620 1400[4620 1450 4585 1485[4550 1520 4500 1520[4450 1520 4415 1485[4380 1450 4380 1400[4380 1350 4415 1315[4450 1280 4500 1280[4550 1280 4585 1315[4620 1350 4620 1400"/>
+                                    </edges>
+                                </DOMShape>
+                                <DOMShape isDrawingObject="true">
+                                    <strokes>
+                                        <StrokeStyle index="1">
+                                            <SolidStroke weight="3" scaleMode="normal" caps="round" joints="round">
+                                                <fill>
+                                                    <SolidColor color="#A9D6E5"/>
+                                                </fill>
+                                            </SolidStroke>
+                                        </StrokeStyle>
+                                    </strokes>
+                                    <edges>
+                                        <Edge strokeStyle="1" edges="!21240 5000[21240 5099 21170 5170[21099 5240 21000 5240[20901 5240 20830 5170[20760 5099 20760 5000[20760 4901 20830 4830[20901 4760 21000 4760[21099 4760 21170 4830[21240 4901 21240 5000"/>
+                                    </edges>
+                                </DOMShape>
+                                <DOMShape isDrawingObject="true">
+                                    <strokes>
+                                        <StrokeStyle index="1">
+                                            <SolidStroke weight="3" scaleMode="normal" caps="round" joints="round">
+                                                <fill>
+                                                    <SolidColor color="#A9D6E5"/>
+                                                </fill>
+                                            </SolidStroke>
+                                        </StrokeStyle>
+                                    </strokes>
+                                    <edges>
+                                        <Edge strokeStyle="1" edges="!21660 4100[21660 4166 21613 4213[21566 4260 21500 4260[21434 4260 21387 4213[21340 4166 21340 4100[21340 4034 21387 3987[21434 3940 21500 3940[21566 3940 21613 3987[21660 4034 21660 4100"/>
+                                    </edges>
+                                </DOMShape>
+                            </elements>
+                        </DOMFrame>
+                    </frames>
+                </DOMLayer>
+            </layers>
+        </DOMTimeline>
+    </timelines>
+</DOMDocument>

@@ -1,0 +1,104 @@
+{
+  "title": "A tentacle with the Curve Deformer",
+  "summary": "Bend an octopus's tentacle along a curve by dragging its handles, pose it on three keyframes and tween it into a wave.",
+  "minutes": 7,
+  "order": 34,
+  "guide": "rigging.html",
+  "tags": ["Animation", "Rigging"],
+  "start": {"document": "start"},
+  "final": "final",
+  "steps": [
+    {
+      "title": "Welcome",
+      "text": "<p>The octopus's long tentacle is a graphic symbol of its own, <i>Tentacle</i>, on the <i>Tentacle</i> layer. It hangs straight down.</p><p>A Curve Deformer lays a curve, a spine, along a symbol's art. Drag the spine's handles and the art bends along it, keeping its thickness, without redrawing it.</p>"
+    },
+    {
+      "title": "Select the tentacle",
+      "text": "<p>Press <kbd>V</kbd> for the Selection tool and click the long tentacle, at the right of the octopus.</p>",
+      "target": "stage:700,300,60,320",
+      "wait": {"selection": "instance"}
+    },
+    {
+      "title": "Add a Curve Deformer",
+      "text": "<p>Choose <b>Modify &gt; Deformer &gt; Curve Deformer</b>. A spine runs down the middle of the tentacle: a square anchor at each end, and two round handles between.</p>",
+      "target": "menu:Modify/Deformer/Curve Deformer",
+      "wait": {"command": "Curve Deformer"}
+    },
+    {
+      "title": "Swing the tip",
+      "text": "<p>Drag the square anchor at the bottom of the tentacle to the right. The tentacle bends to follow, and the round handle next to the anchor moves along with it.</p>",
+      "target": "stage:700,580,140,60",
+      "wait": {"command": "Deform"}
+    },
+    {
+      "title": "Make it curl",
+      "text": "<p>Drag that lower round handle to the left, past the middle of the tentacle. The spine turns into an S, and the tentacle curls with it.</p>",
+      "target": "stage:690,450,140,100",
+      "wait": {"command": "Deform"}
+    },
+    {
+      "title": "A second keyframe",
+      "text": "<p>Click frame 12 of the <i>Tentacle</i> layer and choose <b>Insert &gt; Timeline &gt; Keyframe</b>. Each keyframe keeps its own pose of the deformer.</p>",
+      "target": "menu:Insert/Timeline/Keyframe",
+      "wait": {"command": "Insert Keyframe"}
+    },
+    {
+      "title": "Select it again",
+      "text": "<p>Click the tentacle on the stage, to show its handles on this keyframe.</p>",
+      "target": "stage:700,300,140,330",
+      "wait": {"selection": "instance"}
+    },
+    {
+      "title": "Wave hello",
+      "text": "<p>Drag the square anchor at the tip up and to the right, until it is level with the octopus's cheek. The tentacle reaches up.</p>",
+      "target": "stage:760,380,200,250",
+      "wait": {"command": "Deform"}
+    },
+    {
+      "title": "Curl the tip",
+      "text": "<p>The round handle next to the anchor came along with it, up beside the octopus's head. Drag it down, below the tip. The tentacle swoops down and curls up at the end, like a wave.</p>",
+      "target": "stage:780,300,120,280",
+      "wait": {"command": "Deform"}
+    },
+    {
+      "title": "A third keyframe",
+      "text": "<p>Click frame 24 of the <i>Tentacle</i> layer and choose <b>Insert &gt; Timeline &gt; Keyframe</b>.</p>",
+      "target": "frame:Tentacle:24",
+      "wait": {"command": "Insert Keyframe"}
+    },
+    {
+      "title": "Select it once more",
+      "text": "<p>Click the tentacle on the stage, where it curls up beside the octopus.</p>",
+      "target": "stage:740,380,230,170",
+      "wait": {"selection": "instance"}
+    },
+    {
+      "title": "Straighten it",
+      "text": "<p>Choose <b>Modify &gt; Deformer &gt; Reset Pose</b>. The handles go back where they started, and the tentacle hangs straight again.</p>",
+      "target": "menu:Modify/Deformer/Reset Pose",
+      "wait": {"command": "Reset Pose"}
+    },
+    {
+      "title": "Tween the first half",
+      "text": "<p>Click frame 6 of the <i>Tentacle</i> layer and choose <b>Insert &gt; Classic Tween</b>.</p>",
+      "target": "frame:Tentacle:6",
+      "wait": {"command": "Create Classic Tween"}
+    },
+    {
+      "title": "And the second",
+      "text": "<p>Click frame 18 of the <i>Tentacle</i> layer and choose <b>Insert &gt; Classic Tween</b>. A classic tween bends the tentacle from one keyframe's pose to the next.</p>",
+      "target": "frame:Tentacle:18",
+      "wait": {"command": "Create Classic Tween"}
+    },
+    {
+      "title": "Play it",
+      "text": "<p>Press <kbd>Enter</kbd>, or click the play button in the timeline header. The tentacle sways, waves and hangs down again.</p>",
+      "target": "widget:timelinePlay",
+      "wait": {"playing": true}
+    },
+    {
+      "title": "What you did",
+      "text": "<p>You bent a symbol along a curve and posed it on three keyframes. Each drag of a handle is one step to undo.</p><p><b>Modify &gt; Deformer &gt; Envelope Deformer</b> puts a grid of handles around the art instead, for squash and stretch, and <b>Remove Deformer</b> takes a deformer off. Shapes inside the symbol bend; pictures and text in it do not.</p>"
+    }
+  ]
+}
