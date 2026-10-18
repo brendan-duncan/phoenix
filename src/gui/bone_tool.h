@@ -119,7 +119,8 @@ struct BoundShape
 /// The Bind tool, in the Bone tool's slot: click a bone of a boned shape to
 /// see the points that follow it, then click a point to bind it to the bone,
 /// Shift-click to bind or unbind it, Ctrl-click to unbind it. A point bound
-/// to several bones follows them all, evenly.
+/// to several bones follows them all, evenly; Alt-click gives the chosen
+/// bone a quarter more of it, Alt+Shift-click a quarter less.
 class BindTool : public Tool
 {
 public:
@@ -132,6 +133,15 @@ public:
     void paintOverlay(PhoenixView& view, QPainter& painter, double scale) override;
     bool showsSelectionBounds() const override { return false; }
     void deactivate(PhoenixView& view) override;
+
+    /// The bone chosen, by the joint at its tail, with its armature's frame
+    /// and child; -1 when there is none.
+    int chosenBone(fla::Frame*& frame, size_t& child) const
+    {
+        frame = _frame;
+        child = _child;
+        return _frame ? _bone : -1;
+    }
 
 private:
     std::vector<BoundShape> shapesOnShow(PhoenixView& view) const;

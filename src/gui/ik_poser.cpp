@@ -280,7 +280,8 @@ void IKPoser::drag(PhoenixView& view, const QPointF& documentPos)
         angles.push_back(joint.angle);
 
     _posed = _original;
-    if (!_posed.setPose(_into, angles))
+    // Where gravity or wind bend the bones, only what the drag changed.
+    if (!_posed.setPose(_into, _original.poseFromShown(_into, angles)))
         return;
     _moved = true;
     fla::PoseArmatureCommand::apply(_frame, _child, _posed.xml(), posesOf(_posed));
