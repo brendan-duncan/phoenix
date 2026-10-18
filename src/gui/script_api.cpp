@@ -2052,8 +2052,8 @@ void ScriptApi::addHelperOperations()
                                     "Moho switch file")},
             {"chart", QJsonObject{{"type", "object"},
                           {"description", "Which frame of the mouth symbol (from 1) shows each shape, such as "
-                                          "{\"A\": 1, \"B\": 2, \"X\": 9}; the chart saved on the symbol, or one "
-                                          "frame a shape in order, when left out"},
+                                          "{\"A\": 1, \"B\": 2, \"X\": 9}; the chart saved on the symbol, or the frames "
+                                          "labeled with the shapes' names, or one frame a shape in order, when left out"},
                           {"additionalProperties", QJsonObject{{"type", "integer"}}}}}},
         {"layer"}, true, [this](const QJsonObject& args) {
             ScriptContext context{_window};
@@ -2097,7 +2097,7 @@ void ScriptApi::addHelperOperations()
                     if (name == "phoenixMouthChart")
                         chart = fla::lipsync::chartFrom(value);
             if (chart.empty())
-                chart = fla::lipsync::defaultChart(fla::lipsync::shapesOf(cues));
+                chart = fla::lipsync::defaultChart(fla::lipsync::shapesOf(cues), fla::lipsync::labelsOf(*mouth));
             fla::CommandPtr keys = fla::lipsync::apply(layer, *mouth, cues, chart, key.index, fps);
             if (!keys)
                 fail("No mouth shapes came of that.");

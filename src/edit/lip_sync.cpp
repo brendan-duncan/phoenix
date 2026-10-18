@@ -5,9 +5,12 @@
 
 #include "../data/frame.h"
 #include "../data/layer.h"
+#include "../data/symbol.h"
 #include "../data/symbol_instance.h"
+#include "../data/timeline.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstdlib>
 #include <sstream>
@@ -172,13 +175,38 @@ std::vector<std::string> shapesOf(const std::vector<Cue>& cues)
     return shapes;
 }
 
-std::map<std::string, int> defaultChart(const std::vector<std::string>& shapes)
+std::map<std::string, int> defaultChart(const std::vector<std::string>& shapes, const std::map<std::string, int>& labels)
 {
+    const auto lower = [](std::string text) {
+        for (char& c : text)
+            c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        return text;
+    };
     std::map<std::string, int> chart;
     int frame = 1;
     for (const std::string& shape : shapes)
-        chart[shape] = frame++;
+    {
+        int labeled = 0;
+        for (const auto& [label, at] : labels)
+            if (label == shape || (!labeled && lower(label) == lower(shape)))
+                labeled = at;
+        chart[shape] = labeled > 0 ? labeled : frame;
+        ++frame;
+    }
     return chart;
+}
+
+std::map<std::string, int> labelsOf(const SymbolInstance& mouth)
+{
+    std::map<std::string, int> labels;
+    if (!mouth.symbol || mouth.symbol->timelines.empty() || !mouth.symbol->timelines.front())
+        return labels;
+    for (const Layer* layer : mouth.symbol->timelines.front()->layers)
+        if (layer)
+            for (const Frame* frame : layer->frames)
+                if (frame && !frame->name.empty() && frame->labelType != "comment" && !labels.count(frame->name))
+                    labels[frame->name] = frame->index + 1;
+    return labels;
 }
 
 std::string chartText(const std::map<std::string, int>& chart)

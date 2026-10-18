@@ -39,6 +39,7 @@
 #include "../writer/fla_writer.h"
 #include "../edit/phoenix_features.h"
 #include "tutorial_lesson.h"
+#include <QAbstractButton>
 #include <QApplication>
 #include "tutorial_runner.h"
 #include "../writer/xfl_content.h"
@@ -153,14 +154,16 @@ const char* const kHelp =
     "\n"
     "  capture-window <file|-> --out <png> [--script <jsfl>] [--size WxH]\n"
     "                 [--show <panel>] [--panel <name>] [--menu <path>]\n"
-    "                 [--action <path>] [--crop x,y,w,h] [--dock-width N]\n"
+    "                 [--action <path> [--press <button>]] [--crop x,y,w,h]\n"
+    "                 [--dock-width N]\n"
     "                 [--theme <name>]\n"
     "      Draws the window with the file open, unseen, with default\n"
     "      settings, after the script has set it up (selected something,\n"
     "      gone to a frame), for the guide's pictures. --show opens a panel\n"
     "      by its object name; --panel draws one panel or widget rather than\n"
     "      the window, --menu one menu (\"Modify>Bitmap\"), --action the dialog\n"
-    "      a menu item opens. Nothing is saved.\n"
+    "      a menu item opens (--press clicks one of its buttons first, by its\n"
+    "      text). Nothing is saved.\n"
     "\n"
     "  run-script <script.jsfl|script.py> [document ...] [--timeout SECONDS]\n"
     "             [--no-native-extensions]\n"
@@ -1349,7 +1352,8 @@ public:
 /// never on the screen, after a script has set it up (selected something,
 /// moved to a frame), for the guide's pictures. --panel draws one widget
 /// (a dock or any widget by object name), --menu one menu as it drops
-/// down, --action the dialog a menu item opens (closed again after).
+/// down, --action the dialog a menu item opens (closed again after;
+/// --press clicks one of its buttons first).
 int captureWindow(const QStringList& args)
 {
     const QString out = option(args, "--out");
@@ -1430,8 +1434,10 @@ int captureWindow(const QStringList& args)
             std::fprintf(stderr, "capture-window: no menu item %s\n", qPrintable(actionPath));
             return 1;
         }
-        // The dialog it opens is drawn once it is up, then closed.
-        QTimer::singleShot(600, [&picture]() {
+        // The dialog it opens is drawn once it is up (after --press clicks
+        // one of its buttons, by its text), then closed.
+        const QString press = option(args, "--press");
+        QTimer::singleShot(600, [&picture, press]() {
             QWidget* dialog = QApplication::activeModalWidget();
             if (!dialog)
                 for (QWidget* top : QApplication::topLevelWidgets())
@@ -1439,6 +1445,14 @@ int captureWindow(const QStringList& args)
                         dialog = top;
             if (!dialog)
                 return;
+            if (!press.isEmpty())
+                for (QAbstractButton* button : dialog->findChildren<QAbstractButton*>())
+                    if (button->text().remove('&') == press)
+                    {
+                        button->click();
+                        settle(300);
+                        break;
+                    }
             picture = dialog->grab();
             if (QDialog* asDialog = qobject_cast<QDialog*>(dialog))
                 asDialog->reject();

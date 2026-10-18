@@ -1,8 +1,14 @@
 #include "lip_sync_dialog.h"
 
+#include "audio_engine.h"
 #include "media_import.h"
 
+#include <algorithm>
+#include <cmath>
+
 #include <QApplication>
+#include <QComboBox>
+#include <QDataStream>
 #include <QDialogButtonBox>
 #include <QDir>
 #include <QFile>
@@ -40,6 +46,25 @@ QString findRhubarb()
     return QFileInfo::exists(beside) ? beside : QString();
 }
 
+/// Interleaved stereo float samples as a 16-bit WAV file.
+bool writeWav(QIODevice& device, const std::vector<float>& samples, int rate)
+{
+    QDataStream out(&device);
+    out.setByteOrder(QDataStream::LittleEndian);
+    const size_t count = std::min(samples.size(), static_cast<size_t>((0xFFFFFFFFull - 36) / 2));
+    const quint32 dataBytes = static_cast<quint32>(count * 2);
+    out.writeRawData("RIFF", 4);
+    out << quint32(36 + dataBytes);
+    out.writeRawData("WAVE", 4);
+    out.writeRawData("fmt ", 4);
+    out << quint32(16) << quint16(1) << quint16(2) << quint32(rate) << quint32(rate * 4) << quint16(4) << quint16(16);
+    out.writeRawData("data", 4);
+    out << dataBytes;
+    for (size_t i = 0; i < count; ++i)
+        out << qint16(std::lround(std::clamp(samples[i], -1.0f, 1.0f) * 32767.0f));
+    return out.status() == QDataStream::Ok;
+}
+
 QHBoxLayout* fileRow(QLineEdit* edit, QPushButton* browse)
 {
     QHBoxLayout* row = new QHBoxLayout();
@@ -50,25 +75,45 @@ QHBoxLayout* fileRow(QLineEdit* edit, QPushButton* browse)
 
 } // namespace
 
-LipSyncDialog::LipSyncDialog(const QString& mouthName, const std::map<std::string, int>& savedChart, int startFrame,
-    double frameRate, QWidget* parent)
+LipSyncDialog::LipSyncDialog(const QString& mouthName, const std::map<std::string, int>& savedChart,
+    const std::map<std::string, int>& labels, const QStringList& sounds, const QString& sound, SoundSource soundOf,
+    int startFrame, double frameRate, QWidget* parent)
     : QDialog(parent)
     , _frameRate(frameRate)
     , _savedChart(savedChart)
+    , _labels(labels)
+    , _soundOf(std::move(soundOf))
 {
     setWindowTitle("Lip Sync");
     QVBoxLayout* layout = new QVBoxLayout(this);
     layout->addWidget(new QLabel(QString("Mouth: <b>%1</b>, keyed on its layer from the frame below.").arg(mouthName.toHtmlEscaped()), this));
 
-    // From a recording, through Rhubarb.
+    // From a recording: a library sound, or a file on disk.
     _fromAudio = new QRadioButton("Work out the mouth shapes from a voice recording", this);
     _fromAudio->setChecked(true);
     layout->addWidget(_fromAudio);
     QFormLayout* audioForm = new QFormLayout();
+    _sound = new QComboBox(this);
+    if (_soundOf)
+        for (const QString& name : sounds)
+            _sound->addItem(name, name);
+    _sound->addItem("A recording on disk", QString());
+    _sound->setCurrentIndex(std::max(0, _sound->findData(sound)));
+    audioForm->addRow("Sound:", _sound);
     _audio = new QLineEdit(this);
     _audio->setPlaceholderText("A WAV or Ogg recording of the line");
     QPushButton* audioBrowse = new QPushButton("Browse...", this);
     audioForm->addRow("Recording:", fileRow(_audio, audioBrowse));
+    const auto onDisk = [this, audioBrowse]() {
+        const bool file = librarySound().isEmpty();
+        _audio->setEnabled(file);
+        audioBrowse->setEnabled(file);
+    };
+    onDisk();
+    connect(_sound, &QComboBox::currentIndexChanged, this, [this, onDisk]() {
+        onDisk();
+        _fromAudio->setChecked(true);
+    });
     _rhubarb = new QLineEdit(findRhubarb(), this);
     _rhubarb->setPlaceholderText("rhubarb.exe (github.com/DanielSWolf/rhubarb-lip-sync)");
     QPushButton* rhubarbBrowse = new QPushButton("Browse...", this);
@@ -151,11 +196,31 @@ LipSyncDialog::LipSyncDialog(const QString& mouthName, const std::map<std::strin
 bool LipSyncDialog::runRhubarb(std::string& text)
 {
     const QString rhubarb = _rhubarb->text().trimmed();
-    const QString audio = _audio->text().trimmed();
-    if (audio.isEmpty() || !QFileInfo::exists(audio))
+    QString audio = _audio->text().trimmed();
+    const QString library = librarySound();
+    std::shared_ptr<const PcmBuffer> pcm;
+    if (!library.isEmpty())
+    {
+        pcm = _soundOf(library);
+        if (!pcm || pcm->samples.empty())
+        {
+            QMessageBox::information(this, "Lip Sync", QString("Phoenix cannot read the sound %1.").arg(library));
+            return false;
+        }
+    }
+    else if (audio.isEmpty() || !QFileInfo::exists(audio))
     {
         QMessageBox::information(this, "Lip Sync", "Choose the recording of the line.");
         return false;
+    }
+    if ((rhubarb.isEmpty() || !QFileInfo::exists(rhubarb)) && pcm)
+    {
+        // No Rhubarb: Phoenix listens to the library sound itself.
+        std::vector<int16_t> samples(pcm->samples.size());
+        for (size_t i = 0; i < samples.size(); ++i)
+            samples[i] = static_cast<int16_t>(std::lround(std::clamp(pcm->samples[i], -1.0f, 1.0f) * 32767.0f));
+        text = fla::lipsync::tsvOf(fla::lipsync::listen(samples, 2, PcmBuffer::kRate, _frameRate));
+        return true;
     }
     if (rhubarb.isEmpty() || !QFileInfo::exists(rhubarb))
     {
@@ -172,6 +237,18 @@ bool LipSyncDialog::runRhubarb(std::string& text)
     }
     QSettings().setValue("lipsync/rhubarb", rhubarb);
     QTemporaryDir folder;
+    if (pcm)
+    {
+        // Rhubarb reads a file: the library sound, written out as a WAV.
+        QFile wav(folder.filePath("voice.wav"));
+        if (!wav.open(QIODevice::WriteOnly) || !writeWav(wav, pcm->samples, PcmBuffer::kRate))
+        {
+            QMessageBox::warning(this, "Lip Sync", "Phoenix could not hand the sound to Rhubarb.");
+            return false;
+        }
+        wav.close();
+        audio = wav.fileName();
+    }
     QStringList arguments{"-f", "tsv", "-o", folder.filePath("cues.tsv")};
     if (!_script->toPlainText().trimmed().isEmpty())
     {
@@ -247,7 +324,7 @@ bool LipSyncDialog::read()
 void LipSyncDialog::fillChart()
 {
     const std::vector<std::string> shapes = fla::lipsync::shapesOf(_cues);
-    std::map<std::string, int> chart = fla::lipsync::defaultChart(shapes);
+    std::map<std::string, int> chart = fla::lipsync::defaultChart(shapes, _labels);
     // A chart kept on the mouth from before wins.
     for (auto& [shape, frame] : chart)
         if (_savedChart.count(shape))
@@ -276,6 +353,11 @@ std::map<std::string, int> LipSyncDialog::chart() const
             chart[_chart->item(row, 0)->text().toStdString()] = frame->value();
     }
     return chart;
+}
+
+QString LipSyncDialog::librarySound() const
+{
+    return _sound->currentData().toString();
 }
 
 int LipSyncDialog::startFrame() const

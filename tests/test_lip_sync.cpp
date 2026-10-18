@@ -4,7 +4,9 @@
 
 #include "../src/data/frame.h"
 #include "../src/data/layer.h"
+#include "../src/data/symbol.h"
 #include "../src/data/symbol_instance.h"
+#include "../src/data/timeline.h"
 #include "../src/edit/command_stack.h"
 #include "../src/edit/lip_sync.h"
 
@@ -60,6 +62,37 @@ TEST(lip_sync_reads_rhubarb_and_papagayo_and_keys_the_mouth)
     stack.push(fla::lipsync::apply(layer, *mouth, wild, chart, 10, 24.0));
     for (const fla::Frame* f : layer.frames)
         CHECK(f->index >= 0 && f->index <= fla::kMaxFrames);
+}
+
+TEST(lip_sync_chart_follows_the_mouth_frame_labels)
+{
+    // A mouth graphic whose frames are labeled A, C, X (and a comment).
+    fla::Symbol symbol(nullptr);
+    fla::Timeline* timeline = new fla::Timeline(&symbol);
+    symbol.timelines.push_back(timeline);
+    fla::Layer* labels = new fla::Layer(timeline);
+    timeline->layers.push_back(labels);
+    const auto label = [labels](int index, const char* name, const char* type) {
+        fla::Frame* frame = new fla::Frame(labels);
+        frame->index = index;
+        frame->name = name;
+        frame->labelType = type;
+        labels->frames.push_back(frame);
+    };
+    label(0, "A", "name");
+    label(1, "notes", "comment");
+    label(2, "c", "name");
+    label(8, "X", "name");
+    fla::SymbolInstance mouth(nullptr);
+    mouth.symbol = &symbol;
+    const std::map<std::string, int> found = fla::lipsync::labelsOf(mouth);
+    CHECK(found.size() == 3 && found.at("A") == 1 && found.at("c") == 3 && found.at("X") == 9);
+
+    // Labeled shapes go to their frames, case ignored; the rest in order.
+    std::map<std::string, int> chart = fla::lipsync::defaultChart({"A", "B", "C", "X"}, found);
+    CHECK(chart["A"] == 1 && chart["B"] == 2 && chart["C"] == 3 && chart["X"] == 9);
+    chart = fla::lipsync::defaultChart({"B", "X"}, found);
+    CHECK(chart["B"] == 1 && chart["X"] == 9);
 }
 
 TEST(lip_sync_listens_to_loudness_without_rhubarb)
