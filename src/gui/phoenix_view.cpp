@@ -450,6 +450,9 @@ void PhoenixView::setDocument(const fla::FLADocument* document)
     _armatureCache.clear();
     clearCaches();
     cancelStagePicks();
+    _onionShifts.reset();
+    _ghosts.clear();
+    _shiftDrag.frame = -1;
     _flaDocument = document;
     _panX = 0;
     _panY = 0;
@@ -1220,6 +1223,7 @@ void PhoenixView::paintEvent(QPaintEvent *event)
     {
         drawPegs(painter);
         drawDeformers(painter);
+        drawShiftTrace(painter);
     }
 
     // Guides over the art, rulers over everything.
@@ -2055,12 +2059,20 @@ void PhoenixView::drawStageContents(QPainter& painter, const fla::Document* docu
                 after.push_back(current + k);
         }
         // Furthest first, fading with the distance.
+        _ghosts.clear();
         for (int k = static_cast<int>(before.size()); k >= 1; --k)
             drawOnionFrame(painter, document, before[static_cast<size_t>(k - 1)], _onionBeforeColor,
                 _onionOpacity * (1.0 - (k - 1.0) / (before.size() + 1.0)));
         for (int k = static_cast<int>(after.size()); k >= 1; --k)
             drawOnionFrame(painter, document, after[static_cast<size_t>(k - 1)], _onionAfterColor,
                 _onionOpacity * (1.0 - (k - 1.0) / (after.size() + 1.0)));
+        // Shift and Trace picks the nearest ghost first, an earlier one
+        // before a later.
+        std::stable_sort(_ghosts.begin(), _ghosts.end(), [current](const Ghost& a, const Ghost& b) {
+            const int da = std::abs(a.frame - current) * 2 + (a.frame > current ? 1 : 0);
+            const int db = std::abs(b.frame - current) * 2 + (b.frame > current ? 1 : 0);
+            return da < db;
+        });
         _drawPhase = phase;
     }
 
@@ -2268,11 +2280,19 @@ void PhoenixView::drawOnionFrame(QPainter& painter, const fla::Document* documen
         return;
     QImage image(device->width(), device->height(), QImage::Format_ARGB32_Premultiplied);
     image.fill(Qt::transparent);
+    // Shift and Trace: the ghost moved, turned and scaled as dragged, in the
+    // stage's space; its frame stays as it is.
+    QTransform shifted;
+    if (const fla::onion::Shift* shift = _onionShifts.find(onionTimeline(), frame))
+    {
+        const fla::Transform m = fla::onion::matrix(*shift);
+        shifted = QTransform(m.m11, m.m12, m.m21, m.m22, m.tx, m.ty);
+    }
     {
         QPainter onion(&image);
         onion.setRenderHint(QPainter::Antialiasing, true);
         onion.setRenderHint(QPainter::SmoothPixmapTransform, true);
-        onion.setTransform(painter.transform());
+        onion.setTransform(shifted * painter.transform());
         _frameOverride = frame;
         // In outline mode the frame's art is drawn as lines in the tint.
         const QColor savedForced = _forcedOutline;
@@ -2284,11 +2304,19 @@ void PhoenixView::drawOnionFrame(QPainter& painter, const fla::Document* documen
         }
         else if (_scope.back().timeline)
         {
-            onion.setTransform(scopeToDocument() * painter.transform(), false);
+            onion.setTransform(scopeToDocument() * shifted * painter.transform(), false);
             drawTimeline(onion, _scope.back().timeline, fla::LoopType::PlayOnce, 0);
         }
         _frameOverride = -1;
         _forcedOutline = savedForced;
+        // Where the ghost covers, coarsely, for Shift and Trace to find it
+        // under the pointer.
+        if (_shiftTrace && image.width() >= 4 && image.height() >= 4)
+        {
+            _ghosts.push_back({frame, image.scaled(image.width() / 4, image.height() / 4, Qt::IgnoreAspectRatio,
+                                          Qt::SmoothTransformation).convertToFormat(QImage::Format_Alpha8)});
+            _ghostToDevice = painter.transform();
+        }
         // Half the frame's own colors, half the tint.
         onion.setCompositionMode(QPainter::CompositionMode_SourceAtop);
         QColor wash = tint;
@@ -2299,6 +2327,118 @@ void PhoenixView::drawOnionFrame(QPainter& painter, const fla::Document* documen
     painter.resetTransform();
     painter.setOpacity(painter.opacity() * opacity);
     painter.drawImage(0, 0, image);
+    painter.restore();
+}
+
+const void* PhoenixView::onionTimeline() const
+{
+    if (const fla::Timeline* scope = scopeTimeline())
+        return scope;
+    const fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
+    return document ? document->currentScene() : nullptr;
+}
+
+void PhoenixView::setShiftTrace(bool on)
+{
+    _shiftTrace = on;
+    _shiftDrag.frame = -1;
+    _ghosts.clear();
+    if (on)
+        setCursor(Qt::SizeAllCursor);
+    else
+        unsetCursor();
+    _staticValid = false;
+    update();
+}
+
+void PhoenixView::resetShiftTrace()
+{
+    _onionShifts.reset();
+    _shiftDrag.frame = -1;
+    _staticValid = false;
+    update();
+}
+
+bool PhoenixView::beginShiftDrag(QMouseEvent* event)
+{
+    if (!_shiftTrace || !_onionSkin || !_player || event->button() != Qt::LeftButton || _ghosts.empty())
+        return false;
+    // The ghost under the pointer, nearest the playhead first; elsewhere the
+    // nearest earlier one (or the nearest later, when there is none).
+    const QPointF stage = widgetToStage(event->position());
+    const QPoint cell = (_ghostToDevice.map(stage) / 4.0).toPoint();
+    const Ghost* picked = nullptr;
+    for (const Ghost& ghost : _ghosts)
+        if (ghost.coverage.valid(cell) && ghost.coverage.constScanLine(cell.y())[cell.x()] > 8)
+        {
+            picked = &ghost;
+            break;
+        }
+    const int current = _player->currentFrame();
+    for (const Ghost& ghost : _ghosts)
+        if (!picked && ghost.frame < current)
+            picked = &ghost;
+    if (!picked)
+        picked = &_ghosts.front();
+
+    // A ghost shifted for the first time turns and scales about its middle.
+    const void* timeline = onionTimeline();
+    QPointF middle = stage;
+    if (!_onionShifts.find(timeline, picked->frame))
+    {
+        const QImage& coverage = picked->coverage;
+        int left = coverage.width(), top = coverage.height(), right = -1, bottom = -1;
+        for (int y = 0; y < coverage.height(); ++y)
+        {
+            const uchar* line = coverage.constScanLine(y);
+            for (int x = 0; x < coverage.width(); ++x)
+                if (line[x] > 8)
+                {
+                    left = std::min(left, x);
+                    right = std::max(right, x);
+                    top = std::min(top, y);
+                    bottom = std::max(bottom, y);
+                }
+        }
+        bool invertible = false;
+        const QTransform toStage = _ghostToDevice.inverted(&invertible);
+        if (right >= left && invertible)
+            middle = toStage.map(QPointF((left + right + 1) * 2.0, (top + bottom + 1) * 2.0));
+    }
+    fla::onion::Shift& shift = _onionShifts.at(timeline, picked->frame, fla::Point(middle.x(), middle.y()));
+    _shiftDrag.frame = picked->frame;
+    _shiftDrag.mode = (event->modifiers() & Qt::ShiftModifier) ? 1 : (event->modifiers() & Qt::AltModifier) ? 2 : 0;
+    _shiftDrag.start = stage;
+    _shiftDrag.center = QPointF(shift.pivot.x + shift.dx, shift.pivot.y + shift.dy);
+    _shiftDrag.was = shift;
+    return true;
+}
+
+void PhoenixView::drawShiftTrace(QPainter& painter)
+{
+    if (!_shiftTrace || !_onionSkin)
+        return;
+    // A mark at the middle of each shifted ghost on show.
+    painter.save();
+    painter.setTransform(QTransform());
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    const QColor ink = theme::color("accent");
+    const void* timeline = onionTimeline();
+    for (const Ghost& ghost : _ghosts)
+    {
+        const fla::onion::Shift* shift = _onionShifts.find(timeline, ghost.frame);
+        if (!shift || !shift->moved())
+            continue;
+        const QPointF at = stageToWidget(QPointF(shift->pivot.x + shift->dx, shift->pivot.y + shift->dy));
+        painter.setBrush(Qt::NoBrush);
+        painter.setPen(QPen(QColor(0, 0, 0, 120), 3.0));
+        painter.drawLine(at - QPointF(7.0, 0.0), at + QPointF(7.0, 0.0));
+        painter.drawLine(at - QPointF(0.0, 7.0), at + QPointF(0.0, 7.0));
+        painter.setPen(QPen(ink, 1.5));
+        painter.drawLine(at - QPointF(7.0, 0.0), at + QPointF(7.0, 0.0));
+        painter.drawLine(at - QPointF(0.0, 7.0), at + QPointF(0.0, 7.0));
+        painter.drawEllipse(at, 4.0, 4.0);
+    }
     painter.restore();
 }
 
@@ -8895,6 +9035,9 @@ void PhoenixView::mousePressEvent(QMouseEvent *event)
     // So does a deformer's handle.
     if (event->button() == Qt::LeftButton && !forcePan && beginDeformerDrag(event->position()))
         return;
+    // Shift and Trace takes the stage while it is on.
+    if (!forcePan && beginShiftDrag(event))
+        return;
 
     beginInteraction();
 
@@ -8931,6 +9074,29 @@ void PhoenixView::mouseMoveEvent(QMouseEvent *event)
     if (_sketching)
     {
         _sketchAt = mapToDocument(event->position());
+        return;
+    }
+    if (_shiftDrag.frame >= 0)
+    {
+        // The ghost follows the pointer: moved, turned about its middle, or
+        // scaled from it.
+        const QPointF stage = widgetToStage(event->position());
+        fla::onion::Shift& shift = _onionShifts.at(onionTimeline(), _shiftDrag.frame, _shiftDrag.was.pivot);
+        shift = _shiftDrag.was;
+        const QPointF from = _shiftDrag.start - _shiftDrag.center;
+        const QPointF to = stage - _shiftDrag.center;
+        if (_shiftDrag.mode == 1)
+            shift.rotation += (std::atan2(to.y(), to.x()) - std::atan2(from.y(), from.x())) * 180.0 / 3.14159265358979323846;
+        else if (_shiftDrag.mode == 2)
+            shift.scale = std::clamp(shift.scale * std::hypot(to.x(), to.y()) / std::max(std::hypot(from.x(), from.y()), 1.0),
+                0.05, 20.0);
+        else
+        {
+            shift.dx += stage.x() - _shiftDrag.start.x();
+            shift.dy += stage.y() - _shiftDrag.start.y();
+        }
+        _staticValid = false;
+        update();
         return;
     }
     emit cursorMoved(mapToDocument(event->position()), event->position().toPoint());
@@ -9012,6 +9178,11 @@ void PhoenixView::mouseReleaseEvent(QMouseEvent *event)
     if (_movie)
     {
         movieMouse(event);
+        return;
+    }
+    if (_shiftDrag.frame >= 0 && event->button() == Qt::LeftButton)
+    {
+        _shiftDrag.frame = -1;
         return;
     }
     if (_sketching && event->button() == Qt::LeftButton)

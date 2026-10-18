@@ -16004,6 +16004,29 @@ void MainWindow::fillOnionMenu(QMenu* menu)
             applyOnion();
         });
     }
+    // Shift and Trace: the ghosts moved, turned and scaled to trace over,
+    // the frames left as they are.
+    menu->addSeparator();
+    QAction* shiftTrace = menu->addAction("Shift and Trace");
+    shiftTrace->setCheckable(true);
+    shiftTrace->setChecked(_phoenixView && _phoenixView->shiftTrace());
+    shiftTrace->setStatusTip("Drag a ghost on the stage to move it, Shift+drag to turn it, Alt+drag to scale it");
+    connect(shiftTrace, &QAction::toggled, this, [this](bool on) {
+        if (!_phoenixView)
+            return;
+        if (on && _onionSkinAction && !_onionSkinAction->isChecked())
+            _onionSkinAction->setChecked(true);
+        _phoenixView->setShiftTrace(on);
+        if (on)
+            statusBar()->showMessage("Shift and Trace: drag a ghost to move it, Shift+drag to turn it, Alt+drag to scale "
+                                     "it. Turn it off to draw.", 8000);
+    });
+    QAction* resetShift = menu->addAction("Reset Shift and Trace", this, [this]() {
+        if (_phoenixView)
+            _phoenixView->resetShiftTrace();
+    });
+    resetShift->setEnabled(_phoenixView && _phoenixView->shiftTraceMoved());
+    resetShift->setStatusTip("Put every shifted ghost back where its frame has it");
     menu->addSeparator();
     menu->addAction("Color Before...", this, [this]() {
         const QColor chosen = QColorDialog::getColor(_onion.beforeColor, this, "Onion Skin: Frames Before");

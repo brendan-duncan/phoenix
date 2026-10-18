@@ -92,6 +92,7 @@ set(PHOENIX_CORE_SOURCES
     edit/phoenix_features.cpp
     edit/region_split.cpp
     edit/review_notes.cpp
+    edit/onion_shift.cpp
     edit/safe_zones.cpp
     edit/scene_commands.cpp
     edit/script_edit.cpp

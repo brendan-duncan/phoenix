@@ -4,6 +4,7 @@ What changed in each release of Phoenix, newest first.
 
 ## Unreleased
 
+- Onion skin Shift and Trace: slide, turn or resize the faint copy of another frame to trace over it, without changing that frame; Reset Shift and Trace puts them back
 - Modify > Deformer > Corner Pin: drag a symbol's four corners anywhere and its art follows in true perspective, for signs, screens and floors; shapes, text and bitmaps are put in a symbol first
 - Corner pins tween between keyframes and show in movies, SWF movies and HTML5 pages
 - Export FLA for Other Apps draws bent instances (corner pins, curve and envelope deformers) into bitmaps, so other apps show them bent

@@ -355,6 +355,7 @@ set(HEADERS
     src/edit/frame_actions.h
     src/edit/function_curves.h
     src/edit/deformers.h
+    src/edit/onion_shift.h
     src/edit/scene_commands.h
     src/edit/script_edit.h
     src/edit/document_settings.h
