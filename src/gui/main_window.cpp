@@ -10384,13 +10384,15 @@ void MainWindow::updateEditState()
         _palettes->refresh();
     if (_functionCurves && _functionCurvesDock && _functionCurvesDock->isVisible() && !_editContext.commandStack().isInMacro())
         _functionCurves->refresh();
-    if (_scenes && _scenesDock && _scenesDock->isVisible() && !_editContext.commandStack().isInMacro())
+    if (!_editContext.commandStack().isInMacro())
     {
-        // An undo may have put back a scene, or taken the shown one away.
+        // An undo may have put back a scene, or taken the shown one away,
+        // with the panel closed too: the stage's scene menu changes scenes.
         fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
-        if (document && _shownScene != document->currentScene())
+        if (document && _shownScene && !document->timelines.empty() && _shownScene != document->currentScene())
             goToScene(-1);
-        _scenes->refresh();
+        if (_scenes && _scenesDock && _scenesDock->isVisible())
+            _scenes->refresh();
     }
     if (_colorPanel)
         _colorPanel->refresh();
@@ -12807,6 +12809,56 @@ void MainWindow::rebuildBreadcrumb()
         connect(button, &QToolButton::clicked, this, [this, level]() {
             _phoenixView->exitToDepth(level);
         });
+        if (level == 0)
+        {
+            // The scene drops down: the scenes to switch to and the scene
+            // commands. Inside a symbol a click still steps back out to it.
+            button->setEnabled(true);
+            button->setToolTip("Scenes");
+            button->setPopupMode(depth > 0 ? QToolButton::MenuButtonPopup : QToolButton::InstantPopup);
+            QMenu* scenes = new QMenu(button);
+            connect(scenes, &QMenu::aboutToShow, this, [this, scenes]() {
+                scenes->clear();
+                const fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
+                const int count = document ? static_cast<int>(document->timelines.size()) : 0;
+                const int current = document ? document->currentSceneIndex() : -1;
+                for (int i = 0; i < count; ++i)
+                {
+                    const std::string& name = document->timelines[static_cast<size_t>(i)]->name;
+                    QAction* scene = scenes->addAction(
+                        name.empty() ? QString("Scene %1").arg(i + 1) : QString::fromStdString(name), this,
+                        [this, i]() {
+                            if (_phoenixView)
+                                _phoenixView->exitToDepth(0);
+                            goToScene(i);
+                        });
+                    scene->setCheckable(true);
+                    scene->setChecked(i == current);
+                }
+                if (count > 0)
+                    scenes->addSeparator();
+                scenes->addAction("&Add Scene", this, [this]() {
+                    if (_scenes)
+                        _scenes->addScene(false);
+                })->setEnabled(document != nullptr);
+                scenes->addAction("D&uplicate Scene", this, [this]() {
+                    if (_scenes)
+                        _scenes->addScene(true);
+                })->setEnabled(count > 0);
+                scenes->addAction("&Delete Scene", this, [this]() {
+                    if (_scenes)
+                        _scenes->deleteScene();
+                })->setEnabled(count > 1);
+                scenes->addSeparator();
+                scenes->addAction("Open Scenes &Panel", this, [this]() {
+                    if (!_scenesDock)
+                        return;
+                    _scenesDock->show();
+                    _scenesDock->raise();
+                });
+            });
+            button->setMenu(scenes);
+        }
         layout->addWidget(button);
     }
     layout->addStretch();

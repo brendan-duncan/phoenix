@@ -38,9 +38,10 @@ public:
 
     /// Adds a new scene after the current one, or a copy of it.
     void addScene(bool duplicate);
+    /// Deletes the current scene, once asked; the last one stays.
+    void deleteScene();
 
 private:
-    void deleteScene();
     void renamed(QListWidgetItem* item);
     void reordered();
     void push(std::vector<fla::Timeline*> scenes, int current, const char* name);
