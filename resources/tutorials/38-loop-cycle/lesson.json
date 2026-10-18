@@ -1,0 +1,72 @@
+{
+  "title": "A cycle with Loop",
+  "summary": "Key a balloon's bob once and let the Loop behavior repeat it for the whole shot, then make it bob higher in Function Curves.",
+  "minutes": 7,
+  "order": 38,
+  "guide": "behaviors.html",
+  "tags": ["Animation", "Behaviors"],
+  "start": {"document": "start"},
+  "final": "final",
+  "steps": [
+    {
+      "title": "Welcome",
+      "text": "<p>Much of animation repeats: a bob, a wave, a walk. Key it once, and the <b>Loop</b> behavior plays it again and again for as long as the shot runs.</p><p>The <i>Balloon</i> layer holds a hot-air balloon, the graphic symbol <i>Balloon</i>, keyed on frames 1, 13 and 25. Two classic tweens carry it up and back down: one bob, a second long. After frame 25 it hangs still until the end, frame 96.</p>"
+    },
+    {
+      "title": "Play it",
+      "text": "<p>Press <kbd>Enter</kbd>, or click the play button in the timeline header. The balloon bobs once, then stops dead in the air.</p>",
+      "target": "widget:timelinePlay",
+      "wait": {"playing": true}
+    },
+    {
+      "title": "Select the last keyframe",
+      "text": "<p>Press <kbd>Enter</kbd> again to stop. In the timeline, click frame 25 of the <i>Balloon</i> layer. That selects the balloon on it, with a box around it on the stage.</p><p>A behavior goes on the instance of one keyframe and works over that keyframe's frames. This keyframe runs from frame 25 to the end, the frames that need the bob.</p>",
+      "target": "frame:Balloon:25",
+      "wait": {"selection": "instance"}
+    },
+    {
+      "title": "Open the Behaviors panel",
+      "text": "<p>Choose <b>Window &gt; Behaviors</b> if it is not showing. It lists the behaviors on the selected balloon: none yet.</p>",
+      "target": "dock:Behaviors"
+    },
+    {
+      "title": "Add Loop",
+      "text": "<p>Click <b>Add Behavior</b> and choose <b>Loop</b>. Its settings show below the list: <b>Loop</b> is <b>Cycle</b>, round and round, and <b>Loop the first (frames)</b> is 24.</p><p>Loop looks back to where the balloon's keyframes start, frame 1, and repeats their first 24 frames. That is exactly one bob: frame 25 is the same pose as frame 1, so each bob runs into the next without a jump.</p>",
+      "target": "widget:behaviorsAdd",
+      "wait": {"command": "Add Behavior"}
+    },
+    {
+      "title": "Play it",
+      "text": "<p>Press <kbd>Enter</kbd>, or click the play button in the timeline header. The balloon bobs all the way to frame 96, four bobs from one set of keys.</p>",
+      "target": "widget:timelinePlay",
+      "wait": {"playing": true}
+    },
+    {
+      "title": "Open Function Curves",
+      "text": "<p>Press <kbd>Enter</kbd> again to stop. Choose <b>Window &gt; Function Curves</b>. It opens beside the timeline, narrow. Drag the edge between them to the left until the panel is about half as wide as the window, so the dots on its graph stand apart.</p>",
+      "target": "menu:Window/Function Curves",
+      "wait": {"action": "Window/Function Curves"}
+    },
+    {
+      "title": "Show the height",
+      "text": "<p>Function Curves shows one property of the layer picked in the timeline, <i>Balloon</i>, over its frames. In the list at its top right, choose <b>Y</b>.</p><p>The solid line is the balloon's height as keyed, with a dot for each keyframe: frames 1, 13 and 25. Y counts down from the top of the stage, so the balloon rising shows as a dip, and after frame 25 the line is flat.</p><p>The dashed line is what Loop makes of it: the same dip, again and again, to the end.</p>",
+      "target": "dock:Function Curves"
+    },
+    {
+      "title": "Bob higher",
+      "text": "<p>Double-click the middle dot, on frame 13. In the <b>Keyframe Value</b> window, type <b>230</b> and click <b>OK</b>. You can also drag the dot down; the value shows as you drag.</p><p>The dip gets deeper, and so does every dashed one after it. Loop repeats the keys as they are now, so one change reaches every bob.</p>",
+      "target": "dock:Function Curves",
+      "wait": {"command": "Change Curve"}
+    },
+    {
+      "title": "Play it",
+      "text": "<p>Press <kbd>Enter</kbd>, or click the play button in the timeline header. The balloon floats higher on every bob, all the way to the end.</p>",
+      "target": "widget:timelinePlay",
+      "wait": {"playing": true}
+    },
+    {
+      "title": "What you did",
+      "text": "<p>You keyed one bob and looped it for the whole shot, then changed every bob at once by changing the one you keyed.</p><p>Keep the first and last keys of a cycle the same, and set <b>Loop the first (frames)</b> to the frames between them, so each time round runs into the next. <b>Back and Forth</b> plays the keyed frames forward and then backward, and <b>Continue</b> carries on the way the motion was going at the speed it ended with: a drift that never stops. Function Curves shows X, rotation, scale, alpha and more the same way; pick one from its list.</p>"
+    }
+  ]
+}
