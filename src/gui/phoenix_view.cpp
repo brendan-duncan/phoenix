@@ -3541,8 +3541,13 @@ fla::Transform PhoenixView::shownTransform(const LayerFrame& state, size_t eleme
     {
         const double rate = _flaDocument && _flaDocument->document && _flaDocument->document->frameRate > 0.0
             ? _flaDocument->document->frameRate : 24.0;
-        return fla::applyMotion(element->transform, element->transformationPoint, motion->at(0.0, rate),
-            motion->at(state.offset + _subframe, rate));
+        const fla::MotionState now = motion->at(state.offset + _subframe, rate);
+        // Turned or moved in 3D: drawn in perspective (threeDTransform).
+        if (motion->threeD())
+            _motion3D[element] = Motion3D{now, motion->pivotZ()};
+        else
+            _motion3D.erase(element);
+        return fla::applyMotion(element->transform, element->transformationPoint, motion->at(0.0, rate), now);
     }
     const std::vector<int> pairs = state.tweenFrame && state.frame->tweenType == fla::TweenType::Motion
         ? fla::pairTweenElements(state.frame->elements, state.tweenFrame->elements) : std::vector<int>();
@@ -7615,7 +7620,25 @@ QTransform PhoenixView::threeDTransform(const fla::Element* element, const QTran
 {
     const auto* instance = dynamic_cast<const fla::SymbolInstance*>(element);
     const fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
-    if (!instance || !document || instance->symbolType != fla::SymbolType::MovieClip)
+    if (!instance || !document)
+        return QTransform();
+    // An object motion tween in 3D, as the FLA's 3D motion draws it: in the
+    // document's own perspective, its depth on from the instance's 3D
+    // matrix.
+    const auto tweened = _motion3D.find(element);
+    if (tweened != _motion3D.end() && depth == 0.0)
+    {
+        const fla::MotionState& now = tweened->second.state;
+        double values[16];
+        const double z = now.z + (instance->matrix3D(values) ? values[14] / 20.0 : 0.0);
+        const std::array<double, 9> m = fla::threed::motionProjection(
+            fla::Transform(placed.m11(), placed.m12(), placed.m21(), placed.m22(), placed.dx(), placed.dy()),
+            instance->transformationPoint, tweened->second.pivotZ, now.rotationX, now.rotationY, z,
+            fla::threed::vanishingPoint(*document), fla::threed::documentFocalLength(*document));
+        // From the clip's own space; after placed, from its parent's.
+        return placed.inverted() * QTransform(m[0], m[3], m[6], m[1], m[4], m[7], m[2], m[5], m[8]);
+    }
+    if (instance->symbolType != fla::SymbolType::MovieClip)
         return QTransform();
     fla::threed::Pose pose = fla::threed::of(*instance);
     if (const auto* other = dynamic_cast<const fla::SymbolInstance*>(tweenElement))
@@ -10663,6 +10686,7 @@ void PhoenixView::clearCaches()
         _pending.end());
     _pathCache.clear();
     _guideCache.clear();
+    _motion3D.clear();
     _boundsCache.clear();
     _artBoundsCache.clear();
     _snapBoundsValid = false;

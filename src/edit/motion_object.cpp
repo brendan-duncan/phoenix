@@ -95,13 +95,89 @@ Affine linearPart(const MotionState& state)
     return m;
 }
 
+/// The power of an easing TimeMap type (Quadratic 2 to Quintic 5), with
+/// \a dual set for the Dual ones; 0 for any other.
+int easePower(const std::string& type, bool& dual)
+{
+    dual = type.compare(0, 4, "Dual") == 0;
+    const std::string base = dual ? type.substr(4) : type;
+    return base == "Quadratic" ? 2 : base == "Cubic" ? 3 : base == "Quartic" ? 4 : base == "Quintic" ? 5 : 0;
+}
+
 } // namespace
+
+bool MotionEase::none() const
+{
+    if (type == "Custom")
+        return points.size() < 4;
+    if (type == "BounceIn")
+        return strength < 1.0;
+    bool dual = false;
+    return easePower(type, dual) == 0 || strength == 0.0;
+}
+
+double MotionEase::at(double t, double frames) const
+{
+    t = std::max(0.0, std::min(1.0, t));
+    if (none())
+        return t;
+    if (type == "Custom")
+        return easeProgress(t, 0, points);
+    if (type == "BounceIn")
+    {
+        // A fall from the start to the end, then bounces back off the end,
+        // each shorter than the one before (in proportion 1, 1/2, 1/3...)
+        // and lower (e^-1, e^-2...): each a parabola, in whole frames.
+        const int bounces = static_cast<int>(std::lround(std::min(strength, 50.0)));
+        double harmonic = 0.0;
+        for (int i = 1; i <= bounces; ++i)
+            harmonic += 1.0 / i;
+        if (frames < 1.0)
+            return t;
+        const double x = t * frames;
+        double start = 0.0;
+        for (int i = 1; i <= bounces; ++i)
+        {
+            const double width = std::max(1.0, std::round(frames / (i * harmonic)));
+            if (x < start + width)
+            {
+                const double u = (x - start) / width;
+                if (i == 1)
+                    return u * u;
+                return 1.0 - std::exp(-(i - 1.0)) * 4.0 * u * (1.0 - u);
+            }
+            start += width;
+        }
+        return 1.0;
+    }
+    // Blended with the straight line by the strength: a quadratic eased
+    // out all the way is 1 - (1 - t)^2, in all the way t^2.
+    bool dual = false;
+    const int n = easePower(type, dual);
+    const double amount = std::min(1.0, std::fabs(strength) / 100.0);
+    const bool out = strength > 0.0;
+    const auto easeOut = [n](double u) { return 1.0 - std::pow(1.0 - u, n); };
+    const auto easeIn = [n](double u) { return std::pow(u, n); };
+    double curve = 0.0;
+    if (!dual)
+        curve = out ? easeOut(t) : easeIn(t);
+    // Two halves: out then in stops in the middle and starts again; in
+    // then out eases both ends.
+    else if (t < 0.5)
+        curve = 0.5 * (out ? easeOut(2.0 * t) : easeIn(2.0 * t));
+    else
+        curve = 0.5 + 0.5 * (out ? easeIn(2.0 * t - 1.0) : easeOut(2.0 * t - 1.0));
+    return t + amount * (curve - t);
+}
 
 bool MotionObject::parse(const std::string& xml)
 {
     _properties.clear();
     _ignoreTimeMap.clear();
+    _eases.clear();
+    _easeOf.clear();
     _orientToPath = false;
+    _pivotZ = 0.0;
     tinyxml2::XMLDocument document;
     if (document.Parse(xml.c_str()) != tinyxml2::XML_SUCCESS)
         return false;
@@ -114,9 +190,38 @@ bool MotionObject::parse(const std::string& xml)
     _duration = root->DoubleAttribute("duration", 0.0);
     const tinyxml2::XMLElement* timeMap = root->FirstChildElement("TimeMap");
     _ease = timeMap ? timeMap->DoubleAttribute("strength", 0.0) : 0.0;
+    // Each TimeMap, the span's first; a custom one a chain of Beziers, each
+    // point with the handles either side of it.
+    for (; timeMap; timeMap = timeMap->NextSiblingElement("TimeMap"))
+    {
+        MotionEase ease;
+        ease.type = timeMap->Attribute("type") ? timeMap->Attribute("type") : "Quadratic";
+        ease.strength = timeMap->DoubleAttribute("strength", 0.0);
+        for (const tinyxml2::XMLElement* point = timeMap->FirstChildElement("CustomTimeMapPoint"); point;
+             point = point->NextSiblingElement("CustomTimeMapPoint"))
+        {
+            Point anchor, previous, next;
+            if (!pair(point->Attribute("anchor"), anchor.x, anchor.y))
+                continue;
+            if (!pair(point->Attribute("previous"), previous.x, previous.y))
+                previous = anchor;
+            if (!pair(point->Attribute("next"), next.x, next.y))
+                next = anchor;
+            if (!ease.points.empty())
+                ease.points.push_back(previous);
+            ease.points.push_back(anchor);
+            ease.points.push_back(next);
+        }
+        if (!ease.points.empty())
+            ease.points.pop_back();
+        _eases.push_back(ease);
+    }
     if (const tinyxml2::XMLElement* metadata = root->FirstChildElement("metadata"))
         if (const tinyxml2::XMLElement* settings = metadata->FirstChildElement("Settings"))
+        {
             _orientToPath = settings->IntAttribute("orientToPath", 0) != 0;
+            _pivotZ = settings->DoubleAttribute("xformPtZOffsetPixels", 0.0);
+        }
 
     // Properties sit in nested containers (Basic_Motion, Transformation,
     // Colors, Filters); every Property found is read.
@@ -139,6 +244,8 @@ bool MotionObject::parse(const std::string& xml)
                 continue;
             if (child->IntAttribute("ignoreTimeMap", 0) != 0)
                 _ignoreTimeMap.push_back(child->Attribute("id"));
+            if (child->IntAttribute("TimeMapIndex", 0) > 0)
+                _easeOf[child->Attribute("id")] = static_cast<size_t>(child->IntAttribute("TimeMapIndex", 0));
             std::vector<Key>& keys = _properties[child->Attribute("id")];
             for (const tinyxml2::XMLElement* keyframe = child->FirstChildElement("Keyframe"); keyframe;
                  keyframe = keyframe->NextSiblingElement("Keyframe"))
@@ -222,37 +329,55 @@ double MotionObject::value(const std::string& property, double time, double fall
     return keys.back().value;
 }
 
-double MotionObject::timeOf(double frame, double frameRate) const
+double MotionObject::eased(size_t index, double raw, double frameRate) const
 {
-    double time = frame * _timeScale / std::max(frameRate, 1.0e-6);
-    if (_ease != 0.0 && _duration > 0.0)
-    {
-        // The TimeMap eases the span as a classic tween's ease does.
-        const double t = std::max(0.0, std::min(1.0, time / _duration));
-        time = easeProgress(t, static_cast<int>(std::lround(_ease)), {}) * _duration;
-    }
-    return time;
+    if (index >= _eases.size() || _eases[index].none())
+        return raw;
+    // The ease runs from the span's first frame to its last, where its last
+    // keys are.
+    const double frame = _timeScale / std::max(frameRate, 1.0e-6);
+    double span = _duration - frame;
+    for (const auto& property : _properties)
+        if (!property.second.empty())
+            span = std::max(span, property.second.back().time);
+    if (span <= 0.0)
+        return raw;
+    return _eases[index].at(raw / span, span / frame) * span;
 }
 
-double MotionObject::sample(const std::string& property, double raw, double eased, double fallback) const
+double MotionObject::sample(const std::string& property, double raw, double frameRate, double fallback) const
 {
-    const bool ignores =
-        std::find(_ignoreTimeMap.begin(), _ignoreTimeMap.end(), property) != _ignoreTimeMap.end();
-    return value(property, ignores ? raw : eased, fallback);
+    if (std::find(_ignoreTimeMap.begin(), _ignoreTimeMap.end(), property) != _ignoreTimeMap.end())
+        return value(property, raw, fallback);
+    const auto own = _easeOf.find(property);
+    return value(property, eased(own == _easeOf.end() ? 0 : own->second, raw, frameRate), fallback);
 }
 
-double MotionObject::heading(double raw, double eased) const
+double MotionObject::heading(double raw, double frameRate) const
 {
     // Along the curve a little either side, inside the span.
     const double step = std::max(_duration * 1.0e-3, 1.0e-6);
     const double before = std::max(0.0, std::min(raw, _duration - step));
     const double after = before + step;
-    const double shift = eased - raw;
-    const double dx = sample("Motion_X", after, after + shift, 0.0) - sample("Motion_X", before, before + shift, 0.0);
-    const double dy = sample("Motion_Y", after, after + shift, 0.0) - sample("Motion_Y", before, before + shift, 0.0);
+    const double dx = sample("Motion_X", after, frameRate, 0.0) - sample("Motion_X", before, frameRate, 0.0);
+    const double dy = sample("Motion_Y", after, frameRate, 0.0) - sample("Motion_Y", before, frameRate, 0.0);
     if (dx == 0.0 && dy == 0.0)
         return 0.0;
     return std::atan2(dy, dx) * 180.0 / kPi;
+}
+
+bool MotionObject::threeD() const
+{
+    for (const char* id : {"Rotation_X", "Rotation_Y", "Motion_Z"})
+    {
+        const auto found = _properties.find(id);
+        if (found == _properties.end())
+            continue;
+        for (const Key& key : found->second)
+            if (key.value != 0.0)
+                return true;
+    }
+    return false;
 }
 
 bool MotionObject::has(const std::string& property) const
@@ -410,12 +535,11 @@ ColorTransform MotionObject::colorAt(double frame, double frameRate, const Color
 {
     ColorTransform color = base;
     const double raw = frame * _timeScale / std::max(frameRate, 1.0e-6);
-    const double time = timeOf(frame, frameRate);
     for (int i = 0; i < motion::kColorChannelCount; ++i)
     {
         const std::string id = motion::kColorChannels[i].id;
         if (has(id))
-            motion::setColorValue(color, id, sample(id, raw, time, 0.0));
+            motion::setColorValue(color, id, sample(id, raw, frameRate, 0.0));
     }
     return color;
 }
@@ -424,14 +548,13 @@ std::vector<Filter> MotionObject::filtersAt(double frame, double frameRate, cons
 {
     std::vector<Filter> filters = base;
     const double raw = frame * _timeScale / std::max(frameRate, 1.0e-6);
-    const double time = timeOf(frame, frameRate);
     for (size_t i = 0; i < filters.size(); ++i)
     {
         for (const std::string& field : motion::filterFields(filters[i]))
         {
             const std::string id = motion::filterPropertyId(filters[i], i, field);
             if (has(id))
-                motion::setFilterValue(filters[i], field, sample(id, raw, time, 0.0));
+                motion::setFilterValue(filters[i], field, sample(id, raw, frameRate, 0.0));
         }
     }
     return filters;
@@ -460,19 +583,21 @@ bool MotionObject::animatesFilters() const
 MotionState MotionObject::at(double frame, double frameRate) const
 {
     const double raw = frame * _timeScale / std::max(frameRate, 1.0e-6);
-    const double time = timeOf(frame, frameRate);
     MotionState state;
-    state.x = sample("Motion_X", raw, time, 0.0);
-    state.y = sample("Motion_Y", raw, time, 0.0);
-    state.rotation = sample("Rotation_Z", raw, time, 0.0);
-    state.skewX = sample("Skew_X", raw, time, 0.0);
-    state.skewY = sample("Skew_Y", raw, time, 0.0);
-    state.scaleX = sample("Scale_X", raw, time, 100.0);
-    state.scaleY = sample("Scale_Y", raw, time, 100.0);
+    state.x = sample("Motion_X", raw, frameRate, 0.0);
+    state.y = sample("Motion_Y", raw, frameRate, 0.0);
+    state.rotation = sample("Rotation_Z", raw, frameRate, 0.0);
+    state.skewX = sample("Skew_X", raw, frameRate, 0.0);
+    state.skewY = sample("Skew_Y", raw, frameRate, 0.0);
+    state.scaleX = sample("Scale_X", raw, frameRate, 100.0);
+    state.scaleY = sample("Scale_Y", raw, frameRate, 100.0);
+    state.rotationX = sample("Rotation_X", raw, frameRate, 0.0);
+    state.rotationY = sample("Rotation_Y", raw, frameRate, 0.0);
+    state.z = sample("Motion_Z", raw, frameRate, 0.0);
     // Oriented to its path, the object turns by as much as the path has
     // since the start: it keeps the angle to the path it started with.
     if (_orientToPath && (has("Motion_X") || has("Motion_Y")))
-        state.rotation += heading(raw, time) - heading(0.0, timeOf(0.0, frameRate));
+        state.rotation += heading(raw, frameRate) - heading(0.0, frameRate);
     return state;
 }
 

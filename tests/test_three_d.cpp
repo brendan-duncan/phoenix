@@ -227,3 +227,38 @@ TEST(three_d_several_lights_shadows_and_extrusion)
     const std::array<double, 9> across = td::projection(quarter, fla::Point(0.0, 0.0), vanishing, focal, 10.0);
     CHECK(near(td::project(across, fla::Point(0.0, 0.0)), 10.0, 0.0));
 }
+
+TEST(three_d_motion_projection_draws_a_tweened_clip_as_the_reference_app_does)
+{
+    // motion_3d_eases.fla at frame 12: a 464.35 by 381.45 clip placed at
+    // (86, 272.05), moved by (688.3, -254.2), turned 15.17 degrees about x
+    // and 22 about y about its middle, 96.65 toward the viewer, on a
+    // 1920 by 1080 stage seen at 122.35 degrees.
+    fla::Document document(nullptr);
+    document.width = 1920;
+    document.height = 1080;
+    document.viewAngle3D = 122.353661987282;
+    document.vanishingPoint3DX = 960.0;
+    document.vanishingPoint3DY = 540.0;
+    const double focal = fla::threed::documentFocalLength(document);
+    CHECK(std::fabs(focal - 528.27) < 0.01);
+    const fla::Point pivot(232.15, 190.7);
+    const fla::Transform placed(1.0, 0.0, 0.0, 1.0, 86.0 + 688.3, 272.05 - 254.2);
+    const std::array<double, 9> map = fla::threed::motionProjection(placed, pivot, 0.0, 40.0 * 11.0 / 29.0,
+        58.0 * 11.0 / 29.0, -96.6483, fla::threed::vanishingPoint(document), focal);
+    // Its bottom corners where the reference render has them.
+    CHECK(near(fla::threed::project(map, fla::Point(0.0, 381.45)), 820.0, 403.0, 2.0));
+    CHECK(near(fla::threed::project(map, fla::Point(464.35, 381.45)), 1340.0, 342.0, 2.0));
+    // Flat and at the stage's depth: just placed.
+    const std::array<double, 9> flat =
+        fla::threed::motionProjection(placed, pivot, 0.0, 0.0, 0.0, 0.0, fla::Point(960.0, 540.0), focal);
+    CHECK(near(fla::threed::project(flat, fla::Point(10.0, 20.0)), 784.3, 37.85, 1.0e-9));
+    // Pushed back a focal length: half way to the vanishing point.
+    const std::array<double, 9> far =
+        fla::threed::motionProjection(placed, pivot, 0.0, 0.0, 0.0, focal, fla::Point(960.0, 540.0), focal);
+    CHECK(near(fla::threed::project(far, fla::Point(10.0, 20.0)), (784.3 + 960.0) / 2.0, (37.85 + 540.0) / 2.0, 1.0e-9));
+    // No vanishing point set: the stage's middle.
+    document.vanishingPoint3DX = 0.0;
+    document.vanishingPoint3DY = 0.0;
+    CHECK(near(fla::threed::vanishingPoint(document), 960.0, 540.0));
+}

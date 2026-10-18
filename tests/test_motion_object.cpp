@@ -389,3 +389,126 @@ TEST(motion_tween_orient_to_path_turns_on_and_off)
                              "</AnimationCore></motionObjectXML>";
     CHECK(fla::orientsToPath(fla::withOrientToPath(bare, true)));
 }
+
+namespace {
+
+/// The tweens of motion_3d_eases.fla, made in the reference app: 30 frames
+/// at 30 fps. One clip turned and moved in 3D (its turns keyed at the
+/// start and end, its depth also at frame 11); one moving across and up,
+/// its X bouncing in (TimeMap 1), its Y stopping and starting (TimeMap 2).
+const char* kTurned =
+    "<motionObjectXML><AnimationCore TimeScale=\"30000\" Version=\"1\" duration=\"30000\">"
+    "<TimeMap strength=\"0\" type=\"Quadratic\"/><metadata><Settings orientToPath=\"0\" "
+    "xformPtXOffsetPct=\"0.499946\" xformPtYOffsetPct=\"0.499934\" xformPtZOffsetPixels=\"0\"/></metadata>"
+    "<PropertyContainer id=\"headContainer\"><PropertyContainer id=\"Basic_Motion\">"
+    "<Property enabled=\"1\" id=\"Motion_Z\" ignoreTimeMap=\"0\"><Keyframe anchor=\"0,0\" next=\"0,0\" previous=\"0,0\" timevalue=\"0\"/>"
+    "<Keyframe anchor=\"0,-96.6483\" next=\"0,-96.6483\" previous=\"0,-96.6483\" timevalue=\"11000\"/>"
+    "<Keyframe anchor=\"0,281.7\" next=\"0,281.7\" previous=\"0,281.7\" timevalue=\"29000\"/></Property>"
+    "<Property enabled=\"1\" id=\"Rotation_X\" ignoreTimeMap=\"0\"><Keyframe anchor=\"0,0\" next=\"0,0\" previous=\"0,0\" timevalue=\"0\"/>"
+    "<Keyframe anchor=\"0,40\" next=\"0,40\" previous=\"0,40\" timevalue=\"29000\"/></Property>"
+    "<Property enabled=\"1\" id=\"Rotation_Y\" ignoreTimeMap=\"0\"><Keyframe anchor=\"0,0\" next=\"0,0\" previous=\"0,0\" timevalue=\"0\"/>"
+    "<Keyframe anchor=\"0,58\" next=\"0,58\" previous=\"0,58\" timevalue=\"29000\"/></Property>"
+    "</PropertyContainer></PropertyContainer></AnimationCore></motionObjectXML>";
+
+const char* kEased =
+    "<motionObjectXML><AnimationCore TimeScale=\"30000\" Version=\"1\" duration=\"30000\">"
+    "<TimeMap strength=\"0\" type=\"Quadratic\"/><TimeMap strength=\"4\" type=\"BounceIn\"/>"
+    "<TimeMap strength=\"50\" type=\"DualCubic\"/><TimeMap strength=\"0\" type=\"Custom\">"
+    "<CustomTimeMapPoint anchor=\"0,0\" next=\"0.2228,0.2228\" previous=\"0,0\"/>"
+    "<CustomTimeMapPoint anchor=\"0.5521,0.8765\" next=\"0.674,0.8303\" previous=\"0.2266,1\"/>"
+    "<CustomTimeMapPoint anchor=\"1,1\" next=\"1,1\" previous=\"0.8894,0.8894\"/></TimeMap>"
+    "<PropertyContainer id=\"headContainer\"><PropertyContainer id=\"Basic_Motion\">"
+    "<Property TimeMapIndex=\"1\" enabled=\"1\" id=\"Motion_X\" ignoreTimeMap=\"0\">"
+    "<Keyframe anchor=\"0,0\" next=\"0,0\" previous=\"0,0\" timevalue=\"0\"/>"
+    "<Keyframe anchor=\"0,1161.8\" next=\"0,1161.8\" previous=\"0,1161.8\" timevalue=\"29000\"/></Property>"
+    "<Property TimeMapIndex=\"2\" enabled=\"1\" id=\"Motion_Y\" ignoreTimeMap=\"0\">"
+    "<Keyframe anchor=\"0,0\" next=\"0,0\" previous=\"0,0\" timevalue=\"0\"/>"
+    "<Keyframe anchor=\"0,-453.8\" next=\"0,-453.8\" previous=\"0,-453.8\" timevalue=\"29000\"/></Property>"
+    "<Property TimeMapIndex=\"3\" enabled=\"1\" id=\"Rotation_Z\" ignoreTimeMap=\"0\">"
+    "<Keyframe anchor=\"0,0\" next=\"0,0\" previous=\"0,0\" timevalue=\"0\"/>"
+    "<Keyframe anchor=\"0,90\" next=\"0,90\" previous=\"0,90\" timevalue=\"29000\"/></Property>"
+    "</PropertyContainer></PropertyContainer></AnimationCore></motionObjectXML>";
+
+} // namespace
+
+TEST(motion_object_reads_its_3d_turns_and_depth)
+{
+    fla::MotionObject motion;
+    CHECK(motion.parse(kTurned));
+    CHECK(motion.threeD());
+    CHECK(motion.pivotZ() == 0.0);
+    const fla::MotionState start = motion.at(0.0, 30.0);
+    CHECK(start.flat());
+    // At frame 11, a third of the way round and at its depth keyframe.
+    const fla::MotionState middle = motion.at(11.0, 30.0);
+    CHECK(std::fabs(middle.rotationX - 40.0 * 11.0 / 29.0) < 1.0e-6);
+    CHECK(std::fabs(middle.rotationY - 58.0 * 11.0 / 29.0) < 1.0e-6);
+    CHECK(std::fabs(middle.z + 96.6483) < 1.0e-6);
+    const fla::MotionState end = motion.at(29.0, 30.0);
+    CHECK(std::fabs(end.rotationX - 40.0) < 1.0e-6 && std::fabs(end.z - 281.7) < 1.0e-6);
+    fla::MotionObject flat;
+    CHECK(flat.parse(kEased));
+    CHECK(!flat.threeD());
+}
+
+TEST(motion_object_eases_each_property_by_its_own_time_map)
+{
+    fla::MotionObject motion;
+    CHECK(motion.parse(kEased));
+    CHECK(motion.eases().size() == 4);
+    // The fractions of the way the reference app's frames 6, 12 and 18 show.
+    const double x[3] = {0.1274, 0.6172, 0.6395};
+    const double y[3] = {0.2667, 0.4363, 0.5443};
+    const int frames[3] = {5, 11, 17};
+    for (int i = 0; i < 3; ++i)
+    {
+        const fla::MotionState state = motion.at(frames[i], 30.0);
+        CHECK(std::fabs(state.x / 1161.8 - x[i]) < 0.003);
+        CHECK(std::fabs(state.y / -453.8 - y[i]) < 0.003);
+    }
+    // Bouncing in: a fall to the end over 14 of its 29 frames, then three
+    // bounces off it, the first e^-1 high.
+    CHECK(std::fabs(motion.at(7.0, 30.0).x / 1161.8 - 0.25) < 1.0e-9);
+    CHECK(std::fabs(motion.at(14.0, 30.0).x - 1161.8) < 1.0e-6);
+    CHECK(std::fabs(motion.at(17.5, 30.0).x / 1161.8 - (1.0 - std::exp(-1.0))) < 1.0e-9);
+    CHECK(std::fabs(motion.at(29.0, 30.0).x - 1161.8) < 1.0e-6);
+    // Stopping in the middle and starting again: half way at the middle.
+    CHECK(std::fabs(motion.at(14.5, 30.0).y / -453.8 - 0.5) < 1.0e-9);
+    // The custom ease passes through its middle point.
+    CHECK(std::fabs(motion.at(0.5521 * 29.0, 30.0).rotation - 0.8765 * 90.0) < 1.0e-3);
+    CHECK(std::fabs(motion.at(29.0, 30.0).rotation - 90.0) < 1.0e-6);
+}
+
+TEST(motion_eases_follow_the_time_map_types)
+{
+    fla::MotionEase cubic;
+    cubic.type = "Cubic";
+    cubic.strength = 100.0;
+    CHECK(std::fabs(cubic.at(0.5, 23.0) - 0.875) < 1.0e-12);
+    cubic.strength = -100.0;
+    CHECK(std::fabs(cubic.at(0.5, 23.0) - 0.125) < 1.0e-12);
+    cubic.strength = 50.0;
+    CHECK(std::fabs(cubic.at(0.5, 23.0) - 0.6875) < 1.0e-12);
+    // Eased in and out, 70 percent of the way.
+    fla::MotionEase dual;
+    dual.type = "DualQuadratic";
+    dual.strength = -70.0;
+    CHECK(std::fabs(dual.at(1.0 / 14.0, 14.0) - (0.3 / 14.0 + 0.7 * 0.5 * std::pow(2.0 / 14.0, 2.0))) < 1.0e-12);
+    CHECK(std::fabs(dual.at(0.5, 14.0) - 0.5) < 1.0e-12);
+    // Four bounces over 74 frames: arcs of 36, 18, 12 and 9 frames, the
+    // last not done when the span ends (as the reference app's preset
+    // plays it).
+    fla::MotionEase bounce;
+    bounce.type = "BounceIn";
+    bounce.strength = 4.0;
+    CHECK(std::fabs(bounce.at(18.0 / 74.0, 74.0) - 0.25) < 1.0e-12);
+    CHECK(std::fabs(bounce.at(45.0 / 74.0, 74.0) - (1.0 - std::exp(-1.0))) < 1.0e-12);
+    CHECK(std::fabs(bounce.at(60.0 / 74.0, 74.0) - (1.0 - std::exp(-2.0))) < 1.0e-12);
+    CHECK(std::fabs(bounce.at(1.0, 74.0) - 0.98022) < 5.0e-4);
+    fla::MotionEase none;
+    CHECK(none.none() && none.at(0.3, 10.0) == 0.3);
+    fla::MotionEase other;
+    other.type = "Spring";
+    other.strength = 5.0;
+    CHECK(other.none());
+}

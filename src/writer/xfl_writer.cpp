@@ -647,6 +647,20 @@ void XFLWriter::writeElementCommon(const Element& element, XMLElement* node)
     setBool(node, "isFloating", element.isFloating, false);
     setBool(node, "lockFlag", element.isLocked, false);
 
+    // An instance placed by a 3D matrix (matrix3D, among its kept
+    // attributes) has no 2D one, and its transformation point is in its
+    // parent's space.
+    double values[16];
+    const auto* instance = dynamic_cast<const SymbolInstance*>(&element);
+    if (instance && instance->matrix3D(values))
+    {
+        const Transform& t = element.transform;
+        const Point& p = element.transformationPoint;
+        const auto rounded = [](double v) { return std::round(v * 1.0e6) / 1.0e6; };
+        writeTransformationPoint(Point(rounded(t.m11 * p.x + t.m21 * p.y + t.tx), rounded(t.m12 * p.x + t.m22 * p.y + t.ty)),
+            node, element.keepTransformationPoint);
+        return;
+    }
     writeMatrix(element.transform, node, "matrix", element.keepMatrix);
     writeTransformationPoint(element.transformationPoint, node, element.keepTransformationPoint);
 }

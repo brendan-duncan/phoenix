@@ -832,6 +832,21 @@ bool parseSymbolInstance(const tinyxml2::XMLElement* element, fla::SymbolInstanc
         instance->blendMode.clear();
     instance->firstFrame = fla::clampFrameIndex(getIntAttribute(element, "firstFrame", 0));
     instance->lastFrame = std::min(getIntAttribute(element, "lastFrame", -1), fla::kMaxFrames);
+    // Moved in 3D, the instance is placed by a 3D matrix and keeps its
+    // transformation point in its parent's space.
+    double values[16];
+    if (!instance->keepMatrix && instance->matrix3D(values))
+    {
+        instance->transform = fla::SymbolInstance::transformOf3D(values);
+        const fla::Transform& t = instance->transform;
+        const double det = t.m11 * t.m22 - t.m12 * t.m21;
+        if (std::fabs(det) > 1.0e-12)
+        {
+            const double x = instance->transformationPoint.x - t.tx;
+            const double y = instance->transformationPoint.y - t.ty;
+            instance->transformationPoint = fla::Point((t.m22 * x - t.m21 * y) / det, (-t.m12 * x + t.m11 * y) / det);
+        }
+    }
 
     // FLA files leave the type out for a movie clip and carry it for
     // everything else, a graphic always with its loop.

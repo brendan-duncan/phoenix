@@ -13,7 +13,9 @@ namespace fla {
 
 /// Where an object motion tween has its object at one moment: the offset
 /// from where it started, in pixels, and its turn, skew (degrees) and scale
-/// (percent).
+/// (percent). A clip tweened in 3D also turns about its horizontal and
+/// vertical axes (degrees) and moves in depth (pixels, away from the viewer
+/// for positive).
 struct MotionState
 {
     double x = 0.0;
@@ -23,6 +25,33 @@ struct MotionState
     double skewY = 0.0;
     double scaleX = 100.0;
     double scaleY = 100.0;
+    double rotationX = 0.0;
+    double rotationY = 0.0;
+    double z = 0.0;
+
+    bool flat() const { return rotationX == 0.0 && rotationY == 0.0 && z == 0.0; }
+};
+
+/// An ease of a motion tween, a TimeMap of its AnimationCore: the whole
+/// span's (the first) or one that properties name by TimeMapIndex, as the
+/// Motion Editor gives each property its own. \a type is as the file names
+/// it: Quadratic, Cubic, Quartic and Quintic ease in (\a strength below 0)
+/// or out (above), by -100 to 100; DualQuadratic to DualQuintic stop and
+/// start in the middle (above 0) or ease in and out (below); BounceIn
+/// bounces \a strength times on its way in; Custom follows \a points, a
+/// chain of cubic Beziers from (0,0) to (1,1) as the custom ease dialog
+/// draws it. Others leave the time as it is.
+struct MotionEase
+{
+    std::string type = "Quadratic";
+    double strength = 0.0;
+    std::vector<Point> points;
+
+    /// Leaves the time as it is.
+    bool none() const;
+    /// The eased fraction of the way at \a t (0 to 1) of a span \a frames
+    /// frames long, from its first frame to its last.
+    double at(double t, double frames) const;
 };
 
 /// An object motion tween, read from the
@@ -67,6 +96,17 @@ public:
     /// The span's length in TimeScale units.
     double duration() const { return _duration; }
 
+    /// Whether the tween turns or moves its object in 3D.
+    bool threeD() const;
+
+    /// How far behind the object the point it turns about in 3D is, in
+    /// pixels (the Settings' xformPtZOffsetPixels).
+    double pivotZ() const { return _pivotZ; }
+
+    /// The tween's eases: the first is the span's, others are a property's
+    /// own.
+    const std::vector<MotionEase>& eases() const { return _eases; }
+
     /// When the tween's property keyframes fall, in TimeScale units, in
     /// order and each once, whichever properties they key.
     std::vector<double> keyTimes() const;
@@ -82,20 +122,25 @@ private:
         double previousValue = 0.0;
     };
     double value(const std::string& property, double time, double fallback) const;
-    /// The time \a frame frames in, the TimeMap's ease applied.
-    double timeOf(double frame, double frameRate) const;
-    /// A property's value with the span's \a raw time and its \a eased
-    /// one: the raw time for a property that ignores the TimeMap.
-    double sample(const std::string& property, double raw, double eased, double fallback) const;
-    /// The direction the position curve heads at \a time, in degrees.
-    double heading(double raw, double eased) const;
+    /// The time \a raw (TimeScale units) comes to under ease \a index, at
+    /// \a frameRate.
+    double eased(size_t index, double raw, double frameRate) const;
+    /// A property's value at the span's \a raw time, eased by its own
+    /// TimeMap or the span's, or not at all when it ignores the TimeMap.
+    double sample(const std::string& property, double raw, double frameRate, double fallback) const;
+    /// The direction the position curve heads at \a raw time, in degrees.
+    double heading(double raw, double frameRate) const;
     bool has(const std::string& property) const;
 
     std::map<std::string, std::vector<Key>> _properties;
     /// Properties marked ignoreTimeMap: the span's ease leaves them be.
     std::vector<std::string> _ignoreTimeMap;
+    /// The TimeMaps, and the one each property names when not the first.
+    std::vector<MotionEase> _eases;
+    std::map<std::string, size_t> _easeOf;
     /// Orient to Path: the object turns as its path does.
     bool _orientToPath = false;
+    double _pivotZ = 0.0;
 
 public:
     bool orientsToPath() const { return _orientToPath; }

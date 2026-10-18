@@ -359,6 +359,71 @@ std::array<double, 9> projection(const Pose& pose, const Point& center, const Po
     return map;
 }
 
+double documentFocalLength(const Document& document)
+{
+    return focalLength(document.viewAngle3D > 0.0 ? document.viewAngle3D : 55.0, document.width);
+}
+
+Point vanishingPoint(const Document& document)
+{
+    if (document.vanishingPoint3DX == 0.0 && document.vanishingPoint3DY == 0.0)
+        return Point(document.width / 2.0, document.height / 2.0);
+    return Point(document.vanishingPoint3DX, document.vanishingPoint3DY);
+}
+
+std::array<double, 9> motionProjection(const Transform& placed, const Point& pivot, double pivotZ, double rotationX,
+    double rotationY, double z, const Point& vanishing, double focal)
+{
+    // The 2D matrix's turn, and what is left of it (scale and skew), which
+    // comes first: K = Rz(-turn) L.
+    const double turn = std::atan2(placed.m12, placed.m11);
+    const double ct = std::cos(turn);
+    const double st = std::sin(turn);
+    const double k00 = ct * placed.m11 + st * placed.m12;
+    const double k10 = -st * placed.m11 + ct * placed.m12;
+    const double k01 = ct * placed.m21 + st * placed.m22;
+    const double k11 = -st * placed.m21 + ct * placed.m22;
+    // Turned about x, then y, then z (the 2D turn), with z into the stage:
+    // the top comes toward the viewer for a positive turn about x, the
+    // right for one about y.
+    const double a = rotationX * kPi / 180.0;
+    const double b = rotationY * kPi / 180.0;
+    const auto turned = [&](double x, double y, double w, double out[3]) {
+        // About x.
+        const double y1 = y * std::cos(a) - w * std::sin(a);
+        const double z1 = y * std::sin(a) + w * std::cos(a);
+        // About y.
+        const double x2 = x * std::cos(b) + z1 * std::sin(b);
+        const double z2 = -x * std::sin(b) + z1 * std::cos(b);
+        // About z.
+        out[0] = x2 * ct - y1 * st;
+        out[1] = x2 * st + y1 * ct;
+        out[2] = z2;
+    };
+    // Where the pivot is placed, and each axis of the clip and its pivot's
+    // offset turned.
+    const double cx = placed.m11 * pivot.x + placed.m21 * pivot.y + placed.tx;
+    const double cy = placed.m12 * pivot.x + placed.m22 * pivot.y + placed.ty;
+    double ux[3], uy[3], origin[3];
+    turned(k00, k10, 0.0, ux);
+    turned(k01, k11, 0.0, uy);
+    turned(-(k00 * pivot.x + k01 * pivot.y), -(k10 * pivot.x + k11 * pivot.y), -pivotZ, origin);
+    // q = (cx, cy, z + pivotZ) + origin + ux x + uy y, seen from focal in
+    // front of the vanishing point: X = f q.x + V.x q.z, W = f + q.z.
+    const double f = std::max(focal, 1.0);
+    const double q[3][3] = {{ux[0], uy[0], cx + origin[0]}, {ux[1], uy[1], cy + origin[1]},
+        {ux[2], uy[2], z + pivotZ + origin[2]}};
+    std::array<double, 9> map;
+    for (int i = 0; i < 3; ++i)
+    {
+        map[i] = (f * q[0][i] + vanishing.x * q[2][i]) / f;
+        map[3 + i] = (f * q[1][i] + vanishing.y * q[2][i]) / f;
+        map[6 + i] = q[2][i] / f;
+    }
+    map[8] += 1.0;
+    return map;
+}
+
 Point project(const std::array<double, 9>& map, const Point& point)
 {
     const double X = map[0] * point.x + map[1] * point.y + map[2];

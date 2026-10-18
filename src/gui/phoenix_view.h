@@ -1696,6 +1696,15 @@ private:
         unsigned revision = 0;
     };
     std::map<const fla::Frame*, CachedMotion> _motionCache;
+    /// The 3D turn and depth an object motion tween in 3D last placed each
+    /// element with (shownTransform), for threeDTransform to draw it in
+    /// perspective; and how far behind the clip it turns about.
+    struct Motion3D
+    {
+        fla::MotionState state;
+        double pivotZ = 0.0;
+    };
+    std::unordered_map<const fla::Element*, Motion3D> _motion3D;
     /// Moves on with any edit that may touch a frame's motion (clearCaches,
     /// invalidateBounds), so the XML is looked at again.
     unsigned _motionRevision = 0;

@@ -36,6 +36,18 @@ public:
     /// moved by however the instance has moved since it was read.
     std::vector<std::pair<std::string, std::string>> keptAttributes() const;
 
+    /// The 3D matrix the file placed the instance with in place of a 2D
+    /// one (matrix3D: sixteen numbers, column by column, its move in
+    /// twips), as a clip moved in 3D keeps it; false when it has none.
+    /// Such an instance keeps its transformation point in its parent's
+    /// space in the file; Phoenix reads it into the symbol's, as for any
+    /// other instance, and a save writes both back the file's way.
+    bool matrix3D(double values[16]) const;
+
+    /// The 2D matrix matrix3D \a values place the instance with: its x and
+    /// y columns and its move, in pixels.
+    static Transform transformOf3D(const double values[16]);
+
     /// How the instance is composited over what is under it, as the file
     /// names it: normal, layer, multiply, screen, lighten, darken,
     /// difference, add, subtract, invert, alpha, erase, overlay, hardlight.

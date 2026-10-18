@@ -1676,3 +1676,38 @@ TEST(xfl_reads_a_component_as_a_symbol_and_keeps_it_one)
     CHECK(written.find("linkageClassName=\"fl.controls.Button\"") != std::string::npos);
     CHECK(written.find("<parametersAsXML") != std::string::npos);
 }
+
+TEST(xfl_places_an_instance_by_its_3d_matrix_and_writes_it_back)
+{
+    // As the reference app keeps a clip moved in 3D: a 3D matrix (its move
+    // in twips) in place of the 2D one, the transformation point in the
+    // parent's space.
+    std::unique_ptr<fla::Document> document = parseDocumentText(
+        "<DOMDocument xmlns='http://ns.adobe.com/xfl/2008/'>"
+        "<timelines><DOMTimeline name='Scene 1'><layers><DOMLayer name='L'><frames><DOMFrame index='0'><elements>"
+        "<DOMSymbolInstance libraryItemName='A' matrix3D='1 0 0 0 0 1 0 0 0 0 1 0 1720 5441 0 1' rotationX='40' "
+        "centerPoint3DX='318.15' centerPoint3DY='462.75'>"
+        "<transformationPoint><Point x='318.15' y='462.75'/></transformationPoint></DOMSymbolInstance>"
+        "</elements></DOMFrame></frames></DOMLayer></layers></DOMTimeline></timelines></DOMDocument>");
+    CHECK(document != nullptr);
+    if (!document || document->timelines.empty())
+        return;
+    auto* instance = dynamic_cast<fla::SymbolInstance*>(document->timelines[0]->layers[0]->frames[0]->elements[0]);
+    CHECK(instance != nullptr);
+    if (!instance)
+        return;
+    CHECK(std::fabs(instance->transform.tx - 86.0) < 1.0e-9 && std::fabs(instance->transform.ty - 272.05) < 1.0e-9);
+    CHECK(std::fabs(instance->transformationPoint.x - 232.15) < 1.0e-9);
+    CHECK(std::fabs(instance->transformationPoint.y - 190.7) < 1.0e-9);
+    XFLWriter writer;
+    std::string written = writer.writeDocument(*document);
+    CHECK(written.find("matrix3D=\"1 0 0 0 0 1 0 0 0 0 1 0 1720 5441 0 1\"") != std::string::npos);
+    CHECK(written.find("<Point x=\"318.15\" y=\"462.75\"/>") != std::string::npos);
+    CHECK(written.find("<matrix>") == std::string::npos);
+    // Moved 10 to the right: the 3D matrix and the point go with it.
+    instance->transform.tx += 10.0;
+    written = writer.writeDocument(*document);
+    CHECK(written.find("matrix3D=\"1 0 0 0 0 1 0 0 0 0 1 0 1920 5441 0 1\"") != std::string::npos);
+    CHECK(written.find("<Point x=\"328.15\" y=\"462.75\"/>") != std::string::npos);
+    CHECK(written.find("<matrix>") == std::string::npos);
+}
