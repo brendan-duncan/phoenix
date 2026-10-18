@@ -968,6 +968,34 @@ TEST(xfl_symbol_href_falls_back_to_the_name)
     // match the name.
     symbol.href = "Characters/Hero v2.xml";
     CHECK(XFLWriter::symbolHref(symbol) == "Characters/Hero v2.xml");
+
+    // What no Windows file name can hold is made safe; folders stay.
+    symbol.href = "Parts./robot hand?.xml";
+    CHECK(XFLWriter::symbolHref(symbol) == "Parts_/robot hand_.xml");
+    CHECK(XFLWriter::fileSafeHref("a<b>c:d\"e|f*g\\h.xml") == "a_b_c_d_e_f_g_h.xml");
+}
+
+TEST(xfl_folder_writes_a_symbol_named_what_no_file_can_be)
+{
+    // A symbol named with a ? (as old documents allow) is written to a file
+    // of a safe name, and read back by its own name.
+    std::unique_ptr<fla::FLADocument> document(fla::createEmptyDocument(550, 400, 24.0));
+    if (!document->document->symbolList)
+        document->document->symbolList = new fla::SymbolList(document->document);
+    fla::Symbol* symbol = new fla::Symbol(document->document->symbolList);
+    symbol->name = "robot hand?";
+    symbol->href = "robot hand?.xml";
+    document->document->symbolList->symbols.push_back(symbol);
+    std::vector<fla::XFLEntry> entries;
+    std::vector<std::string> unsupported;
+    std::string error;
+    CHECK(fla::XFLContent::build(*document->document, "test", entries, unsupported, error));
+    bool written = false;
+    for (const fla::XFLEntry& entry : entries)
+        if (entry.path == "LIBRARY/robot hand_.xml")
+            written = entry.text.find("name=\"robot hand?\"") != std::string::npos;
+    CHECK(written);
+    CHECK(entries.front().text.find("href=\"robot hand_.xml\"") != std::string::npos);
 }
 
 TEST(xfl_round_trips_real_documents)
