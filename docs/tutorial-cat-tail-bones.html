@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bones inside a shape · Phoenix User Guide</title>
+<meta name="description" content="Put three bones inside a cat's tail drawn as a plain shape, swing it up, then use the Bind tool to fix the points that follow the wrong bone.">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Phoenix">
+<meta property="og:title" content="Bones inside a shape · Phoenix User Guide">
+<meta property="og:description" content="Put three bones inside a cat's tail drawn as a plain shape, swing it up, then use the Bind tool to fix the points that follow the wrong bone.">
+<meta property="og:url" content="https://phoenixanimate.com/tutorial-cat-tail-bones.html">
+<meta property="og:image" content="https://phoenixanimate.com/assets/shots/hero.webp">
+<meta property="og:image:type" content="image/webp">
+<meta property="og:image:width" content="1704">
+<meta property="og:image:height" content="1061">
+<meta property="og:image:alt" content="The Phoenix window with three flower characters on the stage, the timeline below and the Properties panel on the right">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://phoenixanimate.com/assets/shots/hero.webp">
+<meta name="keywords" content="tutorial lesson step by step bones bone tool bind tool binding boned shape armature tail cat bend points skin weights rigging">
+<link rel="icon" href="assets/img/logo.png">
+<link rel="stylesheet" href="assets/site.css">
+<script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<main>
+<article class="content">
+
+<p class="eyebrow">Tutorials</p>
+
+<h1>Bones inside a shape</h1>
+
+<p class="lead">Put three bones inside a cat's tail drawn as a plain shape, swing it up, then use the Bind tool to fix the points that follow the wrong bone.</p>
+
+<div class="callout">
+  <span class="label">Try it in Phoenix</span>
+  <p>This page is also a lesson inside Phoenix: choose <span class="menu-path">Help &rsaquo; Tutorials...</span> and start <strong>Bones inside a shape</strong>, and Phoenix points at each control as you go. It takes about 8 minutes.</p>
+</div>
+
+<p>To follow along here instead, download the starting document, <a href="assets/tutorials/cat-tail-bones.fla" download>cat-tail-bones.fla</a>, and open it with <span class="menu-path">File &rsaquo; Open...</span>.</p>
+
+<figure>
+  <img src="assets/shots/tutorial-cat-tail-bones.webp" alt="Three frames of an orange cat whose tail, curled behind it, swings up beside it" width="1000" height="265">
+  <figcaption>The cat on frames 1, 6 and 12: three bones inside the tail bend its outline as they turn.</figcaption>
+</figure>
+
+<p>Bones can go inside a drawing too. Then it bends rather than turning in pieces: each point of its outline follows the bone nearest it.</p><p>The cat's tail is one plain shape on the <i>Tail</i> layer, not a symbol. Its end is hidden under the cat's body.</p>
+
+<h2>1. Choose the Bone tool</h2>
+
+<p>Press <kbd>M</kbd>, or click the Bone tool in the toolbox.</p>
+
+<h2>2. The first bone</h2>
+
+<p>Drag inside the tail from where it comes out from under the cat, beside its back paw, to the left along the tail to where it starts to curve up, and let go.</p><p>Phoenix moves the tail into a symbol of its own on a new layer, <i>Armature_1</i>, and ties each point of its outline to the bone nearest it.</p>
+
+<h2>3. The second bone</h2>
+
+<p>Press on the round joint at the end of that bone and drag up the curve to its middle. A new bone grows from the joint.</p>
+
+<h2>4. The third bone</h2>
+
+<p>Drag from the new joint up to near the tip of the tail.</p>
+
+<h2>5. Go to frame 12</h2>
+
+<p>Press <kbd>V</kbd> for the Selection tool. In the timeline, click frame 12 of the <i>Armature_1</i> layer.</p>
+
+<h2>6. Swing the tail up</h2>
+
+<p>Drag the bone nearest the tip by its end, up and to the right toward the cat's ear. The whole tail swings up and bends to follow.</p>
+
+<h2>7. Look closely</h2>
+
+<p>Under the cat, a square corner of the tail now pokes out below its body: the end hidden under the cat turned with the first bone and swung out. Where the tail bends near the floor, its outline makes a sharp corner too.</p><p>Both come from points that follow the wrong bones. The Bind tool changes which bones a point follows.</p>
+
+<h2>8. Back to frame 1</h2>
+
+<p>Click frame 1 of <i>Armature_1</i>. Points are best bound where the tail is as you drew it.</p>
+
+<h2>9. Choose the Bind tool</h2>
+
+<p>The Bind tool shares a slot with the Bone tool: press and hold the slot, then choose <b>Bind</b>. Every point of the tail's outline shows as a small square.</p>
+
+<h2>10. Choose the first bone</h2>
+
+<p>Click the bone nearest the cat. It is outlined in green, and the points that follow it turn yellow, among them the four at the tail's end, under the cat's body.</p>
+
+<h2>11. Let the hidden end stay</h2>
+
+<p>Hold <kbd>Ctrl</kbd> and click each of the four yellow points under the cat's body, to the right of the bone's round end. Each turns white with a red outline: it follows no bone now, so it stays where it is.</p>
+
+<h2>12. Round the bend</h2>
+
+<p>With the first bone still chosen, click the point on the tail's lower edge just to the left of the first joint. It follows the second bone; now it follows the first one as well, and shows as a triangle.</p>
+
+<h2>13. And the other side</h2>
+
+<div class="split">
+  <figure style="margin:0"><img src="assets/shots/cat-tail-bind.webp" alt="The Bind tool on the tail: small squares on its outline, the second bone outlined in green, two triangles at the bend and four red-outlined squares under the cat" width="360" height="320"></figure>
+  <div>
+    <p>Click the second bone, then the point on the lower edge just to the right of the same joint. It becomes a triangle too: the two points on either side of the bend follow both bones evenly.</p>
+  </div>
+</div>
+
+<h2>14. See the difference</h2>
+
+<p>Press <kbd>V</kbd> and click frame 12 of <i>Armature_1</i>. The tail's end stays hidden under the cat, and the bend near the floor is rounder.</p>
+
+<figure>
+  <img src="assets/shots/cat-tail-before-after.webp" alt="The swung-up tail twice: on the left a square corner pokes out below the cat, on the right it is gone and the bend is rounder" width="800" height="377">
+  <figcaption>Frame 12 before and after binding: the hidden end stays hidden, and the bend is rounder.</figcaption>
+</figure>
+
+<h2>15. Play it</h2>
+
+<p>Press <kbd>Enter</kbd>, or click the play button in the timeline header. The tail sweeps up.</p>
+
+<h2>What you did</h2>
+
+<p>You boned a plain shape and posed it, then changed which bones some of its points follow. Every frame of the armature is bent again from frame 1 when you bind, and each bind is one step to undo.</p><p>With the Bind tool, a click on a point binds it to the chosen bone as well as to those it follows, <kbd>Ctrl</kbd>-click unbinds it, and <kbd>Shift</kbd>-click does one or the other. A square follows one bone, a triangle several, and a red outline none. The second joint, higher up, can be rounded the same way.</p>
+
+<p>For everything this tutorial touches on, see <a href="bones.html#bones-inside-a-shape">Bones inside a shape</a> and <a href="bones.html#binding-points-with-the-bind-tool">Binding points with the Bind tool</a>.</p>
+
+</article>
+</main>
+</body>
+</html>

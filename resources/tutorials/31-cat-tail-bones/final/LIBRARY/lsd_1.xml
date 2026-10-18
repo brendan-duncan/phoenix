@@ -1,0 +1,841 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<DOMSymbolItem xmlns="http://ns.adobe.com/xfl/2008/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" name="lsd_1" itemID="6ad524ad-baae0f70" lastModified="1792353453" symbolType="ik container">
+    <timeline>
+        <DOMTimeline name="lsd_1">
+            <layers>
+                <DOMLayer name="Layer_1" color="#00FFFF" autoNamed="false">
+                    <frames>
+                        <DOMFrame index="0" keyMode="9728">
+                            <elements>
+                                <DOMShape>
+                                    <fills>
+                                        <FillStyle index="1">
+                                            <SolidColor color="#F4A259"/>
+                                        </FillStyle>
+                                    </fills>
+                                    <strokes>
+                                        <StrokeStyle index="1">
+                                            <SolidStroke weight="5" scaleMode="normal" caps="round" joints="round">
+                                                <fill>
+                                                    <SolidColor color="#3D2C2E"/>
+                                                </fill>
+                                            </SolidStroke>
+                                        </StrokeStyle>
+                                    </strokes>
+                                    <edges>
+                                        <Edge fillStyle1="1" strokeStyle="1" edges="!-957 -2614[-1150 -2818 -1353 -2626|-1722 -2299|-2143 -1760|-2362 -1053|-2406 -287|-2238 483|-1863 1209|-1268 1808|-518 2260|372 2523|1250 2625|1956 2515|2406 2368|2072 1468|1722 1618|1228 1731|531 1678|-204 1496|-792 1173|-1259 747|-1559 223|-1716 -357|-1710 -953|-1579 -1484|-1275 -1908|-969 -2218[-765 -2411 -957 -2614"/>
+                                    </edges>
+                                </DOMShape>
+                            </elements>
+                        </DOMFrame>
+                        <DOMFrame index="1" keyMode="9728">
+                            <elements>
+                                <DOMShape>
+                                    <fills>
+                                        <FillStyle index="1">
+                                            <SolidColor color="#F4A259"/>
+                                        </FillStyle>
+                                    </fills>
+                                    <strokes>
+                                        <StrokeStyle index="1">
+                                            <SolidStroke weight="5" scaleMode="normal" caps="round" joints="round">
+                                                <fill>
+                                                    <SolidColor color="#3D2C2E"/>
+                                                </fill>
+                                            </SolidStroke>
+                                        </StrokeStyle>
+                                    </strokes>
+                                    <edges>
+                                        <Edge fillStyle1="1" strokeStyle="1" edges="!#FFFCB8.7D #FFF518.CC[#FFFBF5.57 #FFF44E.DA #FFFB2C.63 #FFF510.FE|#FFF9BE.DF #FFF65B.E2|#FFF81F.9B #FFF87B.51|#FFF74C.1C #FFFB40.99|#FFF728.3A #FFFE3F.05|#FFF7B6.7A #126.5E|#FFF8F5.F8 #416.73|#FFFB1B.5D #6A3.64|#FFFDEE.3F #891.59|#167.31 #9B8.E2|#4D0.8A #A41.17|1956 2515|2406 2368|2072 1468|1722 1618|#4DD.76 #6C2.E9|#227.10 #672.BD|#FFFF4F.BB #5A0.2D|#FFFD24.A7 #442.E0|#FFFB72.EB #277.0D|#FFFA6F.10 #56.06|#FFF9D9.73 #FFFDF1.B6|#FFF9D9.22 #FFFB9D.AF|#FFFA56.80 #FFF989.53|#FFFB81.FD #FFF7DE.20|#FFFCB0.B0 #FFF6A4.E7[#FFFD7A.A1 #FFF5E1.C0 #FFFCB8.7D #FFF518.CC"/>
+                                    </edges>
+                                </DOMShape>
+                            </elements>
+                        </DOMFrame>
+                        <DOMFrame index="2" keyMode="9728">
+                            <elements>
+                                <DOMShape>
+                                    <fills>
+                                        <FillStyle index="1">
+                                            <SolidColor color="#F4A259"/>
+                                        </FillStyle>
+                                    </fills>
+                                    <strokes>
+                                        <StrokeStyle index="1">
+                                            <SolidStroke weight="5" scaleMode="normal" caps="round" joints="round">
+                                                <fill>
+                                                    <SolidColor color="#3D2C2E"/>
+                                                </fill>
+                                            </SolidStroke>
+                                        </StrokeStyle>
+                                    </strokes>
+                                    <edges>
+                                        <Edge fillStyle1="1" strokeStyle="1" edges="!#FFFD37.59 #FFF472.79[#FFFC72.12 #FFF3AA.9B #FFFBAB.2F #FFF46E.DE|#FFFA41.32 #FFF5BD.9C|#FFF8A7.B6 #FFF7E1.69|#FFF7DB.BE #FFFAA8.E5|#FFF7BF.FC #FFFDA7.A7|#FFF836.28 #72.27|#FFF93C.58 #378.14|#FFFB2F.C9 #637.6B|#FFFDE4.FC #84D.8B|#15B.B9 #996.4B|#4BF.16 #A40.7F|1956 2515|2406 2368|2072 1468|1722 1618|#4EE.EA #6C3.81|#23C.2D #658.47|#FFFF6D.9E #569.7B|#FFFD64.AE #3F4.AE|#FFFBD6.A8 #209.9E|#FFFAFC.68 #FFFFD6.A4|#FFFA70.58 #FFFD53.0C|#FFFA69.B7 #FFFAFF.0E|#FFFAE1.6F #FFF8E9.66|#FFFC08.61 #FFF73B.0D|#FFFD33.BE #FFF5FE.A3[#FFFDFB.9B #FFF539.5B #FFFD37.59 #FFF472.79"/>
+                                    </edges>
+                                </DOMShape>
+                            </elements>
+                        </DOMFrame>
+                        <DOMFrame index="3" keyMode="9728">
+                            <elements>
+                                <DOMShape>
+                                    <fills>
+                                        <FillStyle index="1">
+                                            <SolidColor color="#F4A259"/>
+                                        </FillStyle>
+                                    </fills>
+                                    <strokes>
+                                        <StrokeStyle index="1">
+                                            <SolidStroke weight="5" scaleMode="normal" caps="round" joints="round">
+                                                <fill>
+                                                    <SolidColor color="#3D2C2E"/>
+                                                </fill>
+                                            </SolidStroke>
+                                        </StrokeStyle>
+                                    </strokes>
+                                    <edges>
+                                        <Edge fillStyle1="1" strokeStyle="1" edges="!#FFFDBE.CB #FFF3D7.9B[#FFFCF7.68 #FFF311.D8 #FFFC32.9D #FFF3D8.33|#FFFACC.31 #FFF52A.C3|#FFF938.89 #FFF752.DE|#FFF874.1E #FFFA1C.79|#FFF860.7C #FFFD1B.7C|#FFF8C0.6A #FFFFC7.12|#FFF98B.D2 #2DE.7B|#FFFB49.3C #5CC.59|#FFFDDE.4F #808.AB|#151.9D #973.48|#4AD.AC #A3F.39|1956 2515|2406 2368|2072 1468|1722 1618|#500.54 #6C4.C7|#252.4E #63E.AA|#FFFF8D.9E #533.FE|#FFFDA7.D0 #3AA.8E|#FFFC3F.BD #1A3.07|#FFFB90.54 #FFFF61.44|#FFFB0F.E9 #FFFCBF.97|#FFFB02.F7 #FFFA6B.B3|#FFFB75.06 #FFF854.CE|#FFFC97.64 #FFF6A3.5B|#FFFDBF.63 #FFF563.C9[#FFFE85.26 #FFF49C.67 #FFFDBE.CB #FFF3D7.9B"/>
+                                    </edges>
+                                </DOMShape>
+                            </elements>
+                        </DOMFrame>
+                        <DOMFrame index="4" keyMode="9728">
+                            <elements>
+                                <DOMShape>
+                                    <fills>
+                                        <FillStyle index="1">
+                                            <SolidColor color="#F4A259"/>
+                                        </FillStyle>
+                                    </fills>
+                                    <strokes>
+                                        <StrokeStyle index="1">
+                                            <SolidStroke weight="5" scaleMode="normal" caps="round" joints="round">
+                                                <fill>
+                                                    <SolidColor color="#3D2C2E"/>
+                                                </fill>
+                                            </SolidStroke>
+                                        </StrokeStyle>
+                                    </strokes>
+                                    <edges>
+                                        <Edge fillStyle1="1" strokeStyle="1" edges="!#FFFE4E.01 #FFF348.B9[#FFFD84.89 #FFF285.15 #FFFCC1.DA #FFF34D.83|#FFFB5F.0A #FFF4A3.DA|#FFF9D1.41 #FFF6D0.35|#FFF914.69 #FFF99B.DA|#FFF908.E8 #FFFC9B.07|#FFF954.92 #FFFF25.CA|#FFF9E4.0D #24A.39|#FFFB67.AC #562.6E|#FFFDDA.51 #7C2.D5|#148.E1 #94F.E7|#49C.51 #A3D.45|1956 2515|2406 2368|2072 1468|1722 1618|#511.AF #6C6.BB|#269.6B #625.EF|#FFFFAF.AF #4FF.CB|#FFFDED.C6 #364.9F|#FFFCAD.AD #143.8D|#FFFC2A.18 #FFFEF6.43|#FFFBB7.52 #FFFC37.DB|#FFFBA4.0F #FFF9E4.23|#FFFC10.72 #FFF7CC.10|#FFFD2E.35 #FFF617.90|#FFFE52.CC #FFF4D4.E0[#FFFF16.6F #FFF40B.67 #FFFE4E.01 #FFF348.B9"/>
+                                    </edges>
+                                </DOMShape>
+                            </elements>
+                        </DOMFrame>
+                        <DOMFrame index="5" keyMode="9728">
+                            <elements>
+                                <DOMShape>
+                                    <fills>
+                                        <FillStyle index="1">
+                                            <SolidColor color="#F4A259"/>
+                                        </FillStyle>
+                                    </fills>
+                                    <strokes>
+                                        <StrokeStyle index="1">
+                                            <SolidStroke weight="5" scaleMode="normal" caps="round" joints="round">
+                                                <fill>
+                                                    <SolidColor color="#3D2C2E"/>
+                                                </fill>
+                                            </SolidStroke>
+                                        </StrokeStyle>
+                                    </strokes>
+                                    <edges>
+                                        <Edge fillStyle1="1" strokeStyle="1" edges="!#FFFEE4.22 #FFF2C6.47[#FFFE18.9A #FFF204.C9 #FFFD58.0E #FFF2CF.44|#FFFBF8.E3 #FFF429.59|#FFFA71.06 #FFF659.E2|#FFF9BB.C5 #FFF927.7D|#FFF9B8.65 #FFFC26.BF|#FFF9F1.E9 #FFFE8E.EC|#FFFA44.A7 #1BB.DA|#FFFB8B.0A #4F9.ED|#FFFDD9.1A #77C.22|#141.89 #92C.36|#48B.0E #A3A.A3|1956 2515|2406 2368|2072 1468|1722 1618|#522.F2 #6C9.5D|#281.7A #60E.1F|#FFFFD3.C3 #4CC.F6|#FFFE36.49 #322.FC|#FFFD1F.F8 #EB.71|#FFFCC8.F4 #FFFE95.F2|#FFFC65.B8 #FFFBBC.4E|#FFFC4C.26 #FFF968.D3|#FFFCB2.D9 #FFF74F.A1|#FFFDCB.F7 #FFF598.20|#FFFEED.1F #FFF452.5C[#FFFFAE.9D #FFF386.D3 #FFFEE4.22 #FFF2C6.47"/>
+                                    </edges>
+                                </DOMShape>
+                            </elements>
+                        </DOMFrame>
+                        <DOMFrame index="6" keyMode="9728">
+                            <elements>
+                                <DOMShape>
+                                    <fills>
+                                        <FillStyle index="1">
+                                            <SolidColor color="#F4A259"/>
+                                        </FillStyle>
+                                    </fills>
+                                    <strokes>
+                                        <StrokeStyle index="1">
+                                            <SolidStroke weight="5" scaleMode="normal" caps="round" joints="round">
+                                                <fill>
+                                                    <SolidColor color="#3D2C2E"/>
+                                                </fill>
+                                            </SolidStroke>
+                                        </StrokeStyle>
+                                    </strokes>
+                                    <edges>
+                                        <Edge fillStyle1="1" strokeStyle="1" edges="!#FFFF80.4D #FFF250.AC[#FFFEB2.BB #FFF191.59 #FFFDF4.57 #FFF25D.DB|#FFFC98.DC #FFF3BB.A3|#FFFB16.F4 #FFF5F0.4C|#FFFA69.50 #FFF8BF.C8|#FFFA6E.11 #FFFBBF.08|#FFFA97.AC #FFFE03.0A|#FFFAAD.36 #133.E2|#FFFBB3.44 #493.16|#FFFDDA.C0 #734.B2|#13B.97 #908.42|#479.E8 #A37.56|1956 2515|2406 2368|2072 1468|1722 1618|#534.18 #6CC.AA|#29A.73 #5F7.45|#FFFFF9.CC #49B.95|#FFFE81.11 #2E5.BA|#FFFD96.19 #9A.E9|#FFFD6C.24 #FFFE40.91|#FFFD1A.3A #FFFB4D.55|#FFFCFA.59 #FFF8FA.28|#FFFD5B.59 #FFF6DF.E8|#FFFE6F.CC #FFF525.73|#FFFF8D.7C #FFF3DC.A3[#4C.D0 #FFF30F.10 #FFFF80.4D #FFF250.AC"/>
+                                    </edges>
+                                </DOMShape>
+                            </elements>
+                        </DOMFrame>
+                        <DOMFrame index="7" keyMode="9728">
+                            <elements>
+                                <DOMShape>
+                                    <fills>
+                                        <FillStyle index="1">
+                                            <SolidColor color="#F4A259"/>
+                                        </FillStyle>
+                                    </fills>
+                                    <strokes>
+                                        <StrokeStyle index="1">
+                                            <SolidStroke weight="5" scaleMode="normal" caps="round" joints="round">
+                                                <fill>
+                                                    <SolidColor color="#3D2C2E"/>
+                                                </fill>
+                                            </SolidStroke>
+                                        </StrokeStyle>
+                                    </strokes>
+                                    <edges>
+                                        <Edge fillStyle1="1" strokeStyle="1" edges="!#21.99 #FFF1E8.3C[#FFFF52.03 #FFF12B.19 #FFFE95.CD #FFF1F9.9D|#FFFD3E.0C #FFF35B.0F|#FFFBC2.25 #FFF593.C6|#FFFB1C.23 #FFF865.0F|#FFFB29.05 #FFFB64.36|#FFFB45.0E #FFFD82.A3|#FFFB1D.46 #B2.CC|#FFFBE0.42 #42E.28|#FFFDDF.59 #6EC.A2|#137.0D #8E4.1A|#468.E7 #A33.5E|1956 2515|2406 2368|2072 1468|1722 1618|#545.19 #6D0.A2|#2B4.4B #5E1.69|#21.BB #46B.B9|#FFFECD.D4 #2AC.E8|#FFFE0F.89 #52.1F|#FFFE12.DF #FFFDF6.54|#FFFDD3.F0 #FFFAEB.46|#FFFDAD.C1 #FFF898.78|#FFFE09.0C #FFF67D.38|#FFFF18.CA #FFF4BF.DC|#32.FA #FFF374.09[#F0.1D #FFF2A4.73 #21.99 #FFF1E8.3C"/>
+                                    </edges>
+                                </DOMShape>
+                            </elements>
+                        </DOMFrame>
+                        <DOMFrame index="8" keyMode="9728">
+                            <elements>
+                                <DOMShape>
+                                    <fills>
+                                        <FillStyle index="1">
+                                            <SolidColor color="#F4A259"/>
+                                        </FillStyle>
+                                    </fills>
+                                    <strokes>
+                                        <StrokeStyle index="1">
+                                            <SolidStroke weight="5" scaleMode="normal" caps="round" joints="round">
+                                                <fill>
+                                                    <SolidColor color="#3D2C2E"/>
+                                                </fill>
+                                            </SolidStroke>
+                                        </StrokeStyle>
+                                    </strokes>
+                                    <edges>
+                                        <Edge fillStyle1="1" strokeStyle="1" edges="!#C7.1C #FFF18D.3B[#FFFFF5.88 #FFF0D2.4E #FFFF3B.84 #FFF1A2.CD|#FFFDE7.86 #FFF307.DE|#FFFC71.AC #FFF544.94|#FFFBD3.51 #FFF817.95|#FFFBE8.54 #FFFB16.8E|#FFFBF9.3C #FFFD0E.2B|#FFFB94.5A #39.0C|#FFFC11.ED #3CB.62|#FFFDE6.F8 #6A4.14|#133.ED #8BF.CB|#458.11 #A2E.BD|1956 2515|2406 2368|2072 1468|1722 1618|#555.EF #6D5.43|#2CE.F9 #5CC.94|#4B.80 #43D.76|#FFFF1C.4B #278.92|#FFFE8B.BE #11.36|#FFFEBC.5A #FFFDB7.5E|#FFFE91.ED #FFFA96.63|#FFFE65.71 #FFF844.05|#FFFEBB.04 #FFF627.D6|#FFFFC6.06 #FFF467.9E|#DC.AE #FFF318.D3[#197.9B #FFF247.3F #C7.1C #FFF18D.3B"/>
+                                    </edges>
+                                </DOMShape>
+                            </elements>
+                        </DOMFrame>
+                        <DOMFrame index="9" keyMode="9728">
+                            <elements>
+                                <DOMShape>
+                                    <fills>
+                                        <FillStyle index="1">
+                                            <SolidColor color="#F4A259"/>
+                                        </FillStyle>
+                                    </fills>
+                                    <strokes>
+                                        <StrokeStyle index="1">
+                                            <SolidStroke weight="5" scaleMode="normal" caps="round" joints="round">
+                                                <fill>
+                                                    <SolidColor color="#3D2C2E"/>
+                                                </fill>
+                                            </SolidStroke>
+                                        </StrokeStyle>
+                                    </strokes>
+                                    <edges>
+                                        <Edge fillStyle1="1" strokeStyle="1" edges="!#16F.E5 #FFF13F.DB[#9C.59 #FFF087.28 #FFFFE4.8D #FFF159.9D|#FFFE94.5D #FFF2C2.44|#FFFD24.99 #FFF502.E7|#FFFC8D.EA #FFF7D7.8B|#FFFCAB.0D #FFFAD6.41|#FFFCB3.5B #FFFCA6.04|#FFFC11.F1 #FFFFC7.0B|#FFFC48.26 875|#FFFDF1.B0 #65B.2B|#132.3A #89B.64|#447.6C #A29.75|1956 2515|2406 2368|2072 1468|1722 1618|#566.94 #6DA.8B|#2EA.71 #5B8.CD|#77.0C #410.DD|#FFFF6C.2B #248.BF|#FFFF0A.2E #FFFFD8.46|#FFFF67.CA #FFFD83.C6|#FFFF53.40 #FFFA4E.DF|#FFFF20.79 #FFF7FD.02|#FFFF70.51 #FFF5DF.F2|#76.90 #FFF41C.ED|#189.A8 #FFF2CB.32[#242.5A #FFF1F7.A6 #16F.E5 #FFF13F.DB"/>
+                                    </edges>
+                                </DOMShape>
+                            </elements>
+                        </DOMFrame>
+                        <DOMFrame index="10" keyMode="9728">
+                            <elements>
+                                <DOMShape>
+                                    <fills>
+                                        <FillStyle index="1">
+                                            <SolidColor color="#F4A259"/>
+                                        </FillStyle>
+                                    </fills>
+                                    <strokes>
+                                        <StrokeStyle index="1">
+                                            <SolidStroke weight="5" scaleMode="normal" caps="round" joints="round">
+                                                <fill>
+                                                    <SolidColor color="#3D2C2E"/>
+                                                </fill>
+                                            </SolidStroke>
+                                        </StrokeStyle>
+                                    </strokes>
+                                    <edges>
+                                        <Edge fillStyle1="1" strokeStyle="1" edges="!#21B.03 #FFF100.3C[#145.85 #FFF049.CA #8F.F7 #FFF11E.2F|#FFFF43.9E #FFF28A.60|#FFFDD9.FC #FFF4CE.E0|#FFFD4A.FC #FFF7A5.13|#FFFD70.3E #FFFAA3.6E|#FFFD72.89 #FFFC4A.81|#FFFC95.7F #FFFF5D.2C|#FFFC82.CD #30D.3E|#FFFDFF.90 #612.0C|#131.F2 #876.F3|#436.FF #A23.87|1956 2515|2406 2368|2072 1468|1722 1618|#577.01 #6E0.79|#306.AB #5A6.1D|#A4.4D 998|#FFFFBD.2F #21D.6E|#FFFF8A.4E #FFFFA7.5F|#14.63 #FFFD5B.92|#16.F9 #FFFA14.D9|#FFFFDD.E7 #FFF7C3.8E|#28.03 #FFF5A5.AE|#129.76 #FFF3DF.E8|#238.F6 #FFF28B.48[#2EF.68 #FFF1B5.CA #21B.03 #FFF100.3C"/>
+                                    </edges>
+                                </DOMShape>
+                            </elements>
+                        </DOMFrame>
+                        <DOMFrame index="11" keyMode="9728">
+                            <elements>
+                                <DOMShape>
+                                    <fills>
+                                        <FillStyle index="1">
+                                            <SolidColor color="#F4A259"/>
+                                        </FillStyle>
+                                    </fills>
+                                    <strokes>
+                                        <StrokeStyle index="1">
+                                            <SolidStroke weight="5" scaleMode="normal" caps="round" joints="round">
+                                                <fill>
+                                                    <SolidColor color="#3D2C2E"/>
+                                                </fill>
+                                            </SolidStroke>
+                                        </StrokeStyle>
+                                    </strokes>
+                                    <edges>
+                                        <Edge fillStyle1="1" strokeStyle="1" edges="!#2C7.84 #FFF0CE.6D[#1F0.1A #FFF01A.41 #13C.CE #FFF0F0.8F|#FFFFF4.56 #FFF260.41|#FFFE90.E0 #FFF4A8.8E|#FFFE09.94 #FFF780.3A|#FFFE36.F5 #FFFA7E.25|#FFFE35.E0 #FFFBFB.E4|#FFFD1E.76 #FFFEFB.C4|#FFFCC1.BF #2B2.54|#FFFE10.A8 #5C8.DD|#133.16 #852.87|#426.D1 #A1C.F6|1956 2515|2406 2368|2072 1468|1722 1618|#587.2F #6E7.0A|#323.99 #594.8B|#D3.32 #3BC.F0|#F.0E #1F6.9E|#B.92 #FFFF7E.84|#C1.5A #FFFD3E.BA|#DC.22 #FFF9E8.61|#9C.C9 #FFF797.BA|#E1.25 #FFF579.18|#1DD.C6 #FFF3B0.9E|#2E9.A6 #FFF259.23[#39D.D2 #FFF181.B9 #2C7.84 #FFF0CE.6D"/>
+                                    </edges>
+                                </DOMShape>
+                            </elements>
+                        </DOMFrame>
+                        <DOMFrame index="12" keyMode="9728">
+                            <elements>
+                                <DOMShape>
+                                    <fills>
+                                        <FillStyle index="1">
+                                            <SolidColor color="#F4A259"/>
+                                        </FillStyle>
+                                    </fills>
+                                    <strokes>
+                                        <StrokeStyle index="1">
+                                            <SolidStroke weight="5" scaleMode="normal" caps="round" joints="round">
+                                                <fill>
+                                                    <SolidColor color="#3D2C2E"/>
+                                                </fill>
+                                            </SolidStroke>
+                                        </StrokeStyle>
+                                    </strokes>
+                                    <edges>
+                                        <Edge fillStyle1="1" strokeStyle="1" edges="!#2C7.84 #FFF0CE.6D[#1F0.1A #FFF01A.41 #13C.CE #FFF0F0.8F|#FFFFF4.56 #FFF260.41|#FFFE90.E0 #FFF4A8.8E|#FFFE09.94 #FFF780.3A|#FFFE36.F5 #FFFA7E.25|#FFFE35.E0 #FFFBFB.E4|#FFFD1E.76 #FFFEFB.C4|#FFFCC1.BF #2B2.54|#FFFE10.A8 #5C8.DD|#133.16 #852.87|#426.D1 #A1C.F6|1956 2515|2406 2368|2072 1468|1722 1618|#587.2F #6E7.0A|#323.99 #594.8B|#D3.32 #3BC.F0|#F.0E #1F6.9E|#B.92 #FFFF7E.84|#C1.5A #FFFD3E.BA|#DC.22 #FFF9E8.61|#9C.C9 #FFF797.BA|#E1.25 #FFF579.18|#1DD.C6 #FFF3B0.9E|#2E9.A6 #FFF259.23[#39D.D2 #FFF181.B9 #2C7.84 #FFF0CE.6D"/>
+                                    </edges>
+                                </DOMShape>
+                            </elements>
+                        </DOMFrame>
+                        <DOMFrame index="13" keyMode="9728">
+                            <elements>
+                                <DOMShape>
+                                    <fills>
+                                        <FillStyle index="1">
+                                            <SolidColor color="#F4A259"/>
+                                        </FillStyle>
+                                    </fills>
+                                    <strokes>
+                                        <StrokeStyle index="1">
+                                            <SolidStroke weight="5" scaleMode="normal" caps="round" joints="round">
+                                                <fill>
+                                                    <SolidColor color="#3D2C2E"/>
+                                                </fill>
+                                            </SolidStroke>
+                                        </StrokeStyle>
+                                    </strokes>
+                                    <edges>
+                                        <Edge fillStyle1="1" strokeStyle="1" edges="!#2C7.84 #FFF0CE.6D[#1F0.1A #FFF01A.41 #13C.CE #FFF0F0.8F|#FFFFF4.56 #FFF260.41|#FFFE90.E0 #FFF4A8.8E|#FFFE09.94 #FFF780.3A|#FFFE36.F5 #FFFA7E.25|#FFFE35.E0 #FFFBFB.E4|#FFFD1E.76 #FFFEFB.C4|#FFFCC1.BF #2B2.54|#FFFE10.A8 #5C8.DD|#133.16 #852.87|#426.D1 #A1C.F6|1956 2515|2406 2368|2072 1468|1722 1618|#587.2F #6E7.0A|#323.99 #594.8B|#D3.32 #3BC.F0|#F.0E #1F6.9E|#B.92 #FFFF7E.84|#C1.5A #FFFD3E.BA|#DC.22 #FFF9E8.61|#9C.C9 #FFF797.BA|#E1.25 #FFF579.18|#1DD.C6 #FFF3B0.9E|#2E9.A6 #FFF259.23[#39D.D2 #FFF181.B9 #2C7.84 #FFF0CE.6D"/>
+                                    </edges>
+                                </DOMShape>
+                            </elements>
+                        </DOMFrame>
+                        <DOMFrame index="14" keyMode="9728">
+                            <elements>
+                                <DOMShape>
+                                    <fills>
+                                        <FillStyle index="1">
+                                            <SolidColor color="#F4A259"/>
+                                        </FillStyle>
+                                    </fills>
+                                    <strokes>
+                                        <StrokeStyle index="1">
+                                            <SolidStroke weight="5" scaleMode="normal" caps="round" joints="round">
+                                                <fill>
+                                                    <SolidColor color="#3D2C2E"/>
+                                                </fill>
+                                            </SolidStroke>
+                                        </StrokeStyle>
+                                    </strokes>
+                                    <edges>
+                                        <Edge fillStyle1="1" strokeStyle="1" edges="!#2C7.84 #FFF0CE.6D[#1F0.1A #FFF01A.41 #13C.CE #FFF0F0.8F|#FFFFF4.56 #FFF260.41|#FFFE90.E0 #FFF4A8.8E|#FFFE09.94 #FFF780.3A|#FFFE36.F5 #FFFA7E.25|#FFFE35.E0 #FFFBFB.E4|#FFFD1E.76 #FFFEFB.C4|#FFFCC1.BF #2B2.54|#FFFE10.A8 #5C8.DD|#133.16 #852.87|#426.D1 #A1C.F6|1956 2515|2406 2368|2072 1468|1722 1618|#587.2F #6E7.0A|#323.99 #594.8B|#D3.32 #3BC.F0|#F.0E #1F6.9E|#B.92 #FFFF7E.84|#C1.5A #FFFD3E.BA|#DC.22 #FFF9E8.61|#9C.C9 #FFF797.BA|#E1.25 #FFF579.18|#1DD.C6 #FFF3B0.9E|#2E9.A6 #FFF259.23[#39D.D2 #FFF181.B9 #2C7.84 #FFF0CE.6D"/>
+                                    </edges>
+                                </DOMShape>
+                            </elements>
+                        </DOMFrame>
+                        <DOMFrame index="15" keyMode="9728">
+                            <elements>
+                                <DOMShape>
+                                    <fills>
+                                        <FillStyle index="1">
+                                            <SolidColor color="#F4A259"/>
+                                        </FillStyle>
+                                    </fills>
+                                    <strokes>
+                                        <StrokeStyle index="1">
+                                            <SolidStroke weight="5" scaleMode="normal" caps="round" joints="round">
+                                                <fill>
+                                                    <SolidColor color="#3D2C2E"/>
+                                                </fill>
+                                            </SolidStroke>
+                                        </StrokeStyle>
+                                    </strokes>
+                                    <edges>
+                                        <Edge fillStyle1="1" strokeStyle="1" edges="!#2C7.84 #FFF0CE.6D[#1F0.1A #FFF01A.41 #13C.CE #FFF0F0.8F|#FFFFF4.56 #FFF260.41|#FFFE90.E0 #FFF4A8.8E|#FFFE09.94 #FFF780.3A|#FFFE36.F5 #FFFA7E.25|#FFFE35.E0 #FFFBFB.E4|#FFFD1E.76 #FFFEFB.C4|#FFFCC1.BF #2B2.54|#FFFE10.A8 #5C8.DD|#133.16 #852.87|#426.D1 #A1C.F6|1956 2515|2406 2368|2072 1468|1722 1618|#587.2F #6E7.0A|#323.99 #594.8B|#D3.32 #3BC.F0|#F.0E #1F6.9E|#B.92 #FFFF7E.84|#C1.5A #FFFD3E.BA|#DC.22 #FFF9E8.61|#9C.C9 #FFF797.BA|#E1.25 #FFF579.18|#1DD.C6 #FFF3B0.9E|#2E9.A6 #FFF259.23[#39D.D2 #FFF181.B9 #2C7.84 #FFF0CE.6D"/>
+                                    </edges>
+                                </DOMShape>
+                            </elements>
+                        </DOMFrame>
+                        <DOMFrame index="16" keyMode="9728">
+                            <elements>
+                                <DOMShape>
+                                    <fills>
+                                        <FillStyle index="1">
+                                            <SolidColor color="#F4A259"/>
+                                        </FillStyle>
+                                    </fills>
+                                    <strokes>
+                                        <StrokeStyle index="1">
+                                            <SolidStroke weight="5" scaleMode="normal" caps="round" joints="round">
+                                                <fill>
+                                                    <SolidColor color="#3D2C2E"/>
+                                                </fill>
+                                            </SolidStroke>
+                                        </StrokeStyle>
+                                    </strokes>
+                                    <edges>
+                                        <Edge fillStyle1="1" strokeStyle="1" edges="!#2C7.84 #FFF0CE.6D[#1F0.1A #FFF01A.41 #13C.CE #FFF0F0.8F|#FFFFF4.56 #FFF260.41|#FFFE90.E0 #FFF4A8.8E|#FFFE09.94 #FFF780.3A|#FFFE36.F5 #FFFA7E.25|#FFFE35.E0 #FFFBFB.E4|#FFFD1E.76 #FFFEFB.C4|#FFFCC1.BF #2B2.54|#FFFE10.A8 #5C8.DD|#133.16 #852.87|#426.D1 #A1C.F6|1956 2515|2406 2368|2072 1468|1722 1618|#587.2F #6E7.0A|#323.99 #594.8B|#D3.32 #3BC.F0|#F.0E #1F6.9E|#B.92 #FFFF7E.84|#C1.5A #FFFD3E.BA|#DC.22 #FFF9E8.61|#9C.C9 #FFF797.BA|#E1.25 #FFF579.18|#1DD.C6 #FFF3B0.9E|#2E9.A6 #FFF259.23[#39D.D2 #FFF181.B9 #2C7.84 #FFF0CE.6D"/>
+                                    </edges>
+                                </DOMShape>
+                            </elements>
+                        </DOMFrame>
+                        <DOMFrame index="17" keyMode="9728">
+                            <elements>
+                                <DOMShape>
+                                    <fills>
+                                        <FillStyle index="1">
+                                            <SolidColor color="#F4A259"/>
+                                        </FillStyle>
+                                    </fills>
+                                    <strokes>
+                                        <StrokeStyle index="1">
+                                            <SolidStroke weight="5" scaleMode="normal" caps="round" joints="round">
+                                                <fill>
+                                                    <SolidColor color="#3D2C2E"/>
+                                                </fill>
+                                            </SolidStroke>
+                                        </StrokeStyle>
+                                    </strokes>
+                                    <edges>
+                                        <Edge fillStyle1="1" strokeStyle="1" edges="!#2C7.84 #FFF0CE.6D[#1F0.1A #FFF01A.41 #13C.CE #FFF0F0.8F|#FFFFF4.56 #FFF260.41|#FFFE90.E0 #FFF4A8.8E|#FFFE09.94 #FFF780.3A|#FFFE36.F5 #FFFA7E.25|#FFFE35.E0 #FFFBFB.E4|#FFFD1E.76 #FFFEFB.C4|#FFFCC1.BF #2B2.54|#FFFE10.A8 #5C8.DD|#133.16 #852.87|#426.D1 #A1C.F6|1956 2515|2406 2368|2072 1468|1722 1618|#587.2F #6E7.0A|#323.99 #594.8B|#D3.32 #3BC.F0|#F.0E #1F6.9E|#B.92 #FFFF7E.84|#C1.5A #FFFD3E.BA|#DC.22 #FFF9E8.61|#9C.C9 #FFF797.BA|#E1.25 #FFF579.18|#1DD.C6 #FFF3B0.9E|#2E9.A6 #FFF259.23[#39D.D2 #FFF181.B9 #2C7.84 #FFF0CE.6D"/>
+                                    </edges>
+                                </DOMShape>
+                            </elements>
+                        </DOMFrame>
+                        <DOMFrame index="18" keyMode="9728">
+                            <elements>
+                                <DOMShape>
+                                    <fills>
+                                        <FillStyle index="1">
+                                            <SolidColor color="#F4A259"/>
+                                        </FillStyle>
+                                    </fills>
+                                    <strokes>
+                                        <StrokeStyle index="1">
+                                            <SolidStroke weight="5" scaleMode="normal" caps="round" joints="round">
+                                                <fill>
+                                                    <SolidColor color="#3D2C2E"/>
+                                                </fill>
+                                            </SolidStroke>
+                                        </StrokeStyle>
+                                    </strokes>
+                                    <edges>
+                                        <Edge fillStyle1="1" strokeStyle="1" edges="!#2C7.84 #FFF0CE.6D[#1F0.1A #FFF01A.41 #13C.CE #FFF0F0.8F|#FFFFF4.56 #FFF260.41|#FFFE90.E0 #FFF4A8.8E|#FFFE09.94 #FFF780.3A|#FFFE36.F5 #FFFA7E.25|#FFFE35.E0 #FFFBFB.E4|#FFFD1E.76 #FFFEFB.C4|#FFFCC1.BF #2B2.54|#FFFE10.A8 #5C8.DD|#133.16 #852.87|#426.D1 #A1C.F6|1956 2515|2406 2368|2072 1468|1722 1618|#587.2F #6E7.0A|#323.99 #594.8B|#D3.32 #3BC.F0|#F.0E #1F6.9E|#B.92 #FFFF7E.84|#C1.5A #FFFD3E.BA|#DC.22 #FFF9E8.61|#9C.C9 #FFF797.BA|#E1.25 #FFF579.18|#1DD.C6 #FFF3B0.9E|#2E9.A6 #FFF259.23[#39D.D2 #FFF181.B9 #2C7.84 #FFF0CE.6D"/>
+                                    </edges>
+                                </DOMShape>
+                            </elements>
+                        </DOMFrame>
+                        <DOMFrame index="19" keyMode="9728">
+                            <elements>
+                                <DOMShape>
+                                    <fills>
+                                        <FillStyle index="1">
+                                            <SolidColor color="#F4A259"/>
+                                        </FillStyle>
+                                    </fills>
+                                    <strokes>
+                                        <StrokeStyle index="1">
+                                            <SolidStroke weight="5" scaleMode="normal" caps="round" joints="round">
+                                                <fill>
+                                                    <SolidColor color="#3D2C2E"/>
+                                                </fill>
+                                            </SolidStroke>
+                                        </StrokeStyle>
+                                    </strokes>
+                                    <edges>
+                                        <Edge fillStyle1="1" strokeStyle="1" edges="!#2C7.84 #FFF0CE.6D[#1F0.1A #FFF01A.41 #13C.CE #FFF0F0.8F|#FFFFF4.56 #FFF260.41|#FFFE90.E0 #FFF4A8.8E|#FFFE09.94 #FFF780.3A|#FFFE36.F5 #FFFA7E.25|#FFFE35.E0 #FFFBFB.E4|#FFFD1E.76 #FFFEFB.C4|#FFFCC1.BF #2B2.54|#FFFE10.A8 #5C8.DD|#133.16 #852.87|#426.D1 #A1C.F6|1956 2515|2406 2368|2072 1468|1722 1618|#587.2F #6E7.0A|#323.99 #594.8B|#D3.32 #3BC.F0|#F.0E #1F6.9E|#B.92 #FFFF7E.84|#C1.5A #FFFD3E.BA|#DC.22 #FFF9E8.61|#9C.C9 #FFF797.BA|#E1.25 #FFF579.18|#1DD.C6 #FFF3B0.9E|#2E9.A6 #FFF259.23[#39D.D2 #FFF181.B9 #2C7.84 #FFF0CE.6D"/>
+                                    </edges>
+                                </DOMShape>
+                            </elements>
+                        </DOMFrame>
+                        <DOMFrame index="20" keyMode="9728">
+                            <elements>
+                                <DOMShape>
+                                    <fills>
+                                        <FillStyle index="1">
+                                            <SolidColor color="#F4A259"/>
+                                        </FillStyle>
+                                    </fills>
+                                    <strokes>
+                                        <StrokeStyle index="1">
+                                            <SolidStroke weight="5" scaleMode="normal" caps="round" joints="round">
+                                                <fill>
+                                                    <SolidColor color="#3D2C2E"/>
+                                                </fill>
+                                            </SolidStroke>
+                                        </StrokeStyle>
+                                    </strokes>
+                                    <edges>
+                                        <Edge fillStyle1="1" strokeStyle="1" edges="!#2C7.84 #FFF0CE.6D[#1F0.1A #FFF01A.41 #13C.CE #FFF0F0.8F|#FFFFF4.56 #FFF260.41|#FFFE90.E0 #FFF4A8.8E|#FFFE09.94 #FFF780.3A|#FFFE36.F5 #FFFA7E.25|#FFFE35.E0 #FFFBFB.E4|#FFFD1E.76 #FFFEFB.C4|#FFFCC1.BF #2B2.54|#FFFE10.A8 #5C8.DD|#133.16 #852.87|#426.D1 #A1C.F6|1956 2515|2406 2368|2072 1468|1722 1618|#587.2F #6E7.0A|#323.99 #594.8B|#D3.32 #3BC.F0|#F.0E #1F6.9E|#B.92 #FFFF7E.84|#C1.5A #FFFD3E.BA|#DC.22 #FFF9E8.61|#9C.C9 #FFF797.BA|#E1.25 #FFF579.18|#1DD.C6 #FFF3B0.9E|#2E9.A6 #FFF259.23[#39D.D2 #FFF181.B9 #2C7.84 #FFF0CE.6D"/>
+                                    </edges>
+                                </DOMShape>
+                            </elements>
+                        </DOMFrame>
+                        <DOMFrame index="21" keyMode="9728">
+                            <elements>
+                                <DOMShape>
+                                    <fills>
+                                        <FillStyle index="1">
+                                            <SolidColor color="#F4A259"/>
+                                        </FillStyle>
+                                    </fills>
+                                    <strokes>
+                                        <StrokeStyle index="1">
+                                            <SolidStroke weight="5" scaleMode="normal" caps="round" joints="round">
+                                                <fill>
+                                                    <SolidColor color="#3D2C2E"/>
+                                                </fill>
+                                            </SolidStroke>
+                                        </StrokeStyle>
+                                    </strokes>
+                                    <edges>
+                                        <Edge fillStyle1="1" strokeStyle="1" edges="!#2C7.84 #FFF0CE.6D[#1F0.1A #FFF01A.41 #13C.CE #FFF0F0.8F|#FFFFF4.56 #FFF260.41|#FFFE90.E0 #FFF4A8.8E|#FFFE09.94 #FFF780.3A|#FFFE36.F5 #FFFA7E.25|#FFFE35.E0 #FFFBFB.E4|#FFFD1E.76 #FFFEFB.C4|#FFFCC1.BF #2B2.54|#FFFE10.A8 #5C8.DD|#133.16 #852.87|#426.D1 #A1C.F6|1956 2515|2406 2368|2072 1468|1722 1618|#587.2F #6E7.0A|#323.99 #594.8B|#D3.32 #3BC.F0|#F.0E #1F6.9E|#B.92 #FFFF7E.84|#C1.5A #FFFD3E.BA|#DC.22 #FFF9E8.61|#9C.C9 #FFF797.BA|#E1.25 #FFF579.18|#1DD.C6 #FFF3B0.9E|#2E9.A6 #FFF259.23[#39D.D2 #FFF181.B9 #2C7.84 #FFF0CE.6D"/>
+                                    </edges>
+                                </DOMShape>
+                            </elements>
+                        </DOMFrame>
+                        <DOMFrame index="22" keyMode="9728">
+                            <elements>
+                                <DOMShape>
+                                    <fills>
+                                        <FillStyle index="1">
+                                            <SolidColor color="#F4A259"/>
+                                        </FillStyle>
+                                    </fills>
+                                    <strokes>
+                                        <StrokeStyle index="1">
+                                            <SolidStroke weight="5" scaleMode="normal" caps="round" joints="round">
+                                                <fill>
+                                                    <SolidColor color="#3D2C2E"/>
+                                                </fill>
+                                            </SolidStroke>
+                                        </StrokeStyle>
+                                    </strokes>
+                                    <edges>
+                                        <Edge fillStyle1="1" strokeStyle="1" edges="!#2C7.84 #FFF0CE.6D[#1F0.1A #FFF01A.41 #13C.CE #FFF0F0.8F|#FFFFF4.56 #FFF260.41|#FFFE90.E0 #FFF4A8.8E|#FFFE09.94 #FFF780.3A|#FFFE36.F5 #FFFA7E.25|#FFFE35.E0 #FFFBFB.E4|#FFFD1E.76 #FFFEFB.C4|#FFFCC1.BF #2B2.54|#FFFE10.A8 #5C8.DD|#133.16 #852.87|#426.D1 #A1C.F6|1956 2515|2406 2368|2072 1468|1722 1618|#587.2F #6E7.0A|#323.99 #594.8B|#D3.32 #3BC.F0|#F.0E #1F6.9E|#B.92 #FFFF7E.84|#C1.5A #FFFD3E.BA|#DC.22 #FFF9E8.61|#9C.C9 #FFF797.BA|#E1.25 #FFF579.18|#1DD.C6 #FFF3B0.9E|#2E9.A6 #FFF259.23[#39D.D2 #FFF181.B9 #2C7.84 #FFF0CE.6D"/>
+                                    </edges>
+                                </DOMShape>
+                            </elements>
+                        </DOMFrame>
+                        <DOMFrame index="23" keyMode="9728">
+                            <elements>
+                                <DOMShape>
+                                    <fills>
+                                        <FillStyle index="1">
+                                            <SolidColor color="#F4A259"/>
+                                        </FillStyle>
+                                    </fills>
+                                    <strokes>
+                                        <StrokeStyle index="1">
+                                            <SolidStroke weight="5" scaleMode="normal" caps="round" joints="round">
+                                                <fill>
+                                                    <SolidColor color="#3D2C2E"/>
+                                                </fill>
+                                            </SolidStroke>
+                                        </StrokeStyle>
+                                    </strokes>
+                                    <edges>
+                                        <Edge fillStyle1="1" strokeStyle="1" edges="!#2C7.84 #FFF0CE.6D[#1F0.1A #FFF01A.41 #13C.CE #FFF0F0.8F|#FFFFF4.56 #FFF260.41|#FFFE90.E0 #FFF4A8.8E|#FFFE09.94 #FFF780.3A|#FFFE36.F5 #FFFA7E.25|#FFFE35.E0 #FFFBFB.E4|#FFFD1E.76 #FFFEFB.C4|#FFFCC1.BF #2B2.54|#FFFE10.A8 #5C8.DD|#133.16 #852.87|#426.D1 #A1C.F6|1956 2515|2406 2368|2072 1468|1722 1618|#587.2F #6E7.0A|#323.99 #594.8B|#D3.32 #3BC.F0|#F.0E #1F6.9E|#B.92 #FFFF7E.84|#C1.5A #FFFD3E.BA|#DC.22 #FFF9E8.61|#9C.C9 #FFF797.BA|#E1.25 #FFF579.18|#1DD.C6 #FFF3B0.9E|#2E9.A6 #FFF259.23[#39D.D2 #FFF181.B9 #2C7.84 #FFF0CE.6D"/>
+                                    </edges>
+                                </DOMShape>
+                            </elements>
+                        </DOMFrame>
+                        <DOMFrame index="24" keyMode="9728">
+                            <elements>
+                                <DOMShape>
+                                    <fills>
+                                        <FillStyle index="1">
+                                            <SolidColor color="#F4A259"/>
+                                        </FillStyle>
+                                    </fills>
+                                    <strokes>
+                                        <StrokeStyle index="1">
+                                            <SolidStroke weight="5" scaleMode="normal" caps="round" joints="round">
+                                                <fill>
+                                                    <SolidColor color="#3D2C2E"/>
+                                                </fill>
+                                            </SolidStroke>
+                                        </StrokeStyle>
+                                    </strokes>
+                                    <edges>
+                                        <Edge fillStyle1="1" strokeStyle="1" edges="!#2C7.84 #FFF0CE.6D[#1F0.1A #FFF01A.41 #13C.CE #FFF0F0.8F|#FFFFF4.56 #FFF260.41|#FFFE90.E0 #FFF4A8.8E|#FFFE09.94 #FFF780.3A|#FFFE36.F5 #FFFA7E.25|#FFFE35.E0 #FFFBFB.E4|#FFFD1E.76 #FFFEFB.C4|#FFFCC1.BF #2B2.54|#FFFE10.A8 #5C8.DD|#133.16 #852.87|#426.D1 #A1C.F6|1956 2515|2406 2368|2072 1468|1722 1618|#587.2F #6E7.0A|#323.99 #594.8B|#D3.32 #3BC.F0|#F.0E #1F6.9E|#B.92 #FFFF7E.84|#C1.5A #FFFD3E.BA|#DC.22 #FFF9E8.61|#9C.C9 #FFF797.BA|#E1.25 #FFF579.18|#1DD.C6 #FFF3B0.9E|#2E9.A6 #FFF259.23[#39D.D2 #FFF181.B9 #2C7.84 #FFF0CE.6D"/>
+                                    </edges>
+                                </DOMShape>
+                            </elements>
+                        </DOMFrame>
+                        <DOMFrame index="25" keyMode="9728">
+                            <elements>
+                                <DOMShape>
+                                    <fills>
+                                        <FillStyle index="1">
+                                            <SolidColor color="#F4A259"/>
+                                        </FillStyle>
+                                    </fills>
+                                    <strokes>
+                                        <StrokeStyle index="1">
+                                            <SolidStroke weight="5" scaleMode="normal" caps="round" joints="round">
+                                                <fill>
+                                                    <SolidColor color="#3D2C2E"/>
+                                                </fill>
+                                            </SolidStroke>
+                                        </StrokeStyle>
+                                    </strokes>
+                                    <edges>
+                                        <Edge fillStyle1="1" strokeStyle="1" edges="!#2C7.84 #FFF0CE.6D[#1F0.1A #FFF01A.41 #13C.CE #FFF0F0.8F|#FFFFF4.56 #FFF260.41|#FFFE90.E0 #FFF4A8.8E|#FFFE09.94 #FFF780.3A|#FFFE36.F5 #FFFA7E.25|#FFFE35.E0 #FFFBFB.E4|#FFFD1E.76 #FFFEFB.C4|#FFFCC1.BF #2B2.54|#FFFE10.A8 #5C8.DD|#133.16 #852.87|#426.D1 #A1C.F6|1956 2515|2406 2368|2072 1468|1722 1618|#587.2F #6E7.0A|#323.99 #594.8B|#D3.32 #3BC.F0|#F.0E #1F6.9E|#B.92 #FFFF7E.84|#C1.5A #FFFD3E.BA|#DC.22 #FFF9E8.61|#9C.C9 #FFF797.BA|#E1.25 #FFF579.18|#1DD.C6 #FFF3B0.9E|#2E9.A6 #FFF259.23[#39D.D2 #FFF181.B9 #2C7.84 #FFF0CE.6D"/>
+                                    </edges>
+                                </DOMShape>
+                            </elements>
+                        </DOMFrame>
+                        <DOMFrame index="26" keyMode="9728">
+                            <elements>
+                                <DOMShape>
+                                    <fills>
+                                        <FillStyle index="1">
+                                            <SolidColor color="#F4A259"/>
+                                        </FillStyle>
+                                    </fills>
+                                    <strokes>
+                                        <StrokeStyle index="1">
+                                            <SolidStroke weight="5" scaleMode="normal" caps="round" joints="round">
+                                                <fill>
+                                                    <SolidColor color="#3D2C2E"/>
+                                                </fill>
+                                            </SolidStroke>
+                                        </StrokeStyle>
+                                    </strokes>
+                                    <edges>
+                                        <Edge fillStyle1="1" strokeStyle="1" edges="!#2C7.84 #FFF0CE.6D[#1F0.1A #FFF01A.41 #13C.CE #FFF0F0.8F|#FFFFF4.56 #FFF260.41|#FFFE90.E0 #FFF4A8.8E|#FFFE09.94 #FFF780.3A|#FFFE36.F5 #FFFA7E.25|#FFFE35.E0 #FFFBFB.E4|#FFFD1E.76 #FFFEFB.C4|#FFFCC1.BF #2B2.54|#FFFE10.A8 #5C8.DD|#133.16 #852.87|#426.D1 #A1C.F6|1956 2515|2406 2368|2072 1468|1722 1618|#587.2F #6E7.0A|#323.99 #594.8B|#D3.32 #3BC.F0|#F.0E #1F6.9E|#B.92 #FFFF7E.84|#C1.5A #FFFD3E.BA|#DC.22 #FFF9E8.61|#9C.C9 #FFF797.BA|#E1.25 #FFF579.18|#1DD.C6 #FFF3B0.9E|#2E9.A6 #FFF259.23[#39D.D2 #FFF181.B9 #2C7.84 #FFF0CE.6D"/>
+                                    </edges>
+                                </DOMShape>
+                            </elements>
+                        </DOMFrame>
+                        <DOMFrame index="27" keyMode="9728">
+                            <elements>
+                                <DOMShape>
+                                    <fills>
+                                        <FillStyle index="1">
+                                            <SolidColor color="#F4A259"/>
+                                        </FillStyle>
+                                    </fills>
+                                    <strokes>
+                                        <StrokeStyle index="1">
+                                            <SolidStroke weight="5" scaleMode="normal" caps="round" joints="round">
+                                                <fill>
+                                                    <SolidColor color="#3D2C2E"/>
+                                                </fill>
+                                            </SolidStroke>
+                                        </StrokeStyle>
+                                    </strokes>
+                                    <edges>
+                                        <Edge fillStyle1="1" strokeStyle="1" edges="!#2C7.84 #FFF0CE.6D[#1F0.1A #FFF01A.41 #13C.CE #FFF0F0.8F|#FFFFF4.56 #FFF260.41|#FFFE90.E0 #FFF4A8.8E|#FFFE09.94 #FFF780.3A|#FFFE36.F5 #FFFA7E.25|#FFFE35.E0 #FFFBFB.E4|#FFFD1E.76 #FFFEFB.C4|#FFFCC1.BF #2B2.54|#FFFE10.A8 #5C8.DD|#133.16 #852.87|#426.D1 #A1C.F6|1956 2515|2406 2368|2072 1468|1722 1618|#587.2F #6E7.0A|#323.99 #594.8B|#D3.32 #3BC.F0|#F.0E #1F6.9E|#B.92 #FFFF7E.84|#C1.5A #FFFD3E.BA|#DC.22 #FFF9E8.61|#9C.C9 #FFF797.BA|#E1.25 #FFF579.18|#1DD.C6 #FFF3B0.9E|#2E9.A6 #FFF259.23[#39D.D2 #FFF181.B9 #2C7.84 #FFF0CE.6D"/>
+                                    </edges>
+                                </DOMShape>
+                            </elements>
+                        </DOMFrame>
+                        <DOMFrame index="28" keyMode="9728">
+                            <elements>
+                                <DOMShape>
+                                    <fills>
+                                        <FillStyle index="1">
+                                            <SolidColor color="#F4A259"/>
+                                        </FillStyle>
+                                    </fills>
+                                    <strokes>
+                                        <StrokeStyle index="1">
+                                            <SolidStroke weight="5" scaleMode="normal" caps="round" joints="round">
+                                                <fill>
+                                                    <SolidColor color="#3D2C2E"/>
+                                                </fill>
+                                            </SolidStroke>
+                                        </StrokeStyle>
+                                    </strokes>
+                                    <edges>
+                                        <Edge fillStyle1="1" strokeStyle="1" edges="!#2C7.84 #FFF0CE.6D[#1F0.1A #FFF01A.41 #13C.CE #FFF0F0.8F|#FFFFF4.56 #FFF260.41|#FFFE90.E0 #FFF4A8.8E|#FFFE09.94 #FFF780.3A|#FFFE36.F5 #FFFA7E.25|#FFFE35.E0 #FFFBFB.E4|#FFFD1E.76 #FFFEFB.C4|#FFFCC1.BF #2B2.54|#FFFE10.A8 #5C8.DD|#133.16 #852.87|#426.D1 #A1C.F6|1956 2515|2406 2368|2072 1468|1722 1618|#587.2F #6E7.0A|#323.99 #594.8B|#D3.32 #3BC.F0|#F.0E #1F6.9E|#B.92 #FFFF7E.84|#C1.5A #FFFD3E.BA|#DC.22 #FFF9E8.61|#9C.C9 #FFF797.BA|#E1.25 #FFF579.18|#1DD.C6 #FFF3B0.9E|#2E9.A6 #FFF259.23[#39D.D2 #FFF181.B9 #2C7.84 #FFF0CE.6D"/>
+                                    </edges>
+                                </DOMShape>
+                            </elements>
+                        </DOMFrame>
+                        <DOMFrame index="29" keyMode="9728">
+                            <elements>
+                                <DOMShape>
+                                    <fills>
+                                        <FillStyle index="1">
+                                            <SolidColor color="#F4A259"/>
+                                        </FillStyle>
+                                    </fills>
+                                    <strokes>
+                                        <StrokeStyle index="1">
+                                            <SolidStroke weight="5" scaleMode="normal" caps="round" joints="round">
+                                                <fill>
+                                                    <SolidColor color="#3D2C2E"/>
+                                                </fill>
+                                            </SolidStroke>
+                                        </StrokeStyle>
+                                    </strokes>
+                                    <edges>
+                                        <Edge fillStyle1="1" strokeStyle="1" edges="!#2C7.84 #FFF0CE.6D[#1F0.1A #FFF01A.41 #13C.CE #FFF0F0.8F|#FFFFF4.56 #FFF260.41|#FFFE90.E0 #FFF4A8.8E|#FFFE09.94 #FFF780.3A|#FFFE36.F5 #FFFA7E.25|#FFFE35.E0 #FFFBFB.E4|#FFFD1E.76 #FFFEFB.C4|#FFFCC1.BF #2B2.54|#FFFE10.A8 #5C8.DD|#133.16 #852.87|#426.D1 #A1C.F6|1956 2515|2406 2368|2072 1468|1722 1618|#587.2F #6E7.0A|#323.99 #594.8B|#D3.32 #3BC.F0|#F.0E #1F6.9E|#B.92 #FFFF7E.84|#C1.5A #FFFD3E.BA|#DC.22 #FFF9E8.61|#9C.C9 #FFF797.BA|#E1.25 #FFF579.18|#1DD.C6 #FFF3B0.9E|#2E9.A6 #FFF259.23[#39D.D2 #FFF181.B9 #2C7.84 #FFF0CE.6D"/>
+                                    </edges>
+                                </DOMShape>
+                            </elements>
+                        </DOMFrame>
+                        <DOMFrame index="30" keyMode="9728">
+                            <elements>
+                                <DOMShape>
+                                    <fills>
+                                        <FillStyle index="1">
+                                            <SolidColor color="#F4A259"/>
+                                        </FillStyle>
+                                    </fills>
+                                    <strokes>
+                                        <StrokeStyle index="1">
+                                            <SolidStroke weight="5" scaleMode="normal" caps="round" joints="round">
+                                                <fill>
+                                                    <SolidColor color="#3D2C2E"/>
+                                                </fill>
+                                            </SolidStroke>
+                                        </StrokeStyle>
+                                    </strokes>
+                                    <edges>
+                                        <Edge fillStyle1="1" strokeStyle="1" edges="!#2C7.84 #FFF0CE.6D[#1F0.1A #FFF01A.41 #13C.CE #FFF0F0.8F|#FFFFF4.56 #FFF260.41|#FFFE90.E0 #FFF4A8.8E|#FFFE09.94 #FFF780.3A|#FFFE36.F5 #FFFA7E.25|#FFFE35.E0 #FFFBFB.E4|#FFFD1E.76 #FFFEFB.C4|#FFFCC1.BF #2B2.54|#FFFE10.A8 #5C8.DD|#133.16 #852.87|#426.D1 #A1C.F6|1956 2515|2406 2368|2072 1468|1722 1618|#587.2F #6E7.0A|#323.99 #594.8B|#D3.32 #3BC.F0|#F.0E #1F6.9E|#B.92 #FFFF7E.84|#C1.5A #FFFD3E.BA|#DC.22 #FFF9E8.61|#9C.C9 #FFF797.BA|#E1.25 #FFF579.18|#1DD.C6 #FFF3B0.9E|#2E9.A6 #FFF259.23[#39D.D2 #FFF181.B9 #2C7.84 #FFF0CE.6D"/>
+                                    </edges>
+                                </DOMShape>
+                            </elements>
+                        </DOMFrame>
+                        <DOMFrame index="31" keyMode="9728">
+                            <elements>
+                                <DOMShape>
+                                    <fills>
+                                        <FillStyle index="1">
+                                            <SolidColor color="#F4A259"/>
+                                        </FillStyle>
+                                    </fills>
+                                    <strokes>
+                                        <StrokeStyle index="1">
+                                            <SolidStroke weight="5" scaleMode="normal" caps="round" joints="round">
+                                                <fill>
+                                                    <SolidColor color="#3D2C2E"/>
+                                                </fill>
+                                            </SolidStroke>
+                                        </StrokeStyle>
+                                    </strokes>
+                                    <edges>
+                                        <Edge fillStyle1="1" strokeStyle="1" edges="!#2C7.84 #FFF0CE.6D[#1F0.1A #FFF01A.41 #13C.CE #FFF0F0.8F|#FFFFF4.56 #FFF260.41|#FFFE90.E0 #FFF4A8.8E|#FFFE09.94 #FFF780.3A|#FFFE36.F5 #FFFA7E.25|#FFFE35.E0 #FFFBFB.E4|#FFFD1E.76 #FFFEFB.C4|#FFFCC1.BF #2B2.54|#FFFE10.A8 #5C8.DD|#133.16 #852.87|#426.D1 #A1C.F6|1956 2515|2406 2368|2072 1468|1722 1618|#587.2F #6E7.0A|#323.99 #594.8B|#D3.32 #3BC.F0|#F.0E #1F6.9E|#B.92 #FFFF7E.84|#C1.5A #FFFD3E.BA|#DC.22 #FFF9E8.61|#9C.C9 #FFF797.BA|#E1.25 #FFF579.18|#1DD.C6 #FFF3B0.9E|#2E9.A6 #FFF259.23[#39D.D2 #FFF181.B9 #2C7.84 #FFF0CE.6D"/>
+                                    </edges>
+                                </DOMShape>
+                            </elements>
+                        </DOMFrame>
+                        <DOMFrame index="32" keyMode="9728">
+                            <elements>
+                                <DOMShape>
+                                    <fills>
+                                        <FillStyle index="1">
+                                            <SolidColor color="#F4A259"/>
+                                        </FillStyle>
+                                    </fills>
+                                    <strokes>
+                                        <StrokeStyle index="1">
+                                            <SolidStroke weight="5" scaleMode="normal" caps="round" joints="round">
+                                                <fill>
+                                                    <SolidColor color="#3D2C2E"/>
+                                                </fill>
+                                            </SolidStroke>
+                                        </StrokeStyle>
+                                    </strokes>
+                                    <edges>
+                                        <Edge fillStyle1="1" strokeStyle="1" edges="!#2C7.84 #FFF0CE.6D[#1F0.1A #FFF01A.41 #13C.CE #FFF0F0.8F|#FFFFF4.56 #FFF260.41|#FFFE90.E0 #FFF4A8.8E|#FFFE09.94 #FFF780.3A|#FFFE36.F5 #FFFA7E.25|#FFFE35.E0 #FFFBFB.E4|#FFFD1E.76 #FFFEFB.C4|#FFFCC1.BF #2B2.54|#FFFE10.A8 #5C8.DD|#133.16 #852.87|#426.D1 #A1C.F6|1956 2515|2406 2368|2072 1468|1722 1618|#587.2F #6E7.0A|#323.99 #594.8B|#D3.32 #3BC.F0|#F.0E #1F6.9E|#B.92 #FFFF7E.84|#C1.5A #FFFD3E.BA|#DC.22 #FFF9E8.61|#9C.C9 #FFF797.BA|#E1.25 #FFF579.18|#1DD.C6 #FFF3B0.9E|#2E9.A6 #FFF259.23[#39D.D2 #FFF181.B9 #2C7.84 #FFF0CE.6D"/>
+                                    </edges>
+                                </DOMShape>
+                            </elements>
+                        </DOMFrame>
+                        <DOMFrame index="33" keyMode="9728">
+                            <elements>
+                                <DOMShape>
+                                    <fills>
+                                        <FillStyle index="1">
+                                            <SolidColor color="#F4A259"/>
+                                        </FillStyle>
+                                    </fills>
+                                    <strokes>
+                                        <StrokeStyle index="1">
+                                            <SolidStroke weight="5" scaleMode="normal" caps="round" joints="round">
+                                                <fill>
+                                                    <SolidColor color="#3D2C2E"/>
+                                                </fill>
+                                            </SolidStroke>
+                                        </StrokeStyle>
+                                    </strokes>
+                                    <edges>
+                                        <Edge fillStyle1="1" strokeStyle="1" edges="!#2C7.84 #FFF0CE.6D[#1F0.1A #FFF01A.41 #13C.CE #FFF0F0.8F|#FFFFF4.56 #FFF260.41|#FFFE90.E0 #FFF4A8.8E|#FFFE09.94 #FFF780.3A|#FFFE36.F5 #FFFA7E.25|#FFFE35.E0 #FFFBFB.E4|#FFFD1E.76 #FFFEFB.C4|#FFFCC1.BF #2B2.54|#FFFE10.A8 #5C8.DD|#133.16 #852.87|#426.D1 #A1C.F6|1956 2515|2406 2368|2072 1468|1722 1618|#587.2F #6E7.0A|#323.99 #594.8B|#D3.32 #3BC.F0|#F.0E #1F6.9E|#B.92 #FFFF7E.84|#C1.5A #FFFD3E.BA|#DC.22 #FFF9E8.61|#9C.C9 #FFF797.BA|#E1.25 #FFF579.18|#1DD.C6 #FFF3B0.9E|#2E9.A6 #FFF259.23[#39D.D2 #FFF181.B9 #2C7.84 #FFF0CE.6D"/>
+                                    </edges>
+                                </DOMShape>
+                            </elements>
+                        </DOMFrame>
+                        <DOMFrame index="34" keyMode="9728">
+                            <elements>
+                                <DOMShape>
+                                    <fills>
+                                        <FillStyle index="1">
+                                            <SolidColor color="#F4A259"/>
+                                        </FillStyle>
+                                    </fills>
+                                    <strokes>
+                                        <StrokeStyle index="1">
+                                            <SolidStroke weight="5" scaleMode="normal" caps="round" joints="round">
+                                                <fill>
+                                                    <SolidColor color="#3D2C2E"/>
+                                                </fill>
+                                            </SolidStroke>
+                                        </StrokeStyle>
+                                    </strokes>
+                                    <edges>
+                                        <Edge fillStyle1="1" strokeStyle="1" edges="!#2C7.84 #FFF0CE.6D[#1F0.1A #FFF01A.41 #13C.CE #FFF0F0.8F|#FFFFF4.56 #FFF260.41|#FFFE90.E0 #FFF4A8.8E|#FFFE09.94 #FFF780.3A|#FFFE36.F5 #FFFA7E.25|#FFFE35.E0 #FFFBFB.E4|#FFFD1E.76 #FFFEFB.C4|#FFFCC1.BF #2B2.54|#FFFE10.A8 #5C8.DD|#133.16 #852.87|#426.D1 #A1C.F6|1956 2515|2406 2368|2072 1468|1722 1618|#587.2F #6E7.0A|#323.99 #594.8B|#D3.32 #3BC.F0|#F.0E #1F6.9E|#B.92 #FFFF7E.84|#C1.5A #FFFD3E.BA|#DC.22 #FFF9E8.61|#9C.C9 #FFF797.BA|#E1.25 #FFF579.18|#1DD.C6 #FFF3B0.9E|#2E9.A6 #FFF259.23[#39D.D2 #FFF181.B9 #2C7.84 #FFF0CE.6D"/>
+                                    </edges>
+                                </DOMShape>
+                            </elements>
+                        </DOMFrame>
+                        <DOMFrame index="35" keyMode="9728">
+                            <elements>
+                                <DOMShape>
+                                    <fills>
+                                        <FillStyle index="1">
+                                            <SolidColor color="#F4A259"/>
+                                        </FillStyle>
+                                    </fills>
+                                    <strokes>
+                                        <StrokeStyle index="1">
+                                            <SolidStroke weight="5" scaleMode="normal" caps="round" joints="round">
+                                                <fill>
+                                                    <SolidColor color="#3D2C2E"/>
+                                                </fill>
+                                            </SolidStroke>
+                                        </StrokeStyle>
+                                    </strokes>
+                                    <edges>
+                                        <Edge fillStyle1="1" strokeStyle="1" edges="!#2C7.84 #FFF0CE.6D[#1F0.1A #FFF01A.41 #13C.CE #FFF0F0.8F|#FFFFF4.56 #FFF260.41|#FFFE90.E0 #FFF4A8.8E|#FFFE09.94 #FFF780.3A|#FFFE36.F5 #FFFA7E.25|#FFFE35.E0 #FFFBFB.E4|#FFFD1E.76 #FFFEFB.C4|#FFFCC1.BF #2B2.54|#FFFE10.A8 #5C8.DD|#133.16 #852.87|#426.D1 #A1C.F6|1956 2515|2406 2368|2072 1468|1722 1618|#587.2F #6E7.0A|#323.99 #594.8B|#D3.32 #3BC.F0|#F.0E #1F6.9E|#B.92 #FFFF7E.84|#C1.5A #FFFD3E.BA|#DC.22 #FFF9E8.61|#9C.C9 #FFF797.BA|#E1.25 #FFF579.18|#1DD.C6 #FFF3B0.9E|#2E9.A6 #FFF259.23[#39D.D2 #FFF181.B9 #2C7.84 #FFF0CE.6D"/>
+                                    </edges>
+                                </DOMShape>
+                            </elements>
+                        </DOMFrame>
+                    </frames>
+                </DOMLayer>
+            </layers>
+        </DOMTimeline>
+    </timeline>
+</DOMSymbolItem>
