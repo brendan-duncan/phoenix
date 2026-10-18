@@ -44,6 +44,7 @@ const NAV = [
     { href: "tutorial-head-turn.html", title: "A head turn on a controller" },
     { href: "tutorial-multiplane-camera.html", title: "Multiplane camera" },
     { href: "tutorial-loop-cycle.html", title: "A cycle with Loop" },
+    { href: "tutorial-linked-palettes.html", title: "Linked palettes" },
   ] },
   { group: "Workspace", pages: [
     { href: "workspace.html", title: "The workspace" },
