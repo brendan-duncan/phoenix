@@ -4,6 +4,7 @@
 #include "camera.h"
 #include "command.h"
 #include "deformers.h"
+#include "depth_sort.h"
 #include "frame_bake.h"
 #include "frame_sound.h"
 #include "graphic_loop.h"
@@ -46,6 +47,7 @@
 #include <deque>
 #include <map>
 #include <memory>
+#include <numeric>
 #include <set>
 
 namespace fla::html5 {
@@ -910,12 +912,21 @@ private:
             Transform parent = parentTransform(timeline, *layer, *span, frame, here, 0);
             if (framed)
                 parent = followedBy(parent, view);
+            // A layer sorted by depth stacks its clips by their Z.
+            std::vector<int> rank(here.elements.size());
+            std::iota(rank.begin(), rank.end(), 0);
+            if (depthsort::sorts(*layer) && here.elements.size() == span->elements.size())
+            {
+                const std::vector<size_t> order = depthsort::drawOrder(*layer, *span, framesIn);
+                for (size_t k = 0; k < order.size(); ++k)
+                    rank[order[k]] = static_cast<int>(k);
+            }
             for (size_t ei = 0; ei < here.elements.size(); ++ei)
             {
                 const Element* element = here.elements[ei];
                 const std::string entry = entryJson(*element, here.originals[ei], here.copies ? 0 : framesIn, parent,
                     prefix + "L" + std::to_string(li) + "E" + std::to_string(ei),
-                    (static_cast<int>(layers.size()) - li) * 65536 + static_cast<int>(ei) + 1, maskGroup, maskedBy);
+                    (static_cast<int>(layers.size()) - li) * 65536 + rank[ei] + 1, maskGroup, maskedBy);
                 if (!entry.empty())
                     out += (out.empty() ? "" : ",") + entry;
             }

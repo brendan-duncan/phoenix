@@ -67,6 +67,8 @@ const std::vector<Feature>& all()
         {"3d-rotation", "3D rotation and depth", "the movie clips flat, without their 3D turn, lighting, shadows or depth",
             {"phoenixRotationX", "phoenixRotationY", "phoenixZ", "phoenixPerspectiveAngle", "phoenixLight", "phoenixDepthOfField",
                 "phoenixShadows", "phoenixExtrude"}},
+        {"depth-sorting", "Sorting by depth", "each layer's clips stacked in the order they were placed, whatever their Z",
+            {"phoenixSortByDepth"}},
         {"parenting-options", "Layer parenting options", "child layers taking on all of the parent's transform",
             {"phoenixParentScale", "phoenixParentSkew", "phoenixParentFlip"}},
         {"shape-binding", "Bones bound in Phoenix", "boned shapes as drawn; posing them may bend them differently",

@@ -23,6 +23,7 @@
 #include "../edit/asset_warp.h"
 #include "../edit/deformers.h"
 #include "../edit/frame_actions.h"
+#include "../edit/onion_shift.h"
 
 #include <deque>
 #include <memory>
@@ -380,6 +381,15 @@ public:
     /// its keyframe; a movie clip or a button at its first frame.
     int symbolFrameShown(const fla::SymbolInstance& instance, const fla::Frame& frame);
     bool onionSkin() const { return _onionSkin; }
+
+    /// Shift and Trace: while on, dragging on the stage moves the onion skin
+    /// ghost under the pointer (the nearest earlier one elsewhere), Shift+drag
+    /// turns it and Alt+drag scales it, to trace over; the frames themselves
+    /// do not change. The shifts last until reset or another document opens.
+    void setShiftTrace(bool on);
+    bool shiftTrace() const { return _shiftTrace; }
+    void resetShiftTrace();
+    bool shiftTraceMoved() const { return !_onionShifts.empty(); }
 
 public:
 
@@ -1122,6 +1132,34 @@ private:
     /// Draws the edited timeline (or the document) at frame \a frame,
     /// faded and tinted, for onion skinning.
     void drawOnionFrame(QPainter& painter, const fla::Document* document, int frame, const QColor& tint, double opacity);
+
+    /// Shift and Trace (setShiftTrace). The timeline the onion skin shows,
+    /// which keys its shifts.
+    const void* onionTimeline() const;
+    bool _shiftTrace = false;
+    fla::onion::Shifts _onionShifts;
+    /// The ghosts as last drawn, nearest the playhead first: each frame's
+    /// coverage, a pixel for 4 by 4 of the device, and the map from the
+    /// stage to the device it was drawn on.
+    struct Ghost
+    {
+        int frame = 0;
+        QImage coverage;
+    };
+    std::vector<Ghost> _ghosts;
+    QTransform _ghostToDevice;
+    struct ShiftDrag
+    {
+        int frame = -1;
+        /// 0 moves, 1 turns, 2 scales.
+        int mode = 0;
+        QPointF start;
+        QPointF center;
+        fla::onion::Shift was;
+    };
+    ShiftDrag _shiftDrag;
+    bool beginShiftDrag(QMouseEvent* event);
+    void drawShiftTrace(QPainter& painter);
 
     /// While a layer in outline view is being drawn, its color: every fill
     /// and stroke is drawn as a thin line in it and nothing is filled.
@@ -1882,6 +1920,11 @@ public:
     /// back is (an extruded clip has one even when flat).
     QTransform threeDTransform(const fla::Element* element, const QTransform& placed,
         const fla::Element* tweenElement = nullptr, double progress = 0.0, double depth = 0.0) const;
+    /// A corner pin's perspective, as a map in the instance's own space, to
+    /// go before its placement; the identity for anything else. Part way to
+    ///  tweenElement's pin at  progress.
+    QTransform cornerPinTransform(const fla::Element* element, const fla::Element* tweenElement = nullptr,
+        double progress = 0.0) const;
 
 private:
     /// A movie clip a timeline shows now, which can cast a shadow on a

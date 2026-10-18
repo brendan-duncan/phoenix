@@ -7,6 +7,7 @@
 #include "stage_controls.h"
 #include "safe_zones_dialog.h"
 #include "../edit/canvas_document.h"
+#include "../edit/depth_sort.h"
 #include "../edit/motion_blur.h"
 #include "../edit/safe_zones.h"
 #include "tutorial_lesson.h"
@@ -3561,6 +3562,11 @@ void MainWindow::setupUI()
             after = fla::motionblur::withOn(*layer, what == "motionblur:on");
             name = "Motion Blur";
         }
+        else if (what.startsWith("depthsort:"))
+        {
+            after = fla::depthsort::withSorting(*layer, what == "depthsort:on");
+            name = "Sort by Depth";
+        }
         else
         {
             after = fla::compositing::withAdjustment(*layer, what == "adjustment:on");
@@ -4299,6 +4305,37 @@ void MainWindow::importAnimatic()
 
 void MainWindow::deformSelection(int what)
 {
+    static const char* const names[] = {"Remove Deformer", "Curve Deformer", "Envelope Deformer", "Reset Pose", "Corner Pin"};
+    fla::CommandStack& stack = _editContext.commandStack();
+    stack.beginMacro(names[what]);
+    // A corner pin on shapes, bitmaps or text: they go into a graphic
+    // symbol of their own first, which the pin then goes on.
+    std::vector<fla::Element*> loose;
+    fla::Frame* looseFrame = nullptr;
+    for (fla::Element* element : selectedElements())
+    {
+        fla::Frame* frame = dynamic_cast<fla::Frame*>(element->parent);
+        if (what == 4 && frame && !dynamic_cast<fla::SymbolInstance*>(element) && (!looseFrame || frame == looseFrame))
+        {
+            looseFrame = frame;
+            loose.push_back(element);
+        }
+    }
+    auto* layerOfLoose = looseFrame ? dynamic_cast<fla::Layer*>(looseFrame->parent) : nullptr;
+    if (!loose.empty() && _flaDocument && _flaDocument->document && _phoenixView && layerOfLoose && !layerOfLoose->isLocked())
+    {
+        fla::Document* document = _flaDocument->document;
+        QRectF bounds;
+        for (fla::Element* element : loose)
+            bounds = bounds.united(_phoenixView->elementBounds(element));
+        std::string symbolName;
+        for (int n = 1; document->symbolList && document->symbolList->symbolMap.count(symbolName = "Corner Pin " +
+            std::to_string(n)); ++n)
+            ;
+        stack.push(fla::CommandPtr(new fla::ConvertToSymbolCommand(document, looseFrame, loose, symbolName,
+            bounds.center().x(), bounds.center().y(), "Convert to Symbol", &_selection, fla::SymbolType::Graphic)));
+        _documentView->setDocument(_flaDocument);
+    }
     std::vector<fla::SymbolInstance*> instances;
     for (fla::Element* element : selectedElements())
         if (auto* instance = dynamic_cast<fla::SymbolInstance*>(element))
@@ -4310,12 +4347,10 @@ void MainWindow::deformSelection(int what)
         }
     if (instances.empty() || !_phoenixView)
     {
-        QMessageBox::information(this, "Deformer", "Select one or more symbol instances.");
+        stack.endMacro();
+        QMessageBox::information(this, "Deformer", what == 4 ? "Select something to pin." : "Select one or more symbol instances.");
         return;
     }
-    static const char* const names[] = {"Remove Deformer", "Curve Deformer", "Envelope Deformer", "Reset Pose"};
-    fla::CommandStack& stack = _editContext.commandStack();
-    stack.beginMacro(names[what]);
     for (fla::SymbolInstance* instance : instances)
     {
         std::optional<fla::deform::Deformer> deformer;
@@ -4327,6 +4362,13 @@ void MainWindow::deformSelection(int what)
                 bounds = QRectF(-50.0, -50.0, 100.0, 100.0);
             deformer = what == 1 ? fla::deform::curveAround(bounds.left(), bounds.top(), bounds.right(), bounds.bottom())
                                  : fla::deform::envelopeAround(bounds.left(), bounds.top(), bounds.right(), bounds.bottom());
+        }
+        else if (what == 4)
+        {
+            QRectF bounds = _phoenixView->symbolBounds(instance->symbol);
+            if (!bounds.isValid() || bounds.isEmpty())
+                bounds = QRectF(-50.0, -50.0, 100.0, 100.0);
+            deformer = fla::deform::cornerPinAround(bounds.left(), bounds.top(), bounds.right(), bounds.bottom());
         }
         else if (what == 3)
         {
@@ -4340,7 +4382,7 @@ void MainWindow::deformSelection(int what)
     stack.endMacro();
     stack.breakMergeChain();
     // The handles are dragged with the Selection tool.
-    if ((what == 1 || what == 2) && _toolbox)
+    if ((what == 1 || what == 2 || what == 4) && _toolbox)
         if (QAction* selection = _toolbox->tool("Selection"))
             selection->trigger();
     _phoenixView->clearCaches();
@@ -7124,6 +7166,9 @@ void MainWindow::setupMenus()
     QAction* envelopeDeformer = deformMenu->addAction("&Envelope Deformer");
     envelopeDeformer->setStatusTip("Pull the selected symbols by a grid of handles around them");
     connect(envelopeDeformer, &QAction::triggered, this, [this]() { deformSelection(2); });
+    QAction* cornerPin = deformMenu->addAction("Corner &Pin");
+    cornerPin->setStatusTip("Put the selection's four corners anywhere, in perspective: a sign, a screen, a floor");
+    connect(cornerPin, &QAction::triggered, this, [this]() { deformSelection(4); });
     deformMenu->addSeparator();
     QAction* resetDeformer = deformMenu->addAction("&Reset Pose");
     resetDeformer->setStatusTip("Put the selected deformers' handles back where they were set");
@@ -16134,6 +16179,29 @@ void MainWindow::fillOnionMenu(QMenu* menu)
             applyOnion();
         });
     }
+    // Shift and Trace: the ghosts moved, turned and scaled to trace over,
+    // the frames left as they are.
+    menu->addSeparator();
+    QAction* shiftTrace = menu->addAction("Shift and Trace");
+    shiftTrace->setCheckable(true);
+    shiftTrace->setChecked(_phoenixView && _phoenixView->shiftTrace());
+    shiftTrace->setStatusTip("Drag a ghost on the stage to move it, Shift+drag to turn it, Alt+drag to scale it");
+    connect(shiftTrace, &QAction::toggled, this, [this](bool on) {
+        if (!_phoenixView)
+            return;
+        if (on && _onionSkinAction && !_onionSkinAction->isChecked())
+            _onionSkinAction->setChecked(true);
+        _phoenixView->setShiftTrace(on);
+        if (on)
+            statusBar()->showMessage("Shift and Trace: drag a ghost to move it, Shift+drag to turn it, Alt+drag to scale "
+                                     "it. Turn it off to draw.", 8000);
+    });
+    QAction* resetShift = menu->addAction("Reset Shift and Trace", this, [this]() {
+        if (_phoenixView)
+            _phoenixView->resetShiftTrace();
+    });
+    resetShift->setEnabled(_phoenixView && _phoenixView->shiftTraceMoved());
+    resetShift->setStatusTip("Put every shifted ghost back where its frame has it");
     menu->addSeparator();
     menu->addAction("Color Before...", this, [this]() {
         const QColor chosen = QColorDialog::getColor(_onion.beforeColor, this, "Onion Skin: Frames Before");

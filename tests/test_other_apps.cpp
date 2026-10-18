@@ -17,6 +17,7 @@
 #include "../src/data/symbol_list.h"
 #include "../src/data/timeline.h"
 #include "../src/edit/adjustments.h"
+#include "../src/edit/deformers.h"
 #include "../src/edit/other_apps.h"
 #include "../src/edit/templates.h"
 #include "../src/parser/fla_parser.h"
@@ -530,6 +531,41 @@ TEST(other_apps_draw_effects_with_no_filter_into_bitmaps)
     CHECK(notes.size() == 1 && notes[0].find("left out") != std::string::npos);
     auto* kept = dynamic_cast<fla::SymbolInstance*>(plain->document->timelines.front()->layers.front()->frames.front()->elements.front());
     CHECK(kept && kept->filters.size() == 2 && kept->filters[0].type == fla::Filter::Type::Glow);
+}
+
+TEST(other_apps_draw_deformed_instances_into_bitmaps)
+{
+    const fs::path root = fs::temp_directory_path() / "phoenix_other_apps_tests";
+    std::unique_ptr<fla::FLADocument> file = effectsSample(root / "corner_pin", "", "");
+    CHECK(file && file->document);
+    if (!file || !file->document)
+        return;
+    fla::Document& document = *file->document;
+    fla::Layer* bars = document.timelines.front()->layers.front();
+    auto* bar = static_cast<fla::SymbolInstance*>(bars->frames.front()->elements.front());
+    bar->filters.clear();
+    // At rest, a pin changes nothing and nothing is baked.
+    fla::deform::Deformer pin = fla::deform::cornerPinAround(0.0, 0.0, 40.0, 20.0);
+    bar->extraAttributes = fla::deform::withDeformer(*bar, pin);
+    CHECK(!fla::otherapps::needsBaking(document));
+    pin.posed[1].y += 10.0;
+    bar->extraAttributes = fla::deform::withDeformer(*bar, pin);
+    CHECK(fla::otherapps::needsBaking(document));
+
+    std::vector<fla::otherapps::Drawing> asked;
+    const fla::otherapps::Renderer render = [&](const fla::otherapps::Drawing& drawing) {
+        asked.push_back(drawing);
+        return solid(4, 4, 0xFF00FF00u, 0.0, 0.0);
+    };
+    std::vector<std::string> notes;
+    fla::otherapps::bakeCompositing(document, notes, render);
+    // Drawn a frame at a time, reaching as far as the corner went; the same
+    // picture throughout is one bitmap held.
+    CHECK(asked.size() == 3 && asked[0].element == bar && asked[0].margin >= 10.0);
+    CHECK(notes.size() == 1 && notes[0].find("deformer") != std::string::npos);
+    CHECK(bars->frames.size() == 1 && bars->frames[0]->duration == 3);
+    CHECK(!bars->frames.empty() && dynamic_cast<fla::BitmapInstance*>(bars->frames[0]->elements.front()));
+    CHECK(!fla::otherapps::needsBaking(document));
 }
 
 TEST(other_apps_draw_adjustment_layers_with_no_filter_into_bitmaps)

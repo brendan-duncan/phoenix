@@ -335,7 +335,7 @@ std::string unstructured(const Document& document)
     // show: the movie then goes out as frames of shapes.
     static const char* const blocking[] = {"effect-layers", "line-and-color-art", "multiplane-camera", "pegs",
         "deformers", "behaviors", "compositing", "instance-effects", "node-graph", "mask-edges", "several-masks",
-        "motion-blur", "templates", "master-controllers", "3d-rotation", "parenting-options"};
+        "motion-blur", "templates", "master-controllers", "3d-rotation", "depth-sorting", "parenting-options"};
     for (const features::Use& use : features::used(document))
     {
         if (!use.feature)

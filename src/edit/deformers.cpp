@@ -176,6 +176,61 @@ Point applyEnvelope(const Deformer& deformer, const Point& point)
     return Point(moved.x, moved.y);
 }
 
+using Matrix = std::array<double, 9>;
+
+Matrix multiply(const Matrix& a, const Matrix& b)
+{
+    Matrix m{};
+    for (int row = 0; row < 3; ++row)
+        for (int column = 0; column < 3; ++column)
+            for (int k = 0; k < 3; ++k)
+                m[row * 3 + column] += a[row * 3 + k] * b[k * 3 + column];
+    return m;
+}
+
+/// The map from the unit square's corners, (0, 0), (1, 0), (1, 1), (0, 1),
+/// to \a quad's.
+Matrix squareTo(const Point quad[4])
+{
+    const double dx1 = quad[1].x - quad[2].x, dx2 = quad[3].x - quad[2].x;
+    const double dy1 = quad[1].y - quad[2].y, dy2 = quad[3].y - quad[2].y;
+    const double sx = quad[0].x - quad[1].x + quad[2].x - quad[3].x;
+    const double sy = quad[0].y - quad[1].y + quad[2].y - quad[3].y;
+    double g = 0.0, h = 0.0;
+    const double det = dx1 * dy2 - dx2 * dy1;
+    if ((sx != 0.0 || sy != 0.0) && std::abs(det) > 1.0e-12)
+    {
+        g = (sx * dy2 - dx2 * sy) / det;
+        h = (dx1 * sy - sx * dy1) / det;
+    }
+    return {quad[1].x - quad[0].x + g * quad[1].x, quad[3].x - quad[0].x + h * quad[3].x, quad[0].x,
+        quad[1].y - quad[0].y + g * quad[1].y, quad[3].y - quad[0].y + h * quad[3].y, quad[0].y, g, h, 1.0};
+}
+
+bool invert(const Matrix& m, Matrix& inverse)
+{
+    const double det = m[0] * (m[4] * m[8] - m[5] * m[7]) - m[1] * (m[3] * m[8] - m[5] * m[6]) +
+        m[2] * (m[3] * m[7] - m[4] * m[6]);
+    if (std::abs(det) < 1.0e-12)
+        return false;
+    inverse = {(m[4] * m[8] - m[5] * m[7]) / det, (m[2] * m[7] - m[1] * m[8]) / det, (m[1] * m[5] - m[2] * m[4]) / det,
+        (m[5] * m[6] - m[3] * m[8]) / det, (m[0] * m[8] - m[2] * m[6]) / det, (m[2] * m[3] - m[0] * m[5]) / det,
+        (m[3] * m[7] - m[4] * m[6]) / det, (m[1] * m[6] - m[0] * m[7]) / det, (m[0] * m[4] - m[1] * m[3]) / det};
+    return true;
+}
+
+Point applyCornerPin(const Deformer& deformer, const Point& point)
+{
+    Matrix map;
+    if (!cornerPinMap(deformer, map))
+        return point;
+    const double w = map[6] * point.x + map[7] * point.y + map[8];
+    // Past the horizon a fold leaves nothing sensible: kept where it was.
+    if (w <= 1.0e-9)
+        return point;
+    return Point((map[0] * point.x + map[1] * point.y + map[2]) / w, (map[3] * point.x + map[4] * point.y + map[5]) / w);
+}
+
 } // namespace
 
 bool Deformer::valid() const
@@ -184,7 +239,39 @@ bool Deformer::valid() const
         return false;
     if (kind == Kind::Curve)
         return rest.size() >= 4 && (rest.size() - 1) % 3 == 0;
+    if (kind == Kind::CornerPin)
+        return rest.size() == 4;
     return rest.size() == 16;
+}
+
+Deformer cornerPinAround(double left, double top, double right, double bottom)
+{
+    Deformer deformer;
+    deformer.kind = Kind::CornerPin;
+    deformer.rest = {Point(left, top), Point(right, top), Point(right, bottom), Point(left, bottom)};
+    deformer.posed = deformer.rest;
+    return deformer;
+}
+
+bool homography(const Point from[4], const Point to[4], std::array<double, 9>& map)
+{
+    // From the corners to a unit square, then from it to the new corners.
+    Matrix back;
+    if (!invert(squareTo(from), back))
+        return false;
+    map = multiply(squareTo(to), back);
+    // Scaled so the last entry is 1, as an affine map's is.
+    if (std::abs(map[8]) > 1.0e-12)
+        for (double& value : map)
+            value /= map[8];
+    return true;
+}
+
+bool cornerPinMap(const Deformer& deformer, std::array<double, 9>& map)
+{
+    if (deformer.kind != Kind::CornerPin || !deformer.valid())
+        return false;
+    return homography(deformer.rest.data(), deformer.posed.data(), map);
 }
 
 Deformer curveAround(double left, double top, double right, double bottom)
@@ -225,7 +312,7 @@ std::string text(const Deformer& deformer)
 {
     std::ostringstream out;
     out.precision(10);
-    out << (deformer.kind == Kind::Curve ? "curve" : "envelope");
+    out << (deformer.kind == Kind::Curve ? "curve" : deformer.kind == Kind::CornerPin ? "cornerpin" : "envelope");
     for (const Point& point : deformer.rest)
         out << ' ' << point.x << ' ' << point.y;
     out << " /";
@@ -244,6 +331,8 @@ std::optional<Deformer> parse(const std::string& text)
         deformer.kind = Kind::Curve;
     else if (kind == "envelope")
         deformer.kind = Kind::Envelope;
+    else if (kind == "cornerpin")
+        deformer.kind = Kind::CornerPin;
     else
         return std::nullopt;
     std::vector<Point>* into = &deformer.rest;
@@ -317,6 +406,8 @@ Point apply(const Deformer& deformer, const Point& point)
 {
     if (!deformer.valid())
         return point;
+    if (deformer.kind == Kind::CornerPin)
+        return applyCornerPin(deformer, point);
     return deformer.kind == Kind::Curve ? applyCurve(deformer, point) : applyEnvelope(deformer, point);
 }
 
