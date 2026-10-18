@@ -4,11 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Timeline and layers · Phoenix User Guide</title>
-<meta name="description" content="Read the timeline, and create, order, hide, lock, outline, group and configure layers.">
+<meta name="description" content="Read every part of the timeline, work with each kind of layer, parent layers, move between scene and symbol timelines, and find things in a long animation.">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Phoenix">
 <meta property="og:title" content="Timeline and layers · Phoenix User Guide">
-<meta property="og:description" content="Read the timeline, and create, order, hide, lock, outline, group and configure layers.">
+<meta property="og:description" content="Read every part of the timeline, work with each kind of layer, parent layers, move between scene and symbol timelines, and find things in a long animation.">
 <meta property="og:url" content="https://phoenixanimate.com/timeline.html">
 <meta property="og:image" content="https://phoenixanimate.com/assets/shots/hero.webp">
 <meta property="og:image:type" content="image/webp">
@@ -17,7 +17,7 @@
 <meta property="og:image:alt" content="The Phoenix window with three flower characters on the stage, the timeline below and the Properties panel on the right">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:image" content="https://phoenixanimate.com/assets/shots/hero.webp">
-<meta name="keywords" content="timeline layers layer folder new layer delete layer rename reorder hide show lock outline view layer color current layer layer properties guide mask parenting frame grid ruler playhead">
+<meta name="keywords" content="timeline header current frame frame rate fps elapsed time playback controls playhead ruler frame view frame size row height preview preview in context time in seconds span based selection layers layer kinds layer folder mask guide motion guide camera layer peg adjustment layer effect layer color art layer sound new layer delete layer rename reorder hide show lock outline transparent layer color current layer layer properties parenting layer depth scene timeline symbol timeline nested timelines find keyframes next keyframe frame scripts">
 <link rel="icon" href="assets/img/logo.png">
 <link rel="stylesheet" href="assets/site.css">
 <script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
@@ -38,7 +38,28 @@
 
 <h2>Reading the timeline</h2>
 
-<p>Along the top is the <strong>header</strong>, with the current frame number, the frame rate, the elapsed time and the playback controls. Below it, the <strong>ruler</strong> numbers the frames, and the <strong>playhead</strong> marks the frame shown on the stage. Click or drag in the ruler to move the playhead. While onion skinning or loop playback is on, its markers in the ruler can be dragged too (see <a href="frames.html#onion-skinning">Onion skinning</a> and <a href="frames.html#looping-a-range">Looping a range</a>).</p>
+<figure>
+  <img src="assets/shots/timeline-camera-layer.webp" alt="The top of the timeline: the parenting view button and the show, lock and outline buttons over the layer list, then the frame number 1, 30.00 fps and 0.00 s, the playback buttons, the onion skin, loop and frame view buttons, the ruler with the playhead at frame 1, and a Camera layer with three classic tweens above three other layers" width="1152" height="150">
+  <figcaption>From the left: the parenting view button and the show, lock and outline buttons for all layers; the current frame, frame rate and elapsed time; First Frame, Step Back, Play and Step Forward; Onion Skin, Loop Playback and the frame view menu; then the ruler and playhead over the frame grid. The top layer is a camera layer from an FLA file.</figcaption>
+</figure>
+
+<p>Along the top is the <strong>header</strong>. On its left are three readouts: the <strong>current frame</strong>, the document's <strong>frame rate</strong>, and the <strong>elapsed time</strong> at the playhead in seconds. They are for reading only; set the frame rate as <strong>FPS</strong> on the Doc tab of the Properties panel or in <span class="menu-path">Modify &rsaquo; Document...</span> (<kbd>Ctrl</kbd>+<kbd>J</kbd>). In the middle are the playback buttons, which do what the <span class="menu-path">Control</span> menu does:</p>
+
+<table>
+  <thead><tr><th>Button</th><th>Key</th><th>Does</th></tr></thead>
+  <tbody>
+    <tr><td>First frame</td><td><kbd>Shift</kbd>+<kbd>,</kbd></td><td class="wrap">Goes to frame 1 (<kbd>Shift</kbd>+<kbd>.</kbd> goes to the last)</td></tr>
+    <tr><td>Step back, step forward</td><td><kbd>,</kbd> and <kbd>.</kbd></td><td class="wrap">Moves the playhead one frame</td></tr>
+    <tr><td>Play</td><td><kbd>Enter</kbd></td><td class="wrap">Plays from the playhead, with sound; again stops</td></tr>
+    <tr><td>Onion skin</td><td><kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>O</kbd></td><td class="wrap">Shows the frames around the playhead faded; right-click it for its settings</td></tr>
+    <tr><td>Loop playback</td><td><kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>L</kbd></td><td class="wrap">Plays a range over and over</td></tr>
+    <tr><td>&#9776;</td><td>&mdash;</td><td class="wrap">The <a href="#frame-view">frame view</a> menu</td></tr>
+  </tbody>
+</table>
+
+<p><kbd>Alt</kbd>+<kbd>.</kbd> and <kbd>Alt</kbd>+<kbd>,</kbd> jump to the next and previous keyframe on the current layer. The keys work while the stage or the timeline has the focus, so <kbd>Enter</kbd> in a text box stays the text box's.</p>
+
+<p>Below the header, the <strong>ruler</strong> numbers the frames, and the <strong>playhead</strong> marks the frame shown on the stage. Click or drag in the ruler to move the playhead. While onion skinning or loop playback is on, its markers in the ruler can be dragged too (see <a href="frames.html#onion-skinning">Onion skinning</a> and <a href="frames.html#looping-a-range">Looping a range</a>). Past the end of the timeline the grid is shaded darker.</p>
 
 <p>Each row of the frame grid belongs to the layer beside it. The cells show what is on each frame:</p>
 
@@ -62,6 +83,27 @@
 <h2>Layers</h2>
 
 <p>Layers keep parts of your scene separate, so you can draw and animate each one without disturbing the rest. Layers higher in the list draw in front.</p>
+
+<h3>Kinds of layer</h3>
+
+<table>
+  <thead><tr><th>Kind</th><th>Make it with</th><th>What it does</th></tr></thead>
+  <tbody>
+    <tr><td>Normal</td><td class="wrap">The New Layer button, <span class="menu-path">Insert &rsaquo; Timeline &rsaquo; Layer</span></td><td class="wrap">Holds artwork, instances, text, sounds and frame scripts</td></tr>
+    <tr><td>Folder</td><td class="wrap">The New Folder button, <span class="menu-path">Insert &rsaquo; Timeline &rsaquo; Layer Folder</span></td><td class="wrap">Groups layers; holds no frames of its own</td></tr>
+    <tr><td>Mask and masked</td><td class="wrap">Right-click &rsaquo; <strong>Mask</strong></td><td class="wrap">The layers under a mask show only through its artwork. See <a href="masks-guides.html#masks">Masks</a></td></tr>
+    <tr><td>Guide and guided</td><td class="wrap">Right-click &rsaquo; <strong>Guide</strong></td><td class="wrap">Never exported. With layers guided by it, a line on it is a <a href="masks-guides.html#motion-guides">motion guide</a> they follow</td></tr>
+    <tr><td>Camera</td><td class="wrap"><span class="menu-path">Insert &rsaquo; Camera</span></td><td class="wrap">Pans, zooms and turns the view of the scene. See <a href="stage.html#the-camera">The camera</a></td></tr>
+    <tr><td>Peg</td><td class="wrap"><span class="menu-path">Insert &rsaquo; Peg</span></td><td class="wrap">A layer that others follow, to move, turn and scale them about a pivot. See <a href="rigging.html#pegs">Pegs</a></td></tr>
+    <tr><td>Color art</td><td class="wrap"><span class="menu-path">Insert &rsaquo; Color Art Layer</span></td><td class="wrap">Takes a drawing's fills under its lines. See <a href="ink-and-paint.html#line-and-color-art">Line and color art</a></td></tr>
+    <tr><td>Effect</td><td class="wrap"><span class="menu-path">Insert &rsaquo; Effect Layer</span></td><td class="wrap">A tone, highlight or glow over the layer below. See <a href="effects.html#effect-layers">Effect layers</a></td></tr>
+    <tr><td>Adjustment and track matte</td><td class="wrap">Right-click &rsaquo; <strong>Adjustment Layer</strong>, <strong>Track Matte</strong></td><td class="wrap">Changes everything below, or shows a layer through the one above. See <a href="behaviors.html#compositing">Track mattes and adjustment layers</a></td></tr>
+  </tbody>
+</table>
+
+<p>There is no separate sound layer: a sound sits on a keyframe of any layer, though a layer of its own keeps it easy to find. See <a href="sound.html">Sound</a>.</p>
+
+<p>The layers inside a folder, under a mask or under a guide are indented beneath it in the list. Adjustment layers and track-matted layers have an icon of their own; the other kinds share the plain layer icon, so a name such as <em>mask</em> or <em>guide</em> helps you tell them apart.</p>
 
 <h3>Layer controls</h3>
 
@@ -89,7 +131,7 @@
   <li>The buttons below the layer list add a <strong>new layer</strong> or a <strong>new folder</strong>, and <strong>delete</strong> the layers selected. <span class="menu-path">Insert &rsaquo; Timeline &rsaquo; Layer</span> and <span class="menu-path">Layer Folder</span> add them too.</li>
   <li><kbd>Ctrl</kbd>-click or <kbd>Shift</kbd>-click layer names to select several layers at once.</li>
   <li>Drag a layer up or down to change the stacking order. Drop it onto a folder to move it inside.</li>
-  <li>Right-click a layer for <strong>Insert Layer</strong>, <strong>Insert Folder</strong>, <strong>Delete Layer</strong>, the layer clipboard commands below, <strong>Guide</strong>, <strong>Mask</strong>, <strong>Parent Layer</strong>, <strong>Show All</strong>, <strong>Hide Others</strong>, <strong>Lock Others</strong> and <strong>Properties...</strong>.</li>
+  <li>Right-click a layer for <strong>Insert Layer</strong>, <strong>Insert Folder</strong>, <strong>Delete Layer</strong>, the layer clipboard commands below, <strong>Guide</strong>, <strong>Mask</strong>, <strong>Track Matte</strong>, <strong>Adjustment Layer</strong>, <strong>Layer Mode</strong>, <strong>Echo and Posterize Time...</strong>, <strong>Motion Blur</strong>, <strong>Parent Layer</strong>, <strong>Show All</strong>, <strong>Hide Others</strong>, <strong>Lock Others</strong> and <strong>Properties...</strong>. A mask layer adds <strong>Mask Edge...</strong>, a masked one <strong>Also Masked By</strong>, and an effect layer <strong>Effect Settings...</strong>.</li>
   <li>A timeline always keeps at least one layer that can hold frames, so the last one cannot be deleted.</li>
 </ul>
 
@@ -124,7 +166,7 @@
 <p>To make a layer follow another, right-click it and choose the layer from <strong>Parent Layer</strong> (or <strong>None</strong> to set it free), or use the <strong>parenting view</strong>: click the linked-circles button at the top right of the layer list and a column of handles appears, with a line from each layer to the one it follows, in that layer's color. Drag a layer's handle onto another layer to make it follow that one, or let go below the layers so it follows none. The objects stay where they are on the stage. A layer can't follow a folder, a guide layer, or one that already follows it. Hover over a layer's name to see which layer it follows. For multiplane camera moves, see <a href="rigging.html#multiplane-camera">Rigs and motion</a>.</p>
 
 <p>A child always follows its parent's position and rotation. By default it takes on the parent's scale, skew and flip too; turn any of them off under <strong>Follow parent's</strong> in Layer Properties and the child keeps its own. With <strong>Scale</strong> off, a parent grown to twice its size carries the child along without growing it, and the child's distance from the parent's pivot stays as drawn. With <strong>Flip</strong> off, a parent mirrored side to side leaves the child unmirrored; a parent flipped top to bottom is a side-to-side flip turned half round, so the child still turns with it. The settings go with the child layer and apply through the whole chain above it. Changing them can move the child on the stage, and Undo puts it back.</p>
-<p>Files parented in Animate work the way Animate shows them: a child turns with its parent and stays on its joint, but keeps its own size, and is not mirrored when the parent is. <strong>Follow parent's</strong> applies to parents set up in Phoenix.</p>
+<p>Parenting that comes in an FLA file made elsewhere works as it was made there: a child turns with its parent and stays on its joint, but keeps its own size, and is not mirrored when the parent is. <strong>Follow parent's</strong> applies to parents set up in Phoenix.</p>
 
 <h2>Frame view</h2>
 
@@ -151,6 +193,43 @@
   <dt>Layer Depth</dt><dd>How far each layer sits from the multiplane camera. See <a href="rigging.html#multiplane-camera">Multiplane camera</a>.</dd>
   <dt>Scene</dt><dd>The document's scenes, each with its own timeline. See <a href="documents.html#scenes">Scenes</a>.</dd>
 </dl>
+
+<p>Once a scene has a camera, the Frame tab of the Properties panel also shows the current layer's <strong>Layer Depth</strong>, how far behind the stage it sits, beside the Layer Depth panel.</p>
+
+<h2>Many timelines</h2>
+
+<p>A document has more than one timeline. Each <strong>scene</strong> has its own, and so does every <strong>symbol</strong>. The Timeline panel shows the one you are working in, and the edit bar above the stage says which: <em>Scene 1</em>, or <em>Scene 1 &rsaquo; hat</em> while you edit the symbol <em>hat</em> from that scene.</p>
+
+<ul>
+  <li>Switch scenes from <span class="menu-path">View &rsaquo; Scene</span>, the <a href="stage.html#scenes">Scene panel</a>, or <kbd>Shift</kbd>+<kbd>Page Up</kbd> and <kbd>Shift</kbd>+<kbd>Page Down</kbd>.</li>
+  <li>Open a symbol's timeline by <a href="symbols.html#edit-a-symbol">editing the symbol</a>. Click a name in the edit bar to go back up.</li>
+  <li>Each open document has timelines of its own; switching document tabs switches the Timeline panel with it.</li>
+</ul>
+
+<p>Timelines nest: a scene holds instances of symbols, whose timelines hold more. A graphic's timeline plays in step with the timeline it is placed on, frame for frame, under the control of its <a href="symbols.html#looping-for-graphics">looping</a> settings, so scrubbing the scene scrubs it too. A movie clip's timeline runs on its own, from its first frame, whatever the outer timeline does; the stage shows its first frame while you scrub. A button's timeline is its <a href="symbols.html#button-symbols">four states</a>.</p>
+
+
+<h2>Find things on the timeline</h2>
+
+<p>In a long scene with many layers:</p>
+
+<ul>
+  <li><kbd>Alt</kbd>+<kbd>.</kbd> and <kbd>Alt</kbd>+<kbd>,</kbd> step from keyframe to keyframe on the current layer.</li>
+  <li>Close folders you are not working in, choose <strong>Tiny</strong> frames from the frame view menu, or <kbd>Ctrl</kbd>+scroll, to see more of the timeline at once. <strong>Preview</strong> shows each keyframe's artwork in its row.</li>
+  <li><a href="workspace.html#movie-explorer">Movie Explorer</a> (<kbd>Alt</kbd>+<kbd>F3</kbd>) lists every layer, labeled frame, script and sound, in every scene and symbol. Its <strong>Frames</strong> button narrows it to layers and labels, and clicking an entry takes you there.</li>
+  <li><a href="workspace.html#find-and-replace">Find and Replace</a> (<kbd>Ctrl</kbd>+<kbd>F</kbd>) finds every keyframe that plays a sound, and every instance of a symbol, with the scene, layer and frame of each.</li>
+  <li>The <a href="actionscript.html#actions">Actions panel</a>'s script navigator lists every script in the document.</li>
+  <li><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>A</kbd> selects every frame of the timeline, ready to move or copy.</li>
+</ul>
+
+<h2>The timeline in scripts</h2>
+
+<p>Timelines can be driven from two kinds of script:</p>
+
+<ul>
+  <li><strong>ActionScript</strong> in a movie. A script on a keyframe runs when the playhead reaches it, and calls such as <code>stop()</code>, <code>gotoAndPlay("walk")</code> and <code>nextScene()</code> move a timeline's playhead, the scene's or a named movie clip's. Frame labels make good targets, as they stay put when frames move. These run in <a href="actionscript.html#test-movie">Test Movie</a> and published movies, and the simple ones while you play the document too, with <a href="actionscript.html#simple-frame-actions">Enable Simple Frame Actions</a> on. See <a href="frames.html#frame-scripts">Frame scripts</a> and <a href="actionscript.html">ActionScript and Test Movie</a>.</li>
+  <li><strong>JSFL or Python</strong> scripts that edit the document. <code>fl.getDocumentDOM().getTimeline()</code> is the timeline you are working in, with its layers and frames: insert keyframes, add layers, set the current frame. See <a href="scripting.html">Scripting</a>.</li>
+</ul>
 
 </article>
 </main>
