@@ -301,7 +301,13 @@ void IKPoser::drag(PhoenixView& view, const QPointF& documentPos)
         solved = fla::solvePose(start, goals, _joint, to, _original.limits());
 
     _posed = _original;
-    if (!_posed.setPlacedPose(_into, solved))
+    // Where gravity or wind bend the bones, only what the drag changed is
+    // posed; locks and targets are kept again as every frame is worked out.
+    std::vector<double> angles;
+    for (const fla::IKJoint& joint : solved)
+        angles.push_back(joint.angle);
+    const std::vector<double> posing = _original.poseFromShown(_into, angles);
+    if (!_posed.setPlacedPose(_into, solved, posing != angles ? &posing : nullptr))
         return;
     // A bone that reaches for a point takes the point where it is dragged.
     if (_mode == Mode::Reach)

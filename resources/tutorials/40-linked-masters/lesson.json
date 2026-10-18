@@ -1,0 +1,87 @@
+{
+  "title": "Linked master symbols",
+  "summary": "Keep a character in one master file and link it into a shot, then change the master and update the shot to match.",
+  "minutes": 8,
+  "order": 40,
+  "guide": "pipeline.html#linked-shared-assets",
+  "tags": [
+    "Symbols"
+  ],
+  "start": {
+    "document": "start"
+  },
+  "final": "final",
+  "steps": [
+    {
+      "title": "Welcome",
+      "text": "<p>On a show, the same character appears in many shots. When the design changes, nobody wants to redraw it in every one. Instead, the character lives in a <i>master file</i>, and each shot links its copy to it. Change the master, update the shot, and the shot follows.</p><p>This document is a shot: <i>Pip</i>, a graphic symbol, hops across a meadow. You will make a master file for Pip, link the shot to it, play the art director and change the master, then bring the change into the shot.</p>"
+    },
+    {
+      "title": "Play it",
+      "text": "<p>Press <kbd>Enter</kbd>, or click the play button in the timeline header. Pip hops across in a red scarf.</p>",
+      "target": "widget:timelinePlay",
+      "wait": {
+        "playing": true
+      }
+    },
+    {
+      "title": "Make the master file",
+      "text": "<p>Press <kbd>Enter</kbd> again to stop. A master is any file with Pip in its library, so the quickest way to make one is to save a copy of this document.</p><p>Choose <b>File &gt; Save As...</b>. Make a new folder for the show, called <i>Pip show</i> (in your Documents folder, say), go into it, name the file <i>Pip</i> and click <b>Save</b>. The window's title now reads <i>Pip</i>.</p>",
+      "target": "menu:File/Save As..."
+    },
+    {
+      "title": "Save the shot",
+      "text": "<p>Choose <b>File &gt; Save As...</b> again, and save into the same <i>Pip show</i> folder as <i>Shot 1</i>.</p><p>The folder now holds two files: <i>Pip</i>, the master, and <i>Shot 1</i>, the shot you go on working in.</p>",
+      "target": "menu:File/Save As..."
+    },
+    {
+      "title": "Link Pip to the master",
+      "text": "<p>In the <b>Library</b> panel, right-click <i>Pip</i> and choose <b>Link to Master File...</b>. Choose <i>Pip</i> in the <i>Pip show</i> folder and click <b>Open</b>. Phoenix lists the master's symbols with <i>Pip</i> already picked: click <b>OK</b>.</p><p>When Phoenix offers to update Pip from the master now, click <b>No</b>: the master is the same as the shot for now. In the Library, Pip's type reads <b>Graphic (linked)</b>.</p>",
+      "target": "dock:Library",
+      "wait": {
+        "command": "Link to Master"
+      }
+    },
+    {
+      "title": "Save the link",
+      "text": "<p>If Phoenix is still asking whether to update Pip, click <b>No</b>.</p><p>Press <kbd>Ctrl</kbd>+<kbd>S</kbd> to save <i>Shot 1</i>. The link is saved in the shot, with the master's place written relative to it, so the <i>Pip show</i> folder can move as a whole.</p>",
+      "target": "menu:File/Save",
+      "wait": {
+        "action": "File/Save"
+      }
+    },
+    {
+      "title": "Open the master",
+      "text": "<p>Now play the art director, who wants Pip in a blue scarf. Choose <b>File &gt; Open...</b> and open <i>Pip</i> from the <i>Pip show</i> folder. It opens in a tab of its own.</p><p>This lesson window then asks you to go back to the lesson's tab. You will, in two steps; carry on here meanwhile.</p>",
+      "target": "menu:File/Open...",
+      "wait": {
+        "action": "File/Open..."
+      }
+    },
+    {
+      "title": "Change the master",
+      "text": "<p>In the <i>Pip</i> tab, double-click <i>Pip</i> in the <b>Library</b> to edit the symbol. Press <kbd>V</kbd> for the Selection tool and click the red scarf.</p><p>Click the <b>Swatches</b> tab beside the Library (or choose <b>Window &gt; Swatches</b>) and click a blue color. The scarf turns blue. Choose <b>File &gt; Save</b> to save the master, then click <b>Next</b>.</p>"
+    },
+    {
+      "title": "Back to the shot",
+      "text": "<p>Choose <b>File &gt; Close</b> to close the master. You are back in <i>Shot 1</i>, and its Pip still wears the red scarf: a shot keeps its own copy of a linked symbol until you update it, so a change to the master never surprises you in the middle of a shot.</p>"
+    },
+    {
+      "title": "Update from the master",
+      "text": "<p>Click the <b>Library</b> tab. Right-click <i>Pip</i> and choose <b>Update from Master</b>. Phoenix warns that the update replaces Pip with the master's version and cannot be undone: click <b>Yes</b>.</p><p>Phoenix reports that Pip was updated; click <b>OK</b>. The scarf on the stage is blue, and Pip still hops exactly as before: only what is inside the symbol changed.</p>",
+      "target": "dock:Library"
+    },
+    {
+      "title": "Play it",
+      "text": "<p>Press <kbd>Enter</kbd>. Pip hops across in the new blue scarf, on every frame of the shot.</p>",
+      "target": "widget:timelinePlay",
+      "wait": {
+        "playing": true
+      }
+    },
+    {
+      "title": "What you did",
+      "text": "<p>You kept a character in a master file, linked a shot's copy to it, and brought a design change from the master into the shot. In the shot, Pip is still an ordinary symbol, so the shot opens and plays without the master; it only remembers where Pip came from.</p><p>A real master usually holds just the character, its rig and the symbols inside it; those come along on an update too. With many linked symbols, right-click anywhere in the Library and choose <b>Update All Linked Items</b>. <b>Change Master File...</b> links a symbol elsewhere, and <b>Unlink from Master</b> lets it go its own way.</p><p>To bring a change into a whole episode at once, update every shot from the command line: <code>Phoenix batch \"Pip show\" --update-links --save</code>.</p>"
+    }
+  ]
+}

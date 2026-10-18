@@ -18,6 +18,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <functional>
@@ -987,6 +988,102 @@ std::vector<IKJoint> IKArmature::sprungAt(int frame) const
     return _sprung[static_cast<size_t>(std::clamp(frame, 0, count - 1))];
 }
 
+namespace {
+
+/// Smooth noise over time, about -1 to 1, the same for the same seed: values
+/// at whole times eased between.
+double windNoise(int seed, double t)
+{
+    const auto at = [seed](long long n) {
+        uint32_t h = static_cast<uint32_t>(n) * 0x9E3779B1u ^ static_cast<uint32_t>(seed) * 0x85EBCA77u;
+        h ^= h >> 15;
+        h *= 0x2C1B3C6Du;
+        h ^= h >> 12;
+        h *= 0x297A2D39u;
+        h ^= h >> 15;
+        return static_cast<double>(h) / 4294967295.0 * 2.0 - 1.0;
+    };
+    const auto octave = [&at](double time) {
+        const double whole = std::floor(time);
+        const double f = time - whole;
+        const long long n = static_cast<long long>(whole);
+        return at(n) + (at(n + 1) - at(n)) * f * f * (3.0 - 2.0 * f);
+    };
+    return 0.65 * octave(t) + 0.35 * octave(2.3 * t + 17.0);
+}
+
+/// How gravity and wind turn a sprung bone, in radians a second squared: a
+/// pull toward each one's direction, strongest across it.
+struct ForceField
+{
+    BoneForces forces;
+
+    /// On a bone pointing \a direction (radians) at \a time seconds into the
+    /// span; \a lag delays the wind's gusts, so they run down a chain.
+    double pull(double direction, double time, double lag) const
+    {
+        // At 100, the softest spring gives way nearly all the way.
+        constexpr double kStrongest = 200.0;
+        constexpr double kRadians = kPi / 180.0;
+        double turn = 0.0;
+        if (forces.gravity > 0.0)
+            turn += kStrongest * forces.gravity / 100.0 * std::sin(forces.gravityAngle * kRadians - direction);
+        if (forces.wind > 0.0)
+        {
+            const double gust = std::clamp(forces.gusts, 0.0, 100.0) / 100.0;
+            const double t = (time - lag) * std::max(forces.gustRate, 0.0);
+            const double strength = kStrongest * forces.wind / 100.0 * std::max(0.0, 1.0 + 1.2 * gust * windNoise(forces.seed, t));
+            const double angle = forces.windAngle * kRadians + 0.35 * gust * windNoise(forces.seed + 7919, 1.7 * t + 31.0);
+            turn += strength * std::sin(angle - direction);
+        }
+        return turn;
+    }
+};
+
+/// The way the bones from each joint point, in the joint's own frame: toward
+/// its children, on average; 0 for a joint with none.
+std::vector<double> bonesPointing(const std::vector<IKJoint>& joints)
+{
+    std::vector<Point> sum(joints.size());
+    for (const IKJoint& joint : joints)
+    {
+        if (joint.parent < 0 || static_cast<size_t>(joint.parent) >= joints.size())
+            continue;
+        const IKJoint& from = joints[static_cast<size_t>(joint.parent)];
+        const double dx = joint.position.x - from.position.x;
+        const double dy = joint.position.y - from.position.y;
+        const double length = std::hypot(dx, dy);
+        if (length < 1.0e-9)
+            continue;
+        sum[static_cast<size_t>(joint.parent)].x += dx / length;
+        sum[static_cast<size_t>(joint.parent)].y += dy / length;
+    }
+    std::vector<double> pointing(joints.size(), 0.0);
+    for (size_t i = 0; i < joints.size(); ++i)
+    {
+        if (sum[i].x != 0.0 || sum[i].y != 0.0)
+            pointing[i] = std::atan2(sum[i].y, sum[i].x) - joints[i].angle;
+    }
+    return pointing;
+}
+
+/// Where a bone on a spring of \a omega comes to rest from \a wanted under
+/// \a pull (of its angle), let swing critically damped for three seconds.
+double settled(double wanted, double omega, const std::function<double(double)>& pull)
+{
+    constexpr double dt = 1.0 / 240.0;
+    double angle = wanted;
+    double speed = 0.0;
+    for (int step = 0; step < 720; ++step)
+    {
+        speed += (omega * omega * (wanted - angle) - 2.0 * omega * speed + pull(angle)) * dt;
+        angle += speed * dt;
+    }
+    return angle;
+}
+
+} // namespace
+
 std::vector<std::vector<IKJoint>> IKArmature::simulate(const std::function<std::vector<IKJoint>(int)>& posedOn) const
 {
     const int count = std::max(1, frames());
@@ -1008,11 +1105,26 @@ std::vector<std::vector<IKJoint>> IKArmature::simulate(const std::function<std::
     std::vector<double> target(_nodes.size(), 0.0);
     constexpr int kSteps = 8;
     const double dt = 1.0 / (_fps * kSteps);
+    // Gravity and wind, and how deep each joint hangs, which their gusts
+    // reach a little later.
+    const ForceField field{forces()};
+    const bool pushed = field.forces.any();
+    std::vector<double> lag(_nodes.size(), 0.0);
+    for (size_t i = 0; i < _nodes.size(); ++i)
+    {
+        const int parent = _nodes[i].parent;
+        if (parent >= 0 && static_cast<size_t>(parent) < i)
+            lag[i] = lag[static_cast<size_t>(parent)] + 0.08;
+    }
     std::vector<std::vector<IKJoint>> sprung(static_cast<size_t>(count));
     for (int f = 0; f < count; ++f)
     {
         const std::vector<IKJoint> posed = posedOn(f);
         std::vector<IKJoint> joints = posed;
+        // The way each joint's bones point from it, in its own frame.
+        std::vector<double> pointing(posed.size(), 0.0);
+        if (pushed)
+            pointing = bonesPointing(posed);
         // Parents come before their children, so each joint hangs off its
         // parent as the springs have already moved it; a root turns toward
         // its pose.
@@ -1036,7 +1148,13 @@ std::vector<std::vector<IKJoint>> IKArmature::simulate(const std::function<std::
                 angle[i] = wanted;
                 speed[i] = 0.0;
                 target[i] = wanted;
-                joints[i].angle = wanted;
+                // The span starts with the bone settled under gravity and
+                // the wind as they are then.
+                if (pushed && omega[i] > 0.0)
+                    angle[i] = settled(wanted, omega[i], [&](double at) {
+                        return field.pull(at + pointing[i], 0.0, lag[i]);
+                    });
+                joints[i].angle = angle[i];
                 continue;
             }
             // The nearest turn of the angle wanted, so a pose that crosses
@@ -1046,7 +1164,9 @@ std::vector<std::vector<IKJoint>> IKArmature::simulate(const std::function<std::
             for (int s = 1; s <= kSteps; ++s)
             {
                 const double goal = from + (wanted - from) * s / kSteps;
-                const double pull = omega[i] * omega[i] * (goal - angle[i]) - 2.0 * zeta[i] * omega[i] * speed[i];
+                double pull = omega[i] * omega[i] * (goal - angle[i]) - 2.0 * zeta[i] * omega[i] * speed[i];
+                if (pushed)
+                    pull += field.pull(angle[i] + pointing[i], (f - 1 + static_cast<double>(s) / kSteps) / _fps, lag[i]);
                 speed[i] += pull * dt;
                 angle[i] += speed[i] * dt;
             }
@@ -2176,6 +2296,15 @@ std::vector<IKJoint> solvePose(std::vector<IKJoint> joints, const PoseGoals& goa
     std::vector<bool> blocked(count, false);
     for (int at = dragging ? joints[static_cast<size_t>(effector)].parent : -1; at >= 0; at = joints[static_cast<size_t>(at)].parent)
     {
+        // No further up than a locked bone's head: turning that, or any
+        // joint above it, would move the bone.
+        const bool holds = std::any_of(goals.pins.begin(), goals.pins.end(), [&](const PoseGoals::Pin& pin) {
+            const int head = pin.joint >= 0 && static_cast<size_t>(pin.joint) < count && pin.joint != effector
+                ? joints[static_cast<size_t>(pin.joint)].parent : -1;
+            return head >= 0 && hangsBelow(joints, static_cast<size_t>(head), at);
+        });
+        if (holds)
+            break;
         dragged.push_back(at);
         blocked[static_cast<size_t>(at)] = true;
     }
@@ -2372,7 +2501,7 @@ bool IKArmature::ensurePose(int frame)
     return setPlacedPose(frame, shownAt(frame));
 }
 
-void IKArmature::writePlaces(size_t pose, const std::vector<IKJoint>& joints)
+void IKArmature::writePlaces(size_t pose, const std::vector<IKJoint>& joints, bool withAngles)
 {
     for (size_t i = 0; i < _nodes.size() && i < joints.size(); ++i)
     {
@@ -2393,7 +2522,7 @@ void IKArmature::writePlaces(size_t pose, const std::vector<IKJoint>& joints)
         }
         const double kept = state->DoubleAttribute("angle", 0.0);
         angle += 2.0 * kPi * std::round((kept - angle) / (2.0 * kPi));
-        if (std::fabs(angle - kept) > 1.0e-9)
+        if (withAngles && std::fabs(angle - kept) > 1.0e-9)
             setNumber(state, "angle", angle);
         // Only a root moves, and only a bone that can stretch changes
         // length: the others keep their places as posed, which joints shown
@@ -2408,16 +2537,16 @@ void IKArmature::writePlaces(size_t pose, const std::vector<IKJoint>& joints)
     }
 }
 
-bool IKArmature::setPlacedPose(int frame, const std::vector<IKJoint>& joints)
+bool IKArmature::setPlacedPose(int frame, const std::vector<IKJoint>& joints, const std::vector<double>* angles)
 {
-    if (joints.size() != _nodes.size())
+    if (joints.size() != _nodes.size() || (angles && angles->size() != joints.size()))
         return false;
-    std::vector<double> angles;
+    std::vector<double> posed;
     for (const IKJoint& joint : joints)
-        angles.push_back(joint.angle);
-    if (!setPose(frame, angles))
+        posed.push_back(joint.angle);
+    if (!setPose(frame, angles ? *angles : posed))
         return false;
-    writePlaces(poseIndexAt(frame), joints);
+    writePlaces(poseIndexAt(frame), joints, !angles);
     storeJoints();
     return true;
 }
@@ -2766,6 +2895,222 @@ bool IKArmature::writeBackPoses(const std::vector<std::vector<IKJoint>>& joints)
         }
     }
     return changed;
+}
+
+// ---------------------------------------------------------------------------
+// Gravity and wind
+
+BoneForces IKArmature::forces() const
+{
+    BoneForces found;
+    const tinyxml2::XMLElement* tree = _document ? _document->FirstChildElement("IKTree") : nullptr;
+    if (!tree)
+        return found;
+    found.gravity = std::clamp(tree->DoubleAttribute("phoenixGravity", 0.0), 0.0, 100.0);
+    found.gravityAngle = tree->DoubleAttribute("phoenixGravityAngle", found.gravityAngle);
+    found.wind = std::clamp(tree->DoubleAttribute("phoenixWind", 0.0), 0.0, 100.0);
+    found.windAngle = tree->DoubleAttribute("phoenixWindAngle", found.windAngle);
+    found.gusts = std::clamp(tree->DoubleAttribute("phoenixWindGusts", 0.0), 0.0, 100.0);
+    found.gustRate = std::clamp(tree->DoubleAttribute("phoenixWindRate", found.gustRate), 0.0, 10.0);
+    found.seed = tree->IntAttribute("phoenixWindSeed", found.seed);
+    return found;
+}
+
+void IKArmature::setForces(const BoneForces& forces)
+{
+    tinyxml2::XMLElement* tree = _document ? _document->FirstChildElement("IKTree") : nullptr;
+    if (!tree)
+        return;
+    for (const char* name : {"phoenixGravity", "phoenixGravityAngle", "phoenixWind", "phoenixWindAngle",
+             "phoenixWindGusts", "phoenixWindRate", "phoenixWindSeed"})
+    {
+        tree->DeleteAttribute(name);
+    }
+    // Only what is in use: an armature without them is as it was.
+    if (forces.gravity > 0.0)
+    {
+        setNumber(tree, "phoenixGravity", std::clamp(forces.gravity, 0.0, 100.0));
+        setNumber(tree, "phoenixGravityAngle", forces.gravityAngle);
+    }
+    if (forces.wind > 0.0)
+    {
+        setNumber(tree, "phoenixWind", std::clamp(forces.wind, 0.0, 100.0));
+        setNumber(tree, "phoenixWindAngle", forces.windAngle);
+        if (forces.gusts > 0.0)
+        {
+            setNumber(tree, "phoenixWindGusts", std::clamp(forces.gusts, 0.0, 100.0));
+            setNumber(tree, "phoenixWindRate", std::clamp(forces.gustRate, 0.0, 10.0));
+            tree->SetAttribute("phoenixWindSeed", forces.seed);
+        }
+    }
+    storeJoints();
+}
+
+std::vector<double> IKArmature::poseFromShown(int frame, const std::vector<double>& angles) const
+{
+    if (!forces().any() || !hasSprings())
+        return angles;
+    const std::vector<IKJoint> shown = shownAt(frame);
+    const std::vector<IKJoint> posed = posedAt(frame);
+    if (angles.size() != shown.size() || posed.size() != shown.size())
+        return angles;
+    // Parents come before their children.
+    std::vector<double> pose(angles.size(), 0.0);
+    for (size_t i = 0; i < angles.size(); ++i)
+    {
+        const int parent = shown[i].parent;
+        const bool above = parent >= 0 && static_cast<size_t>(parent) < i;
+        const size_t p = above ? static_cast<size_t>(parent) : 0;
+        const double turned = angles[i] - (above ? angles[p] : 0.0);
+        const double showing = shown[i].angle - (above ? shown[p].angle : 0.0);
+        const double posing = posed[i].angle - (above ? posed[p].angle : 0.0);
+        pose[i] = (above ? pose[p] : 0.0) + posing + wrapAngle(turned - showing);
+    }
+    return pose;
+}
+
+double IKArmature::smoothness() const
+{
+    const tinyxml2::XMLElement* tree = _document ? _document->FirstChildElement("IKTree") : nullptr;
+    return tree ? std::clamp(tree->DoubleAttribute("phoenixSmoothness", 0.0), 0.0, 100.0) : 0.0;
+}
+
+void IKArmature::setSmoothness(double smoothness)
+{
+    tinyxml2::XMLElement* tree = _document ? _document->FirstChildElement("IKTree") : nullptr;
+    if (!tree)
+        return;
+    tree->DeleteAttribute("phoenixSmoothness");
+    if (smoothness > 0.0)
+        setNumber(tree, "phoenixSmoothness", std::clamp(smoothness, 0.0, 100.0));
+}
+
+// ---------------------------------------------------------------------------
+// Smooth binding
+
+ShapeBinding smoothJoint(const ShapeBinding& binding, const std::vector<Point>& anchors,
+    const std::vector<IKJoint>& joints, int joint, double smoothness)
+{
+    ShapeBinding smoothed = binding;
+    if (joint < 0 || static_cast<size_t>(joint) >= joints.size() || anchors.size() != binding.size() || smoothness <= 0.0)
+        return smoothed;
+    // The bone into the joint, numbered by the joint itself, and the bones
+    // out of it, by their tails.
+    const int head = joints[static_cast<size_t>(joint)].parent;
+    if (head < 0 || static_cast<size_t>(head) >= joints.size())
+        return smoothed;
+    const Point& at = joints[static_cast<size_t>(joint)].position;
+    const Point& from = joints[static_cast<size_t>(head)].position;
+    const double inLength = std::hypot(at.x - from.x, at.y - from.y);
+    std::vector<int> out;
+    for (size_t k = 0; k < joints.size(); ++k)
+    {
+        const Point& tail = joints[k].position;
+        if (joints[k].parent == joint && std::hypot(tail.x - at.x, tail.y - at.y) > 1.0e-9)
+            out.push_back(static_cast<int>(k));
+    }
+    if (out.empty() || inLength < 1.0e-9)
+        return smoothed;
+    for (size_t point = 0; point < anchors.size(); ++point)
+    {
+        const Point& p = anchors[point];
+        const std::vector<BoneWeight>& bones = binding[point];
+        if (bones.empty())
+            continue;
+        // Between the bone in and the nearest bone out; a point that follows
+        // any other bone is left as bound.
+        int next = out.front();
+        double nearest = distanceToSegment(p, at, joints[static_cast<size_t>(next)].position);
+        for (int k : out)
+        {
+            const double distance = distanceToSegment(p, at, joints[static_cast<size_t>(k)].position);
+            if (distance < nearest)
+            {
+                nearest = distance;
+                next = k;
+            }
+        }
+        const bool ours = std::all_of(bones.begin(), bones.end(),
+            [&](const BoneWeight& bound) { return bound.bone == joint || bound.bone == next; });
+        if (!ours)
+            continue;
+        // How far the point is past the joint, across the line halfway
+        // between the two bones, against the reach of the blend.
+        const Point& tail = joints[static_cast<size_t>(next)].position;
+        const double outLength = std::hypot(tail.x - at.x, tail.y - at.y);
+        Point across((at.x - from.x) / inLength + (tail.x - at.x) / outLength,
+            (at.y - from.y) / inLength + (tail.y - at.y) / outLength);
+        double length = std::hypot(across.x, across.y);
+        if (length < 1.0e-6)
+        {
+            across = Point((tail.x - at.x) / outLength, (tail.y - at.y) / outLength);
+            length = 1.0;
+        }
+        const double reach = std::clamp(smoothness, 0.0, 100.0) / 100.0 * 0.5 * std::min(inLength, outLength);
+        const double past = ((p.x - at.x) * across.x + (p.y - at.y) * across.y) / length / reach;
+        if (past <= -1.0 || past >= 1.0)
+        {
+            // Past the blend: a point a wider one shared goes to its side's
+            // bone alone.
+            if (bones.size() > 1)
+                smoothed[point] = {{past < 0.0 ? joint : next, 1.0}};
+            continue;
+        }
+        const double x = (past + 1.0) / 2.0;
+        const double weight = x * x * (3.0 - 2.0 * x);
+        smoothed[point] = {{joint, 1.0 - weight}, {next, weight}};
+    }
+    return smoothed;
+}
+
+ShapeBinding smoothJoints(const ShapeBinding& binding, const std::vector<Point>& anchors,
+    const std::vector<IKJoint>& joints, double smoothness)
+{
+    // Each joint from the binding as made, so one joint's blend does not
+    // keep a point from another's.
+    ShapeBinding smoothed = binding;
+    for (size_t joint = 0; joint < joints.size(); ++joint)
+    {
+        const ShapeBinding here = smoothJoint(binding, anchors, joints, static_cast<int>(joint), smoothness);
+        for (size_t point = 0; point < here.size() && point < smoothed.size(); ++point)
+        {
+            if (here[point].size() != binding[point].size() ||
+                !std::equal(here[point].begin(), here[point].end(), binding[point].begin(),
+                    [](const BoneWeight& a, const BoneWeight& b) { return a.bone == b.bone && a.weight == b.weight; }))
+            {
+                smoothed[point] = here[point];
+            }
+        }
+    }
+    return smoothed;
+}
+
+std::vector<BoneWeight> reweighted(const std::vector<BoneWeight>& bones, int bone, double change)
+{
+    double total = 0.0;
+    double own = 0.0;
+    for (const BoneWeight& bound : bones)
+    {
+        total += std::max(0.0, bound.weight);
+        if (bound.bone == bone)
+            own += std::max(0.0, bound.weight);
+    }
+    // Shares of the whole, the bone's own changed.
+    const double was = total > 0.0 ? own / total : 0.0;
+    const double now = std::clamp(was + change, 0.0, 1.0);
+    const double others = total - own;
+    std::vector<BoneWeight> result;
+    for (const BoneWeight& bound : bones)
+    {
+        if (bound.bone == bone)
+            continue;
+        const double share = others > 0.0 ? std::max(0.0, bound.weight) / others : 0.0;
+        if (share * (1.0 - now) > 1.0e-6)
+            result.push_back({bound.bone, share * (1.0 - now)});
+    }
+    if (now > 1.0e-6 || result.empty())
+        result.push_back({bone, result.empty() ? 1.0 : now});
+    return result;
 }
 
 } // namespace fla

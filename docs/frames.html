@@ -17,7 +17,7 @@
 <meta property="og:image:alt" content="The Phoenix window with three flower characters on the stage, the timeline below and the Properties panel on the right">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:image" content="https://phoenixanimate.com/assets/shots/hero.webp">
-<meta name="keywords" content="frame keyframe blank keyframe F5 F6 F7 insert remove clear frames select move copy paste overwrite reverse convert to frame-by-frame label comment anchor playback play loop step onion skin frame by frame edit multiple frames select all frames distribute to keyframes convert to keyframes convert to blank keyframes on ones on twos frame rate fps scale spans time in seconds span end keyframe dot hollow onion markers keyframes only anchor onion outline opacity">
+<meta name="keywords" content="frame keyframe blank keyframe F5 F6 F7 insert remove clear frames select move copy paste overwrite reverse convert to frame-by-frame label comment anchor playback play loop step onion skin frame by frame edit multiple frames select all frames distribute to keyframes convert to keyframes convert to blank keyframes on ones on twos frame rate fps scale spans time in seconds span end keyframe dot hollow onion markers keyframes only anchor onion outline opacity shift and trace trace over move ghost">
 <link rel="icon" href="assets/img/logo.png">
 <link rel="stylesheet" href="assets/site.css">
 <script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
@@ -222,18 +222,39 @@
 <p>The onion skin markers are brackets in the ruler either side of the playhead, with the frames between them shaded. Drag them to set how many frames are shown, up to 99 each way; while Loop Playback is on, the ruler's handles set the loop instead. Or choose a preset and other options from <span class="menu-path">View &rsaquo; Onion Skin Settings</span> (also by right-clicking the onion skin button):</p>
 
 <div class="split">
-<figure style="margin:0"><img src="assets/shots/menu-onion-skin-settings.webp" alt="Onion Skin Settings menu: Onion 1, Onion 2 (checked), Onion 5, Onion All, Outline, Anchor Onion, Keyframes Only, Opacity, Color Before and Color After" width="130" height="252"></figure>
+<figure style="margin:0"><img src="assets/shots/menu-onion-skin-settings.webp" alt="Onion Skin Settings menu: Onion 1, Onion 2 (checked), Onion 5, Onion All, Outline, Anchor Onion, Keyframes Only, Opacity, Shift and Trace, Reset Shift and Trace, Color Before and Color After" width="156" height="303"></figure>
 <dl class="defs">
   <dt>Onion 1, 2, 5, All</dt><dd>How many frames to show on each side. Two is the default; All shows as many frames as the timeline has, up to 99 each way.</dd>
   <dt>Outline</dt><dd>Shows the other frames as outlines only.</dd>
   <dt>Keyframes Only</dt><dd>Counts drawings rather than frames: with Onion 2, the two keyframes before and the two after, however long each is held.</dd>
   <dt>Anchor Onion</dt><dd>Keeps the onion skin on the frames it covers when you turn this on, instead of moving with the playhead: step through a run of frames and compare each with the same few. Drag the markers in the ruler to change which frames it stays on.</dd>
-  <dt>Opacity</dt><dd>25, 45, 65 or 85%.</dd>
+  <dt>Opacity</dt><dd>25, 45, 65 or 85% for the nearest frames; frames further away fade more.</dd>
+  <dt>Shift and Trace</dt><dd>Lets you move the faint copies around to trace over them (see below).</dd>
+  <dt>Reset Shift and Trace</dt><dd>Puts every moved copy back where its frame has it.</dd>
   <dt>Color Before, Color After</dt><dd>The tints for earlier and later frames.</dd>
 </dl>
 </div>
 
 <p>Locked and hidden layers are left out of onion skinning, so lock the background to keep it from cluttering the view. Inside a symbol, locked layers show too. The settings are remembered for next time.</p>
+
+<h3 id="shift-and-trace">Shift and Trace</h3>
+
+<p>When you draw in-betweens by hand, the drawing you want to copy is often in the wrong place: a leaf that falls across the stage, a head that turns, a bouncing ball. Shift and Trace lets you slide, turn and resize the faint onion skin copy of another frame so it sits right under where the new drawing goes, and trace over it. The other frame itself does not change at all; only its faint copy on the stage moves.</p>
+
+<figure>
+  <img src="assets/shots/onion-shift-trace.webp" alt="A frame-by-frame leaf: the green drawing in the middle is the current frame, the blue copy of the frame before has been slid over and turned to sit under it, marked with a small cross, and the green copy of the frame after is still in place on the right" width="560" height="260">
+  <figcaption>The blue copy of the frame before, shifted and turned to lie under the leaf being drawn. The cross marks a shifted copy.</figcaption>
+</figure>
+
+<ol>
+<li>Turn on the onion skin and go to the frame you want to draw.</li>
+<li>Choose <span class="menu-path">View &rsaquo; Onion Skin Settings &rsaquo; Shift and Trace</span> (or right-click the onion skin button). The pointer becomes a four-way arrow.</li>
+<li>Drag a faint copy to move it. Hold <kbd>Shift</kbd> as you start dragging to turn it around its middle, or <kbd>Alt</kbd> to make it bigger or smaller. Drag on an empty spot to move the nearest earlier copy.</li>
+<li>Turn Shift and Trace off again to draw. The copies stay where you put them, so you can trace over them, step to other frames and come back.</li>
+<li>Choose <strong>Reset Shift and Trace</strong> when you are done.</li>
+</ol>
+
+<p>Moved copies are only a drawing aid: nothing about them is saved, exported or undone, and they go back to their places when you open another document.</p>
 
 </article>
 </main>

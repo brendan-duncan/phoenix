@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A cycle with Loop · Phoenix User Guide</title>
+<meta name="description" content="Key a balloon's bob once and let the Loop behavior repeat it for the whole shot, then make it bob higher in Function Curves.">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Phoenix">
+<meta property="og:title" content="A cycle with Loop · Phoenix User Guide">
+<meta property="og:description" content="Key a balloon's bob once and let the Loop behavior repeat it for the whole shot, then make it bob higher in Function Curves.">
+<meta property="og:url" content="https://phoenixanimate.com/tutorial-loop-cycle.html">
+<meta property="og:image" content="https://phoenixanimate.com/assets/shots/hero.webp">
+<meta property="og:image:type" content="image/webp">
+<meta property="og:image:width" content="1704">
+<meta property="og:image:height" content="1061">
+<meta property="og:image:alt" content="The Phoenix window with three flower characters on the stage, the timeline below and the Properties panel on the right">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://phoenixanimate.com/assets/shots/hero.webp">
+<meta name="keywords" content="tutorial lesson step by step loop cycle repeat bob hover float cycle animation loop behavior back and forth continue function curves graph editor curve keyframe value classic tween">
+<link rel="icon" href="assets/img/logo.png">
+<link rel="stylesheet" href="assets/site.css">
+<script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<main>
+<article class="content">
+
+<p class="eyebrow">Tutorials</p>
+
+<h1>A cycle with Loop</h1>
+
+<p class="lead">Key a balloon's bob once and let the Loop behavior repeat it for the whole shot, then make it bob higher in Function Curves.</p>
+
+<div class="callout">
+  <span class="label">Try it in Phoenix</span>
+  <p>This page is also a lesson inside Phoenix: choose <span class="menu-path">Help &rsaquo; Tutorials...</span> and start <strong>A cycle with Loop</strong>, and Phoenix points at each control as you go. It takes about 7 minutes.</p>
+</div>
+
+<p>To follow along here instead, download the starting document, <a href="assets/tutorials/loop-cycle.fla" download>loop-cycle.fla</a>, and open it with <span class="menu-path">File &rsaquo; Open...</span>.</p>
+
+<figure>
+  <img src="assets/shots/tutorial-loop-cycle.webp" alt="Four copies of a striped red and yellow hot-air balloon over a green hill, each a little higher or lower: at the bottom of a bob, rising, at the top, and coming back down" width="1000" height="422">
+  <figcaption>The balloon on four frames of its third bob, which Loop repeats from the one you keyed.</figcaption>
+</figure>
+
+<p>Much of animation repeats: a bob, a wave, a walk. Key it once, and the <b>Loop</b> behavior plays it again and again for as long as the shot runs.</p><p>The <i>Balloon</i> layer holds a hot-air balloon, the graphic symbol <i>Balloon</i>, keyed on frames 1, 13 and 25. Two classic tweens carry it up and back down: one bob, a second long. After frame 25 it hangs still until the end, frame 96.</p>
+
+<h2>1. Play it</h2>
+
+<p>Press <kbd>Enter</kbd>, or click the play button in the timeline header. The balloon bobs once, then stops dead in the air.</p>
+
+<h2>2. Select the last keyframe</h2>
+
+<p>Press <kbd>Enter</kbd> again to stop. In the timeline, click frame 25 of the <i>Balloon</i> layer. That selects the balloon on it, with a box around it on the stage.</p><p>A behavior goes on the instance of one keyframe and works over that keyframe's frames. This keyframe runs from frame 25 to the end, the frames that need the bob.</p>
+
+<figure>
+  <img src="assets/shots/loop-cycle-timeline.webp" alt="The timeline: the Balloon layer with two tweens, from frame 1 to 13 and from 13 to 25, then a keyframe at 25 held to the end; the Clouds and Hills layers below" width="900" height="81">
+  <figcaption>One bob keyed on frames 1, 13 and 25. The keyframe on frame 25 holds the balloon still to the end.</figcaption>
+</figure>
+
+<h2>3. Open the Behaviors panel</h2>
+
+<p>Choose <span class="menu-path">Window &rsaquo; Behaviors</span> if it is not showing. It lists the behaviors on the selected balloon: none yet.</p>
+
+<h2>4. Add Loop</h2>
+
+<div class="split">
+  <figure style="margin:0"><img src="assets/shots/loop-cycle-behaviors.webp" alt="The Behaviors panel: Behaviors of Balloon lists Loop, with Loop set to Cycle and Loop the first (frames) set to 24" width="392" height="360"></figure>
+  <div>
+    <p>Click <b>Add Behavior</b> and choose <b>Loop</b>. Its settings show below the list: <b>Loop</b> is <b>Cycle</b>, round and round, and <b>Loop the first (frames)</b> is 24.</p><p>Loop looks back to where the balloon's keyframes start, frame 1, and repeats their first 24 frames. That is exactly one bob: frame 25 is the same pose as frame 1, so each bob runs into the next without a jump.</p>
+  </div>
+</div>
+
+<h2>5. Play it</h2>
+
+<p>Press <kbd>Enter</kbd>, or click the play button in the timeline header. The balloon bobs all the way to frame 96, four bobs from one set of keys.</p>
+
+<h2>6. Open Function Curves</h2>
+
+<p>Press <kbd>Enter</kbd> again to stop. Choose <span class="menu-path">Window &rsaquo; Function Curves</span>. It opens beside the timeline, narrow. Drag the edge between them to the left until the panel is about half as wide as the window, so the dots on its graph stand apart.</p>
+
+<h2>7. Show the height</h2>
+
+<p>Function Curves shows one property of the layer picked in the timeline, <i>Balloon</i>, over its frames. In the list at its top right, choose <b>Y</b>.</p><p>The solid line is the balloon's height as keyed, with a dot for each keyframe: frames 1, 13 and 25. Y counts down from the top of the stage, so the balloon rising shows as a dip, and after frame 25 the line is flat.</p><p>The dashed line is what Loop makes of it: the same dip, again and again, to the end.</p>
+
+<h2>8. Bob higher</h2>
+
+<p>Double-click the middle dot, on frame 13. In the <b>Keyframe Value</b> window, type <b>230</b> and click <b>OK</b>. You can also drag the dot down; the value shows as you drag.</p><p>The dip gets deeper, and so does every dashed one after it. Loop repeats the keys as they are now, so one change reaches every bob.</p>
+
+<h2>9. Play it</h2>
+
+<p>Press <kbd>Enter</kbd>, or click the play button in the timeline header. The balloon floats higher on every bob, all the way to the end.</p>
+
+<h2>What you did</h2>
+
+<p>You keyed one bob and looped it for the whole shot, then changed every bob at once by changing the one you keyed.</p><p>Keep the first and last keys of a cycle the same, and set <b>Loop the first (frames)</b> to the frames between them, so each time round runs into the next. <b>Back and Forth</b> plays the keyed frames forward and then backward, and <b>Continue</b> carries on the way the motion was going at the speed it ended with: a drift that never stops. Function Curves shows X, rotation, scale, alpha and more the same way; pick one from its list.</p>
+
+<p>For everything this tutorial touches on, see <a href="behaviors.html#the-behaviors">The behaviors</a> and <a href="rigging.html#function-curves">Function curves</a>.</p>
+
+</article>
+</main>
+</body>
+</html>

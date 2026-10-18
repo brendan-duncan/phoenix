@@ -382,6 +382,16 @@ bool BindTool::mousePress(PhoenixView& view, QMouseEvent* event, const QPointF& 
             });
             const bool bound = on != bones.end();
             const Qt::KeyboardModifiers modifiers = event->modifiers();
+            // Alt gives the bone a quarter more of the point, Alt+Shift a
+            // quarter less, the other bones it follows making up the rest.
+            if (modifiers & Qt::AltModifier)
+            {
+                bones = fla::reweighted(bones, _bone, (modifiers & Qt::ShiftModifier) ? -0.25 : 0.25);
+                if (_rebind)
+                    _rebind(view, shape.frame, shape.child, binding);
+                view.update();
+                return true;
+            }
             // Ctrl unbinds, Shift switches, a plain click binds.
             const bool unbind = (modifiers & Qt::ControlModifier) || ((modifiers & Qt::ShiftModifier) && bound);
             if (unbind && bound)
@@ -440,16 +450,36 @@ void BindTool::paintOverlay(PhoenixView& view, QPainter& painter, double scale)
                 painter.drawLine(QPointF(head.x, head.y), QPointF(tail.x, tail.y));
             }
         }
-        // Each point: yellow when it follows the chosen bone, a triangle
-        // when it follows more than one bone, red when it follows none.
+        // Each point: yellow when it follows the chosen bone, paler the less
+        // of it the bone has, a triangle when it follows more than one bone,
+        // red when it follows none.
         for (size_t i = 0; i < shape.shown.size(); ++i)
         {
             const std::vector<fla::BoneWeight>& bones = shape.binding[i];
-            const bool onBone = chosen && std::any_of(bones.begin(), bones.end(),
-                [this](const fla::BoneWeight& bound) { return bound.bone == _bone; });
+            double total = 0.0;
+            double share = 0.0;
+            for (const fla::BoneWeight& bound : bones)
+            {
+                total += std::max(0.0, bound.weight);
+                if (chosen && bound.bone == _bone)
+                    share += std::max(0.0, bound.weight);
+            }
+            share = total > 0.0 ? share / total : 0.0;
+            const bool onBone = share > 0.0;
             const QPointF at = shape.shown[i];
             painter.setPen(QPen(bones.empty() ? QColor(220, 40, 40) : QColor(40, 90, 220), 1.0 * scale));
-            painter.setBrush(onBone ? QColor(255, 220, 0) : QColor(255, 255, 255));
+            painter.setBrush(onBone ? QColor(255, 255 - static_cast<int>(35 * share), 255 - static_cast<int>(255 * share))
+                                    : QColor(255, 255, 255));
+            // How much of a shared point the chosen bone has.
+            if (onBone && share < 0.995)
+            {
+                QFont font = painter.font();
+                font.setPointSizeF(7.0 * scale);
+                painter.save();
+                painter.setFont(font);
+                painter.drawText(at + QPointF(half * 1.6, -half * 1.2), QString("%1%").arg(std::lround(share * 100.0)));
+                painter.restore();
+            }
             if (bones.size() > 1)
             {
                 painter.drawPolygon(QPolygonF({at + QPointF(0.0, -half * 1.2), at + QPointF(half * 1.1, half),

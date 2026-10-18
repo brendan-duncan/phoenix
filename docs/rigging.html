@@ -17,7 +17,7 @@
 <meta property="og:image:alt" content="The Phoenix window with three flower characters on the stage, the timeline below and the Properties panel on the right">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:image" content="https://phoenixanimate.com/assets/shots/hero.webp">
-<meta name="keywords" content="x-sheet exposure sheet peg pivot rig master controller slider deformer curve envelope bend squash function curve graph light table multiplane camera">
+<meta name="keywords" content="x-sheet exposure sheet peg pivot rig master controller slider deformer curve envelope corner pin perspective bend squash function curve graph light table multiplane camera">
 <link rel="icon" href="assets/img/logo.png">
 <link rel="stylesheet" href="assets/site.css">
 <script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
@@ -41,7 +41,7 @@
 
 <p>A controller is one slider that drives several properties at once: a head turn that moves the head, swaps the eyes' drawing and turns the nose. Open <span class="menu-path">Window &rsaquo; Controllers</span> and choose <strong>New...</strong>. Then, for each thing it should drive, pick the layer in the timeline, select the controller and choose <strong>Bind...</strong>: choose the property (X, Y, rotation, scale, scale X, scale Y, alpha, or a graphic's frame) and the values it should have with the slider at 0 and at 1. Both start at the value the layer has now. <strong>Remove</strong> takes out the selected binding or controller.</p>
 
-<p>Dragging the slider sets every property it drives on the frame shown, as one undo step. A layer with no keyframe there gets one; cut into a tween, the new keyframe takes the in-between and both halves keep tweening. What is saved is ordinary keyframes; the controllers themselves are kept with the document for the next time you open it in Phoenix.</p>
+<p>Dragging the slider sets every property it drives on the frame shown, as one undo step. A layer with no keyframe there gets one; cut into a tween, the new keyframe takes the in-between and both halves keep tweening. What is saved is ordinary keyframes; the controllers themselves are kept with the document for the next time you open it in Phoenix. To rig a cat's head turn on one, step by step, follow the <a href="tutorial-head-turn.html">A head turn on a controller</a> tutorial.</p>
 
 <h2>Deformers</h2>
 
@@ -50,21 +50,29 @@
 <ul>
 <li><strong>Curve Deformer</strong> lays a spine along the art. Drag its square anchors and round handles with the Selection tool and the art bends along it, keeping its thickness: an arm at the elbow, a tail, a sway.</li>
 <li><strong>Envelope Deformer</strong> puts a four by four grid of handles around the art. Drag any of them and the art is pulled with it, smoothly, most near the handle: a squash, a stretch, a lean.</li>
+<li><strong>Corner Pin</strong> puts a square handle on each corner of the art. Drag a corner anywhere and the art follows in true perspective, so it looks like it lies on a surface turned away from you: a poster on a wall, a picture on a TV screen, a road going back into the distance. Straight lines stay straight, and the far side gets smaller, as it would on a real wall.</li>
 </ul>
 
-<p>The handles show on a selected instance's keyframe. Each keyframe keeps its own pose, and a classic tween goes from one pose to the next. <strong>Reset Pose</strong> puts the handles back where they started; <strong>Remove Deformer</strong> takes the deformer off. Shapes are bent; bitmaps and text inside the symbol are not.</p>
+<figure>
+  <img src="assets/shots/corner-pin.webp" alt="Two copies of a checkered sign on a wall: on the left as drawn, on the right corner pinned so it turns away to the right, its far edge shorter, its four square handles showing" width="575" height="274">
+  <figcaption>The same sign as drawn (left) and corner pinned onto the wall (right). Drag the square corners to place it.</figcaption>
+</figure>
 
-<p>Deformed art shows bent on the stage and in everything Phoenix exports: movies, image sequences and passes. Other apps that open the FLA show the art as drawn.</p>
+<p>The handles show on a selected instance's keyframe. Each keyframe keeps its own pose, and a classic tween goes from one pose to the next, so a sign can swing open or a screen can slide into place. <strong>Reset Pose</strong> puts the handles back where they started; <strong>Remove Deformer</strong> takes the deformer off. Curve and envelope deformers bend shapes; bitmaps and text inside the symbol are not bent. A corner pin takes everything in the symbol with it: shapes, text, bitmaps and other symbols.</p>
+
+<p>A corner pin works on anything you select. Select loose shapes, a bitmap or text and choose <strong>Corner Pin</strong>, and Phoenix first puts them in a new graphic symbol (named Corner Pin 1, 2 and so on) and pins that. Undo takes both steps back at once.</p>
+
+<p>Deformed art shows bent on the stage and in everything Phoenix exports: movies, image sequences, passes, SWF movies and HTML5 pages. <span class="menu-path">File &rsaquo; Export &rsaquo; Export FLA for Other Apps</span> draws each bent instance into a bitmap, a new one only on the frames where it changes. Other apps that open the FLA as Phoenix saved it show the art as drawn.</p>
 
 <h2>Function curves</h2>
 
 <p><span class="menu-path">Window &rsaquo; Function Curves</span> shows one property of the layer picked in the timeline as a curve over its frames: X, Y, rotation, scale X and Y, skew, alpha, brightness, tint or a graphic's frame, or the camera's pan, zoom and turn on a camera layer. The curve runs through the tweens between keyframes, as they play, and each keyframe is a dot.</p>
 
-<p>Drag a dot up or down to change that keyframe's value, or double-click it to type one; both are one undo step. Click anywhere else in the graph to go to that frame.</p>
+<p>Drag a dot up or down to change that keyframe's value, or double-click it to type one; both are one undo step. Click anywhere else in the graph to go to that frame. To try it, follow the <a href="tutorial-loop-cycle.html">A cycle with Loop</a> tutorial.</p>
 
 <h2>X-sheet</h2>
 
-<p><span class="menu-path">Window &rsaquo; X-Sheet</span> shows the timeline as an exposure sheet: a column per layer, a row per frame, each drawing numbered by its content. Type a drawing number into a cell and press <kbd>Enter</kbd> to expose that drawing there, press <kbd>X</kbd> to hold, or <kbd>Delete</kbd> to clear the cell. The arrow keys move between cells.</p>
+<p><span class="menu-path">Window &rsaquo; X-Sheet</span> shows the timeline as an exposure sheet: a column per layer, a row per frame, each drawing numbered by its content. Type a drawing number into a cell and press <kbd>Enter</kbd> to expose that drawing there, press <kbd>X</kbd> for a blank, or <kbd>Delete</kbd> to clear the keyframe there so the drawing before it holds on. <kbd>Enter</kbd> with nothing typed moves down a row, and the arrow keys move between cells. To time a hop this way, follow the <a href="tutorial-x-sheet.html">Timing with the X-sheet</a> tutorial.</p>
 
 <figure class="narrow">
   <img src="assets/shots/xsheet.webp" alt="The X-Sheet panel: a column for each layer and a row for each frame, with drawing numbers and hold lines" width="391" height="218">
@@ -76,7 +84,7 @@
 
 <h2>Multiplane camera</h2>
 
-<p><span class="menu-path">Insert &rsaquo; Camera</span> adds a camera layer at the top of the scene, running its full length; a scene has one camera. In <span class="menu-path">Window &rsaquo; Layer Depth</span>, drag each layer nearer to or farther from the camera, so a pan moves near layers faster than far ones.</p>
+<p><span class="menu-path">Insert &rsaquo; Camera</span> adds a camera layer at the top of the scene, running its full length; a scene has one camera. In <span class="menu-path">Window &rsaquo; Layer Depth</span>, drag each layer nearer to or farther from the camera, so a pan moves near layers faster than far ones. To try it on a landscape, follow the <a href="tutorial-multiplane-camera.html">Multiplane camera</a> tutorial.</p>
 
 <p>The <a href="stage.html#the-camera">Camera tool</a> (<kbd>C</kbd>) moves the camera: drag to pan, <kbd>Shift</kbd>-drag to zoom and <kbd>Alt</kbd>-drag to turn. Each drag keys the camera on the frame shown, and the camera tweens into that keyframe from the one before. Function Curves shows the camera's pan, zoom and turn on the camera layer. Turn off <span class="menu-path">View &rsaquo; Camera View</span> to see the scene without the camera's moves.</p>
 

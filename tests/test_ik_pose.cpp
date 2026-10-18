@@ -1718,3 +1718,312 @@ TEST(a_stretched_symbol_armature_saves_and_plays)
     CHECK(writer.write(*fla->document, out.string(), "ik_symbols_stretched"));
     std::printf("    written: %s\n", out.string().c_str());
 }
+
+namespace {
+
+/// Three symbol joints in a row along x, 100 pixels apart, one pose held
+/// for 60 frames, the bone from the middle joint on a spring.
+fla::IKArmature sprungTail(double strength = 20.0)
+{
+    std::vector<fla::ArmatureJoint> joints(3);
+    for (int i = 0; i < 3; ++i)
+    {
+        joints[i].position = fla::Point(100.0 * i, 0.0);
+        joints[i].registration = joints[i].position;
+        joints[i].parent = i - 1;
+        joints[i].node = "ikNode_" + std::to_string(i + 1);
+        joints[i].reference = "R" + std::to_string(i + 1);
+    }
+    fla::IKArmature armature;
+    armature.parse(fla::symbolArmatureXml("Armature_1", "ikTreeName1", joints, 60));
+    fla::BoneSpring spring;
+    spring.present = true;
+    spring.strength = strength;
+    spring.damping = 30.0;
+    armature.setSpring(1, spring);
+    return armature;
+}
+
+std::vector<double> anglesOf(const fla::IKArmature& armature, int joint)
+{
+    std::vector<double> angles;
+    for (int frame = 0; frame < armature.frames(); ++frame)
+        angles.push_back(armature.jointsAt(frame)[static_cast<size_t>(joint)].angle);
+    return angles;
+}
+
+} // namespace
+
+TEST(gravity_hangs_sprung_bones_and_is_stored_in_their_frames)
+{
+    fla::IKArmature armature = sprungTail();
+    CHECK(armature.hasSprings() && !armature.forces().any());
+    CHECK(std::fabs(armature.jointsAt(30)[1].angle) < 1.0e-6);
+
+    // Gravity straight down: the sprung bone hangs from the first frame on,
+    // and stays hanging; the joint above, with no spring, keeps its pose.
+    fla::BoneForces forces;
+    forces.gravity = 50.0;
+    armature.setForces(forces);
+    CHECK(armature.forces().gravity == 50.0 && armature.forces().gravityAngle == 90.0);
+    const std::vector<double> hanging = anglesOf(armature, 1);
+    CHECK(hanging[0] > 0.2 && hanging[0] < kPi / 2.0);
+    CHECK(std::fabs(hanging[59] - hanging[0]) < 0.01);
+    CHECK(std::fabs(armature.jointsAt(30)[0].angle) < 1.0e-6);
+    // The bone below hangs off it.
+    CHECK(std::fabs(armature.jointsAt(30)[2].angle - hanging[30]) < 1.0e-6);
+
+    // A stiffer spring gives way less.
+    fla::IKArmature stiff = sprungTail(80.0);
+    stiff.setForces(forces);
+    CHECK(stiff.jointsAt(0)[1].angle > 0.0 && stiff.jointsAt(0)[1].angle < hanging[0] - 0.1);
+
+    // Kept on the tree, and the frames store the hang: read back, or with
+    // Phoenix's own settings gone as another app sees them, the same.
+    const std::string xml = armature.xml();
+    CHECK(xml.find("phoenixGravity=\"50\"") != std::string::npos);
+    CHECK(xml.find("phoenixGravityAngle=\"90\"") != std::string::npos);
+    CHECK(xml.find("phoenixWind") == std::string::npos);
+    fla::IKArmature again;
+    CHECK(again.parse(xml) && again.forces().gravity == 50.0);
+    CHECK(anglesOf(again, 1) == hanging);
+    tinyxml2::XMLDocument plain;
+    CHECK(plain.Parse(xml.c_str()) == tinyxml2::XML_SUCCESS);
+    plain.FirstChildElement("IKTree")->DeleteAttribute("phoenixGravity");
+    plain.FirstChildElement("IKTree")->DeleteAttribute("phoenixGravityAngle");
+    tinyxml2::XMLPrinter printer(nullptr, true);
+    plain.Print(&printer);
+    fla::IKArmature other;
+    CHECK(other.parse(printer.CStr()) && !other.forces().any());
+    CHECK(anglesOf(other, 1) == hanging);
+
+    // Posing a frame where it hangs poses only what changed, not the hang
+    // again on top of itself.
+    std::vector<double> shown;
+    for (const fla::IKJoint& joint : armature.shownAt(10))
+        shown.push_back(joint.angle);
+    const std::vector<double> pose = armature.poseFromShown(10, shown);
+    CHECK(pose.size() == 3 && std::fabs(pose[1]) < 1.0e-9 && std::fabs(pose[2]) < 1.0e-9);
+    shown[0] += 0.5;
+    shown[1] += 0.5;
+    shown[2] += 0.5;
+    const std::vector<double> turned = armature.poseFromShown(10, shown);
+    CHECK(std::fabs(turned[0] - 0.5) < 1.0e-9 && std::fabs(turned[1] - 0.5) < 1.0e-9);
+
+    // Taken away, the pose again.
+    armature.setForces(fla::BoneForces());
+    CHECK(armature.xml().find("phoenixGravity") == std::string::npos);
+    CHECK(std::fabs(armature.jointsAt(30)[1].angle) < 1.0e-6);
+}
+
+TEST(wind_gusts_sway_sprung_bones_the_same_every_time)
+{
+    // Wind blowing up across the bone, gusting.
+    fla::BoneForces forces;
+    forces.wind = 60.0;
+    forces.windAngle = -90.0;
+    forces.gusts = 80.0;
+    forces.gustRate = 1.0;
+    forces.seed = 7;
+    fla::IKArmature armature = sprungTail();
+    armature.setForces(forces);
+    const std::vector<double> swaying = anglesOf(armature, 1);
+    double low = swaying[0];
+    double high = swaying[0];
+    double sum = 0.0;
+    for (double angle : swaying)
+    {
+        low = std::min(low, angle);
+        high = std::max(high, angle);
+        sum += angle;
+    }
+    // Blown up (turned back from the right), more and less as it gusts.
+    CHECK(sum / swaying.size() < -0.1 && low < -0.2);
+    CHECK(high - low > 0.05);
+
+    // Worked out again, it is the same; read back, the same frames.
+    fla::IKArmature same = sprungTail();
+    same.setForces(forces);
+    CHECK(anglesOf(same, 1) == swaying);
+    fla::IKArmature back;
+    CHECK(back.parse(armature.xml()));
+    const fla::BoneForces read = back.forces();
+    CHECK(read.wind == 60.0 && read.windAngle == -90.0 && read.gusts == 80.0 && read.gustRate == 1.0 && read.seed == 7);
+    CHECK(anglesOf(back, 1) == swaying);
+    CHECK(back.setFrames(60));
+    CHECK(anglesOf(back, 1) == swaying);
+
+    // Another seed, other gusts; a steady wind holds still once settled.
+    forces.seed = 8;
+    fla::IKArmature other = sprungTail();
+    other.setForces(forces);
+    CHECK(anglesOf(other, 1) != swaying);
+    forces.gusts = 0.0;
+    fla::IKArmature steady = sprungTail();
+    steady.setForces(forces);
+    CHECK(steady.jointsAt(0)[1].angle < -0.2);
+    CHECK(std::fabs(steady.jointsAt(59)[1].angle - steady.jointsAt(0)[1].angle) < 0.01);
+    CHECK(steady.xml().find("phoenixWindSeed") == std::string::npos);
+
+    // No spring, no sway.
+    fla::IKArmature loose = sprungTail();
+    loose.setSpring(1, fla::BoneSpring());
+    loose.setForces(forces);
+    CHECK(std::fabs(loose.jointsAt(30)[1].angle) < 1.0e-6);
+}
+
+namespace {
+
+/// A rectangle 200 by 40 pixels from the origin with points along its top
+/// at 60, 90, 100, 110 and 140.
+std::unique_ptr<fla::Shape> jointedRectangle()
+{
+    std::unique_ptr<fla::Shape> shape(new fla::Shape(nullptr));
+    PathParser parser;
+    fla::Edge* edge = parser.parse("!0 0|1200 0|1800 0|2000 0|2200 0|2800 0|4000 0|4000 800|0 800|0 0", shape.get());
+    if (edge)
+    {
+        edge->fillStyle1 = 1;
+        shape->edges.push_back(edge);
+    }
+    return shape;
+}
+
+int anchorAt(const std::vector<fla::Point>& anchors, double x, double y)
+{
+    for (size_t i = 0; i < anchors.size(); ++i)
+        if (near(anchors[i], x, y, 0.01))
+            return static_cast<int>(i);
+    return -1;
+}
+
+double weightOf(const std::vector<fla::BoneWeight>& bones, int bone)
+{
+    double weight = 0.0;
+    for (const fla::BoneWeight& bound : bones)
+        if (bound.bone == bone)
+            weight += bound.weight;
+    return weight;
+}
+
+} // namespace
+
+TEST(smoothed_joints_blend_points_between_their_bones)
+{
+    // Bones along the middle of the rectangle, joints at 0, 100 and 200.
+    std::vector<fla::ArmatureJoint> joints(3);
+    for (int i = 0; i < 3; ++i)
+    {
+        joints[i].position = fla::Point(100.0 * i, 20.0);
+        joints[i].registration = joints[i].position;
+        joints[i].parent = i - 1;
+        joints[i].node = "ikNode_" + std::to_string(i + 1);
+    }
+    fla::IKArmature armature;
+    CHECK(armature.parse(fla::armatureXml("Armature_1", "ikTreeName1", joints, 11, true)));
+    std::unique_ptr<fla::Shape> shape = jointedRectangle();
+    const std::vector<fla::Point> anchors = fla::shapeAnchors(*shape);
+    const std::vector<fla::IKJoint> rest = armature.jointsAt(0);
+    const fla::ShapeBinding nearest = fla::bindToNearestBones(anchors, rest);
+    const int at60 = anchorAt(anchors, 60.0, 0.0);
+    const int at90 = anchorAt(anchors, 90.0, 0.0);
+    const int at100 = anchorAt(anchors, 100.0, 0.0);
+    const int at110 = anchorAt(anchors, 110.0, 0.0);
+    const int corner = anchorAt(anchors, 0.0, 0.0);
+    CHECK(at60 >= 0 && at90 >= 0 && at100 >= 0 && at110 >= 0 && corner >= 0);
+    if (at60 < 0 || at90 < 0 || at100 < 0 || at110 < 0 || corner < 0)
+        return;
+    // Nearest bones: one bone each side of the joint, both at it, evenly.
+    CHECK(nearest[at90].size() == 1 && nearest[at90][0].bone == 1);
+    CHECK(nearest[at100].size() == 2);
+    CHECK(armature.smoothness() == 0.0);
+
+    // Smoothed all the way: the weight passes from one bone to the next
+    // over half the shorter bone, 50 pixels, either side of the joint.
+    const fla::ShapeBinding smooth = fla::smoothJoints(nearest, anchors, rest, 100.0);
+    CHECK(std::fabs(weightOf(smooth[at90], 1) - 0.648) < 1.0e-3 && std::fabs(weightOf(smooth[at90], 2) - 0.352) < 1.0e-3);
+    CHECK(std::fabs(weightOf(smooth[at100], 1) - 0.5) < 1.0e-9 && std::fabs(weightOf(smooth[at100], 2) - 0.5) < 1.0e-9);
+    CHECK(std::fabs(weightOf(smooth[at110], 2) - 0.648) < 1.0e-3);
+    CHECK(weightOf(smooth[at60], 2) > 0.0 && weightOf(smooth[at60], 2) < 0.05);
+    CHECK(smooth[corner].size() == 1 && smooth[corner][0].bone == 1 && smooth[corner][0].weight == 1.0);
+    // Less smoothing reaches less far, and a point it no longer reaches
+    // goes back to its own side's bone.
+    const fla::ShapeBinding less = fla::smoothJoints(smooth, anchors, rest, 20.0);
+    CHECK(less[at60].size() == 1 && less[at60][0].bone == 1);
+    CHECK(std::fabs(weightOf(less[at100], 2) - 0.5) < 1.0e-9);
+    // A point that follows some other bone too is left as bound.
+    fla::ShapeBinding mixed = nearest;
+    mixed[at90].push_back({0, 0.5});
+    CHECK(fla::smoothJoint(mixed, anchors, rest, 1, 100.0)[at90].size() == 2);
+
+    // Bent with the far bone turned a quarter down, the point at 90 lands
+    // between where each bone alone takes it: (90, 0) and (120, 10).
+    armature.setBinding(smooth, anchors, fla::Transform());
+    armature.setSmoothness(100.0);
+    fla::IKArmature again;
+    CHECK(again.parse(armature.xml()) && again.bindsAnchors() && again.smoothness() == 100.0);
+    const fla::ShapeBinding read = again.binding();
+    CHECK(read.size() == anchors.size() && std::fabs(weightOf(read[at90], 2) - weightOf(smooth[at90], 2)) < 1.0e-5);
+    CHECK(again.setPose(10, {rest[0].angle, rest[1].angle + kPi / 2.0, rest[2].angle + kPi / 2.0}));
+    fla::bindShape(*shape, fla::Transform(), read, rest, again.shownAt(10));
+    const std::vector<fla::Point> bent = fla::shapeAnchors(*shape);
+    const double w = weightOf(smooth[at90], 2);
+    CHECK(near(bent[at90], 90.0 * (1.0 - w) + 120.0 * w, 10.0 * w, 0.01));
+    CHECK(near(bent[corner], 0.0, 0.0, 0.01));
+    // Bound evenly as before, the point at 90 follows its one bone.
+    std::unique_ptr<fla::Shape> plain = jointedRectangle();
+    fla::bindShape(*plain, fla::Transform(), nearest, rest, again.shownAt(10));
+    CHECK(near(fla::shapeAnchors(*plain)[at90], 90.0, 0.0, 0.01));
+}
+
+TEST(a_point_reweighted_shares_itself_out)
+{
+    std::vector<fla::BoneWeight> even = {{1, 0.5}, {2, 0.5}};
+    std::vector<fla::BoneWeight> more = fla::reweighted(even, 1, 0.25);
+    CHECK(std::fabs(weightOf(more, 1) - 0.75) < 1.0e-9 && std::fabs(weightOf(more, 2) - 0.25) < 1.0e-9);
+    std::vector<fla::BoneWeight> gone = fla::reweighted(more, 1, -1.0);
+    CHECK(gone.size() == 1 && gone[0].bone == 2 && std::fabs(gone[0].weight - 1.0) < 1.0e-9);
+    std::vector<fla::BoneWeight> added = fla::reweighted({{2, 1.0}}, 3, 0.25);
+    CHECK(added.size() == 2 && std::fabs(weightOf(added, 3) - 0.25) < 1.0e-9 && std::fabs(weightOf(added, 2) - 0.75) < 1.0e-9);
+    // A point keeps a bone to follow.
+    std::vector<fla::BoneWeight> last = fla::reweighted({{2, 1.0}}, 2, -0.25);
+    CHECK(last.size() == 1 && last[0].bone == 2 && std::fabs(last[0].weight - 1.0) < 1.0e-9);
+}
+
+TEST(a_locked_bone_holds_while_gravity_pulls_a_sprung_bone_below_it)
+{
+    // The middle bone locked; the last, on a spring, hanging under gravity.
+    fla::IKArmature armature = fourJoints();
+    fla::BoneSpring spring;
+    spring.present = true;
+    spring.strength = 30.0;
+    spring.damping = 50.0;
+    armature.setSpring(2, spring);
+    CHECK(armature.setLocked(2, 0, true));
+    fla::BoneForces forces;
+    forces.gravity = 60.0;
+    armature.setForces(forces);
+    for (int frame : {0, 5, 10})
+    {
+        const std::vector<fla::IKJoint> joints = armature.jointsAt(frame);
+        CHECK(near(joints[1].position, 100.0, 0.0, 1.0e-3) && near(joints[2].position, 200.0, 0.0, 1.0e-3));
+        CHECK(joints[3].position.y > 5.0);
+    }
+
+    // Dragging the hanging bone turns only it: the locked bone stays, and
+    // only the change the drag makes is posed, gravity still on top.
+    const std::vector<fla::IKJoint> start = armature.shownAt(10);
+    const std::vector<fla::IKJoint> solved =
+        fla::solvePose(start, armature.goalsAt(10, start, 3), 3, fla::Point(230.0, -40.0));
+    CHECK(near(solved[2].position, 200.0, 0.0, 1.0e-6) && near(solved[3].position, 230.0, -40.0, 0.05));
+    std::vector<double> angles;
+    for (const fla::IKJoint& joint : solved)
+        angles.push_back(joint.angle);
+    const std::vector<double> posing = armature.poseFromShown(10, angles);
+    CHECK(armature.setPlacedPose(10, solved, &posing));
+    const std::vector<fla::IKJoint> after = armature.jointsAt(10);
+    CHECK(near(after[1].position, 100.0, 0.0, 1.0e-3) && near(after[2].position, 200.0, 0.0, 1.0e-3));
+    // Up and to the right, where it was dragged, with gravity pulling it
+    // down a little.
+    CHECK(after[3].position.y < -10.0 && after[3].position.y > -40.5 && after[3].position.x > 220.0);
+}

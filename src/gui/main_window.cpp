@@ -7,6 +7,7 @@
 #include "stage_controls.h"
 #include "safe_zones_dialog.h"
 #include "../edit/canvas_document.h"
+#include "../edit/depth_sort.h"
 #include "../edit/motion_blur.h"
 #include "../edit/safe_zones.h"
 #include "tutorial_lesson.h"
@@ -3561,6 +3562,11 @@ void MainWindow::setupUI()
             after = fla::motionblur::withOn(*layer, what == "motionblur:on");
             name = "Motion Blur";
         }
+        else if (what.startsWith("depthsort:"))
+        {
+            after = fla::depthsort::withSorting(*layer, what == "depthsort:on");
+            name = "Sort by Depth";
+        }
         else
         {
             after = fla::compositing::withAdjustment(*layer, what == "adjustment:on");
@@ -4299,6 +4305,37 @@ void MainWindow::importAnimatic()
 
 void MainWindow::deformSelection(int what)
 {
+    static const char* const names[] = {"Remove Deformer", "Curve Deformer", "Envelope Deformer", "Reset Pose", "Corner Pin"};
+    fla::CommandStack& stack = _editContext.commandStack();
+    stack.beginMacro(names[what]);
+    // A corner pin on shapes, bitmaps or text: they go into a graphic
+    // symbol of their own first, which the pin then goes on.
+    std::vector<fla::Element*> loose;
+    fla::Frame* looseFrame = nullptr;
+    for (fla::Element* element : selectedElements())
+    {
+        fla::Frame* frame = dynamic_cast<fla::Frame*>(element->parent);
+        if (what == 4 && frame && !dynamic_cast<fla::SymbolInstance*>(element) && (!looseFrame || frame == looseFrame))
+        {
+            looseFrame = frame;
+            loose.push_back(element);
+        }
+    }
+    auto* layerOfLoose = looseFrame ? dynamic_cast<fla::Layer*>(looseFrame->parent) : nullptr;
+    if (!loose.empty() && _flaDocument && _flaDocument->document && _phoenixView && layerOfLoose && !layerOfLoose->isLocked())
+    {
+        fla::Document* document = _flaDocument->document;
+        QRectF bounds;
+        for (fla::Element* element : loose)
+            bounds = bounds.united(_phoenixView->elementBounds(element));
+        std::string symbolName;
+        for (int n = 1; document->symbolList && document->symbolList->symbolMap.count(symbolName = "Corner Pin " +
+            std::to_string(n)); ++n)
+            ;
+        stack.push(fla::CommandPtr(new fla::ConvertToSymbolCommand(document, looseFrame, loose, symbolName,
+            bounds.center().x(), bounds.center().y(), "Convert to Symbol", &_selection, fla::SymbolType::Graphic)));
+        _documentView->setDocument(_flaDocument);
+    }
     std::vector<fla::SymbolInstance*> instances;
     for (fla::Element* element : selectedElements())
         if (auto* instance = dynamic_cast<fla::SymbolInstance*>(element))
@@ -4310,12 +4347,10 @@ void MainWindow::deformSelection(int what)
         }
     if (instances.empty() || !_phoenixView)
     {
-        QMessageBox::information(this, "Deformer", "Select one or more symbol instances.");
+        stack.endMacro();
+        QMessageBox::information(this, "Deformer", what == 4 ? "Select something to pin." : "Select one or more symbol instances.");
         return;
     }
-    static const char* const names[] = {"Remove Deformer", "Curve Deformer", "Envelope Deformer", "Reset Pose"};
-    fla::CommandStack& stack = _editContext.commandStack();
-    stack.beginMacro(names[what]);
     for (fla::SymbolInstance* instance : instances)
     {
         std::optional<fla::deform::Deformer> deformer;
@@ -4327,6 +4362,13 @@ void MainWindow::deformSelection(int what)
                 bounds = QRectF(-50.0, -50.0, 100.0, 100.0);
             deformer = what == 1 ? fla::deform::curveAround(bounds.left(), bounds.top(), bounds.right(), bounds.bottom())
                                  : fla::deform::envelopeAround(bounds.left(), bounds.top(), bounds.right(), bounds.bottom());
+        }
+        else if (what == 4)
+        {
+            QRectF bounds = _phoenixView->symbolBounds(instance->symbol);
+            if (!bounds.isValid() || bounds.isEmpty())
+                bounds = QRectF(-50.0, -50.0, 100.0, 100.0);
+            deformer = fla::deform::cornerPinAround(bounds.left(), bounds.top(), bounds.right(), bounds.bottom());
         }
         else if (what == 3)
         {
@@ -4340,7 +4382,7 @@ void MainWindow::deformSelection(int what)
     stack.endMacro();
     stack.breakMergeChain();
     // The handles are dragged with the Selection tool.
-    if ((what == 1 || what == 2) && _toolbox)
+    if ((what == 1 || what == 2 || what == 4) && _toolbox)
         if (QAction* selection = _toolbox->tool("Selection"))
             selection->trigger();
     _phoenixView->clearCaches();
@@ -4785,8 +4827,11 @@ void MainWindow::addShapeBone(const BoneTool::Link& link)
             return;
         }
         rebuilt.keepAttributesOf(bound.armature);
-        rebuilt.setBinding(fla::bindToNearestBones(bound.anchors, rebuilt.jointsAt(0)), bound.anchors,
-            bound.instance->transform, fla::contourStyle(*bound.rest));
+        // Smoothed again as Smooth Joints last smoothed every joint.
+        fla::ShapeBinding nearest = fla::bindToNearestBones(bound.anchors, rebuilt.jointsAt(0));
+        if (rebuilt.smoothness() > 0.0)
+            nearest = fla::smoothJoints(nearest, bound.anchors, rebuilt.jointsAt(0), rebuilt.smoothness());
+        rebuilt.setBinding(nearest, bound.anchors, bound.instance->transform, fla::contourStyle(*bound.rest));
         fla::carryPoses(bound.armature, rebuilt);
         const std::string poses = poseLocationsOf(*link.armature);
         stack.push(fla::CommandPtr(new fla::PoseArmatureCommand(link.armature, link.child,
@@ -4847,13 +4892,15 @@ void MainWindow::addShapeBone(const BoneTool::Link& link)
         "changes which bone a point follows.", 5000);
 }
 
-void MainWindow::rebindShape(fla::Frame* frame, size_t child, const fla::ShapeBinding& binding)
+void MainWindow::rebindShape(fla::Frame* frame, size_t child, const fla::ShapeBinding& binding, double smoothness)
 {
     BoundShape bound;
     if (!_phoenixView || !BoundShape::find(frame, child, 0, bound))
         return;
     fla::IKArmature armature = bound.armature;
     armature.setBinding(binding, bound.anchors, bound.instance->transform, fla::contourStyle(*bound.rest));
+    if (smoothness >= 0.0)
+        armature.setSmoothness(smoothness);
     const std::string after = armature.xml();
     if (after == frame->extraChildren[child])
         return;
@@ -5125,6 +5172,162 @@ void MainWindow::showBoneMenu(const QPoint& globalPos, const PhoenixView::IKBone
     menu.exec(globalPos);
 }
 
+void MainWindow::editBoneForces()
+{
+    size_t child = 0;
+    int into = 0;
+    fla::Frame* span = currentPoseSpan(child, into);
+    fla::IKArmature armature;
+    if (!span || !_phoenixView || !armature.parse(span->extraChildren[child]))
+    {
+        statusBar()->showMessage("Gravity and wind work on an armature layer's frames.", 4000);
+        return;
+    }
+    const fla::BoneForces forces = armature.forces();
+
+    QDialog dialog(this);
+    dialog.setWindowTitle("Gravity and Wind");
+    QFormLayout* form = new QFormLayout(&dialog);
+    const auto percent = [&dialog](double value, const char* tip) {
+        HotSpinBox* box = new HotSpinBox(&dialog);
+        box->setRange(0, 100);
+        box->setValue(static_cast<int>(std::lround(value)));
+        box->setSpecialValueText("None");
+        box->setToolTip(tip);
+        return box;
+    };
+    const auto direction = [&dialog](double value, const char* tip) {
+        HotDoubleSpinBox* box = new HotDoubleSpinBox(&dialog);
+        box->setRange(-180.0, 180.0);
+        box->setDecimals(0);
+        box->setSuffix(QString(QChar(0x00B0)));
+        box->setValue(value);
+        box->setToolTip(tip);
+        return box;
+    };
+    HotSpinBox* gravity = percent(forces.gravity, "How hard gravity pulls the springy bones; None for no gravity");
+    HotDoubleSpinBox* gravityAngle =
+        direction(forces.gravityAngle, "Which way gravity pulls: 90 is down, 0 right, 180 left, -90 up");
+    HotSpinBox* wind = percent(forces.wind, "How hard the wind blows on the springy bones; None for no wind");
+    HotDoubleSpinBox* windAngle =
+        direction(forces.windAngle, "Which way the wind blows: 0 is to the right, 180 to the left, 90 down");
+    HotSpinBox* gusts = percent(forces.gusts, "How much the wind rises, falls and veers; None for a steady wind");
+    gusts->setSpecialValueText("Steady");
+    HotDoubleSpinBox* gustRate = new HotDoubleSpinBox(&dialog);
+    gustRate->setRange(0.1, 5.0);
+    gustRate->setDecimals(1);
+    gustRate->setSingleStep(0.1);
+    gustRate->setSuffix(" a second");
+    gustRate->setValue(std::clamp(forces.gustRate, 0.1, 5.0));
+    gustRate->setToolTip("About how many gusts come each second");
+    HotSpinBox* seed = new HotSpinBox(&dialog);
+    seed->setRange(1, 9999);
+    seed->setValue(std::clamp(forces.seed, 1, 9999));
+    seed->setToolTip("Another number gives other gusts; the same number always gives the same ones");
+    const auto enable = [=]() {
+        gravityAngle->setEnabled(gravity->value() > 0);
+        windAngle->setEnabled(wind->value() > 0);
+        gusts->setEnabled(wind->value() > 0);
+        gustRate->setEnabled(wind->value() > 0 && gusts->value() > 0);
+        seed->setEnabled(wind->value() > 0 && gusts->value() > 0);
+    };
+    enable();
+    for (HotSpinBox* box : {gravity, wind, gusts})
+        connect(box, &HotText::valueChanged, &dialog, enable);
+    form->addRow("Gravity", gravity);
+    form->addRow("Direction", gravityAngle);
+    form->addRow("Wind", wind);
+    form->addRow("Direction ", windAngle);
+    form->addRow("Gusts", gusts);
+    form->addRow("Gust rate", gustRate);
+    form->addRow("Variation", seed);
+    if (!armature.hasSprings())
+    {
+        QLabel* note = new QLabel("They move only bones with a spring. Click a bone with the Bone tool to give it one.",
+            &dialog);
+        note->setWordWrap(true);
+        form->addRow(note);
+    }
+    QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    form->addRow(buttons);
+    if (dialog.exec() != QDialog::Accepted)
+        return;
+
+    fla::BoneForces chosen;
+    chosen.gravity = gravity->value();
+    chosen.gravityAngle = gravityAngle->value();
+    chosen.wind = wind->value();
+    chosen.windAngle = windAngle->value();
+    chosen.gusts = gusts->value();
+    chosen.gustRate = gustRate->value();
+    chosen.seed = static_cast<int>(seed->value());
+    // Every frame's joints worked out again, the shapes bent and the
+    // instances carried as posing does.
+    const std::string before = span->extraChildren[child];
+    IKPoser poser;
+    poser.change(*_phoenixView, _editContext.commandStack(), span, child,
+        [=](fla::IKArmature& edited) {
+            edited.setForces(chosen);
+            return edited.xml() != before;
+        },
+        "Gravity and Wind");
+}
+
+void MainWindow::smoothShapeJoints()
+{
+    size_t child = 0;
+    int into = 0;
+    fla::Frame* span = currentPoseSpan(child, into);
+    BoundShape bound;
+    if (!span || !_phoenixView || !BoundShape::find(span, child, 0, bound))
+    {
+        statusBar()->showMessage("Smooth Joints works on the frames of a boned shape's armature layer.", 4000);
+        return;
+    }
+    // The Bind tool's bone, when it is one of this armature's.
+    fla::Frame* chosenFrame = nullptr;
+    size_t chosenChild = 0;
+    const int bone = _bindTool ? _bindTool->chosenBone(chosenFrame, chosenChild) : -1;
+    const bool chosen = bone >= 0 && chosenFrame == span && chosenChild == child;
+
+    QDialog dialog(this);
+    dialog.setWindowTitle("Smooth Joints");
+    QFormLayout* form = new QFormLayout(&dialog);
+    HotSpinBox* smoothness = new HotSpinBox(&dialog);
+    smoothness->setRange(1, 100);
+    smoothness->setSuffix("%");
+    smoothness->setValue(bound.armature.smoothness() > 0.0 ? static_cast<int>(std::lround(bound.armature.smoothness())) : 50);
+    smoothness->setToolTip("How far either side of each joint the shape blends from one bone to the next, as a share of "
+                           "half the shorter bone");
+    form->addRow("Smoothness", smoothness);
+    QCheckBox* only = new QCheckBox("Only the joints of the bone chosen with the Bind tool", &dialog);
+    only->setChecked(chosen);
+    only->setEnabled(chosen);
+    form->addRow(only);
+    QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    form->addRow(buttons);
+    if (dialog.exec() != QDialog::Accepted)
+        return;
+
+    const std::vector<fla::IKJoint> joints = bound.armature.jointsAt(0);
+    const double amount = smoothness->value();
+    fla::ShapeBinding binding = bound.binding;
+    if (only->isChecked())
+    {
+        // The joints at either end of the chosen bone.
+        binding = fla::smoothJoint(binding, bound.anchors, joints, bone, amount);
+        if (static_cast<size_t>(bone) < joints.size())
+            binding = fla::smoothJoint(binding, bound.anchors, joints, joints[static_cast<size_t>(bone)].parent, amount);
+        rebindShape(span, child, binding);
+    }
+    else
+        rebindShape(span, child, fla::smoothJoints(binding, bound.anchors, joints, amount), amount);
+}
+
 void MainWindow::addCamera()
 {
     fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
@@ -5220,7 +5423,8 @@ void MainWindow::poseCommand(PoseCommand command)
         done = poser.change(*_phoenixView, _editContext.commandStack(), span, child,
             [into, shown](fla::IKArmature& posed) {
                 const std::vector<int> poses = posed.poses();
-                return std::find(poses.begin(), poses.end(), into) == poses.end() && posed.setPose(into, shown);
+                return std::find(poses.begin(), poses.end(), into) == poses.end() &&
+                    posed.setPose(into, posed.poseFromShown(into, shown));
             },
             "Insert Pose");
     else if (command == PoseCommand::Paste)
@@ -7065,6 +7269,13 @@ void MainWindow::setupMenus()
     poseAction("&Copy Pose", "Copy the armature's pose on this frame", PoseCommand::Copy);
     poseAction("&Paste Pose", "Pose the armature on this frame as the pose copied", PoseCommand::Paste);
     poseAction("C&lear Pose", "Take away the pose on this frame; the armature tweens past it", PoseCommand::Clear);
+    poseMenu->addSeparator();
+    QAction* forcesAction = poseMenu->addAction("&Gravity and Wind...");
+    forcesAction->setStatusTip("Let gravity and wind move the armature's springy bones");
+    connect(forcesAction, &QAction::triggered, this, &MainWindow::editBoneForces);
+    QAction* smoothAction = poseMenu->addAction("&Smooth Joints...");
+    smoothAction->setStatusTip("Blend a boned shape's points between the bones at each joint, for smooth bends");
+    connect(smoothAction, &QAction::triggered, this, &MainWindow::smoothShapeJoints);
     _framesMenu->addSeparator();
     QAction* poseMenuAction = _framesMenu->addMenu(poseMenu);
     connect(_framesMenu, &QMenu::aboutToShow, this, [this, poseMenuAction]() {
@@ -7091,6 +7302,9 @@ void MainWindow::setupMenus()
     QAction* envelopeDeformer = deformMenu->addAction("&Envelope Deformer");
     envelopeDeformer->setStatusTip("Pull the selected symbols by a grid of handles around them");
     connect(envelopeDeformer, &QAction::triggered, this, [this]() { deformSelection(2); });
+    QAction* cornerPin = deformMenu->addAction("Corner &Pin");
+    cornerPin->setStatusTip("Put the selection's four corners anywhere, in perspective: a sign, a screen, a floor");
+    connect(cornerPin, &QAction::triggered, this, [this]() { deformSelection(4); });
     deformMenu->addSeparator();
     QAction* resetDeformer = deformMenu->addAction("&Reset Pose");
     resetDeformer->setStatusTip("Put the selected deformers' handles back where they were set");
@@ -16101,6 +16315,29 @@ void MainWindow::fillOnionMenu(QMenu* menu)
             applyOnion();
         });
     }
+    // Shift and Trace: the ghosts moved, turned and scaled to trace over,
+    // the frames left as they are.
+    menu->addSeparator();
+    QAction* shiftTrace = menu->addAction("Shift and Trace");
+    shiftTrace->setCheckable(true);
+    shiftTrace->setChecked(_phoenixView && _phoenixView->shiftTrace());
+    shiftTrace->setStatusTip("Drag a ghost on the stage to move it, Shift+drag to turn it, Alt+drag to scale it");
+    connect(shiftTrace, &QAction::toggled, this, [this](bool on) {
+        if (!_phoenixView)
+            return;
+        if (on && _onionSkinAction && !_onionSkinAction->isChecked())
+            _onionSkinAction->setChecked(true);
+        _phoenixView->setShiftTrace(on);
+        if (on)
+            statusBar()->showMessage("Shift and Trace: drag a ghost to move it, Shift+drag to turn it, Alt+drag to scale "
+                                     "it. Turn it off to draw.", 8000);
+    });
+    QAction* resetShift = menu->addAction("Reset Shift and Trace", this, [this]() {
+        if (_phoenixView)
+            _phoenixView->resetShiftTrace();
+    });
+    resetShift->setEnabled(_phoenixView && _phoenixView->shiftTraceMoved());
+    resetShift->setStatusTip("Put every shifted ghost back where its frame has it");
     menu->addSeparator();
     menu->addAction("Color Before...", this, [this]() {
         const QColor chosen = QColorDialog::getColor(_onion.beforeColor, this, "Onion Skin: Frames Before");

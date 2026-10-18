@@ -12,6 +12,8 @@
 #include "../data/symbol_list.h"
 #include "../data/timeline.h"
 
+#include <tinyxml2.h>
+
 #include <functional>
 #include <map>
 
@@ -65,10 +67,15 @@ const std::vector<Feature>& all()
         {"3d-rotation", "3D rotation and depth", "the movie clips flat, without their 3D turn, lighting, shadows or depth",
             {"phoenixRotationX", "phoenixRotationY", "phoenixZ", "phoenixPerspectiveAngle", "phoenixLight", "phoenixDepthOfField",
                 "phoenixShadows", "phoenixExtrude"}},
+        {"depth-sorting", "Sorting by depth", "each layer's clips stacked in the order they were placed, whatever their Z",
+            {"phoenixSortByDepth"}},
         {"parenting-options", "Layer parenting options", "child layers taking on all of the parent's transform",
             {"phoenixParentScale", "phoenixParentSkew", "phoenixParentFlip"}},
         {"shape-binding", "Bones bound in Phoenix", "boned shapes as drawn; posing them may bend them differently",
-            {"phoenixBinding"}},
+            {"phoenixBinding", "phoenixSmoothness"}},
+        {"bone-forces", "Gravity and wind on bones", "the bones' sway as baked into their frames, no longer worked out again",
+            {"phoenixGravity", "phoenixGravityAngle", "phoenixWind", "phoenixWindAngle", "phoenixWindGusts",
+                "phoenixWindRate", "phoenixWindSeed"}},
         {"bone-controls", "Bone locks, targets and stretch",
             "the poses as made, which play the same, but the bones no longer lock, reach, keep their angles or stretch when posed",
             {"phoenixLocked", "phoenixTarget", "phoenixTargetPoint", "phoenixIndependent", "phoenixSquash", "phoenixStretch",
@@ -188,19 +195,25 @@ std::vector<Use> used(const Document& document)
                     continue;
                 const std::string at = where + ", frame " + std::to_string(frame->index + 1);
                 note(frame->extraAttributes, at);
-                // An armature's own, inside the IKTree it keeps.
+                // An armature's own, on the IKTree its pose frame keeps.
                 for (const std::string& child : frame->extraChildren)
                 {
-                    if (child.find("<IKTree") == std::string::npos)
+                    if (child.compare(0, 7, "<IKTree") != 0 || child.find("phoenix") == std::string::npos)
                         continue;
-                    Attributes kept;
-                    for (size_t found = child.find(" phoenix"); found != std::string::npos; found = child.find(" phoenix", found + 1))
-                    {
-                        const size_t equals = child.find('=', found);
-                        if (equals != std::string::npos)
-                            kept.emplace_back(child.substr(found + 1, equals - found - 1), std::string());
-                    }
-                    note(kept, at);
+                    tinyxml2::XMLDocument tree;
+                    const tinyxml2::XMLElement* root =
+                        tree.Parse(child.c_str()) == tinyxml2::XML_SUCCESS ? tree.FirstChildElement("IKTree") : nullptr;
+                    // The tree's own, and its nodes' and their poses'.
+                    Attributes attributes;
+                    std::function<void(const tinyxml2::XMLElement*)> gather = [&](const tinyxml2::XMLElement* element) {
+                        for (const tinyxml2::XMLAttribute* each = element->FirstAttribute(); each; each = each->Next())
+                            attributes.emplace_back(each->Name(), each->Value());
+                        for (const tinyxml2::XMLElement* below = element->FirstChildElement(); below; below = below->NextSiblingElement())
+                            gather(below);
+                    };
+                    if (root)
+                        gather(root);
+                    note(attributes, at);
                 }
                 for (const Element* item : frame->elements)
                     element(item, at);

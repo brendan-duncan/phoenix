@@ -4,6 +4,16 @@ What changed in each release of Phoenix, newest first.
 
 ## Unreleased
 
+- Gravity and wind for springy bones (Pose > Gravity and Wind): hair, tails and plants hang and sway with no poses, gusting the same way every time
+- Smooth Joints (Pose > Smooth Joints) blends a boned shape's points between the bones at each joint, so elbows and knees bend in a curve
+- The Bind tool shows how much of each point the chosen bone moves, and Alt-click or Alt+Shift-click gives it more or less
+- Six new tutorials, also lessons in Help > Tutorials: a head turn on a master controller, a multiplane camera move, a cycle with Loop and Function Curves, linked palettes, linked master symbols, and timing with the X-sheet
+- Onion skin Shift and Trace: slide, turn or resize the faint copy of another frame to trace over it, without changing that frame; Reset Shift and Trace puts them back
+- Modify > Deformer > Corner Pin: drag a symbol's four corners anywhere and its art follows in true perspective, for signs, screens and floors; shapes, text and bitmaps are put in a symbol first
+- Corner pins tween between keyframes and show in movies, SWF movies and HTML5 pages
+- Sort by Depth (right-click a layer): its movie clips are drawn by their Z, the furthest behind, and swap places as Z tweens
+- Export FLA for Other Apps lists a depth-sorted layer's clips in depth order, a keyframe a frame where they pass each other
+- Export FLA for Other Apps draws bent instances (corner pins, curve and envelope deformers) into bitmaps, so other apps show them bent
 - Right-click a bone for a bone menu: lock it, give it a target, and set its options
 - Lock a bone, such as a foot, and it stays planted on the stage while you pose the rest; unlock it on the frame where it lifts
 - Drag the joint at an armature's root to move the whole armature, its locked bones staying put

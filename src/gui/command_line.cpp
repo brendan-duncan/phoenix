@@ -51,6 +51,7 @@
 #include <QDir>
 #include <QDockWidget>
 #include <QMenuBar>
+#include <QMouseEvent>
 #include <QTimer>
 #include <QDirIterator>
 #include <QElapsedTimer>
@@ -155,7 +156,7 @@ const char* const kHelp =
     "  capture-window <file|-> --out <png> [--script <jsfl>] [--size WxH]\n"
     "                 [--show <panel>] [--panel <name>] [--menu <path>]\n"
     "                 [--action <path> [--press <button>]] [--crop x,y,w,h]\n"
-    "                 [--dock-width N]\n"
+    "                 [--dock-width N] [--trigger <path>] [--drag x1,y1,x2,y2[,shift|alt]]\n"
     "                 [--theme <name>]\n"
     "      Draws the window with the file open, unseen, with default\n"
     "      settings, after the script has set it up (selected something,\n"
@@ -163,7 +164,9 @@ const char* const kHelp =
     "      by its object name; --panel draws one panel or widget rather than\n"
     "      the window, --menu one menu (\"Modify>Bitmap\"), --action the dialog\n"
     "      a menu item opens (--press clicks one of its buttons first, by its\n"
-    "      text). Nothing is saved.\n"
+    "      text). --trigger runs a menu item (\"View>Onion Skin\") and --drag\n"
+    "      drags on the stage, in its own pixels, before the picture is\n"
+    "      taken. Nothing is saved.\n"
     "\n"
     "  run-script <script.jsfl|script.py> [document ...] [--timeout SECONDS]\n"
     "             [--no-native-extensions]\n"
@@ -1421,6 +1424,45 @@ int captureWindow(const QStringList& args)
     }
     window.refreshAfterScript();
     settle(500);
+    // Menu items turned on or run (--trigger), then drags on the stage
+    // (--drag x1,y1,x2,y2 in the stage's own widget, with ,shift or ,alt
+    // held), in the order given.
+    for (int i = 0; i + 1 < args.size(); ++i)
+        if (args.at(i) == "--trigger")
+        {
+            QAction* action = menuAction(window, args.at(i + 1));
+            if (!action)
+            {
+                std::fprintf(stderr, "capture-window: no menu item %s\n", qPrintable(args.at(i + 1)));
+                return 1;
+            }
+            action->trigger();
+            settle(200);
+        }
+        else if (args.at(i) == "--drag")
+        {
+            const QStringList parts = args.at(i + 1).split(',');
+            PhoenixView* stage = window.findChild<PhoenixView*>();
+            if (parts.size() < 4 || !stage)
+            {
+                std::fprintf(stderr, "capture-window: --drag x1,y1,x2,y2[,shift|alt]\n");
+                return 1;
+            }
+            const Qt::KeyboardModifiers held = parts.value(4) == "shift" ? Qt::ShiftModifier
+                : parts.value(4) == "alt"                                ? Qt::AltModifier
+                                                                         : Qt::NoModifier;
+            const QPointF from(parts.at(0).toDouble(), parts.at(1).toDouble());
+            const QPointF to(parts.at(2).toDouble(), parts.at(3).toDouble());
+            const auto send = [&](QEvent::Type type, const QPointF& at, Qt::MouseButtons buttons) {
+                QMouseEvent event(type, at, stage->mapToGlobal(at), Qt::LeftButton, buttons, held);
+                QApplication::sendEvent(stage, &event);
+            };
+            send(QEvent::MouseButtonPress, from, Qt::LeftButton);
+            for (int step = 1; step <= 8; ++step)
+                send(QEvent::MouseMove, from + (to - from) * (step / 8.0), Qt::LeftButton);
+            send(QEvent::MouseButtonRelease, to, Qt::NoButton);
+            settle(200);
+        }
 
     QPixmap picture;
     const QString panel = option(args, "--panel");

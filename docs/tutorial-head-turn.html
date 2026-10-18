@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A head turn on a controller · Phoenix User Guide</title>
+<meta name="description" content="Turn a cat's head with one slider: a master controller slides its face, swaps its ears' drawing and tips its tuft, then keys each pose for you.">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Phoenix">
+<meta property="og:title" content="A head turn on a controller · Phoenix User Guide">
+<meta property="og:description" content="Turn a cat's head with one slider: a master controller slides its face, swaps its ears' drawing and tips its tuft, then keys each pose for you.">
+<meta property="og:url" content="https://phoenixanimate.com/tutorial-head-turn.html">
+<meta property="og:image" content="https://phoenixanimate.com/assets/shots/hero.webp">
+<meta property="og:image:type" content="image/webp">
+<meta property="og:image:width" content="1704">
+<meta property="og:image:height" content="1061">
+<meta property="og:image:alt" content="The Phoenix window with three flower characters on the stage, the timeline below and the Properties panel on the right">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://phoenixanimate.com/assets/shots/hero.webp">
+<meta name="keywords" content="tutorial lesson step by step head turn master controller slider rig bind pose keyframes graphic frame cut-out character">
+<link rel="icon" href="assets/img/logo.png">
+<link rel="stylesheet" href="assets/site.css">
+<script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<main>
+<article class="content">
+
+<p class="eyebrow">Tutorials</p>
+
+<h1>A head turn on a controller</h1>
+
+<p class="lead">Turn a cat's head with one slider: a master controller slides its face, swaps its ears' drawing and tips its tuft, then keys each pose for you.</p>
+
+<div class="callout">
+  <span class="label">Try it in Phoenix</span>
+  <p>This page is also a lesson inside Phoenix: choose <span class="menu-path">Help &rsaquo; Tutorials...</span> and start <strong>A head turn on a controller</strong>, and Phoenix points at each control as you go. It takes about 8 minutes.</p>
+</div>
+
+<p>To follow along here instead, download the starting document, <a href="assets/tutorials/head-turn.fla" download>head-turn.fla</a>, and open it with <span class="menu-path">File &rsaquo; Open...</span>.</p>
+
+<figure>
+  <img src="assets/shots/tutorial-head-turn.webp" alt="Three copies of Pip, an orange cat in a green sweater: looking left, looking straight ahead and looking right, the face, ears and tuft of fur moved for each" width="1000" height="294">
+  <figcaption>Pip turned by one slider: at 0, in the middle and at 1.</figcaption>
+</figure>
+
+<p>When a head turns, many parts move at once: the face slides across, the ears shift, the fur on top tips over. A <b>master controller</b> is one slider that moves them all together, so you pose the turn in one drag instead of part by part.</p><p>Pip is built from symbols on separate layers. <i>Tuft</i> is the curl of fur on top, <i>Face</i> the eyes, nose and mouth, <i>Head</i> the round head and <i>Ears</i> a graphic symbol with three drawings of the ears: turned left on frame 1, facing you on frame 2 and turned right on frame 3.</p>
+
+<h2>1. Open the Controllers panel</h2>
+
+<p>Choose <span class="menu-path">Window &rsaquo; Controllers</span>.</p>
+
+<h2>2. Make a controller</h2>
+
+<p>In the <b>Controllers</b> panel, click <b>New...</b>. Type <i>Turn</i> as its name and click <b>OK</b>. It shows in the list, driving nothing yet.</p>
+
+<h2>3. Bind the face</h2>
+
+<p>In the timeline, click frame 1 of the <i>Face</i> layer: the controller drives the layer picked there. Then click <b>Bind...</b> in the Controllers panel.</p><p>Leave <b>Property</b> at <b>X</b>. <b>At 0</b> and <b>At 1</b> both show 640, where the face is now. Set <b>At 0</b> to 590 and <b>At 1</b> to 690, and click <b>OK</b>: the face slides 50 pixels to the left with the slider at 0, and 50 to the right at 1.</p>
+
+<h2>4. Bind the ears</h2>
+
+<p>Click frame 1 of the <i>Ears</i> layer, then <b>Bind...</b>.</p><p>Set <b>Property</b> to <b>Frame (graphic)</b>: which drawing of <i>Ears</i> shows. Set <b>At 0</b> to 1 (turned left) and <b>At 1</b> to 3 (turned right), and click <b>OK</b>. In the middle of the slider, the ears show frame 2, facing you.</p>
+
+<h2>5. Bind the tuft</h2>
+
+<p>Click frame 1 of the <i>Tuft</i> layer, then <b>Bind...</b>.</p><p>Set <b>Property</b> to <b>Rotation</b>, <b>At 0</b> to -25 and <b>At 1</b> to 25, and click <b>OK</b>. The tuft turns about its root, so it tips the way Pip looks.</p>
+
+<figure class="narrow">
+  <img src="assets/shots/head-turn-controllers.webp" alt="The Controllers panel: the controller Turn driving 3 properties, Face X from 590 to 690, Ears Frame (graphic) from 1 to 3 and Tuft Rotation from -25 to 25, with the slider below and the New, Bind and Remove buttons" width="390" height="220">
+  <figcaption>The <b>Controllers</b> panel with <i>Turn</i> and its three bindings, one under another.</figcaption>
+</figure>
+
+<h2>6. Try it</h2>
+
+<p>Under the list, drag the slider slowly from one end to the other. Pip looks left, then right: the face slides, the ears change drawing and the tuft tips over, all from one slider.</p><p>Leave it in the middle, at about <b>0.50</b>, so Pip looks straight at you on frame 1.</p>
+
+<h2>7. Look right</h2>
+
+<p>Click frame 13 of the <i>Face</i> layer to go there. Drag the slider all the way to the right, to <b>1.00</b>.</p><p>The <i>Tuft</i>, <i>Face</i> and <i>Ears</i> layers each get a keyframe on frame 13 holding the pose: the controller keys every layer it drives on the frame shown.</p>
+
+<h2>8. Look left</h2>
+
+<p>Click frame 31 of the <i>Face</i> layer, and drag the slider all the way to the left, to <b>0.00</b>.</p>
+
+<figure>
+  <img src="assets/shots/head-turn-timeline.webp" alt="The timeline: the Tuft, Face and Ears layers with keyframes on frames 1, 13 and 31, and the Head, Body and Backdrop layers with one keyframe each" width="900" height="126">
+  <figcaption>Each pose keys the three layers the controller drives, on the frame shown.</figcaption>
+</figure>
+
+<h2>9. Play it</h2>
+
+<p>Press <kbd>Enter</kbd>, or click the play button in the timeline header. Pip looks at you, glances right, then left.</p>
+
+<h2>What you did</h2>
+
+<p>You rigged a head turn on one slider and keyed three poses with it. Each drag is one step, so <span class="menu-path">Edit &rsaquo; Undo</span> takes a pose back. What is saved is ordinary keyframes, which play anywhere the file opens; the controller itself is kept with the document for the next time you open it in Phoenix.</p><p>A controller can drive X, Y, rotation, scale, alpha or a graphic's frame on any number of layers, and layers inside a symbol too: edit the symbol, then pick its layers when you bind. To change a binding, select it in the list and click <b>Remove</b>, then bind it again.</p><p>Here Pip snaps from one pose to the next. For a smoother turn, key more poses a frame or two apart with the slider part way, such as 0.75 on frame 11 before 1.00 on frame 13.</p>
+
+<p>For everything this tutorial touches on, see <a href="rigging.html#master-controllers">Master controllers</a> and <a href="symbols.html">Symbols</a>.</p>
+
+</article>
+</main>
+</body>
+</html>

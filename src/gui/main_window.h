@@ -357,7 +357,9 @@ private slots:
     void addShapeBone(const BoneTool::Link& link);
     /// The Bind tool's change to which bones a boned shape's points follow,
     /// with every frame of its span bent again by it, as one undo step.
-    void rebindShape(fla::Frame* frame, size_t child, const fla::ShapeBinding& binding);
+    /// \a smoothness, when not negative, is kept as the armature's own (see
+    /// IKArmature::smoothness).
+    void rebindShape(fla::Frame* frame, size_t child, const fla::ShapeBinding& binding, double smoothness = -1.0);
 
     /// How far a joint of the armature on \a frame may turn, in a dialog.
     void editJointLimits(fla::Frame* frame, size_t child, int joint);
@@ -899,6 +901,13 @@ private:
     void poseCommand(PoseCommand command);
     /// The joints' angles Copy Pose took.
     std::vector<double> _copiedPose;
+    /// Pose > Gravity and Wind: the forces on the sprung bones of the
+    /// armature at the playhead, in a dialog.
+    void editBoneForces();
+    /// Pose > Smooth Joints: the boned shape at the playhead's points shared
+    /// out between the bones either side of each joint (or of the Bind
+    /// tool's chosen bone's), in a dialog.
+    void smoothShapeJoints();
     /// Window > Collapse ... Panels to Icons: the panels docked on \a area
     /// folded to a strip of their names beside the stage, each opening
     /// beside it; or put back.
