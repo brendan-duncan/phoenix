@@ -1446,3 +1446,192 @@ TEST(locks_targets_and_bone_options_round_trip_and_play_without_phoenix)
             CHECK(near(posed[i].position, shown[i].position.x, shown[i].position.y, 0.05));
     }
 }
+
+namespace {
+
+/// A shape boned by the Bone tool on a new document, held for 11 frames:
+/// \a outline (edge text, in twips) with a chain of bones through \a at.
+struct BonedPart
+{
+    std::unique_ptr<fla::FLADocument> fla;
+    fla::BonedShape boned;
+    fla::IKArmature armature;
+    /// The joints and the shape as the Bone tool made them.
+    std::vector<fla::IKJoint> rest;
+    std::unique_ptr<fla::Shape> restShape;
+};
+
+bool bonePart(BonedPart& part, const char* outline, const std::vector<fla::Point>& at)
+{
+    part.fla.reset(fla::createEmptyDocument(640, 360));
+    if (!part.fla || !part.fla->document || part.fla->document->timelines.empty())
+        return false;
+    fla::Document* document = part.fla->document;
+    fla::Timeline* scene = document->timelines.front();
+    fla::Layer* layer = scene->layers.front();
+    fla::Frame* frame = layer->frames.front();
+    frame->duration = 11;
+    fla::Shape* shape = new fla::Shape(frame);
+    PathParser parser;
+    fla::Edge* edge = parser.parse(outline, shape);
+    if (!edge)
+        return false;
+    edge->fillStyle1 = 1;
+    shape->edges.push_back(edge);
+    fla::SolidColor* fill = new fla::SolidColor(shape);
+    fill->color[0] = 240;
+    fill->color[1] = 150;
+    fill->color[2] = 60;
+    shape->fills.push_back(fill);
+    shape->fillsMap[1] = fill;
+    frame->elements.push_back(shape);
+    std::vector<fla::ArmatureJoint> joints(at.size());
+    for (size_t i = 0; i < at.size(); ++i)
+    {
+        joints[i].position = at[i];
+        joints[i].parent = static_cast<int>(i) - 1;
+        joints[i].node = "ikNode_" + std::to_string(i + 1);
+    }
+    part.boned = fla::boneShape(*scene, *layer, *frame, *shape, joints, "lsd_1", "Armature_1", "ikTreeName1");
+    if (!part.boned.symbol)
+        return false;
+    if (!document->symbolList)
+        document->symbolList = new fla::SymbolList(document);
+    part.boned.symbol->parent = document->symbolList;
+    document->symbolList->symbols.push_back(part.boned.symbol);
+    document->symbolList->link(part.boned.symbol);
+    frame->elements.clear();
+    delete shape;
+    scene->layers.insert(scene->layers.begin(), part.boned.layer);
+    part.armature.parse(part.boned.pose->extraChildren.back());
+    part.rest = part.armature.shownAt(0);
+    const fla::Frame* first = part.boned.symbol->timelines.front()->layers.front()->frames.front();
+    part.restShape.reset(fla::cloneShape(*static_cast<const fla::Shape*>(first->elements.front()), nullptr));
+    return true;
+}
+
+/// The part's shape on each frame, bent to the armature as posing bends it.
+fla::Shape* partShape(BonedPart& part, int frame)
+{
+    return static_cast<fla::Shape*>(part.boned.symbol->timelines.front()->layers.front()->frames[frame]->elements.front());
+}
+
+/// Bends every frame of the part's shape to its armature, as posing does,
+/// keeps the armature on its pose frame, and writes the document as an XFL
+/// folder named \a name for the guide's pictures.
+void bendAndWrite(BonedPart& part, const std::string& name)
+{
+    std::string poses;
+    for (int pose : part.armature.poses())
+        poses += (poses.empty() ? "" : ",") + std::to_string(pose);
+    fla::PoseArmatureCommand::apply(part.boned.pose, part.boned.pose->extraChildren.size() - 1, part.armature.xml(), poses);
+    for (int k = 0; k < part.armature.frames(); ++k)
+    {
+        std::unique_ptr<fla::Shape> bent(fla::cloneShape(*part.restShape, nullptr));
+        fla::bindShape(*bent, part.boned.instance->transform, part.armature.binding(), part.rest, part.armature.shownAt(k));
+        fla::setShapeContents(*partShape(part, k), *bent);
+    }
+    const std::filesystem::path out = std::filesystem::temp_directory_path() / "phoenix_ik_tests" / name;
+    std::filesystem::remove_all(out);
+    fla::XFLFolderWriter writer;
+    CHECK(writer.write(*part.fla->document, out.string(), name));
+    std::printf("    written: %s\n", out.string().c_str());
+}
+
+/// A leg from the hip at (300, 100) to the knee at (300, 180), the ankle at
+/// (300, 262) and the toe at (365, 262).
+const char* const kLeg = "!5600 1800|6400 1800|6400 3600|6400 5000|7400 5000|7400 5500|5600 5500|5600 3600|5600 1800";
+const std::vector<fla::Point> kLegJoints = {fla::Point(300.0, 100.0), fla::Point(300.0, 180.0), fla::Point(300.0, 262.0),
+    fla::Point(365.0, 262.0)};
+
+} // namespace
+
+TEST(bone_controls_bend_a_boned_shape)
+{
+    // The foot locked, the hip moved down and forward on the last pose: the
+    // foot's points stay where they were on every frame.
+    {
+        BonedPart leg;
+        CHECK(bonePart(leg, kLeg, kLegJoints));
+        CHECK(leg.armature.setLocked(3, 0, true));
+        const std::vector<fla::IKJoint> start = leg.armature.shownAt(10);
+        CHECK(leg.armature.setPlacedPose(10,
+            fla::solvePose(movedBy(start, 40.0, 30.0), leg.armature.goalsAt(10, start), -1, fla::Point())));
+        bendAndWrite(leg, "bone_lock");
+        const std::vector<fla::Point> first = fla::shapeAnchors(*partShape(leg, 0));
+        for (int frame : {5, 10})
+        {
+            const std::vector<fla::Point> later = fla::shapeAnchors(*partShape(leg, frame));
+            CHECK(later.size() == 8 && near(later[4], first[4].x, first[4].y, 0.2) && near(later[5], first[5].x, first[5].y, 0.2));
+            // The hip has moved.
+            CHECK(later[0].x > first[0].x + 10.0 && later[0].y > first[0].y + 10.0);
+        }
+    }
+    // The ankle reaches for a point that moves on the last pose.
+    {
+        BonedPart leg;
+        CHECK(bonePart(leg, kLeg, kLegJoints));
+        fla::BoneTarget point;
+        point.point = true;
+        point.at = fla::Point(300.0, 262.0);
+        CHECK(leg.armature.setTarget(2, 0, point));
+        point.at = fla::Point(370.0, 190.0);
+        CHECK(leg.armature.setTarget(2, 10, point, false));
+        CHECK(near(leg.armature.jointsAt(10)[2].position, 370.0, 190.0, 0.1));
+        bendAndWrite(leg, "bone_target");
+    }
+    // The thigh swung forward with the foot keeping its angle.
+    {
+        BonedPart leg;
+        CHECK(bonePart(leg, kLeg, kLegJoints));
+        fla::BoneOptions level;
+        level.independent = true;
+        leg.armature.setOptions(3, level);
+        const std::vector<fla::IKJoint> start = leg.armature.shownAt(10);
+        CHECK(leg.armature.setPlacedPose(10,
+            fla::solvePose(start, leg.armature.goalsAt(10, start, 1), 1, fla::Point(360.0, 150.0))));
+        CHECK(std::fabs(leg.armature.jointsAt(10)[2].angle - leg.armature.jointsAt(0)[2].angle) < 1.0e-6);
+        CHECK(std::fabs(leg.armature.jointsAt(10)[0].angle - leg.armature.jointsAt(0)[0].angle) > 0.5);
+        bendAndWrite(leg, "bone_independent");
+    }
+    // The lower half of a post stretched to twice its length, keeping its
+    // volume: half as wide.
+    {
+        BonedPart post;
+        CHECK(bonePart(post, "!5600 1800|6400 1800|6400 3600|6400 5400|5600 5400|5600 3600|5600 1800",
+            {fla::Point(300.0, 100.0), fla::Point(300.0, 180.0), fla::Point(300.0, 260.0)}));
+        fla::BoneOptions squash;
+        squash.squash = true;
+        squash.keepVolume = true;
+        post.armature.setOptions(2, squash);
+        const std::vector<fla::IKJoint> start = post.armature.shownAt(10);
+        CHECK(post.armature.setPlacedPose(10,
+            fla::stretchBone(start, 2, fla::Point(300.0, 340.0), post.armature.goalsAt(10, start, 2))));
+        bendAndWrite(post, "bone_squash");
+        // Its bottom corner, 20 to the side and 90 past the middle joint,
+        // now 10 to the side and 180 past it (in the container's space).
+        const fla::Point middle = post.armature.jointsAt(10)[1].position;
+        const fla::Transform& placed = post.boned.instance->transform;
+        const fla::Point corner = mapped(placed, fla::shapeAnchors(*partShape(post, 10))[3]);
+        CHECK(near(corner, middle.x + 10.0, middle.y + 180.0, 0.2));
+    }
+    // The ankle reaching for a point past the leg's length, the thigh and
+    // shin stretching up to half as long again to get there.
+    {
+        BonedPart leg;
+        CHECK(bonePart(leg, kLeg, kLegJoints));
+        fla::BoneOptions grow;
+        grow.maxStretch = 1.5;
+        leg.armature.setOptions(1, grow);
+        leg.armature.setOptions(2, grow);
+        fla::BoneTarget point;
+        point.point = true;
+        point.at = fla::Point(300.0, 262.0);
+        CHECK(leg.armature.setTarget(2, 0, point));
+        point.at = fla::Point(380.0, 310.0);
+        CHECK(leg.armature.setTarget(2, 10, point, false));
+        CHECK(near(leg.armature.jointsAt(10)[2].position, 380.0, 310.0, 0.5));
+        CHECK(leg.armature.jointsAt(10)[2].stretch > 1.2);
+        bendAndWrite(leg, "bone_stretch");
+    }
+}
