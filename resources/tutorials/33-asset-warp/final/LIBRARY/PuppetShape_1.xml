@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<DOMSymbolItem xmlns="http://ns.adobe.com/xfl/2008/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" name="PuppetShape_1" itemID="6ad5255a-9344ba40" lastModified="1792353626" symbolType="puppet" puppetData="[{&quot;type&quot;:&quot;bitmap&quot;}]">
+    <timeline>
+        <DOMTimeline name="PuppetShape_1">
+            <layers>
+                <DOMLayer name="Layer_1" color="#00FFFF" current="true" isSelected="true" autoNamed="false">
+                    <frames>
+                        <DOMFrame index="0" keyMode="9728">
+                            <elements>
+                                <DOMSymbolInstance libraryItemName="WarpedAsset_1" symbolType="graphic" loop="play once"/>
+                            </elements>
+                        </DOMFrame>
+                    </frames>
+                </DOMLayer>
+            </layers>
+        </DOMTimeline>
+    </timeline>
+</DOMSymbolItem>

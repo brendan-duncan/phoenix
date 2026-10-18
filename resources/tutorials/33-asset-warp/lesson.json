@@ -1,0 +1,91 @@
+{
+  "title": "Warp a picture with pins",
+  "summary": "Pin a gingerbread cookie picture with the Asset Warp tool and bend it: wave an arm, tilt the head, freeze the tummy, keep a leg stiff with a bone, then tween the wave.",
+  "minutes": 9,
+  "order": 33,
+  "guide": "bones.html",
+  "tags": ["Animation", "Rigging"],
+  "start": {"document": "start"},
+  "final": "final",
+  "steps": [
+    {
+      "title": "Welcome",
+      "text": "<p>The cookie on the <i>Cookie</i> layer is a picture, a PNG, not a drawing. The Asset Warp tool bends a picture, a shape or a graphic symbol around pins you stick in it, like a puppet.</p>"
+    },
+    {
+      "title": "Choose the Asset Warp tool",
+      "text": "<p>Press <kbd>Shift</kbd>+<kbd>W</kbd>, or choose the Asset Warp tool from the Bone tool's slot: press and hold the slot, then choose <b>Asset Warp</b>.</p>",
+      "target": "tool:Asset Warp",
+      "wait": {"tool": "Asset Warp"}
+    },
+    {
+      "title": "Make it a puppet",
+      "text": "<p>Click the cookie's tummy, on its middle button. Phoenix makes the picture a puppet, with a pin where you clicked. The picture goes into a graphic symbol, <i>WarpedAsset_1</i>, inside a puppet symbol, <i>PuppetShape_1</i>; both are in the library.</p>",
+      "target": "stage:610,350,60,60",
+      "wait": {"command": "Make Puppet"}
+    },
+    {
+      "title": "Pin the hands, feet and face",
+      "text": "<p>Click once on each hand, once on each foot and once on the face, between the eyes and the smile. Each click adds a pin, a small white circle. Then click <b>Next</b>.</p><p>Pins hold the picture where they are. When you move one, the picture bends between it and the others.</p>",
+      "target": "stage:470,200,340,390"
+    },
+    {
+      "title": "Wave",
+      "text": "<p>Drag the pin on the hand at the right of the picture up and out, above the shoulder. The arm bends up to follow while the other pins hold the rest of the cookie still.</p>",
+      "target": "stage:740,220,120,180",
+      "wait": {"command": "Move Pin"}
+    },
+    {
+      "title": "Tilt the head",
+      "text": "<p>Hold <kbd>Shift</kbd> and drag from the face's pin out to the right and a little down. A <kbd>Shift</kbd>-drag turns a pin, and the picture round it, without moving it: the head tilts. A turned pin shows a tick the way it turned.</p>",
+      "target": "stage:600,210,90,70",
+      "wait": {"command": "Turn Pin"}
+    },
+    {
+      "title": "Freeze the tummy",
+      "text": "<p>Click the tummy's pin, then press <kbd>F</kbd>. The pin turns square: it is frozen, and the picture round it keeps its angle while the pins about it move, so the buttons stay upright.</p>",
+      "target": "stage:610,350,60,60",
+      "wait": {"command": "Freeze Pin"}
+    },
+    {
+      "title": "A stiff leg",
+      "text": "<p>Click the cookie's left hip, at the left of the picture just below the bottom button, to add a pin there. Then hold <kbd>Ctrl</kbd> and click the pin on the left foot. A line joins the two pins: a bone. The picture along a bone stays on the line between its pins, like a stiff limb.</p>",
+      "target": "stage:540,420,90,160",
+      "wait": {"command": "Add Bone"}
+    },
+    {
+      "title": "Kick",
+      "text": "<p>Drag the left foot's pin out to the left a little. The whole leg swings out straight along the bone instead of bending.</p>",
+      "target": "stage:490,500,110,80",
+      "wait": {"command": "Move Pin"}
+    },
+    {
+      "title": "A second keyframe",
+      "text": "<p>Click frame 12 of the <i>Cookie</i> layer and choose <b>Insert &gt; Timeline &gt; Keyframe</b>. Each keyframe keeps its own pins.</p>",
+      "target": "menu:Insert/Timeline/Keyframe",
+      "wait": {"command": "Insert Keyframe"}
+    },
+    {
+      "title": "Lower the hand",
+      "text": "<p>With the Asset Warp tool, click the tummy's pin to show the pins on this keyframe. Then drag the raised hand's pin down and out, level with the shoulder.</p>",
+      "target": "stage:760,220,140,160",
+      "wait": {"command": "Move Pin"}
+    },
+    {
+      "title": "Tween the wave",
+      "text": "<p>Click frame 6 of the <i>Cookie</i> layer and choose <b>Insert &gt; Classic Tween</b>. The tween bends the picture from one keyframe's pins to the other's.</p>",
+      "target": "menu:Insert/Classic Tween",
+      "wait": {"command": "Create Classic Tween"}
+    },
+    {
+      "title": "Play it",
+      "text": "<p>Press <kbd>Enter</kbd>, or click the play button in the timeline header. The cookie waves.</p>",
+      "target": "widget:timelinePlay",
+      "wait": {"playing": true}
+    },
+    {
+      "title": "What you did",
+      "text": "<p>You turned a picture into a puppet and bent it with pins: moved, turned, frozen and joined by a bone. Making the puppet and each pin change are single steps to undo.</p><p>To take a pin away, <kbd>Alt</kbd>-click it, or click it and press <kbd>Delete</kbd>. <kbd>Ctrl</kbd>-clicking a pin already joined to the chosen one takes the bone away again. Pins work the same on shapes, groups and graphic symbols.</p>"
+    }
+  ]
+}

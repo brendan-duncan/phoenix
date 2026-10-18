@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<DOMSymbolItem xmlns="http://ns.adobe.com/xfl/2008/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" name="WarpedAsset_1" itemID="6ad5255a-9344cae0" lastModified="1792353626" symbolType="graphic">
+    <timeline>
+        <DOMTimeline name="WarpedAsset_1">
+            <layers>
+                <DOMLayer name="Layer_1" color="#00FFFF" current="true" isSelected="true" autoNamed="false">
+                    <frames>
+                        <DOMFrame index="0" keyMode="9728">
+                            <elements>
+                                <DOMBitmapInstance libraryItemName="cookie.png">
+                                    <matrix>
+                                        <Matrix tx="-180" ty="-220"/>
+                                    </matrix>
+                                </DOMBitmapInstance>
+                            </elements>
+                        </DOMFrame>
+                    </frames>
+                </DOMLayer>
+            </layers>
+        </DOMTimeline>
+    </timeline>
+</DOMSymbolItem>
