@@ -5,8 +5,7 @@
   "order": 40,
   "guide": "pipeline.html#linked-shared-assets",
   "tags": [
-    "Symbols",
-    "Pipeline"
+    "Symbols"
   ],
   "start": {
     "document": "start"
