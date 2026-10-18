@@ -4,11 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Masks and guides · Phoenix User Guide</title>
-<meta name="description" content="Reveal artwork through mask layers, keep reference artwork on guide layers, and move objects along a path with motion guides.">
+<meta name="description" content="Mask layers and masking several layers, animated, soft, grown and inverted masks, several masks per layer, layer modes, guide layers, and motion guides that move a classic tween along a path.">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Phoenix">
 <meta property="og:title" content="Masks and guides · Phoenix User Guide">
-<meta property="og:description" content="Reveal artwork through mask layers, keep reference artwork on guide layers, and move objects along a path with motion guides.">
+<meta property="og:description" content="Mask layers and masking several layers, animated, soft, grown and inverted masks, several masks per layer, layer modes, guide layers, and motion guides that move a classic tween along a path.">
 <meta property="og:url" content="https://phoenixanimate.com/masks-guides.html">
 <meta property="og:image" content="https://phoenixanimate.com/assets/shots/hero.webp">
 <meta property="og:image:type" content="image/webp">
@@ -17,7 +17,7 @@
 <meta property="og:image:alt" content="The Phoenix window with three flower characters on the stage, the timeline below and the Properties panel on the right">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:image" content="https://phoenixanimate.com/assets/shots/hero.webp">
-<meta name="keywords" content="mask layer masked layer guide layer guided layer motion guide path orient to path snap reference">
+<meta name="keywords" content="mask layer masked layer guide layer guided layer motion guide path orient to path snap reference animate mask spotlight wipe reveal iris mask several layers feather invert stencil silhouette preserve transparency motion guide follow path transformation point">
 <link rel="icon" href="assets/img/logo.png">
 <link rel="stylesheet" href="assets/site.css">
 <script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
@@ -43,16 +43,31 @@
   <li>Right-click the upper layer and choose <strong>Mask</strong>. The layer below becomes masked by it, and both are locked so you see the result.</li>
 </ol>
 
-<p>To mask more layers with the same mask, drag them into place directly under the mask layer, or set their type to <strong>Masked</strong> in <a href="timeline.html#layer-properties">Layer Properties</a>.</p>
+<h3>Mask several layers</h3>
+
+<p>One mask layer can mask any number of layers. Drag more layers into place directly under the mask layer, among the layers it already masks, or set their type to <strong>Masked</strong> in <a href="timeline.html#layer-properties">Layer Properties</a>; Phoenix tells you if there is no mask layer above to mask them. The masked layers keep their own order, and each can be animated on its own. To free a layer from the mask, set its type back to <strong>Normal</strong>.</p>
 
 <h3>How masks behave</h3>
 
 <ul>
-  <li>Only fills count. Strokes on a mask layer are ignored.</li>
+  <li>Only filled areas count: the fills of shapes, and symbol instances and text drawn there. Strokes on a mask layer are ignored, so turn a stroke you want to mask with into a fill first (<span class="menu-path">Modify &rsaquo; Shape &rsaquo; Convert Lines to Fills</span>).</li>
   <li>Transparency in the mask is ignored: a half-transparent fill masks just like a solid one, with a hard edge.</li>
-  <li>Masks can be animated. Tween or draw the mask frame by frame for wipes, spotlights and reveals.</li>
+  <li>Masks can be animated; see <a href="#animate-a-mask">Animate a mask</a>.</li>
   <li>On the stage, a mask masks only while its layer is locked. Unlock it to see and edit the mask's own artwork, with the layers under it shown whole; lock it again to see the result. Exports always mask.</li>
 </ul>
+
+<h3>Animate a mask</h3>
+
+<p>A mask layer has its own keyframes, so it can move while what it reveals stays still, or the other way round.</p>
+
+<ul>
+  <li><strong>Move a window:</strong> make the mask's shape a symbol and give it a <a href="tweens.html#classic-tweens">classic</a> or <a href="tweens.html#motion-tweens">motion tween</a>, for a spotlight that slides across a scene or a porthole that follows a character.</li>
+  <li><strong>Grow or change it:</strong> give the mask's shape a <a href="tweens.html#shape-tweens">shape tween</a>, for a wipe, an iris opening or a reveal that spreads.</li>
+  <li><strong>Draw it:</strong> draw the mask frame by frame for hand-drawn reveals, such as a line being written on.</li>
+  <li><strong>Move what shows:</strong> animate the masked layers instead, for text sliding into view from behind an edge.</li>
+</ul>
+
+<p>Unlock the mask layer to edit its keyframes on the stage, then lock it again and scrub to check the result. To soften or grow a mask's edge, see the next section. For a complete example, follow the <a href="tutorial-masks.html">masks lesson</a>.</p>
 
 <h3 id="mask-edge">Soft, grown and inverted masks</h3>
 
@@ -89,7 +104,7 @@
 
 <h2>Guide layers</h2>
 
-<p>Right-click a layer and choose <strong>Guide</strong> to turn it into a guide layer. Use guide layers for sketches, layout drawings, reference images and notes. They are drawn while you work but left out of every export.</p>
+<p>Right-click a layer and choose <strong>Guide</strong> to turn it into a guide layer; choose it again to turn it back. Use guide layers for sketches, layout drawings, reference images and notes. They are drawn while you work but left out of every export.</p>
 
 <div class="callout tip">
   <span class="label">Tip</span>
@@ -98,16 +113,41 @@
 
 <h2>Motion guides</h2>
 
-<p>A motion guide moves an object along a path you draw.</p>
+<p>A motion guide moves the objects of a classic tween along a path you draw, instead of in a straight line. Any guide layer becomes a motion guide once a layer is guided by it.</p>
 
 <ol class="steps">
-  <li>Make a classic tween of an instance.</li>
-  <li>Add a guide layer above it and draw the path with the Pen, Pencil or Line tool.</li>
-  <li>Drag the tweened layer under the guide layer so it becomes <strong>guided</strong>, or set its type to <strong>Guided</strong> in <a href="timeline.html#layer-properties">Layer Properties</a>.</li>
-  <li>At the first and last keyframes, place the instance on the path's ends. With <strong>Snap</strong> on in the Frame tab, it snaps onto the path.</li>
+  <li>Make a <a href="tweens.html#classic-tweens">classic tween</a> of an instance.</li>
+  <li>Add a layer above it, right-click it and choose <strong>Guide</strong>. Draw the path on it as a stroke, with the Pen, Pencil or Line tool.</li>
+  <li>Drag the tweened layer onto the guide layer so it becomes <strong>guided</strong>, or set its type to <strong>Guided</strong> in <a href="timeline.html#layer-properties">Layer Properties</a>. The guided layer is shown indented under its guide.</li>
+  <li>At the first and last keyframes, place the instance near where the path should start and end.</li>
 </ol>
 
 <p>The instance now follows the stroke between the keyframes. Check <strong>Orient to path</strong> in the Frame tab's Tweening section, on the tween's first keyframe, and the instance also turns as the path turns.</p>
+
+<div class="split">
+  <figure style="margin:0"><img src="assets/shots/motion-guide-stage.webp" alt="A green square part way along a curved blue stroke drawn on a guide layer" width="340" height="268"></figure>
+  <figure style="margin:0"><img src="assets/shots/timeline-motion-guide.webp" alt="Timeline with a Path guide layer and a Ball layer indented beneath it, holding a lilac classic tween" width="745" height="147"><figcaption>The Ball layer's classic tween guided by the stroke on the Path layer, at frame 4.</figcaption></figure>
+</div>
+
+<h3>How the path is followed</h3>
+
+<ul>
+  <li>The object's <strong>transformation point</strong> rides on the path. Move it with the Free Transform tool to change which part of the object follows the line.</li>
+  <li>The object travels from the point on the path nearest where it starts to the point nearest where it ends, so it lands on the path whether or not you placed it exactly. It can stop part way along, or run along the path backward.</li>
+  <li>The tween's ease sets the speed along the path.</li>
+  <li>Only strokes make the path; fills on the guide layer are ignored. Strokes whose ends meet, within half a pixel, join into one path. If they don't all join, the longest joined line is used and the rest are ignored.</li>
+  <li>The path is read from the guide layer's frame under the playhead, so the guide layer can have keyframes of its own and change its path over time.</li>
+  <li>Several layers can be guided by the same guide, each following the path with its own tween.</li>
+  <li>Only classic tweens follow a motion guide. A <a href="tweens.html#motion-tweens">motion tween</a> has its own path on the stage, which you bend by dragging.</li>
+</ul>
+
+<h3>When the object won't follow the path</h3>
+
+<dl class="defs">
+  <dt>It moves in a straight line</dt><dd>Check that its layer is indented under the guide layer, that its span is a classic tween rather than a motion tween, and that the path is a stroke rather than a filled shape.</dd>
+  <dt>It follows only part of the path</dt><dd>The strokes don't meet end to end, so only the longest joined line counts. Zoom in and join the ends, or redraw the path in one go.</dd>
+  <dt>It jumps to the wrong spot</dt><dd>It goes to the point of the path nearest where you placed it. Move the instance at the first or last keyframe closer to the end of the path you mean.</dd>
+</dl>
 
 </article>
 </main>
