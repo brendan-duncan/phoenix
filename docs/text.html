@@ -4,11 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Text · Phoenix User Guide</title>
-<meta name="description" content="Add and edit text with the Text tool: growing and fixed-width boxes, fonts, sizes and colors, and static, dynamic and input text.">
+<meta name="description" content="Add and edit text with the Text tool: growing and fixed-width boxes, fonts, sizes and colors, vertical text, links, static, dynamic and input text, font symbols, missing fonts, spelling, and text in other languages.">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Phoenix">
 <meta property="og:title" content="Text · Phoenix User Guide">
-<meta property="og:description" content="Add and edit text with the Text tool: growing and fixed-width boxes, fonts, sizes and colors, and static, dynamic and input text.">
+<meta property="og:description" content="Add and edit text with the Text tool: growing and fixed-width boxes, fonts, sizes and colors, vertical text, links, static, dynamic and input text, font symbols, missing fonts, spelling, and text in other languages.">
 <meta property="og:url" content="https://phoenixanimate.com/text.html">
 <meta property="og:image" content="https://phoenixanimate.com/assets/shots/hero.webp">
 <meta property="og:image:type" content="image/webp">
@@ -17,7 +17,7 @@
 <meta property="og:image:alt" content="The Phoenix window with three flower characters on the stage, the timeline below and the Properties panel on the right">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:image" content="https://phoenixanimate.com/assets/shots/hero.webp">
-<meta name="keywords" content="text tool type font family size color static dynamic input text box fixed width wrap caret selection vertical superscript subscript justify spell check font mapping break apart find replace tlf text layout framework">
+<meta name="keywords" content="text tool type font family size color static dynamic input text field box point text fixed width wrap caret selection vertical text columns superscript subscript letter spacing tracking kerning auto kern anti-alias device fonts justify indent margins line spacing link url target instance name single line multiline password selectable render as html border scrollable variable max characters spell check font mapping missing fonts font symbol embed characters break apart find replace unicode input method chinese japanese korean tlf text layout framework">
 <link rel="icon" href="assets/img/logo.png">
 <link rel="stylesheet" href="assets/site.css">
 <script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
@@ -29,7 +29,12 @@
 
 <p class="eyebrow">Drawing</p>
 <h1>Text</h1>
-<p class="lead">Text in Phoenix stays editable: you can retype it, restyle parts of it, and resize its box at any time.</p>
+<p class="lead">Text in Phoenix stays editable: you can retype it, restyle parts of it, and resize its box at any time. A text field can be artwork, a field a script fills in, or a box the viewer types into.</p>
+
+<figure>
+  <img src="assets/shots/text-kinds-stage.webp" alt="The stage with a line of point text, a justified fixed-width paragraph, E = mc squared with a red superscript 2 and H2O with a blue subscript 2, a line of Russian, Greek, Korean and Chinese, a dynamic Score field and an input name field with dotted outlines, and two columns of vertical Japanese at the right" width="960" height="540">
+  <figcaption>Point text, a fixed-width block, superscript and subscript, several scripts in one field, dynamic and input fields (dotted outlines), and vertical text.</figcaption>
+</figure>
 
 <h2>Add text</h2>
 
@@ -47,9 +52,30 @@
   <figcaption>Set the font, size, color and text type before you type, or while text is selected.</figcaption>
 </figure>
 
+<p>New text takes the Tool tab's <strong>Family</strong>, <strong>Size</strong> and <strong>Text type</strong> and the toolbar's fill color. Everything else starts at its default, and you change it on the Object tab once the text is there.</p>
+
+<p>Text copied from another app and pasted onto the stage (not into a box you are editing) becomes a new static text box that grows to fit, in Arial at 20 points. Each line of the pasted text is a line of the box.</p>
+
+<h3>Box width</h3>
+
+<p>Phoenix has two kinds of text box:</p>
+
+<dl class="defs">
+  <dt>Growing (point) text</dt><dd>Made by a click. The box widens as you type and only starts a new line where you press <kbd>Enter</kbd>. Good for titles, labels and single words.</dd>
+  <dt>Fixed-width text</dt><dd>Made by a drag. Words wrap at the box's right edge and the box grows downward. Good for paragraphs and captions.</dd>
+</dl>
+
+<p>While you edit, a text box shows a small handle at its top right corner: round on a growing box, square on a fixed-width one. To switch between them:</p>
+
+<ul>
+  <li>Drag the round handle to give a growing box a width. It becomes fixed-width and its text wraps.</li>
+  <li>Drag a square handle to change the width of a fixed-width box.</li>
+  <li>Double-click a square handle to let the box grow with its text again.</li>
+</ul>
+
 <h2>Edit text</h2>
 
-<p>Click existing text with the Text tool to place the caret in it.</p>
+<p>Click existing text with the Text tool to place the caret in it. That works on text that has been rotated, scaled or skewed too. The Selection tool doesn't edit the words: double-clicking text with it does nothing, so switch to the Text tool first.</p>
 
 <table>
   <thead><tr><th>Key or action</th><th>Does</th></tr></thead>
@@ -60,93 +86,219 @@
     <tr><td><kbd>Ctrl</kbd>+<kbd>&larr;</kbd> <kbd>Ctrl</kbd>+<kbd>&rarr;</kbd></td><td class="wrap">Move a word at a time</td></tr>
     <tr><td><kbd>Shift</kbd> with those keys</td><td class="wrap">Extend the selection</td></tr>
     <tr><td>Drag across text</td><td class="wrap">Select a range</td></tr>
+    <tr><td><kbd>Shift</kbd>+click</td><td class="wrap">Extend the selection to where you click</td></tr>
     <tr><td>Double-click a word</td><td class="wrap">Select the word</td></tr>
     <tr><td><kbd>Ctrl</kbd>+<kbd>A</kbd></td><td class="wrap">Select all the text in the box</td></tr>
     <tr><td><kbd>Backspace</kbd> <kbd>Delete</kbd></td><td class="wrap">Delete characters or the selection</td></tr>
     <tr><td><kbd>Ctrl</kbd>+<kbd>C</kbd> <kbd>Ctrl</kbd>+<kbd>X</kbd> <kbd>Ctrl</kbd>+<kbd>V</kbd></td><td class="wrap">Copy, cut and paste characters, to and from other apps too</td></tr>
+    <tr><td><kbd>Esc</kbd></td><td class="wrap">Finish editing</td></tr>
   </tbody>
 </table>
 
-<p>To type in Chinese, Japanese, Korean or another language that uses an input method, switch to it as usual: the characters being composed show underlined at the caret, with the input method's candidates beside them, and go into the text when you choose them.</p>
+<p>Typing replaces the selected text. Changing the font, size or fill color while text is selected restyles just that part. <kbd>Tab</kbd> doesn't type a tab character.</p>
 
-<p>Typing replaces the selected text. Changing the font, size or fill color while text is selected restyles just that part.</p>
+<h3>Select, move and transform text fields</h3>
 
-<h3>Box width</h3>
+<p>With the Selection tool, click a text field to select it as a whole, and <kbd>Shift</kbd>+click to add more. Drag to move it, or nudge it with the arrow keys. The Free Transform tool rotates, scales, skews and flips text fields like any other object, and the text stays editable. Scaling a field this way makes it bigger on the stage without changing its <strong>Size</strong> setting.</p>
 
-<p>While you edit, a text box shows a small handle: round on a growing box, square on a fixed-width one. Drag the handle to set a width. Double-click a square handle to let the box grow again.</p>
+<p>The Object tab's <strong>Position and Size</strong> shows where the field is and how big it is.</p>
 
 <h2>Character and paragraph settings</h2>
 
-<p>Select a text box with the Selection tool, or click into one with the Text tool, and the Object tab of the Properties panel shows its settings. With the Selection tool a change applies to the whole box, or to every text box selected. While typing, character settings apply to the selected characters and paragraph settings to the paragraphs the selection or caret is in.</p>
+<p>Select a text box with the Selection tool, or click into one with the Text tool, and the Object tab of the Properties panel shows its settings. With the Selection tool a change applies to the whole box, or to every text box selected (the panel's title then says how many). While typing, character settings apply to the selected characters and paragraph settings to the paragraphs the selection or caret is in. The panel's title says <em>(typing)</em> while it shows the settings at the caret.</p>
+
+<div class="split">
+  <figure style="margin:0"><img src="assets/shots/text-properties-dynamic.webp" alt="Object tab for a dynamic text field: Position and Size; Character with Family Arial, Size 24 pt, Color, Style bold, italic and Normal, Letter spacing, Auto kern, Anti-alias, Direction, Link and Target; Paragraph with Align buttons, Line spacing, Indent, Left and Right margin; Options with Type, Instance score_txt, Behavior Single line, Selectable, Show border, Render as HTML, Scrollable and Variable" width="300" height="755"></figure>
+  <div>
+    <p><strong>Character</strong> settings belong to characters, so one field can mix fonts, sizes and colors.</p>
+    <p><strong>Paragraph</strong> settings belong to whole paragraphs: everything between two returns.</p>
+    <p><strong>Options</strong> belong to the field: its type, and what a dynamic or input field does where the movie plays.</p>
+  </div>
+</div>
+
+<h3>Character</h3>
 
 <dl class="defs">
-  <dt>Family, Size, Color</dt><dd>The font, its size in points (a point is a pixel on the stage at 100%) and the text color.</dd>
-  <dt>Style</dt><dd><strong>B</strong> and <strong>I</strong> for bold and italic (drawn bolder or slanted when the font has no bold or italic face), and <strong>Superscript</strong> or <strong>Subscript</strong>, set smaller above or below the line.</dd>
-  <dt>Letter spacing, Auto kern</dt><dd>Room added between letters, and whether the font's own kerning pairs are used.</dd>
-  <dt>Anti-alias</dt><dd>How the text is smoothed where it plays: device fonts, bitmap text, anti-aliasing for animation or for readability, or custom anti-aliasing.</dd>
-  <dt>Direction</dt><dd>Horizontal, or vertical: characters stand upright one under another, in columns that run from right to left (or, chosen so, from left to right), as Chinese, Japanese and Korean are often set. A return starts a new column; a fixed-size box starts one when a column reaches its foot. Letter animators work on vertical text, and Text on a Path runs it along a motion guide (see <a href="behaviors.html">Behaviors</a>).</dd>
-  <dt>Link, Target</dt><dd>A web address the characters open when clicked, and the window it opens in.</dd>
-  <dt>Align</dt><dd>Left, center, right or justified. A justified paragraph spreads each wrapped line to both edges; its last line stays to the left.</dd>
-  <dt>Line spacing</dt><dd>Room between lines, on top of the font's height.</dd>
-  <dt>Indent, Left and Right margin</dt><dd>How far a paragraph's first line starts in, and the room kept clear at either side of the box.</dd>
+  <dt>Family</dt><dd>The font, from the fonts installed on your computer.</dd>
+  <dt>Size</dt><dd>The size in points, from 1 to 500. A point is a pixel on the stage at 100%.</dd>
+  <dt>Color</dt><dd>Click the swatch to pick the text color, with its alpha. Text takes one solid color per character. For a gradient, break the text apart into shapes first (see <a href="#break-text-apart">Break text apart</a>).</dd>
+  <dt>Style</dt><dd><strong>B</strong> and <strong>I</strong> for bold and italic. When the font has no bold or italic face, Phoenix draws it bolder or slanted. The list beside them sets <strong>Normal</strong>, <strong>Superscript</strong> or <strong>Subscript</strong>: smaller characters set above or below the line, as in m&sup2; or H&#8322;O.</dd>
+  <dt>Letter spacing</dt><dd>Room added between letters, in pixels, from -60 to 60. Negative values pull letters together. Select a range to space just those letters, or a whole field to track all of it.</dd>
+  <dt>Auto kern</dt><dd>Uses the font's own kerning pairs, so letters like <em>A</em> and <em>V</em> tuck together. On by default.</dd>
+  <dt>Anti-alias</dt><dd>How the text should be smoothed where the movie plays: <strong>Use device fonts</strong>, <strong>Bitmap text (no anti-alias)</strong>, <strong>Anti-alias for animation</strong>, <strong>Anti-alias for readability</strong> or <strong>Custom anti-alias</strong>. The setting is saved with the field for players that use it. The stage and Phoenix's own exports draw text smoothed whatever it says, and custom anti-aliasing has no thickness or sharpness settings in Phoenix.</dd>
+  <dt>Direction</dt><dd>Horizontal or vertical. See <a href="#vertical-text">Vertical text</a>.</dd>
+  <dt>Link, Target</dt><dd>A web address the characters open when clicked where the movie plays, and the window it opens in: <code>_blank</code> (a new window), <code>_self</code>, <code>_parent</code>, <code>_top</code>, or a window name you type. A <code>mailto:</code> address works too. Input text has no links.</dd>
 </dl>
+
+<h3>Paragraph</h3>
+
+<dl class="defs">
+  <dt>Align</dt><dd><strong>L</strong>, <strong>C</strong>, <strong>R</strong> and <strong>J</strong>: left, center, right or justified. A justified paragraph spreads each wrapped line to both edges; its last line stays to the left. Alignment shows best in a fixed-width box, where there are edges to align to.</dd>
+  <dt>Line spacing</dt><dd>Room between lines, in pixels, on top of the font's own line height. Negative values pull lines closer.</dd>
+  <dt>Indent</dt><dd>How far the first line of each paragraph starts in. A negative indent with a left margin makes a hanging indent.</dd>
+  <dt>Left margin, Right margin</dt><dd>Room kept clear at either side of the box, for every line of the paragraph.</dd>
+</dl>
+
+<h3>Example: a caption with a styled word</h3>
+
+<ol class="steps">
+  <li>With the Text tool, drag a box about 300 pixels wide and type a two-line caption.</li>
+  <li>Press <kbd>Ctrl</kbd>+<kbd>A</kbd>, then on the Object tab set <strong>Family</strong>, <strong>Size</strong> 18 and <strong>Line spacing</strong> 4. Click <strong>C</strong> to center the paragraph.</li>
+  <li>Double-click one word to select it, click <strong>B</strong>, and pick a different <strong>Color</strong>. Only that word changes.</li>
+  <li>Press <kbd>Esc</kbd>. With the Selection tool, drag the box where you want it.</li>
+</ol>
 
 <h3>The Text menu</h3>
 
 <p>The <span class="menu-path">Text</span> menu applies the same settings to the selected text fields, or to the selected characters while you edit one:</p>
 
 <ul>
-  <li><span class="menu-path">Text &rsaquo; Style &rsaquo; Bold</span> (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>B</kbd>) and <span class="menu-path">Italic</span> (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>I</kbd>).</li>
+  <li><span class="menu-path">Text &rsaquo; Style &rsaquo; Bold</span> (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>B</kbd>) and <span class="menu-path">Italic</span> (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>I</kbd>) turn the style on, or off when the text already has it.</li>
   <li><span class="menu-path">Text &rsaquo; Align &rsaquo; Align Left</span> (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>L</kbd>), <span class="menu-path">Center</span> (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>C</kbd>), <span class="menu-path">Align Right</span> (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>R</kbd>) and <span class="menu-path">Justify</span> (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>J</kbd>), for whole paragraphs.</li>
 </ul>
 
+<p>Font, size, letter spacing and the rest are set on the Object tab; the Text menu has no items for them.</p>
+
+<h2 id="vertical-text">Vertical text</h2>
+
+<p>Set <strong>Direction</strong> to <strong>Vertical</strong> and the characters stand upright one under another, in columns that run from right to left, as Chinese, Japanese and Korean are often set. <strong>Vertical, left to right</strong> puts the first column at the left instead. Direction belongs to the whole field.</p>
+
+<ul>
+  <li>A return starts a new column.</li>
+  <li>In a growing box the columns are as tall as their text. In a fixed-size box, a column that reaches the box's foot carries on in the next column.</li>
+  <li>Each character takes a cell as tall as its font. Line spacing, letter spacing and alignment don't change vertical text yet.</li>
+</ul>
+
+<p>Letter animators work on vertical text, and Text on a Path runs it along a motion guide (see <a href="behaviors.html#text">Letter animators</a>).</p>
+
 <h2>Text types</h2>
 
-<p>The <strong>Text type</strong> setting matters if your document will be used in a player or game engine that plays FLA or SWF content:</p>
+<p>Every text field has a type. It matters when your document will play in Test Movie, as a published page or SWF movie, or in a player or game engine that plays FLA or SWF content:</p>
 
 <dl class="defs">
-  <dt>Static Text</dt><dd>Fixed text that is part of the artwork. Use this for anything that is just meant to be seen.</dd>
-  <dt>Dynamic Text</dt><dd>Text a script can change while the content runs, such as a score.</dd>
-  <dt>Input Text</dt><dd>A field the viewer can type into.</dd>
+  <dt>Static Text</dt><dd>Fixed text that is part of the artwork. Use this for anything that is just meant to be seen: titles, captions, signs in a background.</dd>
+  <dt>Dynamic Text</dt><dd>Text a script can change while the content runs, such as a score, a timer or a name. Templates also use dynamic text with an instance name as a field each instance can fill in (see <a href="symbols.html#templates">Templates</a>).</dd>
+  <dt>Input Text</dt><dd>A field the viewer can type into, such as a name or an answer.</dd>
 </dl>
 
-<p>Dynamic and input text show a dotted outline on the stage. Their <strong>Options</strong> on the Object tab set what they do where they play:</p>
+<p>Choose the type for new text with <strong>Text type</strong> on the Tool tab. To change an existing field, select it and choose <strong>Type</strong> under <strong>Options</strong> on the Object tab. Selecting several fields changes them all as one step. Dynamic and input text show a dotted outline on the stage, so you can see their boxes when they are empty.</p>
+
+<h3>Dynamic and input options</h3>
+
+<p>For dynamic and input text, <strong>Options</strong> on the Object tab set what the field does where it plays:</p>
 
 <dl class="defs">
-  <dt>Instance</dt><dd>The name scripts reach the field by.</dd>
-  <dt>Behavior</dt><dd>Single line, multiline, multiline without wrapping, or (for input text) password, which shows dots.</dd>
-  <dt>Selectable, Show border, Render as HTML, Scrollable</dt><dd>Whether the viewer can select the text, a box drawn around the field, text set from a script read as HTML, and a field that keeps its size while its text scrolls.</dd>
-  <dt>Variable</dt><dd>A variable an older script shows in the field.</dd>
-  <dt>Max characters</dt><dd>For input text, how much the viewer can type.</dd>
+  <dt>Instance</dt><dd>The name scripts reach the field by, such as <code>score_txt</code>. See <a href="actionscript.html">ActionScript and Test Movie</a>.</dd>
+  <dt>Behavior</dt><dd><strong>Single line</strong> keeps the text on one line. <strong>Multiline</strong> wraps it at the box's edge. <strong>Multiline no wrap</strong> breaks lines only at returns. Input text adds <strong>Password</strong>, which shows each typed character as an asterisk.</dd>
+  <dt>Selectable</dt><dd>The viewer can select and copy the text. On by default.</dd>
+  <dt>Show border</dt><dd>A box drawn around the field where it plays.</dd>
+  <dt>Render as HTML</dt><dd>Text set from a script may carry HTML tags, such as <code>&lt;b&gt;</code> and <code>&lt;font&gt;</code>, which style it.</dd>
+  <dt>Scrollable</dt><dd>The field keeps its size and its text scrolls. This is saved with the field for players that use it.</dd>
+  <dt>Variable</dt><dd>An ActionScript 1 or 2 variable the field shows. The field updates as the variable changes, and typing into an input field sets it.</dd>
+  <dt>Max characters</dt><dd>For input text, how many characters the viewer can type. <strong>No limit</strong> (0) is the default.</dd>
 </dl>
 
-<h2>Break text apart</h2>
+<figure class="narrow">
+  <img src="assets/shots/text-options-input.webp" alt="The Options section for an input text field: Type Input Text, Instance name_txt, Behavior Single line, Selectable and Show border ticked, Render as HTML and Scrollable not, an empty Variable, and Max characters 20" width="300" height="245">
+  <figcaption>Input text adds Password to Behavior, and Max characters.</figcaption>
+</figure>
 
-<p>Select a text box and choose <span class="menu-path">Modify &rsaquo; Break Apart</span> (<kbd>Ctrl</kbd>+<kbd>B</kbd>) to split it into one box for each letter, each standing where it stood. Break a single letter apart again to turn it into filled shapes in its color, which you can then reshape like any other drawing. The letters are no longer text after that, so you can't retype them.</p>
+<h3>Example: a score that a script updates</h3>
+
+<ol class="steps">
+  <li>Set <strong>Text type</strong> to <strong>Dynamic Text</strong> on the Tool tab, then drag a box and type <code>Score: 0</code>.</li>
+  <li>Press <kbd>Esc</kbd>. Under <strong>Options</strong>, type <code>score_txt</code> in <strong>Instance</strong>.</li>
+  <li>In a frame script, set its text, for example <code>score_txt.text = "Score: " + score;</code> in ActionScript 3, or <code>this.score_txt.text = "Score: " + score;</code> in an HTML5 Canvas document.</li>
+  <li>Choose <span class="menu-path">Control &rsaquo; Test Movie</span> (<kbd>Ctrl</kbd>+<kbd>Enter</kbd>) to see it change. Click an input field there to type into it.</li>
+</ol>
+
+<h3>Example: a name field</h3>
+
+<ol class="steps">
+  <li>Set <strong>Text type</strong> to <strong>Input Text</strong>, and drag a box as wide as the longest name you expect.</li>
+  <li>Under <strong>Options</strong>, name it <code>name_txt</code>, set <strong>Behavior</strong> to <strong>Single line</strong>, tick <strong>Show border</strong>, and set <strong>Max characters</strong> to 20.</li>
+  <li>Scripts read what the viewer typed from <code>name_txt.text</code>.</li>
+</ol>
+
+<h2>Text in other languages</h2>
+
+<p>Text fields hold Unicode, so one field can mix Latin, Cyrillic, Greek, Chinese, Japanese, Korean and other scripts, as long as the font you choose (or the fonts your computer substitutes) has the characters.</p>
+
+<p>To type in Chinese, Japanese, Korean or another language that uses an input method, switch to it as usual: the characters being composed show underlined at the caret, with the input method's candidates beside them, and go into the text when you choose them. You can also paste text in any language from another app.</p>
+
+<p>For text set top to bottom, use <a href="#vertical-text">vertical text</a>. Phoenix has no right-to-left paragraph direction for Arabic or Hebrew.</p>
+
+<h2>Animate text</h2>
+
+<p>A text field can be tweened like any other object: move, rotate, scale and fade it with a <a href="tweens.html">classic or motion tween</a>. To animate the letters one by one while the words stay editable (typewriter, cascade, wave, scramble, text on a path and more), add letter animators in the Behaviors panel. See <a href="behaviors.html#text">Letter animators</a> and the <a href="tutorial-animated-title.html">animated title</a> lesson.</p>
+
+<h2 id="break-text-apart">Break text apart</h2>
+
+<p>Select a text box and choose <span class="menu-path">Modify &rsaquo; Break Apart</span> (<kbd>Ctrl</kbd>+<kbd>B</kbd>) to split it into one box for each letter, each standing where it stood. Spaces are dropped. The letters are still text, so you can put each on its own layer and animate it.</p>
+
+<p>Break a single letter apart again to turn it into filled shapes in its color, which you can then reshape, fill with a gradient, or erase like any other drawing. The letters are no longer text after that, so you can't retype them. To turn a whole word into shapes, break it apart twice: once into letters, then again with all the letters selected.</p>
 
 <h2>Font symbols</h2>
 
-<p>Text can be set in a font symbol from the library, so the font travels with the document. See <a href="library.html#font-symbols">Font symbols</a>.</p>
+<p>A font symbol is a library item that names a font and the characters of it to embed: uppercase, lowercase, numerals, punctuation, basic Latin, and any others you type. Text set in it stays tied to the symbol, so you can change the font for all of that text in one place.</p>
+
+<ol class="steps">
+  <li>Right-click the Library panel and choose <strong>New Font...</strong>.</li>
+  <li>Give it a name, pick the font and its <strong>Bold</strong> or <strong>Italic</strong> style, tick the character ranges to embed, and type any other characters in <strong>Also</strong>.</li>
+  <li>Select text, then right-click the font symbol and choose <strong>Use for Selected Text</strong>.</li>
+</ol>
+
+<p><strong>Font Properties...</strong> changes it later; renaming it keeps the text set in it. Deleting it sets that text in the font itself. See <a href="library.html#font-symbols">Font symbols</a>.</p>
+
+<p>Phoenix keeps font symbols in FLA and XFL files. The SWF movies Phoenix exports name each text field's font for the player to find on the viewer's computer rather than embedding its outlines; static text goes into them as shapes, so it looks the same everywhere.</p>
 
 <h2>Check spelling</h2>
 
-<p><span class="menu-path">Edit &rsaquo; Check Spelling...</span> goes through every text box in every scene and symbol, one word not in the dictionary at a time, showing it in its sentence with suggestions. <strong>Change</strong> fixes this one, <strong>Change All</strong> every one in the document; <strong>Ignore</strong> skips it, <strong>Ignore All</strong> skips it everywhere, and <strong>Add to Dictionary</strong> keeps it as a word from now on. Each change can be undone.</p>
+<div class="split">
+  <figure style="margin:0"><img src="assets/shots/check-spelling-dialog.webp" alt="Check Spelling dialog: Not in the dictionary: Teh, shown in the sentence Teh quick brwn fox jumps, Change to The, suggestions The, Ten, Teoh, Tea, and buttons Change, Change All, Ignore, Ignore All, Add to Dictionary and Close" width="382" height="344"></figure>
+  <div>
+    <p><span class="menu-path">Edit &rsaquo; Check Spelling...</span> goes through every text box in every scene and symbol, one word not in the dictionary at a time, showing it in its sentence with suggestions. Pick a suggestion or type in <strong>Change to</strong>.</p>
+    <p><strong>Change</strong> fixes this one, <strong>Change All</strong> every one in the document; <strong>Ignore</strong> skips it, <strong>Ignore All</strong> skips it everywhere, and <strong>Add to Dictionary</strong> keeps it as a word from now on. When it's done, Phoenix says how many changes it made. Each change can be undone.</p>
+  </div>
+</div>
 
-<p>Phoenix uses the Windows spell checker and its dictionary, in the language Phoenix runs in. On other systems, Check Spelling says that no spell checker is available.</p>
+<p>Phoenix uses the Windows spell checker and its dictionary, in the language Phoenix runs in (or US English when there is no dictionary for it). On other systems, Check Spelling says that no spell checker is available.</p>
 
 <h2>Find and replace text</h2>
 
-<p><span class="menu-path">Edit &rsaquo; Find and Replace...</span> (<kbd>Ctrl</kbd>+<kbd>F</kbd>) finds words, or every use of a font, in every text box of the document and can replace them all at once. See <a href="workspace.html#find-and-replace">Find and Replace</a>.</p>
+<p><span class="menu-path">Edit &rsaquo; Find and Replace...</span> (<kbd>Ctrl</kbd>+<kbd>F</kbd>) searches every text box of the document:</p>
+
+<ul>
+  <li><strong>Text</strong> finds words, with <strong>Match case</strong> and <strong>Whole word</strong>, and replaces them.</li>
+  <li><strong>Font</strong> finds every use of a font the document uses and can set all of it in an installed font instead.</li>
+  <li><strong>Color</strong> finds a color in text as well as in fills and strokes.</li>
+</ul>
+
+<p><strong>Find All</strong> lists where each one is; click one to go there. <strong>Replace All</strong> changes them all as one step. See <a href="workspace.html#find-and-replace">Find and Replace</a>.</p>
 
 <h2>Missing fonts</h2>
 
-<p>When a document you open uses fonts that are not installed on your computer, Phoenix lists them and asks which installed font to show each one in. The document keeps the fonts it names, so it looks right again on a computer that has them. Phoenix remembers your choices for every document; change them under <span class="menu-path">Edit &rsaquo; Font Mapping...</span>.</p>
+<p>When a document you open uses fonts that are not installed on your computer, Phoenix lists them and asks which installed font to show each one in. The document keeps the fonts it names, so it looks right again on a computer that has them. Your choices apply to every document that uses those fonts, and Phoenix only asks again about fonts it hasn't seen before. Change them under <span class="menu-path">Edit &rsaquo; Font Mapping...</span>.</p>
+
+<figure class="narrow">
+  <img src="assets/shots/font-mapping-dialog.webp" alt="Font Mapping dialog listing KozGoPr6N-Regular, MinionPro-Regular and MyriadPro-Bold, each shown in Arial, with OK and Cancel" width="386" height="166">
+  <figcaption>Each missing font, and the installed font it is shown in.</figcaption>
+</figure>
+
+<p>Text set in a font symbol isn't listed: it belongs to the library. To change a document's fonts for good rather than just how they show, use Find and Replace with <strong>Font</strong>.</p>
 
 <h2>How text is drawn</h2>
 
-<p>Phoenix draws the text settings saved in FLA files, including alignment, letter and line spacing, kerning, and bold and italic. All text settings are kept when you save, even those that cannot yet be changed in Phoenix.</p>
+<p>Phoenix draws the text settings saved in FLA files, including alignment, letter and line spacing, indents and margins, kerning, superscript and subscript, vertical text, and bold and italic. All text settings are kept when you save, even those that cannot yet be changed in Phoenix.</p>
 
 <p>TLF text in older FLA and XFL files opens as classic text you can edit: its paragraphs and line breaks, and each span's font, size, color, bold, italic and tracking, with each paragraph's alignment. A TLF field with an instance name becomes dynamic text, so scripts can still reach it; the rest becomes static text. A TLF field Phoenix cannot read is kept as it was and saved back unchanged.</p>
+
+<p>When you export, static text stays real text in published HTML5 pages, vectors in SVG, and shapes in SWF movies; dynamic text with an instance name and input text stay fields scripts can reach. See <a href="export.html">Exporting and publishing</a>.</p>
+
+<div class="callout">
+  <span class="label">Not yet</span>
+  <p>Right-to-left paragraphs, web fonts, embedding font outlines in a single field or in exported SWF movies, and anti-aliasing that changes how the stage draws text.</p>
+</div>
 
 </article>
 </main>
