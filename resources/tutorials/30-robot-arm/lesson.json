@@ -1,0 +1,79 @@
+{
+  "title": "Bones between symbols",
+  "summary": "Join a robot's upper arm, forearm and hand with the Bone tool, keep its elbow bending one way, and pose it waving on a few frames.",
+  "minutes": 8,
+  "order": 30,
+  "guide": "bones.html",
+  "tags": ["Animation", "Rigging", "Symbols"],
+  "start": {"document": "start"},
+  "final": "final",
+  "steps": [
+    {
+      "title": "Welcome",
+      "text": "<p>Bones join separate pieces so they move as one limb: pull the hand and the elbow and shoulder bend to follow. This is called inverse kinematics.</p><p>The robot's arm is three graphic symbols, each on a layer of its own: <i>Upper arm</i>, <i>Forearm</i> and <i>Hand</i>. Each layer runs for 48 frames, two seconds.</p>"
+    },
+    {
+      "title": "Choose the Bone tool",
+      "text": "<p>Press <kbd>M</kbd>, or click the Bone tool in the toolbox.</p>",
+      "target": "tool:Bone",
+      "wait": {"tool": "Bone"}
+    },
+    {
+      "title": "The first bone",
+      "text": "<p>Drag from the shoulder, the dark bolt at the top of the orange upper arm, down to the elbow, the bolt where the yellow forearm begins, and let go there.</p><p>A bone runs from where you press to where you let go, and joins the symbol you pressed on to the one you let go over. Phoenix moves both pieces to a new layer, <i>Armature_1</i>.</p>",
+      "target": "stage:540,290,120,200",
+      "wait": {"command": "Add Bone"}
+    },
+    {
+      "title": "The second bone",
+      "text": "<p>Now drag from the middle of the forearm to the wrist, where the hand begins, and let go there.</p><p>The new bone starts at the elbow, the forearm's joint, wherever on the forearm you press, and joins the hand to the chain.</p>",
+      "target": "stage:600,430,120,150",
+      "wait": {"command": "Add Bone"}
+    },
+    {
+      "title": "Keep the elbow bending one way",
+      "text": "<p>With the Bone tool still chosen, click the forearm's bone, the slim purple shape over the forearm, without dragging. The <b>Joint Rotation and Spring</b> window opens for the elbow, the joint at the bone's top end.</p><p>Check <b>Constrain</b>, set <b>Min</b> to -150 and <b>Max</b> to 0, and click <b>OK</b>. The angles are measured from the upper arm, so the elbow can now fold only one way, as a real one does.</p>",
+      "target": "stage:600,430,120,150",
+      "wait": {"command": "Joint Rotation and Spring"}
+    },
+    {
+      "title": "Go to frame 12",
+      "text": "<p>Press <kbd>V</kbd> for the Selection tool. In the timeline, click frame 12 of the <i>Armature_1</i> layer.</p>",
+      "target": "frame:Armature_1:12",
+      "wait": {"frame": 12}
+    },
+    {
+      "title": "Raise the arm",
+      "text": "<p>Drag the forearm's bone by its end near the hand, up and to the right, until the hand is level with the robot's head.</p><p>The hand follows the cursor and the elbow and shoulder turn to reach it. Frame 12 becomes a pose, a keyframe for the whole arm, and Phoenix fills in the frames before it.</p>",
+      "target": "stage:620,180,260,400",
+      "wait": {"command": "Pose Armature"}
+    },
+    {
+      "title": "Wave",
+      "text": "<p>Click frame 24 of <i>Armature_1</i>. Drag the end of the forearm's bone up and a little to the left, so the hand leans in over the robot's head.</p>",
+      "target": "stage:620,120,260,220",
+      "wait": {"command": "Pose Armature"}
+    },
+    {
+      "title": "Copy the first wave",
+      "text": "<p>Click frame 12 of <i>Armature_1</i> and choose <b>Edit &gt; Timeline &gt; Pose &gt; Copy Pose</b>. The same commands are on the menu you get by right-clicking a frame of an armature layer.</p>",
+      "target": "frame:Armature_1:12"
+    },
+    {
+      "title": "Paste it on frame 36",
+      "text": "<p>Click frame 36 of <i>Armature_1</i> and choose <b>Edit &gt; Timeline &gt; Pose &gt; Paste Pose</b>. The arm leans out again, so the hand waves back and forth.</p>",
+      "target": "frame:Armature_1:36",
+      "wait": {"command": "Paste Pose"}
+    },
+    {
+      "title": "Play it",
+      "text": "<p>Press <kbd>Enter</kbd>, or click the play button in the timeline header. The robot raises its arm and waves.</p>",
+      "target": "widget:timelinePlay",
+      "wait": {"playing": true}
+    },
+    {
+      "title": "What you did",
+      "text": "<p>You joined three symbols with two bones, limited a joint and posed the arm on three frames. Each bone, each pose and each change of limits is one step to undo.</p><p>Bones can be added at any time: drag from any piece already in the armature to another symbol, and one piece can branch into several bones, as a hand into fingers. <b>Edit &gt; Timeline &gt; Pose</b> also has <b>Insert Pose</b>, to make a frame a pose without moving it, and <b>Clear Pose</b>, to take one away.</p>"
+    }
+  ]
+}

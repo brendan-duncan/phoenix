@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bones between symbols · Phoenix User Guide</title>
+<meta name="description" content="Join a robot's upper arm, forearm and hand with the Bone tool, keep its elbow bending one way, and pose it waving on a few frames.">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Phoenix">
+<meta property="og:title" content="Bones between symbols · Phoenix User Guide">
+<meta property="og:description" content="Join a robot's upper arm, forearm and hand with the Bone tool, keep its elbow bending one way, and pose it waving on a few frames.">
+<meta property="og:url" content="https://phoenixanimate.com/tutorial-robot-arm.html">
+<meta property="og:image" content="https://phoenixanimate.com/assets/shots/hero.webp">
+<meta property="og:image:type" content="image/webp">
+<meta property="og:image:width" content="1704">
+<meta property="og:image:height" content="1061">
+<meta property="og:image:alt" content="The Phoenix window with three flower characters on the stage, the timeline below and the Properties panel on the right">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://phoenixanimate.com/assets/shots/hero.webp">
+<meta name="keywords" content="tutorial lesson step by step bones bone tool armature inverse kinematics IK symbols arm joint limits constrain pose poses copy pose paste pose robot rigging">
+<link rel="icon" href="assets/img/logo.png">
+<link rel="stylesheet" href="assets/site.css">
+<script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<main>
+<article class="content">
+
+<p class="eyebrow">Tutorials</p>
+
+<h1>Bones between symbols</h1>
+
+<p class="lead">Join a robot's upper arm, forearm and hand with the Bone tool, keep its elbow bending one way, and pose it waving on a few frames.</p>
+
+<div class="callout">
+  <span class="label">Try it in Phoenix</span>
+  <p>This page is also a lesson inside Phoenix: choose <span class="menu-path">Help &rsaquo; Tutorials...</span> and start <strong>Bones between symbols</strong>, and Phoenix points at each control as you go. It takes about 8 minutes.</p>
+</div>
+
+<p>To follow along here instead, download the starting document, <a href="assets/tutorials/robot-arm.fla" download>robot-arm.fla</a>, and open it with <span class="menu-path">File &rsaquo; Open...</span>.</p>
+
+<figure>
+  <img src="assets/shots/tutorial-robot-arm.webp" alt="Four frames of a teal robot: its arm hanging down, then raised to the right, leaning in over its head and raised again" width="1000" height="239">
+  <figcaption>The robot on frames 1, 12, 24 and 36: one arm, three symbols and two bones, posed three times.</figcaption>
+</figure>
+
+<p>Bones join separate pieces so they move as one limb: pull the hand and the elbow and shoulder bend to follow. This is called inverse kinematics.</p><p>The robot's arm is three graphic symbols, each on a layer of its own: <i>Upper arm</i>, <i>Forearm</i> and <i>Hand</i>. Each layer runs for 48 frames, two seconds.</p>
+
+<h2>1. Choose the Bone tool</h2>
+
+<p>Press <kbd>M</kbd>, or click the Bone tool in the toolbox.</p>
+
+<h2>2. The first bone</h2>
+
+<p>Drag from the shoulder, the dark bolt at the top of the orange upper arm, down to the elbow, the bolt where the yellow forearm begins, and let go there.</p><p>A bone runs from where you press to where you let go, and joins the symbol you pressed on to the one you let go over. Phoenix moves both pieces to a new layer, <i>Armature_1</i>.</p>
+
+<h2>3. The second bone</h2>
+
+<p>Now drag from the middle of the forearm to the wrist, where the hand begins, and let go there.</p><p>The new bone starts at the elbow, the forearm's joint, wherever on the forearm you press, and joins the hand to the chain.</p>
+
+<figure class="narrow">
+  <img src="assets/shots/robot-arm-bones.webp" alt="The robot with two purple bones drawn over its arm, from the shoulder to the elbow and from the elbow to the wrist" width="560" height="560">
+  <figcaption>Two bones: shoulder to elbow, and elbow to wrist. The pieces now live on the <i>Armature_1</i> layer.</figcaption>
+</figure>
+
+<h2>4. Keep the elbow bending one way</h2>
+
+<div class="split">
+  <figure style="margin:0"><img src="assets/shots/robot-arm-joint.webp" alt="The Joint Rotation and Spring window: Constrain checked, Min -150 degrees, Max 0 degrees, Spring None, Damping 30" width="200" height="198"></figure>
+  <div>
+    <p>With the Bone tool still chosen, click the forearm's bone, the slim purple shape over the forearm, without dragging. The <b>Joint Rotation and Spring</b> window opens for the elbow, the joint at the bone's top end.</p><p>Check <b>Constrain</b>, set <b>Min</b> to -150 and <b>Max</b> to 0, and click <b>OK</b>. The angles are measured from the upper arm, so the elbow can now fold only one way, as a real one does.</p>
+  </div>
+</div>
+
+<h2>5. Go to frame 12</h2>
+
+<p>Press <kbd>V</kbd> for the Selection tool. In the timeline, click frame 12 of the <i>Armature_1</i> layer.</p>
+
+<h2>6. Raise the arm</h2>
+
+<p>Drag the forearm's bone by its end near the hand, up and to the right, until the hand is level with the robot's head.</p><p>The hand follows the cursor and the elbow and shoulder turn to reach it. Frame 12 becomes a pose, a keyframe for the whole arm, and Phoenix fills in the frames before it.</p>
+
+<h2>7. Wave</h2>
+
+<p>Click frame 24 of <i>Armature_1</i>. Drag the end of the forearm's bone up and a little to the left, so the hand leans in over the robot's head.</p>
+
+<h2>8. Copy the first wave</h2>
+
+<p>Click frame 12 of <i>Armature_1</i> and choose <span class="menu-path">Edit &rsaquo; Timeline &rsaquo; Pose &rsaquo; Copy Pose</span>. The same commands are on the menu you get by right-clicking a frame of an armature layer.</p>
+
+<h2>9. Paste it on frame 36</h2>
+
+<p>Click frame 36 of <i>Armature_1</i> and choose <span class="menu-path">Edit &rsaquo; Timeline &rsaquo; Pose &rsaquo; Paste Pose</span>. The arm leans out again, so the hand waves back and forth.</p>
+
+<h2>10. Play it</h2>
+
+<p>Press <kbd>Enter</kbd>, or click the play button in the timeline header. The robot raises its arm and waves.</p>
+
+<h2>What you did</h2>
+
+<p>You joined three symbols with two bones, limited a joint and posed the arm on three frames. Each bone, each pose and each change of limits is one step to undo.</p><p>Bones can be added at any time: drag from any piece already in the armature to another symbol, and one piece can branch into several bones, as a hand into fingers. <span class="menu-path">Edit &rsaquo; Timeline &rsaquo; Pose</span> also has <b>Insert Pose</b>, to make a frame a pose without moving it, and <b>Clear Pose</b>, to take one away.</p>
+
+<p>For everything this tutorial touches on, see <a href="bones.html#building-an-armature">Building an armature</a>, <a href="bones.html#joint-limits">Joint limits</a> and <a href="bones.html#pose-commands">Pose commands</a>.</p>
+
+</article>
+</main>
+</body>
+</html>
