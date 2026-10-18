@@ -1037,6 +1037,7 @@ std::shared_ptr<SaveSnapshot> snapshotUnguarded(const fla::Document& document, c
     writeInt(w, s::Document::SnapAlignBorderSpacing, document.snapAlignBorderSpacing, 18);
     writeBool(w, s::Document::ObjectsSnapTo, document.objectsSnapTo, true);
     writeBool(w, s::Document::GuidesSnapTo, document.guidesSnapTo, true);
+    writeBool(w, s::Document::GuidesLocked, document.guidesLocked, false);
     writeInt(w, s::Document::TimelineHeight, document.timelineHeight, 197);
     writeInt(w, s::Document::TimelineLabelWidth, document.timelineLabelWidth, 256);
     writeDouble(w, s::Document::VanishingPointX, document.vanishingPoint3DX, 400.0);

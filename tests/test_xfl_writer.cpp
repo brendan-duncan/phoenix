@@ -1890,3 +1890,22 @@ TEST(xfl_color_alpha_rounds_to_the_nearest_step)
     CHECK(static_cast<const fla::SolidColor*>(shape->fills[1])->color[3] == 31);
     CHECK(static_cast<const fla::SolidColor*>(shape->fills[2])->color[3] == 128);
 }
+
+TEST(xfl_keeps_locked_guides)
+{
+    std::unique_ptr<fla::Document> document = parseDocumentText(
+        "<DOMDocument xmlns='http://ns.adobe.com/xfl/2008/' guidesLocked='true'>"
+        "<timelines><DOMTimeline name='Scene 1'/></timelines></DOMDocument>");
+    CHECK(document && document->guidesLocked);
+    if (!document)
+        return;
+    XFLWriter writer;
+    CHECK(writer.writeDocument(*document).find("guidesLocked=\"true\"") != std::string::npos);
+    document->guidesLocked = false;
+    CHECK(writer.writeDocument(*document).find("guidesLocked=\"true\"") == std::string::npos);
+
+    std::unique_ptr<fla::Document> unlocked = parseDocumentText(
+        "<DOMDocument xmlns='http://ns.adobe.com/xfl/2008/'><timelines><DOMTimeline name='Scene 1'/></timelines>"
+        "</DOMDocument>");
+    CHECK(unlocked && !unlocked->guidesLocked);
+}

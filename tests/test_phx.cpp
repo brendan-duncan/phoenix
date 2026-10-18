@@ -268,6 +268,23 @@ TEST(phx_round_trips_a_new_document)
     CHECK(packageOf(*document->document, a) == packageOf(*back->document, b));
 }
 
+TEST(phx_keeps_locked_guides)
+{
+    std::unique_ptr<fla::FLADocument> document(fla::createEmptyDocument(550, 400, 24.0));
+    CHECK(document && document->document);
+    if (!document || !document->document)
+        return;
+    CHECK(!document->document->guidesLocked);
+    document->document->guidesLocked = true;
+    const std::string path = scratchPath("locked_guides.phx");
+    std::string error;
+    CHECK(phx::save(*document->document, path, phx::SaveOptions(), error));
+    std::string warning;
+    bool readOnly = false;
+    std::unique_ptr<fla::FLADocument> back(phx::load(path, error, warning, readOnly));
+    CHECK(back && back->document && back->document->guidesLocked);
+}
+
 TEST(phx_keeps_what_a_newer_phoenix_wrote)
 {
     std::unique_ptr<fla::FLADocument> document(fla::createEmptyDocument(640, 480, 24.0));

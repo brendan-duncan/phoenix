@@ -2442,6 +2442,7 @@ bool parseDocument(fla::Document* document, const tinyxml2::XMLElement* element,
     document->gridSpacingY = getIntAttribute(element, "gridSpacingY", 18);
     document->objectsSnapTo = getBoolAttribute(element, "objectsSnapTo", true);
     document->guidesSnapTo = getBoolAttribute(element, "guidesSnapTo", true);
+    document->guidesLocked = getBoolAttribute(element, "guidesLocked", false);
     document->snapAlignBorderSpacing = getIntAttribute(element, "snapAlignBorderSpacing", 18);
     getColorAttribute(element, "guidesColor", document->guidesColor);
     document->vanishingPoint3DX = getDoubleAttribute(element, "vanishingPoint3DX", 0.0);
@@ -2454,7 +2455,7 @@ bool parseDocument(fla::Document* document, const tinyxml2::XMLElement* element,
     keepAttributes(element, {"xmlns", "xmlns:xsi", "filetypeGUID", "fileGUID", "width", "height", "frameRate",
         "currentTimeline", "xflVersion", "creatorInfo", "platform", "versionInfo", "majorVersion", "buildNumber",
         "viewAngle3D", "backgroundColor", "phoenixStageAlpha", "gridColor", "gridSpacingX", "gridSpacingY", "objectsSnapTo", "guidesSnapTo",
-        "snapAlignBorderSpacing", "guidesColor", "vanishingPoint3DX", "vanishingPoint3DY", "nextSceneIdentifier",
+        "guidesLocked", "snapAlignBorderSpacing", "guidesColor", "vanishingPoint3DX", "vanishingPoint3DY", "nextSceneIdentifier",
         "playOptionsPlayLoop", "playOptionsPlayPages", "playOptionsPlayFrameActions"}, document);
 
     // Parse child elements
