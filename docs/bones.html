@@ -17,7 +17,7 @@
 <meta property="og:image:alt" content="The Phoenix window with three flower characters on the stage, the timeline below and the Properties panel on the right">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:image" content="https://phoenixanimate.com/assets/shots/hero.webp">
-<meta name="keywords" content="bones ik inverse kinematics armature pose layer bone tool bind tool shape bones control points joint limits constrain rotation springs asset warp tool puppet pins rig">
+<meta name="keywords" content="bones ik inverse kinematics armature pose layer bone tool bind tool shape bones control points joint limits constrain rotation springs gravity wind smooth joints weights asset warp tool puppet pins rig">
 <link rel="icon" href="assets/img/logo.png">
 <link rel="stylesheet" href="assets/site.css">
 <script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
@@ -70,6 +70,25 @@
 
 <p>A point bound to several bones follows them evenly. Every frame of the armature is bent again from its first frame by the new binding, and each change is a single step to undo.</p>
 
+<p>A point can also follow one bone more than another. With a bone chosen, <kbd>Alt</kbd>-click a point to give that bone a quarter more of it, and <kbd>Alt</kbd>+<kbd>Shift</kbd>-click to give it a quarter less; the point's other bones share out the rest. The points the chosen bone moves are yellow, paler the less of them it has, and a shared point shows the bone's share beside it (<em>25%</em>, <em>50%</em>).</p>
+
+<h3 id="smooth-joints">Smooth joints</h3>
+
+<p>When every point follows a single bone, a bent elbow or knee makes a sharp crease. <span class="menu-path">Edit &rsaquo; Timeline &rsaquo; Pose &rsaquo; Smooth Joints</span> blends the points near each joint between the bone above and the bone below, so the shape bends in a soft curve, like an arm in a sleeve:</p>
+
+<ol class="steps">
+  <li>Move the playhead onto the boned shape's armature layer.</li>
+  <li>Choose <strong>Smooth Joints</strong>, and set <strong>Smoothness</strong>: how far either side of each joint the blend reaches, as a share of half the shorter bone. A point right across the joint follows both bones evenly, and points further along follow their own bone more and more.</li>
+  <li>To smooth one joint only, first click its bone with the Bind tool and turn on <strong>Only the joints of the bone chosen with the Bind tool</strong>. That smooths the joints at both ends of the bone.</li>
+</ol>
+
+<p>Choose it again with another Smoothness to change it. The armature remembers the smoothness you gave every joint, and when you add a bone and Phoenix binds the points again, it smooths them the same way. Only points that follow just the bones at a joint change, and a shape bound in another app keeps its binding until you smooth it or bind its points yourself.</p>
+
+<figure>
+  <img src="assets/shots/bones-smooth-joints.webp" alt="Two boned arms bent at the elbow: the left one creased sharply at the joint, the right one bending in a smooth curve" width="640" height="220">
+  <figcaption>The same bend with each point on its nearest bone (left) and with Smooth Joints (right).</figcaption>
+</figure>
+
 <h3>Joint limits</h3>
 
 <p>Click a bone with the Bone tool, without dragging, to set how far the joint at its head may turn. In the <strong>Joint Rotation and Spring</strong> dialog, turn on <strong>Constrain</strong> and give the <strong>Min</strong> and <strong>Max</strong> angles, measured from the bone above. When you drag the armature into a pose, a limited joint stops at its limit and the other joints turn further to make up the difference.</p>
@@ -77,6 +96,24 @@
 <h3 id="springs">Springs</h3>
 
 <p>The same dialog gives a bone a spring, for a tail, an antenna, ears or a ponytail that swings on its own. With <strong>Spring</strong> above None, the bone trails behind as the bones above it move and as its own poses change, swings past and settles back where its pose has it. A low spring swings wide and slow, a high one quick and small; <strong>Damping</strong> says how quickly the swinging dies away, from 0 (it goes on bouncing) to 100 (it settles at once). Springs move the instances of an armature of symbols, and bend a boned shape where its bones swing, the same every time it plays, on the stage, in Test Movie and in exports. The swing is worked into every frame of the armature when you set a spring or change a pose, so the bones swing too, and a span can end swung past its last pose. FLA files keep springs the same way, so an armature with springs from another app plays as it was saved.</p>
+
+<h3 id="gravity-and-wind">Gravity and wind</h3>
+
+<p>Springy bones can also hang under their own weight and blow in the wind, with no poses at all: hair and tails droop, grass and plants sway. Move the playhead onto the armature layer and choose <span class="menu-path">Edit &rsaquo; Timeline &rsaquo; Pose &rsaquo; Gravity and Wind</span>:</p>
+
+<dl class="defs">
+  <dt>Gravity</dt><dd>How hard the bones are pulled, from None to 100, and the <strong>Direction</strong> they are pulled in: 90&deg; is straight down, 0&deg; to the right, 180&deg; to the left and -90&deg; up.</dd>
+  <dt>Wind</dt><dd>How hard the wind blows, and its <strong>Direction</strong>, measured the same way: 0&deg; blows to the right.</dd>
+  <dt>Gusts</dt><dd>How much the wind rises, dies down and changes direction a little. Steady wind just holds the bones bent; stronger gusts make them sway and flutter. <strong>Gust rate</strong> is about how many gusts come each second, and the gusts reach the tip of a chain a moment after its base, so it ripples.</dd>
+  <dt>Variation</dt><dd>A number that picks the pattern of gusts. The same number always gives exactly the same motion; try another for a different sway, for example to keep two plants from moving in step.</dd>
+</dl>
+
+<p>Gravity and wind move only bones with a spring, and how far depends on the spring: a low spring gives way a lot, a high one only a little, and Damping still says how quickly the bones settle. The armature starts the span already hanging, so nothing falls into place on the first frame. The motion is worked into every frame of the armature, as springs are, so it plays the same on the stage, in Test Movie, in every export and in FLA files opened in other apps. When you drag a bone that gravity or wind bends, you pose only the change you make; they keep acting on top of it. Each change in the dialog is one step to undo; set both to None to take them away.</p>
+
+<figure>
+  <img src="assets/shots/bones-gravity-wind.webp" alt="A tall green boned plant bending to the right in the wind, its bones drawn inside it" width="680" height="440">
+  <figcaption>A plant boned from the ground up, with a spring on each bone and a gusting wind blowing to the right.</figcaption>
+</figure>
 
 <h2>Armature layers</h2>
 
@@ -108,6 +145,8 @@
   <dt>Copy Pose</dt><dd>Remembers the armature's pose on that frame, whether or not a pose is there.</dd>
   <dt>Paste Pose</dt><dd>Poses the armature on that frame as the copied pose, adding a pose there if there was none. It pastes onto an armature with the same bones, in the same document or another.</dd>
   <dt>Clear Pose</dt><dd>Takes away the pose on that frame, so the armature tweens straight from the pose before to the pose after. The first pose stays.</dd>
+  <dt>Gravity and Wind</dt><dd>Lets gravity and wind move the armature's springy bones (see <a href="#gravity-and-wind">Gravity and wind</a>).</dd>
+  <dt>Smooth Joints</dt><dd>Blends a boned shape's points between the bones at each joint for smooth bends (see <a href="#smooth-joints">Smooth joints</a>).</dd>
 </dl>
 
 <p>Each is one step to undo; boned shapes bend and symbol instances move as they do when you pose by dragging.</p>
