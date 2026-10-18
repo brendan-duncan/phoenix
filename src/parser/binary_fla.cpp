@@ -434,6 +434,16 @@ public:
 
     using Serializer = void (*)(Reader&, Object&);
 
+    /// A u16 tag that should name an object already read; null for anything
+    /// else (no object, a class, a new object), which is skipped.
+    Object* readReference()
+    {
+        const uint16_t tag = u16();
+        if (tag == 0 || (tag & 0x8000) != 0 || tag == 0x7FFF || tag >= _load.size() || _load[tag].isClass)
+            return nullptr;
+        return _load[tag].object;
+    }
+
     /// CArchive::ReadObject: null, a new object of a class declared here or
     /// earlier, or one already read.
     Object* readObject(const std::map<std::string, Serializer>& serializers)
@@ -2241,6 +2251,7 @@ struct Contents
     std::vector<Object*> symbols;
     std::vector<Object*> media;
     std::vector<Folder> folders;
+    int currentScene = 0; ///< index in scenes
     double width = 550;
     double height = 400;
     double frameRate = 12;
@@ -2272,7 +2283,17 @@ void readContents(Reader& r, Contents& c)
     r.version = version;
     r.skip(known->second);
     c.scenes = readList(r);
-    r.skip(6);
+    // The next scene's number (one past the highest given), a u16 (1 in the
+    // files seen), and the scene open when the document was saved: a
+    // reference to one of the scenes just read. It opens on that scene.
+    r.u16();
+    r.u16();
+    if (const Object* current = r.readReference())
+    {
+        const auto found = std::find(c.scenes.begin(), c.scenes.end(), current);
+        if (found != c.scenes.end())
+            c.currentScene = static_cast<int>(found - c.scenes.begin());
+    }
     c.symbols = readList(r);
     r.u16();
     c.media = readList(r);
@@ -2400,6 +2421,8 @@ public:
         root->SetAttribute("height", number(_contents.height).c_str());
         root->SetAttribute("frameRate", number(_contents.frameRate).c_str());
         root->SetAttribute("backgroundColor", hexColor(_contents.background).c_str());
+        if (_contents.currentScene > 0)
+            root->SetAttribute("currentTimeline", _contents.currentScene + 1);
 
         if (!_contents.folders.empty())
         {

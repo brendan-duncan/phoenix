@@ -163,6 +163,8 @@ TEST(binary_fla_reads_as_its_xfl_twin)
         CHECK(da.frameRate == db.frameRate);
         CHECK(da.timelines.size() == db.timelines.size());
         CHECK(da.resources.size() == db.resources.size());
+        // It opens on the scene it was saved on (Yard_Sale_03's sixth).
+        CHECK(da.currentSceneIndex() == db.currentSceneIndex());
         // Bitmaps say what the twin says: a JPEG is marked as one and has its
         // size, as the reference app needs.
         const auto isJpeg = [](const fla::Bitmap& bitmap) {
