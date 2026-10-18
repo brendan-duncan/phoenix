@@ -128,7 +128,9 @@ void keepAttributes(const tinyxml2::XMLElement* element, std::initializer_list<c
 
 void parseHexColor(const std::string& hexColor, uint8_t rgba[4], double alpha = 1.0)
 {
-    uint8_t a = static_cast<uint8_t>(std::max(0.0, std::min(1.0, alpha)) * 255);
+    // Rounded, not truncated: files write 85/255 as 0.333333333333333, which
+    // truncates to 84.
+    uint8_t a = static_cast<uint8_t>(std::lround(std::max(0.0, std::min(1.0, alpha)) * 255));
     // Remove '#' if present
     if (hexColor.size() == 0)
     {

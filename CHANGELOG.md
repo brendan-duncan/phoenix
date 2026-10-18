@@ -6,6 +6,7 @@ What changed in each release of Phoenix, newest first.
 
 - Old binary FLA files saved again as FLA open in other apps: the saved file names its XFL version, and JPEG images are marked as JPEGs with their size
 - Text runs of only spaces, such as the space between two differently styled words, are no longer lost when an FLA opens
+- Fill and stroke colors with transparency open at exactly the opacity the FLA gives, not one step lower
 
 ## 0.18.2
 

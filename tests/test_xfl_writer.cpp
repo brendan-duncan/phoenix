@@ -1863,3 +1863,30 @@ TEST(xfl_text_keeps_a_run_of_only_spaces)
         static_cast<const fla::StaticText*>(back->timelines[0]->layers[0]->frames[0]->elements[0]);
     CHECK(again->runs.size() == 5 && again->runs[1].text == " ");
 }
+
+TEST(xfl_color_alpha_rounds_to_the_nearest_step)
+{
+    // Files write 85/255 as 0.333333333333333, a hair under the step.
+    std::unique_ptr<fla::Document> document = parseDocumentText(
+        "<DOMDocument xmlns='http://ns.adobe.com/xfl/2008/'><timelines><DOMTimeline name='Scene 1'><layers>"
+        "<DOMLayer name='Layer 1'><frames><DOMFrame index='0'><elements><DOMShape><fills>"
+        "<FillStyle index='1'><SolidColor color='#FF0000' alpha='0.333333333333333'/></FillStyle>"
+        "<FillStyle index='2'><SolidColor alpha='0.12156862745098'/></FillStyle>"
+        "<FillStyle index='3'><SolidColor alpha='0.501960784313725'/></FillStyle>"
+        "</fills></DOMShape></elements></DOMFrame></frames></DOMLayer>"
+        "</layers></DOMTimeline></timelines></DOMDocument>");
+    CHECK(document != nullptr);
+    if (!document)
+        return;
+    const fla::Frame* frame = document->timelines[0]->layers[0]->frames[0];
+    CHECK(frame->elements.size() == 1);
+    if (frame->elements.size() != 1)
+        return;
+    const fla::Shape* shape = static_cast<const fla::Shape*>(frame->elements[0]);
+    CHECK(shape->fills.size() == 3);
+    if (shape->fills.size() != 3)
+        return;
+    CHECK(static_cast<const fla::SolidColor*>(shape->fills[0])->color[3] == 85);
+    CHECK(static_cast<const fla::SolidColor*>(shape->fills[1])->color[3] == 31);
+    CHECK(static_cast<const fla::SolidColor*>(shape->fills[2])->color[3] == 128);
+}
