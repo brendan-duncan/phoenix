@@ -45,6 +45,7 @@ const NAV = [
     { href: "workspace.html", title: "The workspace" },
     { href: "stage.html", title: "Stage, zoom and view" },
     { href: "documents.html", title: "Documents and files" },
+    { href: "import.html", title: "Importing artwork" },
   ] },
   { group: "Drawing", pages: [
     { href: "drawing-models.html", title: "Merge and object drawing" },
