@@ -4,11 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Selecting and transforming · Phoenix User Guide</title>
-<meta name="description" content="Select, move, copy, transform, align, arrange and reshape artwork in Phoenix.">
+<meta name="description" content="Select, move, copy, transform, align, arrange, lock and reshape artwork in Phoenix: the Selection, Subselection, lasso and Free Transform tools, the Align, Transform and Info panels, and the Modify menu's transform, arrange and shape commands.">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Phoenix">
 <meta property="og:title" content="Selecting and transforming · Phoenix User Guide">
-<meta property="og:description" content="Select, move, copy, transform, align, arrange and reshape artwork in Phoenix.">
+<meta property="og:description" content="Select, move, copy, transform, align, arrange, lock and reshape artwork in Phoenix.">
 <meta property="og:url" content="https://phoenixanimate.com/selecting.html">
 <meta property="og:image" content="https://phoenixanimate.com/assets/shots/hero.webp">
 <meta property="og:image:type" content="image/webp">
@@ -17,7 +17,7 @@
 <meta property="og:image:alt" content="The Phoenix window with three flower characters on the stage, the timeline below and the Properties panel on the right">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:image" content="https://phoenixanimate.com/assets/shots/hero.webp">
-<meta name="keywords" content="selection tool subselection lasso polygon magic wand marquee nudge duplicate paste in place free transform distort envelope rotate scale skew flip align distribute arrange bring to front lock transform panel info panel smooth straighten optimize expand fill soften edges convert lines to fills distribute to layers distribute to keyframes remove transform">
+<meta name="keywords" content="selection tool subselection lasso polygon magic wand marquee contact click accuracy select all deselect hide edges nudge move copy alt-drag duplicate paste in place paste in center move to another layer free transform transformation point distort envelope rotate scale skew flip scale and rotate rotate 90 remove transform transform panel duplicate and transform info panel align distribute match size space evenly align to stage arrange bring to front send to back lock unlock all group break apart reshape bend edge corner smooth straighten optimize advanced smooth advanced straighten expand fill soften fill edges convert lines to fills distribute to layers distribute to keyframes">
 <link rel="icon" href="assets/img/logo.png">
 <link rel="stylesheet" href="assets/site.css">
 <script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
@@ -29,27 +29,78 @@
 
 <p class="eyebrow">Drawing</p>
 <h1>Selecting and transforming</h1>
-<p class="lead">Select what you want to change, then move it, copy it, reshape it, or line it up with everything else.</p>
+<p class="lead">Select what you want to change, then move it, copy it, transform it, reshape it, or line it up with everything else.</p>
+
+<p>How a selection behaves depends on what you picked. Merge artwork is selected by area and can be cut along the edge of a selection; drawing objects, groups, symbol instances, text and bitmaps are selected whole. <a href="drawing-models.html">Merge and object drawing</a> explains the difference.</p>
 
 <h2>The Selection tool</h2>
 
-<p>Press <kbd>V</kbd>. The Selection tool is the one you will use most. When you select something with it, or with any other selecting tool (Subselection, Free Transform, Gradient Transform, the lasso tools and the 3D tools), the Properties panel shows the <strong>Object</strong> tab for what you picked.</p>
+<p>Press <kbd>V</kbd>. The Selection tool is the one you will use most. When you select something with it, or with any other selecting tool (Subselection, Free Transform, Gradient Transform, the lasso tools and the 3D tools), the Properties panel shows the <strong>Object</strong> tab for what you picked. While another tool is active, hold <kbd>Ctrl</kbd> to use the Selection tool for a moment.</p>
 
 <table>
   <thead><tr><th>Do this</th><th>To</th></tr></thead>
   <tbody>
-    <tr><td>Click</td><td class="wrap">Select an object, or one area of merge artwork</td></tr>
-    <tr><td><kbd>Shift</kbd>-click</td><td class="wrap">Add to or remove from the selection</td></tr>
-    <tr><td>Drag on empty stage</td><td class="wrap">Select everything inside a rectangle</td></tr>
-    <tr><td>Drag a selection</td><td class="wrap">Move it; hold <kbd>Shift</kbd> to keep to straight lines</td></tr>
-    <tr><td><kbd>Alt</kbd>-drag</td><td class="wrap">Move a copy, leaving the original in place</td></tr>
-    <tr><td>Arrow keys</td><td class="wrap">Nudge one pixel; ten with <kbd>Shift</kbd></td></tr>
-    <tr><td>Double-click</td><td class="wrap">Enter a symbol or group to edit it; on merge artwork, widen the selection. Double-click empty stage to step back out.</td></tr>
-    <tr><td><kbd>Esc</kbd></td><td class="wrap">Clear the selection</td></tr>
+    <tr><td>Click</td><td class="wrap">Select an object, or one fill or stroke segment of merge artwork</td></tr>
+    <tr><td><kbd>Shift</kbd>-click</td><td class="wrap">Add to the selection, or take something already selected out of it</td></tr>
+    <tr><td>Drag on empty stage</td><td class="wrap">Select with a rectangle (a marquee); see below</td></tr>
+    <tr><td><kbd>Shift</kbd>-drag on empty stage</td><td class="wrap">Add what the rectangle takes to the selection</td></tr>
+    <tr><td>Double-click</td><td class="wrap">Enter a symbol or group to edit it; on merge artwork, select a fill with its outline, or every connected stroke segment. Double-click empty stage to step back out.</td></tr>
+    <tr><td>Click empty stage, or <kbd>Esc</kbd></td><td class="wrap">Clear the selection</td></tr>
+    <tr><td>Right-click</td><td class="wrap">Select what is under the pointer, if it is not selected already, and show the stage's menu of commands for it</td></tr>
   </tbody>
 </table>
 
-<p><span class="menu-path">Edit &rsaquo; Select All</span> (<kbd>Ctrl</kbd>+<kbd>A</kbd>) and <span class="menu-path">Deselect All</span> (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>A</kbd>) work too. To bend and reshape merge artwork with this tool, see <a href="drawing-models.html#reshaping-merge-artwork">Reshaping merge artwork</a>.</p>
+<p>The cursor shows what a press will do: a four-way arrow over something that will move, a curve or a corner beside the arrow over an edge you can bend (see <a href="#reshaping-with-the-selection-tool">Reshaping with the Selection tool</a>).</p>
+
+<h3>The marquee</h3>
+
+<p>A marquee picks every object it touches, even if only part of the object is inside it. Merge artwork works by area instead: what the rectangle covers completely is selected whole, and artwork it only partly covers is cut along the rectangle's edge, so you can drag out exactly the piece you enclosed. There is no setting that makes the marquee pick only what it fully encloses.</p>
+
+<h3>What can be selected</h3>
+
+<ul>
+  <li><strong>Select All</strong> (<span class="menu-path">Edit &rsaquo; Select All</span>, <kbd>Ctrl</kbd>+<kbd>A</kbd>) selects everything on the current frame of every visible, unlocked layer, including anything on the pasteboard off the stage. <strong>Deselect All</strong> is <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>A</kbd>. There is no command to invert the selection.</li>
+  <li>Nothing on a hidden or locked layer can be selected on the stage. Lock or hide a layer with its controls on the timeline; see <a href="timeline.html#layer-controls">Layer controls</a>.</li>
+  <li>A single object can be locked too; see <a href="#arrange-and-lock">Arrange and lock</a>.</li>
+  <li>How near a click must be to a line or point to pick it is <strong>Click accuracy</strong> in <span class="menu-path">Edit &rsaquo; Preferences</span>: Strict, Normal or Tolerant. See <a href="preferences.html">Preferences</a>.</li>
+  <li><span class="menu-path">View &rsaquo; Hide Edges</span> (<kbd>Ctrl</kbd>+<kbd>H</kbd>) hides the selection's dot pattern and outlines while it stays selected, so you can judge the art as it is.</li>
+</ul>
+
+<h2>Moving and copying</h2>
+
+<table>
+  <thead><tr><th>Do this</th><th>To</th></tr></thead>
+  <tbody>
+    <tr><td>Drag a selection</td><td class="wrap">Move it. Hold <kbd>Shift</kbd> to keep the move to the nearest 45&deg; direction.</td></tr>
+    <tr><td><kbd>Alt</kbd>-drag</td><td class="wrap">Move a copy, leaving the original in place. <kbd>Alt</kbd> must be held as the drag starts.</td></tr>
+    <tr><td>Arrow keys</td><td class="wrap">Nudge the selection one pixel; ten with <kbd>Shift</kbd>. A run of nudges is one step to undo.</td></tr>
+    <tr><td>Type <strong>X</strong> and <strong>Y</strong></td><td class="wrap">Place it exactly; see <a href="#position-and-size">Position and size</a></td></tr>
+  </tbody>
+</table>
+
+<p>A press that hardly moves counts as a click, so a slightly shaky click selects without nudging anything. With snapping on, the selection's edges and center line up with guides, the grid and other objects as you drag, and with <strong>Snap to Objects</strong> on a small ring at the pointer grows when it locks on; see <a href="stage.html#grid-and-snapping">Grid and snapping</a>.</p>
+
+<h3 id="cut-copy-and-paste">Cut, copy and paste</h3>
+
+<table>
+  <thead><tr><th>Command</th><th>Shortcut</th><th>Notes</th></tr></thead>
+  <tbody>
+    <tr><td>Cut</td><td><kbd>Ctrl</kbd>+<kbd>X</kbd></td><td></td></tr>
+    <tr><td>Copy</td><td><kbd>Ctrl</kbd>+<kbd>C</kbd></td><td></td></tr>
+    <tr><td>Paste in Center</td><td><kbd>Ctrl</kbd>+<kbd>V</kbd></td><td class="wrap">Pastes in the middle of the part of the stage you can see</td></tr>
+    <tr><td>Paste in Place</td><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>V</kbd></td><td class="wrap">Pastes at the original position, for example on another frame or layer. With frames chosen on the timeline, it pastes onto each keyframe they cover, on every unlocked layer chosen</td></tr>
+    <tr><td>Duplicate</td><td><kbd>Ctrl</kbd>+<kbd>D</kbd></td><td class="wrap">Copies the selection and pastes it in one step, exactly on top of the original, without touching the clipboard</td></tr>
+    <tr><td>Clear</td><td><kbd>Delete</kbd> or <kbd>Backspace</kbd></td><td class="wrap">Removes the selection</td></tr>
+  </tbody>
+</table>
+
+<p>Copies go to the system clipboard. You can paste artwork between two Phoenix windows, and paste your artwork into other apps as a picture or as SVG. When you paste into another document, the symbols, bitmaps and brushes the artwork uses come with it. Phoenix pastes in images, text, SVG and PDF artwork from other apps, and files copied in your file manager, which come in as if you had imported them. There is no Paste Special.</p>
+
+<p>Pasted merge artwork floats above the artwork, selected, until you click elsewhere, just like a shape you have just drawn; drawing objects and other objects stay separate.</p>
+
+<h3>Moving to another layer</h3>
+
+<p>To move a selection to another layer without shifting it, cut it (<kbd>Ctrl</kbd>+<kbd>X</kbd>), click the other layer, and choose <strong>Paste in Place</strong> (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>V</kbd>). To give each selected object a layer of its own, use <a href="#distribute-to-layers">Distribute to Layers</a>. Dragging a selection onto another layer is not available.</p>
 
 <h2>Subselection</h2>
 
@@ -59,12 +110,14 @@
   <li>Drag a point, or drag a rectangle to select several and drag them together. <kbd>Shift</kbd>-click or <kbd>Shift</kbd>-drag adds points to the selection.</li>
   <li>Drag a handle to change the curve; <kbd>Alt</kbd>-drag to move one handle independently of its partner.</li>
   <li><kbd>Alt</kbd>-drag from a corner point to pull out handles, or <kbd>Alt</kbd>-click a smooth point to make it a corner.</li>
-  <li>Nudge selected points with the arrow keys, and press <kbd>Delete</kbd> to remove them.</li>
+  <li>Nudge selected points with the arrow keys, one screen pixel at a time (ten with <kbd>Shift</kbd>), so zooming in nudges more finely. Press <kbd>Delete</kbd> to remove them.</li>
 </ul>
+
+<p>To add, delete or convert points, use the Add, Delete and Convert Anchor Point tools; see <a href="drawing-tools.html#add-delete-and-convert-anchor-point">Add, Delete and Convert Anchor Point</a>.</p>
 
 <h2>Lasso tools</h2>
 
-<p>The lasso slot holds three ways to select an irregular area: the Lasso (<kbd>L</kbd>), Polygon and Magic Wand. Hold <kbd>Shift</kbd> with any of them to add to the selection.</p>
+<p>The lasso slot holds three ways to select an irregular area: the Lasso (<kbd>L</kbd>), Polygon and Magic Wand. Hold <kbd>Shift</kbd> with any of them to add to the selection. Like the marquee, they cut merge artwork along their outline and pick objects they touch whole.</p>
 
 <dl class="defs">
   <dt>Lasso</dt><dd>Draw a loop freehand. Merge artwork is cut along the loop.</dd>
@@ -74,92 +127,81 @@
 
 <h2>Free Transform</h2>
 
-<p>Press <kbd>Q</kbd>. Handles appear around the selection.</p>
+<p>Press <kbd>Q</kbd>. A box with eight handles appears around the selection, with the transformation point, a small circle, in the middle. With nothing selected, click something to select it and carry on. Click outside the box to select something else, or empty stage to clear the selection.</p>
+
+<figure class="narrow">
+  <img src="assets/shots/free-transform-handles.webp" alt="Two drawing objects, a teal rounded rectangle and a pink circle, inside a Free Transform box with square handles at the corners and sides and a round transformation point in the middle" width="430" height="305">
+  <figcaption>The Free Transform box around two selected objects.</figcaption>
+</figure>
 
 <table>
   <thead><tr><th>Drag</th><th>To</th></tr></thead>
   <tbody>
-    <tr><td>A corner or side handle</td><td class="wrap">Scale. <kbd>Shift</kbd> keeps the proportions; <kbd>Alt</kbd> scales around the transformation point. With snapping on, the handle itself lands exactly on a guide, a grid line, or another object's edge, corner or anchor point, and an anchor point wins over a line.</td></tr>
-    <tr><td>Just outside a corner</td><td class="wrap">Rotate. <kbd>Shift</kbd> rotates in 45&deg; steps.</td></tr>
-    <tr><td>Along an edge between handles</td><td class="wrap">Skew</td></tr>
-    <tr><td>The transformation point</td><td class="wrap">Move the point that scaling and rotation work around. Double-click it to center it again.</td></tr>
-    <tr><td>A corner with <kbd>Ctrl</kbd></td><td class="wrap">Distort a shape freely. Add <kbd>Shift</kbd> to taper both sides together.</td></tr>
+    <tr><td>Inside the box</td><td class="wrap">Move the selection</td></tr>
+    <tr><td>A corner or side handle</td><td class="wrap">Scale from the opposite handle. <kbd>Shift</kbd> keeps the proportions; <kbd>Alt</kbd> scales around the transformation point. With snapping on, the handle itself lands exactly on a guide, a grid line, or another object's edge, corner or anchor point, and an anchor point wins over a line.</td></tr>
+    <tr><td>Just outside a corner</td><td class="wrap">Rotate around the transformation point. <kbd>Shift</kbd> rotates in 45&deg; steps.</td></tr>
+    <tr><td>Along an edge between handles</td><td class="wrap">Skew; the opposite edge stays put</td></tr>
+    <tr><td>The transformation point</td><td class="wrap">Move the point that scaling and rotation work around. It snaps to the center and the handles, and to guides and the grid with snapping on. Double-click it to center it again.</td></tr>
+    <tr><td>A corner with <kbd>Ctrl</kbd></td><td class="wrap">Distort a shape freely. Add <kbd>Shift</kbd> to taper: the neighboring corner moves the opposite way.</td></tr>
   </tbody>
 </table>
+
+<p>The cursor changes to show which of these a press will do. A rotated or skewed selection keeps a rotated or skewed box, so scaling it afterwards works along its own sides. Each drag is one step to undo, and <kbd>Esc</kbd> cancels a drag in progress. To flip, drag a side handle past the opposite side, or use <strong>Flip Horizontal</strong> and <strong>Flip Vertical</strong> below.</p>
+
+<p>A single object remembers where you put its transformation point. A movie clip also turns about it in 3D.</p>
+
+<h3>Distort and Envelope</h3>
 
 <figure class="narrow">
   <img src="assets/shots/tool-freetransform.webp" alt="Free Transform tool settings with a Mode option" width="391" height="197">
   <figcaption>The Free Transform tool's <strong>Mode</strong> chooses Free Transform, Distort or Envelope.</figcaption>
 </figure>
 
-<p>In <strong>Envelope</strong> mode, a mesh of points and handles surrounds the shape, and dragging them warps the artwork inside. <kbd>Esc</kbd> cancels a transform in progress.</p>
+<p>In <strong>Distort</strong> mode every corner drag distorts, as if <kbd>Ctrl</kbd> were held. In <strong>Envelope</strong> mode, a mesh of points and handles surrounds the shape, and dragging them warps the artwork inside; dragging a point carries its handles with it. Distort and Envelope rewrite the points of shapes, so they work on merge artwork and drawing objects only. A symbol instance, group, text or bitmap can be scaled, rotated and skewed, but not distorted.</p>
 
 <h3>Transform commands</h3>
 
-<p><span class="menu-path">Modify &rsaquo; Transform</span> has exact transforms:</p>
+<figure class="narrow">
+  <img src="assets/shots/menu-modify-transform.webp" alt="The Modify, Transform menu: Scale and Rotate, Rotate 90 degrees clockwise and counterclockwise, Flip Vertical, Flip Horizontal and Remove Transform, with their shortcuts" width="217" height="159">
+</figure>
+
+<p><span class="menu-path">Modify &rsaquo; Transform</span> has exact transforms. They work around the middle of the whole selection:</p>
 
 <table>
-  <thead><tr><th>Command</th><th>Shortcut</th></tr></thead>
+  <thead><tr><th>Command</th><th>Shortcut</th><th>Does</th></tr></thead>
   <tbody>
-    <tr><td>Scale and Rotate...</td><td><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>S</kbd></td></tr>
-    <tr><td>Rotate 90&deg; CW</td><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>9</kbd></td></tr>
-    <tr><td>Rotate 90&deg; CCW</td><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>7</kbd></td></tr>
-    <tr><td>Flip Vertical, Flip Horizontal</td><td></td></tr>
-    <tr><td>Remove Transform</td><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd></td></tr>
+    <tr><td>Scale and Rotate...</td><td><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>S</kbd></td><td class="wrap">Scales by a percentage (1 to 10000%) and turns by an angle, on top of what is there. It offers your last values again.</td></tr>
+    <tr><td>Rotate 90&deg; CW</td><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>9</kbd></td><td class="wrap">A quarter turn clockwise</td></tr>
+    <tr><td>Rotate 90&deg; CCW</td><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>7</kbd></td><td class="wrap">A quarter turn counterclockwise</td></tr>
+    <tr><td>Flip Vertical, Flip Horizontal</td><td></td><td class="wrap">Mirror top to bottom, or left to right</td></tr>
+    <tr><td>Remove Transform</td><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd></td><td class="wrap">Returns each selected instance, group or object to its original size and angle, with no skew, keeping its middle where it was</td></tr>
   </tbody>
 </table>
 
-<p><strong>Remove Transform</strong> returns an instance, group or object to its original size and angle.</p>
+<p>Free Transform, Distort and Envelope are tool modes rather than menu commands. Remove Transform does not touch a movie clip's 3D turn; see <a href="3d.html">3D rotation and translation</a>.</p>
 
 <h3>The Transform panel</h3>
 
-<p><span class="menu-path">Window &rsaquo; Transform</span> (<kbd>Ctrl</kbd>+<kbd>T</kbd>) scales the selection by a percentage (with <strong>Constrain</strong> to keep proportions), rotates it by an angle, or skews it. <strong>Duplicate and Transform</strong> applies the values to a copy, which is a quick way to make a ring of evenly turned copies. <strong>Remove Transform</strong> does the same as the menu command.</p>
+<div class="split">
+  <figure><img src="assets/shots/transform-panel.webp" alt="The Transform panel: Scale 80% by 80% with Constrain checked, Rotate 20 degrees chosen, Skew 20 and 20 degrees, and the Duplicate and Transform and Remove Transform buttons" width="300" height="205"></figure>
+  <div>
+    <p><span class="menu-path">Window &rsaquo; Transform</span> (<kbd>Ctrl</kbd>+<kbd>T</kbd>) shows the scale, rotation and skew of the selected object (the first one, if several are selected), and sets them exactly:</p>
+    <ul>
+      <li><strong>Scale</strong> across and down, as percentages. <strong>Constrain</strong>, on at first, keeps the two the same.</li>
+      <li><strong>Rotate</strong> by an angle, or <strong>Skew</strong> each axis by its own angle.</li>
+    </ul>
+  </div>
+</div>
+
+<p>The values you type are the object's own, not added to what is there: typing 20&deg; into Rotate sets it to 20&deg; however it was turned. Each selected object changes around its own transformation point.</p>
+
+<p><strong>Duplicate and Transform</strong> copies the selection and gives the copy the panel's values. To make a ring of turned copies, type 30&deg; and click it, then 60&deg; and click it again, and so on; clicking it twice with the same value puts the second copy on top of the first. <strong>Remove Transform</strong> sets the selection back to 100% and 0&deg;.</p>
 
 <h2>3D rotation and translation</h2>
 
-<p>Movie clips can be turned and moved in 3D, drawn in perspective. The two 3D tools share a slot in the toolbox:</p>
+<p>Movie clips can be turned about their horizontal and vertical axes with the <strong>3D Rotation</strong> tool (<kbd>W</kbd>) and pushed into the stage or brought nearer with the <strong>3D Translation</strong> tool (<kbd>G</kbd>), drawn in perspective. The Object tab's <strong>3D Position and View</strong> section sets their depth and the document's perspective. See <a href="3d.html">3D rotation and translation</a> for the tools, the view settings, tweening in 3D and what other apps see.</p>
 
-<dl class="defs">
-  <dt>3D Rotation (<kbd>W</kbd>)</dt><dd>Drag a movie clip left or right to turn it about its vertical axis, up or down to tip it about its horizontal axis. It turns about its transformation point. <kbd>Alt</kbd>-click sets it flat again.</dd>
-  <dt>3D Translation (<kbd>G</kbd>)</dt><dd>Drag a movie clip up to push it into the stage, down to bring it nearer. A clip further in draws smaller and closer to the vanishing point, the middle of the stage unless you move it. Move it across the stage with the Selection tool as usual.</dd>
-</dl>
-
-<p>The 3D turn and depth are keyed on keyframes like any other property, and a classic tween between two keyframes turns and moves the clip smoothly from one to the other. Each drag is a single step to undo.</p>
-
-<p>With a movie clip selected, the Object tab's <strong>3D Position and View</strong> section sets its depth (<strong>Z</strong>) exactly, how thick it is (<strong>Depth</strong>: its edges drawn back that far behind its face and shaded by the lights, a card with a visible edge or a solid block of a logo), and the view every 3D clip in the document shares: the <strong>Angle</strong> of perspective (55&deg; unless you change it; wider exaggerates depth) and the <strong>Vanish X</strong> and <strong>Y</strong> point that depth recedes to. <strong>Reset View</strong> puts the vanishing point back in the middle of the stage and the angle at 55&deg;.</p>
-
-<h3 id="lights">Lights and depth of field</h3>
-
-<p><strong>Lights and Depth...</strong> in the same section sets three things for every clip turned or moved in 3D in the document:</p>
-
-<ul>
-  <li><strong>A light.</strong> Each clip is shaded by how squarely it faces the light, so a card swinging round catches the light and darkens as it turns edge on. <strong>From</strong> says where the light comes from (round from above: 90&deg; from the right, -90&deg; from the left), <strong>Height</strong> how far out toward you it is (90&deg; straight from the front), <strong>Ambient</strong> how bright a clip turned away still is, and <strong>Color</strong> tints the light, warm or cool. Clips lying flat on the stage are not shaded. Pick <strong>Light 2</strong>, <strong>3</strong> or <strong>4</strong> and tick <strong>On</strong> for more lights: a warm key light and a cool one from the other side, each shading the clips in its color, added up.</li>
-  <li><strong>Shadows.</strong> With <strong>Clips cast shadows</strong> ticked, a movie clip nearer the viewer (a lower Z) casts a soft shadow on a turned clip behind it, thrown away from each light: further and softer the further apart the two are. <strong>Darkness</strong> sets how dark, <strong>Softness</strong> how much blur for each hundred pixels between them.</li>
-  <li><strong>Depth of field.</strong> Clips blur the further they are from the <strong>Focus</strong> depth (a Z), by <strong>Blur</strong> pixels for each hundred pixels nearer or further: a sharp title with a soft background pushed back behind it. Key the clips' Z to rack focus as they move.</li>
-</ul>
-
-<figure>
-  <img src="assets/shots/mg-3d-light.webp" alt="Five cards on a dark blue stage: one flat and unshaded, two turned toward a warm light and lit, one turned away and dark and blurred deep in the stage, and one near the viewer, large and blurred" width="800" height="206">
-  <figcaption>A warm light from the upper left, and depth of field focused on the stage.</figcaption>
-</figure>
-
-<p>All of these are Phoenix's own: another app opening the FLA file shows the clips flat, unshaded, sharp, without shadows or depth.</p>
-
-<h2>Cut, copy and paste</h2>
-
-<table>
-  <thead><tr><th>Command</th><th>Shortcut</th><th>Notes</th></tr></thead>
-  <tbody>
-    <tr><td>Cut</td><td><kbd>Ctrl</kbd>+<kbd>X</kbd></td><td></td></tr>
-    <tr><td>Copy</td><td><kbd>Ctrl</kbd>+<kbd>C</kbd></td><td></td></tr>
-    <tr><td>Paste in Center</td><td><kbd>Ctrl</kbd>+<kbd>V</kbd></td><td class="wrap">Pastes in the middle of the view</td></tr>
-    <tr><td>Paste in Place</td><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>V</kbd></td><td class="wrap">Pastes at the original position, for example on another frame or layer. With frames chosen on the timeline, it pastes onto each keyframe they cover, on every unlocked layer chosen</td></tr>
-    <tr><td>Duplicate</td><td><kbd>Ctrl</kbd>+<kbd>D</kbd></td><td class="wrap">Copies and pastes in one step</td></tr>
-    <tr><td>Clear</td><td><kbd>Delete</kbd></td><td class="wrap">Removes the selection</td></tr>
-  </tbody>
-</table>
-
-<p>Copies go to the system clipboard. You can paste artwork between two Phoenix windows, and paste your artwork into other apps as a picture or as SVG. Phoenix pastes in images, text, SVG and PDF artwork from other apps, and files copied in your file manager, which come in as if you had imported them.</p>
+<p id="lights">Clips turned in 3D can be shaded by lights, cast shadows on the clips behind them, and blur away from a focus depth. See <a href="3d.html#lights">Lights, shadows and depth of field</a>.</p>
 
 <h2>Arrange and lock</h2>
 
@@ -177,45 +219,100 @@
   </tbody>
 </table>
 
-<p>When several objects are selected, they move through the stack together. Merge artwork always stays below the layer's groups, symbol instances and drawing objects, so Arrange moves it only among the other merge artwork, and moves objects only among objects. A locked object can't be selected until you unlock it.</p>
+<p>When several objects are selected, they move through the stack together. Merge artwork always stays below the layer's groups, symbol instances and drawing objects, so Arrange moves it only among the other merge artwork, and moves objects only among objects. To put something in front of what is on another layer, move it to a layer higher up the timeline.</p>
+
+<p><strong>Lock</strong> keeps the selected objects where they are: a locked object still shows, but can't be selected or moved until you unlock it. <strong>Unlock All</strong> unlocks every locked object on the frame shown, on every layer of the timeline you are editing. To lock or hide a whole layer, use the layer's controls on the timeline.</p>
+
+<h2>Groups</h2>
+
+<p><span class="menu-path">Modify &rsaquo; Group</span> (<kbd>Ctrl</kbd>+<kbd>G</kbd>) puts the selected objects into a group that moves and transforms as one and is kept from merging with other artwork; <strong>Ungroup</strong> is <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>G</kbd>. Only things on the same frame of the same layer can be grouped together. Double-click a group to edit what is inside while the rest of the stage dims; double-click empty stage to step back out.</p>
+
+<p><span class="menu-path">Modify &rsaquo; Break Apart</span> (<kbd>Ctrl</kbd>+<kbd>B</kbd>) takes a group apart, turns a drawing object or primitive into merge artwork, and replaces a symbol instance with the artwork of the frame it shows. Text breaks apart into one text field for each letter, and breaking those apart again turns each letter into a filled shape. See <a href="drawing-models.html#converting-between-the-two">Converting between the two</a>.</p>
 
 <h2>Align</h2>
 
-<p><span class="menu-path">Window &rsaquo; Align</span> (<kbd>Ctrl</kbd>+<kbd>K</kbd>) lines up the selected objects:</p>
+<figure class="narrow">
+  <img src="assets/shots/align-panel.webp" alt="The Align panel: rows of buttons for Align, Distribute, Match size and Space, and an Align to stage checkbox" width="300" height="232">
+</figure>
 
-<ul>
-  <li><strong>Align</strong> their left edges, centers or right edges, or their tops, middles or bottoms.</li>
-  <li><strong>Distribute</strong> them so their edges or centers are evenly spaced.</li>
-  <li><strong>Match size</strong> to make them the same width, height or both.</li>
-  <li><strong>Space evenly</strong> to put equal gaps between them, across or down.</li>
-</ul>
+<p><span class="menu-path">Window &rsaquo; Align</span> (<kbd>Ctrl</kbd>+<kbd>K</kbd>) lines up the selected objects by their bounding boxes:</p>
 
-<p>Check <strong>Align to stage</strong> to align to the stage instead of to each other, for example to center an object on the stage.</p>
+<dl class="defs">
+  <dt>Align</dt><dd>Their left edges, centers or right edges, or their tops, middles or bottoms, to the edge of the whole selection. It needs two or more objects.</dd>
+  <dt>Distribute</dt><dd>Spaces their left edges, centers, right edges, tops, middles or bottoms evenly from the first object to the last. The two outermost stay where they are.</dd>
+  <dt>Match size</dt><dd>Makes them as wide, as tall, or both, as the largest of them. Each grows or shrinks from its top-left corner.</dd>
+  <dt>Space</dt><dd>Puts equal gaps between them, across or down, keeping the outermost two in place. It needs three or more objects.</dd>
+</dl>
+
+<p>Check <strong>Align to stage</strong> to work to the stage instead of to each other. Align then moves even a single object to the stage's edge or center, Distribute and Space spread the selection across the whole stage, and Match size makes objects as wide or tall as the stage.</p>
 
 <p>The same commands are on <span class="menu-path">Modify &rsaquo; Align</span>, with keys: <strong>Left</strong>, <strong>Horizontal Center</strong> and <strong>Right</strong> (<kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>1</kbd> to <kbd>3</kbd>), <strong>Top</strong>, <strong>Vertical Center</strong> and <strong>Bottom</strong> (<kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>4</kbd> to <kbd>6</kbd>), <strong>Make Same Width</strong> and <strong>Make Same Height</strong> (<kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>7</kbd> and <kbd>9</kbd>), and <strong>To Stage</strong> (<kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>8</kbd>), which turns aligning to the stage on and off for all of them.</p>
 
 <h2>The Info panel</h2>
 
-<p><span class="menu-path">Window &rsaquo; Info</span> (<kbd>Ctrl</kbd>+<kbd>I</kbd>) shows the size and position of the selection, the position of the cursor, and the color under the cursor.</p>
+<div class="split">
+  <figure><img src="assets/shots/info-panel.webp" alt="The Info panel showing the selection's size, W 168.15 and H 139.46, and position, X 125.93 and Y 130.27, with Cursor and Color rows" width="300" height="205"></figure>
+  <div>
+    <p><span class="menu-path">Window &rsaquo; Info</span> (<kbd>Ctrl</kbd>+<kbd>I</kbd>) shows, as you work:</p>
+    <ul>
+      <li><strong>Size</strong>: the width and height of the selection's bounding box.</li>
+      <li><strong>Position</strong>: the box's top-left corner.</li>
+      <li><strong>Cursor</strong>: where the pointer is on the stage.</li>
+      <li><strong>Color</strong>: the red, green and blue values and hex code of the color under the pointer, with a swatch.</li>
+    </ul>
+  </div>
+</div>
+
+<p>The Info panel only reports. To type a new size or position, use the Object tab.</p>
 
 <h2>Position and size</h2>
 
 <p>For exact numbers, use the <strong>Position and Size</strong> section of the Object tab: <strong>X</strong> and <strong>Y</strong> set the position, and <strong>W</strong> and <strong>H</strong> the size. Click the chain button to keep the width and height in proportion.</p>
 
+<h2>Reshaping with the Selection tool</h2>
+
+<p>With the Selection tool, point at the edge of a shape that is not selected, whether merge artwork or a drawing object:</p>
+
+<ul>
+  <li>When the cursor shows a curve, drag to bend the edge. The bend spreads smoothly along the outline.</li>
+  <li>When the cursor shows a corner, drag to move the corner point.</li>
+  <li>Hold <kbd>Ctrl</kbd> while dragging an edge to pull a new corner out of it.</li>
+</ul>
+
+<p>A shape you have just drawn can be bent straight away. For point-by-point control, use the <a href="#subselection">Subselection</a> tool. To change how thick a stroke is along its length, use the <a href="drawing-tools.html#width-tool">Width tool</a>. More on bending merge artwork: <a href="drawing-models.html#reshaping-merge-artwork">Reshaping merge artwork</a>.</p>
+
 <h2>Shape commands</h2>
 
-<p><span class="menu-path">Modify &rsaquo; Shape</span> cleans up and reshapes merge artwork and drawing objects:</p>
+<div class="split">
+  <figure><img src="assets/shots/menu-modify-shape.webp" alt="The Modify, Shape menu: Add Shape Hint, Remove All Hints, Smooth, Advanced Smooth, Straighten, Advanced Straighten, Optimize, Convert Lines to Fills, Expand Fill and Soften Fill Edges" width="263" height="252"></figure>
+  <div>
+    <p><span class="menu-path">Modify &rsaquo; Shape</span> cleans up and reshapes the selected merge artwork and drawing objects. Groups, symbols and text are left alone; break them apart first. Each command is one step to undo.</p>
+    <p>The <strong>Shape Options</strong> section of the Object tab has <strong>Smoothen</strong> and <strong>Straighten</strong> buttons that do the same as the menu's Smooth and Straighten.</p>
+  </div>
+</div>
 
 <dl class="defs">
-  <dt>Smooth</dt><dd>Softens curves and removes small bumps. Repeat to smooth further. Also on the Object tab as <strong>Smoothen</strong>.</dd>
-  <dt>Straighten</dt><dd>Flattens nearly straight curves into lines. Also on the Object tab.</dd>
-  <dt>Advanced Smooth...</dt><dd><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>M</kbd>. Smooths only the corners sharper or blunter than the angles you set (a straight run is 180&deg;), as strongly as you choose.</dd>
-  <dt>Advanced Straighten...</dt><dd><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>N</kbd>. Straightens as strongly as you choose. With <strong>Recognize shapes</strong>, a closed path that reads as a rectangle or an oval becomes a true one.</dd>
-  <dt>Optimize...</dt><dd><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>C</kbd>. Reduces the number of points in curves, at a strength you choose.</dd>
+  <dt>Smooth</dt><dd>Softens curves and removes small bumps, by a fixed, gentle amount. Repeat to smooth further.</dd>
+  <dt>Straighten</dt><dd>Flattens nearly straight curves into lines. Repeat to straighten further.</dd>
+  <dt>Advanced Smooth...</dt><dd><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>M</kbd>. Smooths only the corners sharper than <strong>Smooth angles below</strong>, or blunter than <strong>Smooth angles above</strong> (a straight run is 180&deg;), at a <strong>Smoothing strength</strong> from 0 to 100%.</dd>
+  <dt>Advanced Straighten...</dt><dd><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>N</kbd>. Straightens at a <strong>Straightening strength</strong> from 0 to 100%. With <strong>Recognize shapes</strong>, a closed path that reads as a rectangle or an oval becomes a true one.</dd>
+  <dt>Optimize...</dt><dd><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>C</kbd>. Refits curves with fewer points, at a strength from 0 (keeps the shape) to 100 (simplifies most).</dd>
   <dt>Convert Lines to Fills</dt><dd>Turns strokes into filled shapes, so you can reshape their edges or fill them with a gradient.</dd>
-  <dt>Expand Fill...</dt><dd>Grows or shrinks (insets) a fill by a distance in pixels.</dd>
-  <dt>Soften Fill Edges...</dt><dd>Adds a set of fading bands around a fill, outward or inward, for a soft edge.</dd>
+  <dt>Expand Fill...</dt><dd>Grows (<strong>Expand</strong>) or shrinks (<strong>Inset</strong>) fills by a <strong>Distance</strong> in pixels.</dd>
+  <dt>Soften Fill Edges...</dt><dd>Adds a set of fading bands around fills, outward or inward: <strong>Distance</strong> is how wide the soft edge is, and <strong>Number of steps</strong> how many bands make it.</dd>
 </dl>
+
+<div class="split">
+  <figure><img src="assets/shots/dialog-advanced-smooth.webp" alt="The Advanced Smooth dialog: Smooth angles below 90 degrees and Smooth angles above 90 degrees, both checked, and a smoothing strength of 50%" width="310" height="160"></figure>
+  <figure><img src="assets/shots/dialog-soften-fill-edges.webp" alt="The Soften Fill Edges dialog: a distance of 8 pixels, 4 steps, and Expand chosen over Inset" width="252" height="138"></figure>
+</div>
+
+<div class="callout tip">
+  <span class="label">Tip</span>
+  <p>Straighten, Advanced Straighten and Optimize measure their strength on screen, so the same strength changes less when you are zoomed in. Zoom in to tidy fine detail gently, or out for a bolder change.</p>
+</div>
+
+<p>Two more ways to clean up as you go: the Pencil's Smooth and Straighten modes tidy a line as you draw it (see <a href="drawing-tools.html#pencil">Pencil</a>), and <span class="menu-path">Modify &rsaquo; Combine Objects</span> joins and cuts shapes (see <a href="drawing-models.html#combining-objects">Combining objects</a>).</p>
 
 <h2>Distribute to layers</h2>
 

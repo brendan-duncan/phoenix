@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Merge and object drawing · Phoenix User Guide</title>
-<meta name="description" content="How shapes combine in Phoenix: merge drawing, where shapes cut and join, and object drawing, where each shape stays separate.">
+<meta name="description" content="How shapes combine in Phoenix: merge drawing, where shapes cut and join, object drawing, where each shape stays separate, and Combine Objects: Union, Intersect, Punch and Crop.">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Phoenix">
 <meta property="og:title" content="Merge and object drawing · Phoenix User Guide">
@@ -17,7 +17,7 @@
 <meta property="og:image:alt" content="The Phoenix window with three flower characters on the stage, the timeline below and the Properties panel on the right">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:image" content="https://phoenixanimate.com/assets/shots/hero.webp">
-<meta name="keywords" content="merge drawing object drawing mode J drawing object shapes cut overlap fill stroke region selection stipple break apart group combine objects union intersect punch crop primitives trace bitmap">
+<meta name="keywords" content="merge drawing object drawing mode J drawing object shapes cut overlap fill stroke region selection stipple break apart group ungroup combine objects union intersect punch crop boolean cut out hole join primitives trace bitmap">
 <link rel="icon" href="assets/img/logo.png">
 <link rel="stylesheet" href="assets/site.css">
 <script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
@@ -101,28 +101,44 @@
 <h2>Converting between the two</h2>
 
 <dl class="defs">
-  <dt>Break Apart</dt><dd><kbd>Ctrl</kbd>+<kbd>B</kbd>. Turns a drawing object or primitive into merge artwork. It also breaks a group into its contents, and a symbol instance into the artwork of the frame it shows.</dd>
+  <dt>Break Apart</dt><dd><kbd>Ctrl</kbd>+<kbd>B</kbd>. Turns a drawing object or primitive into merge artwork, which floats, selected, and merges with the artwork under it when you deselect it. It also breaks a group into its contents, and a symbol instance into the artwork of the frame it shows.</dd>
   <dt>Union</dt><dd><span class="menu-path">Modify &rsaquo; Combine Objects &rsaquo; Union</span>. Turns the selected shapes, of either kind, into a single drawing object.</dd>
   <dt>Trace Bitmap</dt><dd><span class="menu-path">Modify &rsaquo; Bitmap &rsaquo; Trace Bitmap...</span>. Turns a bitmap on the stage into filled shapes you can edit, one for each area of like color. See <a href="documents.html#trace-bitmap">Trace Bitmap</a>.</dd>
 </dl>
 
 <h2>Combining objects</h2>
 
-<p>With two or more shapes selected, <span class="menu-path">Modify &rsaquo; Combine Objects</span> offers:</p>
+<p>Select two or more shapes on the same frame and layer, drawing objects, primitives or merge artwork in any mix, and choose a command from <span class="menu-path">Modify &rsaquo; Combine Objects</span>. What is on top matters: the topmost selected shape does the cutting.</p>
+
+<figure>
+  <img src="assets/shots/combine-objects.webp" alt="Five copies of a pink circle overlapping the top right corner of a teal square. Left to right: the two shapes as drawn; after Union, the same picture as one object in a single selection box; after Intersect, only the pink quarter where they overlap; after Punch, the teal square with a round bite taken out of its corner; after Crop, only the teal quarter that lay inside the circle" width="1190" height="256">
+  <figcaption>Left to right: a pink circle over a teal square, then Union, Intersect, Punch and Crop.</figcaption>
+</figure>
 
 <table>
   <thead><tr><th>Command</th><th>Result</th></tr></thead>
   <tbody>
-    <tr><td>Union</td><td class="wrap">One drawing object made of all the selected shapes.</td></tr>
-    <tr><td>Intersect</td><td class="wrap">Only the area where the shapes overlap, in the colors of the top one.</td></tr>
-    <tr><td>Punch</td><td class="wrap">The top shape's area is cut out of the shapes beneath it.</td></tr>
-    <tr><td>Crop</td><td class="wrap">The top shape keeps only the parts of the shapes beneath it that fall inside it.</td></tr>
+    <tr><td>Union</td><td class="wrap">All the selected shapes become one drawing object, each in its own colors, upper ones over lower ones as they were stacked. It takes the place of the lowest of them in the stack.</td></tr>
+    <tr><td>Intersect</td><td class="wrap">One drawing object of only the area every selected shape covers, in the colors of the top one. If they don't all overlap, nothing changes.</td></tr>
+    <tr><td>Punch</td><td class="wrap">The top shape's area is cut out of each shape beneath it, and the top shape goes.</td></tr>
+    <tr><td>Crop</td><td class="wrap">Each shape beneath the top one keeps only what lies inside the top shape, and the top shape goes.</td></tr>
   </tbody>
 </table>
 
+<p>After Punch and Crop, the shapes beneath keep their own colors and their own kind: a drawing object stays a drawing object, and merge artwork stays merge artwork. Union and Intersect always leave a drawing object, which is a handy way to turn merge artwork into one; break it apart again (<kbd>Ctrl</kbd>+<kbd>B</kbd>) if you want merge artwork back.</p>
+
+<p>Groups, symbol instances, text and bitmaps are left out of a combine; with fewer than two shapes selected, the status bar asks for more. Break them apart first to combine their artwork. Each combine is one step to undo.</p>
+
+<div class="callout tip">
+  <span class="label">Tip</span>
+  <p>In merge drawing you often get the same results without a command: draw a shape over another and drag it away to punch a hole, or draw in the same color to join. Combine Objects is for drawing objects, which never cut each other on their own.</p>
+</div>
+
 <h2>Groups</h2>
 
-<p>A group (<kbd>Ctrl</kbd>+<kbd>G</kbd>) holds any mix of shapes, objects, text and instances so they move together and are protected from merging. <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>G</kbd> ungroups. Double-click a group to edit inside it while the rest of the stage dims; double-click empty stage to leave.</p>
+<p>A group (<kbd>Ctrl</kbd>+<kbd>G</kbd>) holds any mix of shapes, objects, text and instances so they move together and are protected from merging. <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>G</kbd> ungroups. Double-click a group to edit inside it while the rest of the stage dims; double-click empty stage to leave. Merge artwork inside a group merges only with other merge artwork in the same group.</p>
+
+<p>For moving, transforming, aligning and stacking shapes and objects, see <a href="selecting.html">Selecting and transforming</a>.</p>
 
 </article>
 </main>
