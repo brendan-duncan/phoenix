@@ -4789,8 +4789,11 @@ void MainWindow::addShapeBone(const BoneTool::Link& link)
             bound.instance->transform, fla::contourStyle(*bound.rest));
         fla::carryPoses(bound.armature, rebuilt);
         const std::string poses = poseLocationsOf(*link.armature);
+        // Named for what it does on the undo list, not as a pose.
+        stack.beginMacro(name);
         stack.push(fla::CommandPtr(new fla::PoseArmatureCommand(link.armature, link.child,
             link.armature->extraChildren[link.child], rebuilt.xml(), poses, poses)));
+        stack.endMacro();
     }
     else
     {
