@@ -1635,3 +1635,86 @@ TEST(bone_controls_bend_a_boned_shape)
         bendAndWrite(leg, "bone_stretch");
     }
 }
+
+TEST(a_stretched_symbol_armature_saves_and_plays)
+{
+    // Opt-in: the corpus's ik_symbols.fla with its last bone given squash
+    // and stretch and pulled half as long again 29 frames on, saved as an
+    // XFL folder for render checks.
+    const char* corpus = std::getenv("PHOENIX_FLA_CORPUS");
+    const std::filesystem::path source = corpus ? std::filesystem::path(corpus) / "ik_symbols.fla"
+                                                : std::filesystem::path();
+    if (!corpus || !std::filesystem::exists(source))
+    {
+        std::printf("    skipped: no ik_symbols.fla in PHOENIX_FLA_CORPUS\n");
+        return;
+    }
+    FLAParser parser;
+    std::unique_ptr<fla::FLADocument> fla(parser.parse(source.string()));
+    CHECK(fla && fla->document && !fla->document->timelines.empty());
+    if (!fla || !fla->document || fla->document->timelines.empty())
+        return;
+    fla::Frame* pose = nullptr;
+    for (fla::Layer* layer : fla->document->timelines.front()->layers)
+    {
+        for (fla::Frame* frame : layer->frames)
+        {
+            frame->duration = 30;
+            if (frame->otherTweenType == "IK pose")
+                pose = frame;
+        }
+    }
+    CHECK(pose != nullptr);
+    if (!pose)
+        return;
+    size_t child = 0;
+    while (child < pose->extraChildren.size() && pose->extraChildren[child].find("<IKTree") == std::string::npos)
+        ++child;
+    fla::IKArmature armature;
+    CHECK(child < pose->extraChildren.size() && armature.parse(pose->extraChildren[child]) && armature.setFrames(30));
+    const std::vector<fla::IKJoint> start = armature.shownAt(29);
+    const int last = static_cast<int>(start.size()) - 1;
+    const int head = last >= 0 ? start[static_cast<size_t>(last)].parent : -1;
+    CHECK(head >= 0);
+    if (head < 0)
+        return;
+    fla::BoneOptions squash;
+    squash.squash = true;
+    armature.setOptions(last, squash);
+    const fla::Point& from = start[static_cast<size_t>(head)].position;
+    const fla::Point& to = start[static_cast<size_t>(last)].position;
+    const fla::Point further(from.x + (to.x - from.x) * 1.5, from.y + (to.y - from.y) * 1.5);
+    CHECK(armature.setPlacedPose(29, fla::stretchBone(start, last, further, armature.goalsAt(29, start, last))));
+    CHECK(std::fabs(armature.jointsAt(29)[static_cast<size_t>(last)].stretch - 1.5) < 1.0e-3);
+    fla::PoseArmatureCommand::apply(pose, child, armature.xml(), "0,29");
+
+    // The instance on the stretched bone's head is half as long again along
+    // it, its joint where the armature has it.
+    std::vector<std::pair<int, const fla::Transform*>> placed;
+    for (fla::Element* element : pose->elements)
+    {
+        const fla::SymbolInstance* instance = dynamic_cast<const fla::SymbolInstance*>(element);
+        for (const auto& attribute : instance ? instance->extraAttributes : std::vector<std::pair<std::string, std::string>>())
+        {
+            for (int joint = 0; joint <= last; ++joint)
+            {
+                if (attribute.first != "referenceID" || attribute.second != armature.referenceOf(joint))
+                    continue;
+                placed.emplace_back(joint, &instance->transform);
+                const fla::Transform shown = armature.carried(joint, instance->transform, 29);
+                const fla::IKJoint at = armature.shownAt(29)[static_cast<size_t>(joint)];
+                CHECK(near(mapped(shown, instance->transformationPoint), at.position.x, at.position.y, 0.2));
+                const double area = std::fabs(shown.m11 * shown.m22 - shown.m12 * shown.m21);
+                const double was = std::fabs(instance->transform.m11 * instance->transform.m22 -
+                    instance->transform.m12 * instance->transform.m21);
+                CHECK(std::fabs(area / was - (joint == head ? 1.5 : 1.0)) < 1.0e-3);
+            }
+        }
+    }
+    fla::setBetweenFrames(pose->extraChildren, armature.betweenFrameMatrixList(placed));
+    const std::filesystem::path out = std::filesystem::temp_directory_path() / "phoenix_ik_tests" / "ik_symbols_stretched";
+    std::filesystem::remove_all(out);
+    fla::XFLFolderWriter writer;
+    CHECK(writer.write(*fla->document, out.string(), "ik_symbols_stretched"));
+    std::printf("    written: %s\n", out.string().c_str());
+}
