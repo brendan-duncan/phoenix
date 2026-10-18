@@ -2,7 +2,7 @@
 
 What changed in each release of Phoenix, newest first.
 
-## Unreleased
+## 0.18.1
 
 - Old binary FLA files: scripts written in normal mode, and the action records of the oldest files, open as the ActionScript they stand for, so their buttons, frames and clips work in Test Movie
 - Test Movie runs ActionScript 1 as old movies use it: a variable never set reads as undefined, `add`, `eq`, `ne`, `and`, `or` and `not` work, and so do `set()`, `eval()` and `call()`
