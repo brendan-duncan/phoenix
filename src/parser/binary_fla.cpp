@@ -259,6 +259,7 @@ struct Object
 
     // CPicText
     int32_t bounds[4] = {0, 0, 0, 0};
+    bool autoExpand = false;
     std::vector<TextRun> runs;
 
     // Contents records
@@ -885,6 +886,22 @@ std::vector<ListedAction> readActionList(Reader& r)
         actions.push_back(std::move(action));
     }
     return actions;
+}
+
+/// A script's line breaks as LFs, as XML reads them back from its CDATA
+/// (where a character reference would be read as text).
+std::string lineFeeds(const std::string& script)
+{
+    std::string out;
+    out.reserve(script.size());
+    for (size_t i = 0; i < script.size(); ++i)
+    {
+        if (script[i] != '\r')
+            out += script[i];
+        else if (i + 1 >= script.size() || script[i + 1] != '\n')
+            out += '\n';
+    }
+    return out;
 }
 
 // ---------------------------------------------------------------------------
@@ -1893,7 +1910,10 @@ void readText(Reader& r, Object& o)
     o.matrix = r.matrix();
     for (int32_t& bound : o.bounds)
         bound = r.s32();
-    r.u8();
+    // 1 for a text that grows to fit its lines, 0 for one of a fixed width
+    // that wraps them: the five texts with an XFL twin have 1 and
+    // autoExpand. [S]
+    o.autoExpand = r.u8() != 0;
     r.u8();
     const uint32_t flags = r.u32();
     if (schema >= 5)
@@ -2483,8 +2503,18 @@ private:
     {
         tinyxml2::XMLPrinter printer;
         doc.Print(&printer);
-        const char* text = printer.CStr();
-        return std::vector<uint8_t>(text, text + std::strlen(text));
+        // A text's line breaks are CRs, which XML reads back as LFs unless
+        // they go out as character references. The printer's own line ends
+        // are LFs, so every CR here is in a text.
+        std::vector<uint8_t> out;
+        for (const char* c = printer.CStr(); *c; ++c)
+        {
+            if (*c == '\r')
+                out.insert(out.end(), {'&', '#', '1', '3', ';'});
+            else
+                out.push_back(static_cast<uint8_t>(*c));
+        }
+        return out;
     }
 
     std::string libraryPath(const std::string& folder, const std::string& name) const
@@ -2729,7 +2759,7 @@ private:
         {
             tinyxml2::XMLElement* actions = doc.NewElement("Actionscript");
             tinyxml2::XMLElement* script = doc.NewElement("script");
-            tinyxml2::XMLText* text = doc.NewText(frame.script.c_str());
+            tinyxml2::XMLText* text = doc.NewText(lineFeeds(frame.script).c_str());
             text->SetCData(true);
             script->InsertEndChild(text);
             actions->InsertEndChild(script);
@@ -3014,7 +3044,7 @@ private:
         {
             tinyxml2::XMLElement* actions = doc.NewElement("Actionscript");
             tinyxml2::XMLElement* script = doc.NewElement("script");
-            tinyxml2::XMLText* text = doc.NewText(o.script.c_str());
+            tinyxml2::XMLText* text = doc.NewText(lineFeeds(o.script).c_str());
             text->SetCData(true);
             script->InsertEndChild(text);
             actions->InsertEndChild(script);
@@ -3068,6 +3098,8 @@ private:
         node->SetAttribute("left", number(o.bounds[0] / 20.0).c_str());
         node->SetAttribute("width", number((o.bounds[1] - o.bounds[0]) / 20.0).c_str());
         node->SetAttribute("height", number((o.bounds[3] - o.bounds[2]) / 20.0).c_str());
+        if (o.autoExpand)
+            node->SetAttribute("autoExpand", "true");
         node->SetAttribute("isSelectable", "false");
         writeMatrix(doc, node, o.matrix);
         tinyxml2::XMLElement* runs = doc.NewElement("textRuns");

@@ -5,6 +5,7 @@
 #include "../src/data/fla_document.h"
 #include "../src/data/frame.h"
 #include "../src/data/layer.h"
+#include "../src/data/static_text.h"
 #include "../src/data/symbol.h"
 #include "../src/data/symbol_instance.h"
 #include "../src/data/timeline.h"
@@ -214,6 +215,35 @@ TEST(binary_fla_reads_as_its_xfl_twin)
                     CHECK(la.frames[f]->index == lb.frames[f]->index);
                     CHECK(la.frames[f]->duration == lb.frames[f]->duration);
                     CHECK(la.frames[f]->tweenType == lb.frames[f]->tweenType);
+                    CHECK(la.frames[f]->motionTweenRotate == lb.frames[f]->motionTweenRotate);
+                    CHECK(la.frames[f]->motionTweenRotateTimes == lb.frames[f]->motionTweenRotateTimes);
+                    // Texts keep their line breaks and grow to fit as the
+                    // twin's do.
+                    const auto texts = [](const fla::Frame& frame) {
+                        std::vector<const fla::StaticText*> found;
+                        for (const fla::Element* element : frame.elements)
+                        {
+                            if (element && element->elementType() == fla::Element::Type::StaticText)
+                                found.push_back(static_cast<const fla::StaticText*>(element));
+                        }
+                        return found;
+                    };
+                    const auto ta = texts(*la.frames[f]);
+                    const auto tb = texts(*lb.frames[f]);
+                    CHECK(ta.size() == tb.size());
+                    for (size_t i = 0; i < ta.size() && i < tb.size(); ++i)
+                    {
+                        std::string sa;
+                        std::string sb;
+                        for (const fla::TextRun& run : ta[i]->runs)
+                            sa += run.text;
+                        for (const fla::TextRun& run : tb[i]->runs)
+                            sb += run.text;
+                        if (sa != sb)
+                            std::printf("    %s: text \"%s\" differs\n", pair.first, sb.c_str());
+                        CHECK(sa == sb);
+                        CHECK(ta[i]->autoExpand == tb[i]->autoExpand);
+                    }
                 }
             }
         }
