@@ -46,12 +46,28 @@ bool isCamera(const Layer& layer);
 /// The scene's camera layer, or null.
 Layer* cameraOf(const Timeline& timeline);
 
+/// The FLA's own camera, which Phoenix plays as it plays its own: a layer
+/// of type camera, on while the timeline has cameraLayerEnabled. Each of
+/// its keyframes holds an instance of the camera, classic tweened from one
+/// to the next: where it is placed is where the camera looks, shrinking it
+/// moves the camera in (at half size the picture is twice as big), turning
+/// it turns the camera, and its color effect is over what the camera sees.
+/// A layer attached to the camera (attachedToCamera) stays on the screen as
+/// drawn, out of its reach: not moved, zoomed, turned or colored.
+bool isFileCamera(const Layer& layer);
+bool attached(const Layer& layer);
+
+/// The camera the scene is seen through: its Phoenix camera layer, or else
+/// the FLA's own camera layer while it is on; null when it has neither.
+Layer* filmingOf(const Timeline& timeline);
+
 /// The camera on \a frame of \a timeline (stage \a width by \a height),
 /// tweened between its keyframes where they are tweened. A camera with no
 /// keyframe yet looks at the stage's middle.
 State stateAt(const Timeline& timeline, int frame, double width, double height);
 
-/// A camera keyframe's state, and setting it in a frame's attributes.
+/// A camera keyframe's state, and setting it in a frame's attributes. A
+/// keyframe of the FLA's camera layer is read from its instance.
 State stateOf(const Frame& frame, double width, double height);
 void set(std::vector<std::pair<std::string, std::string>>& attributes, const State& state);
 

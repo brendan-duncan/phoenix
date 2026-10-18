@@ -2338,25 +2338,63 @@ void PhoenixView::drawDocument(QPainter& painter, const fla::Document* document)
     QSizeF logical(device->width(), device->height());
     if (device->devType() == QInternal::Image || device->devType() == QInternal::Pixmap)
         logical /= ratio;
-    QImage image(qCeil(logical.width() * ratio), qCeil(logical.height() * ratio), QImage::Format_ARGB32_Premultiplied);
-    if (image.isNull())
+    const auto colored = [&]() {
+        QImage image(qCeil(logical.width() * ratio), qCeil(logical.height() * ratio), QImage::Format_ARGB32_Premultiplied);
+        if (image.isNull())
+        {
+            drawScene(painter, scene);
+            return;
+        }
+        image.setDevicePixelRatio(ratio);
+        image.fill(Qt::transparent);
+        {
+            QPainter into(&image);
+            into.setRenderHints(painter.renderHints());
+            into.setTransform(painter.transform());
+            drawScene(into, scene);
+        }
+        applyColorTransform(image, color);
+        painter.save();
+        painter.resetTransform();
+        painter.drawImage(QPointF(0.0, 0.0), image);
+        painter.restore();
+    };
+    // Layers attached to the FLA's camera are out of its color's reach:
+    // each run of layers, attached or not, drawn in turn from the bottom,
+    // those not attached colored.
+    const int count = static_cast<int>(scene->layers.size());
+    const auto isAttached = [scene](int i) {
+        const fla::Layer* layer = scene->layers[static_cast<size_t>(i)];
+        return layer && fla::camera::attached(*layer);
+    };
+    bool anyAttached = false;
+    for (int i = 0; i < count; ++i)
+        anyAttached = anyAttached || isAttached(i);
+    if (!anyAttached || _movie || _rangeTimeline == scene)
     {
-        drawScene(painter, scene);
+        colored();
         return;
     }
-    image.setDevicePixelRatio(ratio);
-    image.fill(Qt::transparent);
+    const fla::Timeline* savedRange = _rangeTimeline;
+    const int savedFrom = _rangeFrom;
+    const int savedTo = _rangeTo;
+    _rangeTimeline = scene;
+    for (int to = count; to > 0;)
     {
-        QPainter into(&image);
-        into.setRenderHints(painter.renderHints());
-        into.setTransform(painter.transform());
-        drawScene(into, scene);
+        int from = to - 1;
+        while (from > 0 && isAttached(from - 1) == isAttached(to - 1))
+            --from;
+        _rangeFrom = from;
+        _rangeTo = to;
+        if (isAttached(from))
+            drawScene(painter, scene);
+        else
+            colored();
+        to = from;
     }
-    applyColorTransform(image, color);
-    painter.save();
-    painter.resetTransform();
-    painter.drawImage(QPointF(0.0, 0.0), image);
-    painter.restore();
+    _rangeTimeline = savedRange;
+    _rangeFrom = savedFrom;
+    _rangeTo = savedTo;
 }
 
 namespace {
@@ -4204,9 +4242,10 @@ QTransform PhoenixView::cameraTransform(const fla::Layer* layer)
 {
     const fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
     const fla::Timeline* scene = document ? document->currentScene() : nullptr;
-    if (!_cameraView || !layer || !scene || layer->parent != scene || fla::camera::isCamera(*layer))
+    if (!_cameraView || !layer || !scene || layer->parent != scene || fla::camera::isCamera(*layer) ||
+        fla::camera::isFileCamera(*layer) || fla::camera::attached(*layer))
         return QTransform();
-    if (!fla::camera::cameraOf(*scene))
+    if (!fla::camera::filmingOf(*scene))
         return QTransform();
     const int frame = _frameDepth <= 1 ? shownFrame() : (_player ? _player->currentFrame() : 0);
     const fla::camera::State state = fla::camera::stateAt(*scene, frame, document->width, document->height);
@@ -4220,7 +4259,7 @@ fla::ColorTransform PhoenixView::cameraColor()
 {
     const fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
     const fla::Timeline* scene = document ? document->currentScene() : nullptr;
-    if (!_cameraView || !scene || !fla::camera::cameraOf(*scene))
+    if (!_cameraView || !scene || !fla::camera::filmingOf(*scene))
         return fla::ColorTransform();
     return fla::camera::stateAt(*scene, shownFrame(), document->width, document->height).color;
 }

@@ -18,6 +18,8 @@
 #include "../data/symbol_list.h"
 #include "../data/timeline.h"
 #include "../play/script/class_path.h"
+#include "camera.h"
+#include "motion_object.h"
 #include "phoenix_features.h"
 #include "shape_tween.h"
 #include "swf_actionscript3.h"
@@ -342,6 +344,27 @@ std::string unstructured(const Document& document)
             if (std::strcmp(use.feature->id, id) == 0)
                 return std::string(use.feature->title) + (use.where.empty() ? std::string() : " (" + use.where + ")");
     }
+    // The FLA's own camera layer and motion tweens in 3D, which a player
+    // shows only through scripts the movie does not have.
+    for (const Timeline* scene : document.timelines)
+        if (scene && camera::filmingOf(*scene))
+            return "Camera layer (" + scene->name + ")";
+    std::vector<const Timeline*> timelines(document.timelines.begin(), document.timelines.end());
+    if (document.symbolList)
+        for (const Symbol* symbol : document.symbolList->symbols)
+            if (symbol)
+                timelines.insert(timelines.end(), symbol->timelines.begin(), symbol->timelines.end());
+    for (const Timeline* timeline : timelines)
+        for (const Layer* layer : timeline ? timeline->layers : std::vector<Layer*>())
+            for (const Frame* frame : layer ? layer->frames : std::vector<Frame*>())
+            {
+                if (!frame || frame->otherTweenType != "motion object")
+                    continue;
+                MotionObject motion;
+                const std::string* xml = timeline::motionOf(const_cast<Frame&>(*frame));
+                if (xml && motion.parse(*xml) && motion.threeD())
+                    return "3D motion tween (" + timeline->name + ", " + layer->name + ")";
+            }
     return std::string();
 }
 
