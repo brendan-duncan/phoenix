@@ -25,9 +25,59 @@ std::string shortest(double value)
 
 } // namespace
 
+bool SymbolInstance::matrix3D(double values[16]) const
+{
+    for (const auto& attribute : extraAttributes)
+    {
+        if (attribute.first != "matrix3D")
+            continue;
+        const char* text = attribute.second.c_str();
+        for (int i = 0; i < 16; ++i)
+        {
+            char* end = nullptr;
+            values[i] = std::strtod(text, &end);
+            if (end == text)
+                return false;
+            text = end;
+        }
+        return true;
+    }
+    return false;
+}
+
+Transform SymbolInstance::transformOf3D(const double values[16])
+{
+    return Transform(values[0], values[1], values[4], values[5], values[12] / 20.0, values[13] / 20.0);
+}
+
 std::vector<std::pair<std::string, std::string>> SymbolInstance::keptAttributes() const
 {
     std::vector<std::pair<std::string, std::string>> kept = extraAttributes;
+    // Placed by a 3D matrix: its 2D part follows the instance, its depth
+    // and the rest as the file had them.
+    double values[16];
+    if (matrix3D(values))
+    {
+        const Transform was = transformOf3D(values);
+        const Transform& now = transform;
+        const auto near = [](double a, double b) { return std::fabs(a - b) < 1.0e-9; };
+        if (!near(was.m11, now.m11) || !near(was.m12, now.m12) || !near(was.m21, now.m21) ||
+            !near(was.m22, now.m22) || !near(was.tx, now.tx) || !near(was.ty, now.ty))
+        {
+            values[0] = now.m11;
+            values[1] = now.m12;
+            values[4] = now.m21;
+            values[5] = now.m22;
+            values[12] = std::round(now.tx * 20.0 * 1.0e6) / 1.0e6;
+            values[13] = std::round(now.ty * 20.0 * 1.0e6) / 1.0e6;
+            std::string text;
+            for (int i = 0; i < 16; ++i)
+                text += (i ? " " : "") + shortest(values[i]);
+            for (auto& attribute : kept)
+                if (attribute.first == "matrix3D")
+                    attribute.second = text;
+        }
+    }
     const Transform& t = transform;
     const Transform& r = readMatrix;
     if (!hasReadMatrix || (r.m11 == t.m11 && r.m12 == t.m12 && r.m21 == t.m21 && r.m22 == t.m22 &&

@@ -2338,25 +2338,63 @@ void PhoenixView::drawDocument(QPainter& painter, const fla::Document* document)
     QSizeF logical(device->width(), device->height());
     if (device->devType() == QInternal::Image || device->devType() == QInternal::Pixmap)
         logical /= ratio;
-    QImage image(qCeil(logical.width() * ratio), qCeil(logical.height() * ratio), QImage::Format_ARGB32_Premultiplied);
-    if (image.isNull())
+    const auto colored = [&]() {
+        QImage image(qCeil(logical.width() * ratio), qCeil(logical.height() * ratio), QImage::Format_ARGB32_Premultiplied);
+        if (image.isNull())
+        {
+            drawScene(painter, scene);
+            return;
+        }
+        image.setDevicePixelRatio(ratio);
+        image.fill(Qt::transparent);
+        {
+            QPainter into(&image);
+            into.setRenderHints(painter.renderHints());
+            into.setTransform(painter.transform());
+            drawScene(into, scene);
+        }
+        applyColorTransform(image, color);
+        painter.save();
+        painter.resetTransform();
+        painter.drawImage(QPointF(0.0, 0.0), image);
+        painter.restore();
+    };
+    // Layers attached to the FLA's camera are out of its color's reach:
+    // each run of layers, attached or not, drawn in turn from the bottom,
+    // those not attached colored.
+    const int count = static_cast<int>(scene->layers.size());
+    const auto isAttached = [scene](int i) {
+        const fla::Layer* layer = scene->layers[static_cast<size_t>(i)];
+        return layer && fla::camera::attached(*layer);
+    };
+    bool anyAttached = false;
+    for (int i = 0; i < count; ++i)
+        anyAttached = anyAttached || isAttached(i);
+    if (!anyAttached || _movie || _rangeTimeline == scene)
     {
-        drawScene(painter, scene);
+        colored();
         return;
     }
-    image.setDevicePixelRatio(ratio);
-    image.fill(Qt::transparent);
+    const fla::Timeline* savedRange = _rangeTimeline;
+    const int savedFrom = _rangeFrom;
+    const int savedTo = _rangeTo;
+    _rangeTimeline = scene;
+    for (int to = count; to > 0;)
     {
-        QPainter into(&image);
-        into.setRenderHints(painter.renderHints());
-        into.setTransform(painter.transform());
-        drawScene(into, scene);
+        int from = to - 1;
+        while (from > 0 && isAttached(from - 1) == isAttached(to - 1))
+            --from;
+        _rangeFrom = from;
+        _rangeTo = to;
+        if (isAttached(from))
+            drawScene(painter, scene);
+        else
+            colored();
+        to = from;
     }
-    applyColorTransform(image, color);
-    painter.save();
-    painter.resetTransform();
-    painter.drawImage(QPointF(0.0, 0.0), image);
-    painter.restore();
+    _rangeTimeline = savedRange;
+    _rangeFrom = savedFrom;
+    _rangeTo = savedTo;
 }
 
 namespace {
@@ -3541,8 +3579,13 @@ fla::Transform PhoenixView::shownTransform(const LayerFrame& state, size_t eleme
     {
         const double rate = _flaDocument && _flaDocument->document && _flaDocument->document->frameRate > 0.0
             ? _flaDocument->document->frameRate : 24.0;
-        return fla::applyMotion(element->transform, element->transformationPoint, motion->at(0.0, rate),
-            motion->at(state.offset + _subframe, rate));
+        const fla::MotionState now = motion->at(state.offset + _subframe, rate);
+        // Turned or moved in 3D: drawn in perspective (threeDTransform).
+        if (motion->threeD())
+            _motion3D[element] = Motion3D{now, motion->pivotZ()};
+        else
+            _motion3D.erase(element);
+        return fla::applyMotion(element->transform, element->transformationPoint, motion->at(0.0, rate), now);
     }
     const std::vector<int> pairs = state.tweenFrame && state.frame->tweenType == fla::TweenType::Motion
         ? fla::pairTweenElements(state.frame->elements, state.tweenFrame->elements) : std::vector<int>();
@@ -4199,9 +4242,10 @@ QTransform PhoenixView::cameraTransform(const fla::Layer* layer)
 {
     const fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
     const fla::Timeline* scene = document ? document->currentScene() : nullptr;
-    if (!_cameraView || !layer || !scene || layer->parent != scene || fla::camera::isCamera(*layer))
+    if (!_cameraView || !layer || !scene || layer->parent != scene || fla::camera::isCamera(*layer) ||
+        fla::camera::isFileCamera(*layer) || fla::camera::attached(*layer))
         return QTransform();
-    if (!fla::camera::cameraOf(*scene))
+    if (!fla::camera::filmingOf(*scene))
         return QTransform();
     const int frame = _frameDepth <= 1 ? shownFrame() : (_player ? _player->currentFrame() : 0);
     const fla::camera::State state = fla::camera::stateAt(*scene, frame, document->width, document->height);
@@ -4215,7 +4259,7 @@ fla::ColorTransform PhoenixView::cameraColor()
 {
     const fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
     const fla::Timeline* scene = document ? document->currentScene() : nullptr;
-    if (!_cameraView || !scene || !fla::camera::cameraOf(*scene))
+    if (!_cameraView || !scene || !fla::camera::filmingOf(*scene))
         return fla::ColorTransform();
     return fla::camera::stateAt(*scene, shownFrame(), document->width, document->height).color;
 }
@@ -7615,7 +7659,25 @@ QTransform PhoenixView::threeDTransform(const fla::Element* element, const QTran
 {
     const auto* instance = dynamic_cast<const fla::SymbolInstance*>(element);
     const fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
-    if (!instance || !document || instance->symbolType != fla::SymbolType::MovieClip)
+    if (!instance || !document)
+        return QTransform();
+    // An object motion tween in 3D, as the FLA's 3D motion draws it: in the
+    // document's own perspective, its depth on from the instance's 3D
+    // matrix.
+    const auto tweened = _motion3D.find(element);
+    if (tweened != _motion3D.end() && depth == 0.0)
+    {
+        const fla::MotionState& now = tweened->second.state;
+        double values[16];
+        const double z = now.z + (instance->matrix3D(values) ? values[14] / 20.0 : 0.0);
+        const std::array<double, 9> m = fla::threed::motionProjection(
+            fla::Transform(placed.m11(), placed.m12(), placed.m21(), placed.m22(), placed.dx(), placed.dy()),
+            instance->transformationPoint, tweened->second.pivotZ, now.rotationX, now.rotationY, z,
+            fla::threed::vanishingPoint(*document), fla::threed::documentFocalLength(*document));
+        // From the clip's own space; after placed, from its parent's.
+        return placed.inverted() * QTransform(m[0], m[3], m[6], m[1], m[4], m[7], m[2], m[5], m[8]);
+    }
+    if (instance->symbolType != fla::SymbolType::MovieClip)
         return QTransform();
     fla::threed::Pose pose = fla::threed::of(*instance);
     if (const auto* other = dynamic_cast<const fla::SymbolInstance*>(tweenElement))
@@ -10663,6 +10725,7 @@ void PhoenixView::clearCaches()
         _pending.end());
     _pathCache.clear();
     _guideCache.clear();
+    _motion3D.clear();
     _boundsCache.clear();
     _artBoundsCache.clear();
     _snapBoundsValid = false;

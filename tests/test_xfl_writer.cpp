@@ -18,6 +18,8 @@
 #include "../src/data/static_text.h"
 #include "../src/data/symbol.h"
 #include "../src/data/symbol_list.h"
+#include "../src/edit/camera.h"
+#include "../src/edit/swf_movie.h"
 #include "../src/edit/new_document.h"
 #include "../src/parser/document_parser.h"
 #include "../src/parser/fla_parser.h"
@@ -1675,4 +1677,115 @@ TEST(xfl_reads_a_component_as_a_symbol_and_keeps_it_one)
     CHECK(written.find("DOMSymbolItem") == std::string::npos);
     CHECK(written.find("linkageClassName=\"fl.controls.Button\"") != std::string::npos);
     CHECK(written.find("<parametersAsXML") != std::string::npos);
+}
+
+TEST(xfl_places_an_instance_by_its_3d_matrix_and_writes_it_back)
+{
+    // As the reference app keeps a clip moved in 3D: a 3D matrix (its move
+    // in twips) in place of the 2D one, the transformation point in the
+    // parent's space.
+    std::unique_ptr<fla::Document> document = parseDocumentText(
+        "<DOMDocument xmlns='http://ns.adobe.com/xfl/2008/'>"
+        "<timelines><DOMTimeline name='Scene 1'><layers><DOMLayer name='L'><frames><DOMFrame index='0'><elements>"
+        "<DOMSymbolInstance libraryItemName='A' matrix3D='1 0 0 0 0 1 0 0 0 0 1 0 1720 5441 0 1' rotationX='40' "
+        "centerPoint3DX='318.15' centerPoint3DY='462.75'>"
+        "<transformationPoint><Point x='318.15' y='462.75'/></transformationPoint></DOMSymbolInstance>"
+        "</elements></DOMFrame></frames></DOMLayer></layers></DOMTimeline></timelines></DOMDocument>");
+    CHECK(document != nullptr);
+    if (!document || document->timelines.empty())
+        return;
+    auto* instance = dynamic_cast<fla::SymbolInstance*>(document->timelines[0]->layers[0]->frames[0]->elements[0]);
+    CHECK(instance != nullptr);
+    if (!instance)
+        return;
+    CHECK(std::fabs(instance->transform.tx - 86.0) < 1.0e-9 && std::fabs(instance->transform.ty - 272.05) < 1.0e-9);
+    CHECK(std::fabs(instance->transformationPoint.x - 232.15) < 1.0e-9);
+    CHECK(std::fabs(instance->transformationPoint.y - 190.7) < 1.0e-9);
+    XFLWriter writer;
+    std::string written = writer.writeDocument(*document);
+    CHECK(written.find("matrix3D=\"1 0 0 0 0 1 0 0 0 0 1 0 1720 5441 0 1\"") != std::string::npos);
+    CHECK(written.find("<Point x=\"318.15\" y=\"462.75\"/>") != std::string::npos);
+    CHECK(written.find("<matrix>") == std::string::npos);
+    // Moved 10 to the right: the 3D matrix and the point go with it.
+    instance->transform.tx += 10.0;
+    written = writer.writeDocument(*document);
+    CHECK(written.find("matrix3D=\"1 0 0 0 0 1 0 0 0 0 1 0 1920 5441 0 1\"") != std::string::npos);
+    CHECK(written.find("<Point x=\"328.15\" y=\"462.75\"/>") != std::string::npos);
+    CHECK(written.find("<matrix>") == std::string::npos);
+}
+
+TEST(the_files_camera_layer_plays_as_phoenixs_camera)
+{
+    // camera_layer.fla, made in the reference app: the camera pans right by
+    // frame 11, moves in to 150% and turns 20 degrees by 23, and tints what
+    // it sees 40% blue by 35. Layer_2 is attached to it.
+    const std::string camera =
+        "<DOMLayer name='Camera' layerType='camera'><frames>"
+        "<DOMFrame index='0' duration='11' tweenType='motion'><elements><DOMSymbolInstance libraryItemName='__Camera__' "
+        "isVisible='false'><matrix><Matrix tx='960' ty='540'/></matrix></DOMSymbolInstance></elements></DOMFrame>"
+        "<DOMFrame index='11' duration='12' tweenType='motion'><elements><DOMSymbolInstance libraryItemName='__Camera__' "
+        "isVisible='false'><matrix><Matrix tx='706' ty='540'/></matrix></DOMSymbolInstance></elements></DOMFrame>"
+        "<DOMFrame index='23' duration='12' tweenType='motion'><elements><DOMSymbolInstance libraryItemName='__Camera__' "
+        "isVisible='false'><matrix><Matrix a='0.62640380859375' b='-0.227981567382812' c='0.227981567382812' "
+        "d='0.62640380859375' tx='960' ty='540'/></matrix></DOMSymbolInstance></elements></DOMFrame>"
+        "<DOMFrame index='35'><elements><DOMSymbolInstance libraryItemName='__Camera__' isVisible='false'>"
+        "<matrix><Matrix tx='960' ty='540'/></matrix><color><Color tintMultiplier='0.4' tintColor='#000099'/></color>"
+        "</DOMSymbolInstance></elements></DOMFrame></frames></DOMLayer>";
+    const std::string layers = "<DOMLayer name='Layer_2' attachedToCamera='true'><frames><DOMFrame index='0' "
+                               "duration='36'/></frames></DOMLayer><DOMLayer name='Layer_1'><frames><DOMFrame "
+                               "index='0' duration='36'/></frames></DOMLayer>";
+    std::unique_ptr<fla::Document> document = parseDocumentText(
+        "<DOMDocument xmlns='http://ns.adobe.com/xfl/2008/' width='1920' height='1080'><timelines>"
+        "<DOMTimeline name='Scene 1' cameraLayerEnabled='true'><layers>" + camera + layers +
+        "</layers></DOMTimeline></timelines></DOMDocument>");
+    CHECK(document != nullptr);
+    if (!document || document->timelines.empty() || document->timelines[0]->layers.size() != 3)
+        return;
+    const fla::Timeline& scene = *document->timelines[0];
+    fla::Layer* cameraLayer = scene.layers[0];
+    CHECK(fla::camera::isFileCamera(*cameraLayer) && !fla::camera::isCamera(*cameraLayer));
+    CHECK(fla::camera::filmingOf(scene) == cameraLayer && fla::camera::cameraOf(scene) == nullptr);
+    CHECK(fla::camera::attached(*scene.layers[1]) && !fla::camera::attached(*scene.layers[2]));
+    const auto near = [](double a, double b) { return std::fabs(a - b) < 1.0e-3; };
+    fla::Transform t;
+    // At rest, then panned: what was at 706 shows in the middle.
+    fla::camera::State state = fla::camera::stateAt(scene, 0, 1920.0, 1080.0);
+    CHECK(near(state.x, 960.0) && near(state.zoom, 100.0) && near(state.rotation, 0.0));
+    state = fla::camera::stateAt(scene, 11, 1920.0, 1080.0);
+    CHECK(fla::camera::view(state, 0.0, 1920.0, 1080.0, t));
+    CHECK(near(t.m11 * 706.0 + t.m21 * 540.0 + t.tx, 960.0) && near(t.m12 * 706.0 + t.m22 * 540.0 + t.ty, 540.0));
+    // Moved in and turned: 100 px right of the middle shows 150 px away,
+    // turned 20 degrees clockwise.
+    state = fla::camera::stateAt(scene, 23, 1920.0, 1080.0);
+    CHECK(std::fabs(state.zoom - 150.0) < 0.05 && std::fabs(state.rotation + 20.0) < 0.01);
+    CHECK(fla::camera::view(state, 0.0, 1920.0, 1080.0, t));
+    const double turn = 20.0 * 3.14159265358979323846 / 180.0;
+    CHECK(std::fabs(t.m11 * 1060.0 + t.m21 * 540.0 + t.tx - (960.0 + 150.0 * std::cos(turn))) < 0.05);
+    CHECK(std::fabs(t.m12 * 1060.0 + t.m22 * 540.0 + t.ty - (540.0 + 150.0 * std::sin(turn))) < 0.05);
+    // The Camera tool keys a state back into the camera's instance.
+    const fla::Transform keyed = fla::camera::fileTransformOf(state);
+    CHECK(std::fabs(keyed.m11 - 0.62640380859375) < 1.0e-6 && std::fabs(keyed.m12 + 0.227981567382812) < 1.0e-6);
+    CHECK(std::fabs(keyed.m21 - 0.227981567382812) < 1.0e-6 && near(keyed.tx, 960.0) && near(keyed.ty, 540.0));
+    CHECK(fla::camera::fileCameraOf(*cameraLayer->frames[2]) != nullptr);
+    // Half way there, as a classic tween has it: the instance half way in
+    // size and turn.
+    state = fla::camera::stateAt(scene, 17, 1920.0, 1080.0);
+    CHECK(near(state.x, 833.0) && std::fabs(state.zoom - 120.0) < 0.05 && std::fabs(state.rotation + 10.0) < 0.01);
+    // The tint at the end.
+    state = fla::camera::stateAt(scene, 35, 1920.0, 1080.0);
+    CHECK(near(state.color.tintMultiplier, 0.4) && state.color.tintColor[2] == 0x99 && state.color.tintColor[0] == 0);
+    // Saved as read: no Phoenix camera of its own.
+    XFLWriter writer;
+    const std::string written = writer.writeDocument(*document);
+    CHECK(written.find("layerType=\"camera\"") != std::string::npos);
+    CHECK(written.find("attachedToCamera=\"true\"") != std::string::npos);
+    CHECK(written.find("cameraLayerEnabled=\"true\"") != std::string::npos);
+    CHECK(written.find("phoenixCamera") == std::string::npos);
+    // An SWF movie with its structure has no camera: it goes as frames.
+    CHECK(fla::swfmovie::unstructured(*document).find("Camera layer") == 0);
+    // Switched off, the camera films nothing.
+    std::unique_ptr<fla::Document> off = parseDocumentText(
+        "<DOMDocument xmlns='http://ns.adobe.com/xfl/2008/' width='1920' height='1080'><timelines>"
+        "<DOMTimeline name='Scene 1'><layers>" + camera + layers + "</layers></DOMTimeline></timelines></DOMDocument>");
+    CHECK(off && !off->timelines.empty() && fla::camera::filmingOf(*off->timelines[0]) == nullptr);
 }

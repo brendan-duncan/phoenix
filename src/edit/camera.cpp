@@ -6,6 +6,7 @@
 
 #include "../data/frame.h"
 #include "../data/layer.h"
+#include "../data/symbol_instance.h"
 #include "../data/timeline.h"
 
 #include <algorithm>
@@ -154,8 +155,79 @@ Layer* cameraOf(const Timeline& timeline)
     return nullptr;
 }
 
+bool isFileCamera(const Layer& layer)
+{
+    return layer.otherLayerType == "camera";
+}
+
+bool attached(const Layer& layer)
+{
+    const std::string* on = attribute(layer.extraAttributes, "attachedToCamera");
+    return on && *on == "true";
+}
+
+Layer* filmingOf(const Timeline& timeline)
+{
+    if (Layer* own = cameraOf(timeline))
+        return own;
+    const std::string* on = attribute(timeline.extraAttributes, "cameraLayerEnabled");
+    if (!on || *on != "true")
+        return nullptr;
+    for (Layer* layer : timeline.layers)
+        if (layer && isFileCamera(*layer))
+            return layer;
+    return nullptr;
+}
+
+namespace {
+
+/// A keyframe of the FLA's camera, from the camera's instance on it.
+State fileStateOf(const Frame& frame, double width, double height)
+{
+    State state;
+    state.x = width / 2.0;
+    state.y = height / 2.0;
+    for (const Element* element : frame.elements)
+    {
+        const auto* instance = dynamic_cast<const SymbolInstance*>(element);
+        if (!instance)
+            continue;
+        const Transform& m = instance->transform;
+        state.x = m.tx;
+        state.y = m.ty;
+        const double scale = std::hypot(m.m11, m.m12);
+        state.zoom = scale > 1.0e-6 ? 100.0 / scale : 100.0;
+        state.rotation = std::atan2(m.m12, m.m11) * 180.0 / kPi;
+        state.color = instance->colorTransform;
+        break;
+    }
+    return state;
+}
+
+} // namespace
+
+SymbolInstance* fileCameraOf(const Frame& frame)
+{
+    for (Element* element : frame.elements)
+        if (auto* instance = dynamic_cast<SymbolInstance*>(element))
+            return instance;
+    return nullptr;
+}
+
+Transform fileTransformOf(const State& state)
+{
+    // Shrunk as far as the camera has moved in, and turned with it.
+    const double scale = 100.0 / std::max(state.zoom, 1.0e-6);
+    const double r = state.rotation * kPi / 180.0;
+    return Transform(scale * std::cos(r), scale * std::sin(r), -scale * std::sin(r), scale * std::cos(r), state.x,
+        state.y);
+}
+
 State stateOf(const Frame& frame, double width, double height)
 {
+    if (const auto* layer = dynamic_cast<const Layer*>(frame.parent))
+        if (isFileCamera(*layer))
+            return fileStateOf(frame, width, height);
     State state;
     state.x = number(frame.extraAttributes, kX, width / 2.0);
     state.y = number(frame.extraAttributes, kY, height / 2.0);
@@ -179,7 +251,7 @@ State stateAt(const Timeline& timeline, int frame, double width, double height)
     State rest;
     rest.x = width / 2.0;
     rest.y = height / 2.0;
-    const Layer* layer = cameraOf(timeline);
+    const Layer* layer = filmingOf(timeline);
     if (!layer || layer->frames.empty())
         return rest;
     std::vector<const Frame*> keys(layer->frames.begin(), layer->frames.end());
@@ -207,9 +279,20 @@ State stateAt(const Timeline& timeline, int frame, double width, double height)
         const State to = stateOf(*next, width, height);
         state.x += (to.x - state.x) * t;
         state.y += (to.y - state.y) * t;
-        // Zoom eases evenly as a ratio, so moving in looks steady.
-        state.zoom = state.zoom * std::pow(to.zoom / state.zoom, t);
-        state.rotation += (to.rotation - state.rotation) * t;
+        if (isFileCamera(*layer))
+        {
+            // The FLA's camera tweens its instance as a classic tween does:
+            // its size evenly, and its turn the shorter way round.
+            const double size = 100.0 / state.zoom + (100.0 / to.zoom - 100.0 / state.zoom) * t;
+            state.zoom = 100.0 / std::max(size, 1.0e-6);
+            state.rotation += std::remainder(to.rotation - state.rotation, 360.0) * t;
+        }
+        else
+        {
+            // Zoom eases evenly as a ratio, so moving in looks steady.
+            state.zoom = state.zoom * std::pow(to.zoom / state.zoom, t);
+            state.rotation += (to.rotation - state.rotation) * t;
+        }
         state.color = blendColorTransforms(state.color, to.color, t);
     }
     return state;

@@ -5,6 +5,12 @@ What changed in each release of Phoenix, newest first.
 ## Unreleased
 
 - Dragging the edge of a brush stroke or other smooth outline with the Selection tool bends it in one smooth curve, spreading along the outline instead of creasing at the point grabbed
+- Motion tweens from FLA files play their 3D: clips turned about X and Y and moved in Z show in perspective, at the file's view angle and vanishing point
+- Motion tweens from FLA files ease each property by its own Motion Editor ease: eases in and out, stop and start, bounce in and custom curves
+- A clip that FLA files place with a 3D matrix opens where it belongs, and saves back as it was
+- FLA camera layers play: pan, zoom, rotation and color effect, tweened; layers attached to the camera stay put and keep their color
+- The Camera tool moves an FLA file's camera layer, keying its keyframes as the file keeps them
+- HTML5 pages and SWF movies show the 3D motion and the camera as the stage does
 
 ## 0.18.1
 

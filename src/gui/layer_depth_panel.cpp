@@ -37,7 +37,8 @@ std::vector<fla::Layer*> LayerDepthPanel::layers() const
     std::vector<fla::Layer*> found;
     fla::Timeline* scene = _links.scene ? _links.scene() : nullptr;
     for (fla::Layer* layer : scene ? scene->layers : std::vector<fla::Layer*>())
-        if (layer && layer->layerType != fla::Layer::Type::Folder && !fla::camera::isCamera(*layer))
+        if (layer && layer->layerType != fla::Layer::Type::Folder && !fla::camera::isCamera(*layer) &&
+            !fla::camera::isFileCamera(*layer))
             found.push_back(layer);
     return found;
 }

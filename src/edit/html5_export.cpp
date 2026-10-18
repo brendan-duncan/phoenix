@@ -171,12 +171,10 @@ uint32_t rgbOf(const uint8_t color[4])
 /// An instance's color effect as the multipliers and offsets of a
 /// ColorTransform: tint, then brightness, then the advanced settings, as
 /// the stage applies them.
-std::string colorJson(const ColorTransform& c)
+void toneOf(const ColorTransform& c, double m[4], double o[4])
 {
-    if (c.isIdentity())
-        return std::string();
-    double m[3] = {1.0, 1.0, 1.0};
-    double o[3] = {0.0, 0.0, 0.0};
+    m[0] = m[1] = m[2] = 1.0;
+    o[0] = o[1] = o[2] = 0.0;
     if (c.tintMultiplier != 0.0)
         for (int i = 0; i < 3; ++i)
         {
@@ -200,8 +198,44 @@ std::string colorJson(const ColorTransform& c)
         m[i] *= mult[i];
         o[i] = o[i] * mult[i] + offset[i];
     }
-    return "[" + number(m[0], 4) + "," + number(m[1], 4) + "," + number(m[2], 4) + "," + number(c.alphaMultiplier, 4) +
-        "," + number(o[0], 2) + "," + number(o[1], 2) + "," + number(o[2], 2) + "," + number(c.alphaOffset, 2) + "]";
+    m[3] = c.alphaMultiplier;
+    o[3] = c.alphaOffset;
+}
+
+/// \a c as multipliers and offsets, and then \a over on top of it (a
+/// camera's color over what it sees); empty when both are none.
+std::string colorJson(const ColorTransform& c, const ColorTransform& over = ColorTransform())
+{
+    if (c.isIdentity() && over.isIdentity())
+        return std::string();
+    double m[4], o[4], om[4], oo[4];
+    toneOf(c, m, o);
+    toneOf(over, om, oo);
+    for (int i = 0; i < 4; ++i)
+    {
+        m[i] *= om[i];
+        o[i] = o[i] * om[i] + oo[i];
+    }
+    return "[" + number(m[0], 4) + "," + number(m[1], 4) + "," + number(m[2], 4) + "," + number(m[3], 4) + "," +
+        number(o[0], 2) + "," + number(o[1], 2) + "," + number(o[2], 2) + "," + number(o[3], 2) + "]";
+}
+
+/// Whether \a timeline has layers attached to the FLA's camera, out of
+/// reach of its color: then each layer it colors carries the color itself.
+bool attachedLayers(const Timeline& timeline)
+{
+    return std::any_of(timeline.layers.begin(), timeline.layers.end(),
+        [](const Layer* layer) { return layer && camera::attached(*layer); });
+}
+
+/// Whether \a frame is an object motion tween in 3D.
+bool turnedIn3D(const Frame& frame)
+{
+    if (frame.otherTweenType != "motion object")
+        return false;
+    MotionObject motion;
+    const std::string* xml = timeline::motionOf(const_cast<Frame&>(frame));
+    return xml && motion.parse(*xml) && motion.threeD();
 }
 
 std::string filterJson(const Filter& f)
@@ -420,6 +454,12 @@ std::vector<BakedRun> bakedRuns(const Timeline& timeline)
     for (int i = 0; i < n; ++i)
         if (plain(i))
             for (const Frame* frame : layers[static_cast<size_t>(i)]->frames)
+            {
+                if (frame && turnedIn3D(*frame))
+                {
+                    first3d = std::min(first3d, i);
+                    last3d = std::max(last3d, i);
+                }
                 for (const Element* element : frame ? frame->elements : std::vector<Element*>())
                     if (element && element->elementType() == Element::Type::SymbolInstance &&
                         !threed::of(*static_cast<const SymbolInstance*>(element)).flat())
@@ -427,6 +467,7 @@ std::vector<BakedRun> bakedRuns(const Timeline& timeline)
                         first3d = std::min(first3d, i);
                         last3d = std::max(last3d, i);
                     }
+            }
     add(first3d, last3d + 1, "3D rotation");
     for (int i = 0; i < n; ++i)
     {
@@ -677,7 +718,7 @@ private:
                 scenes += std::string(scenes.empty() ? "" : ",") + "{\"name\":" + quoted(timeline.name) + ",\"at\":" +
                     std::to_string(offset) + ",\"n\":" + std::to_string(length) + "}";
             gatherFrameData(timeline, offset, scene, labels, sounds, scripts);
-            const bool filmed = scene && camera::cameraOf(timeline);
+            const bool filmed = scene && camera::filmingOf(timeline) && !attachedLayers(timeline);
             for (int frame = 0; frame < length; ++frame)
             {
                 const std::string tone = filmed
@@ -817,14 +858,18 @@ private:
         // A scene's multiplane camera: each layer framed by it at its
         // depth, its color effect on the whole picture (the timeline's
         // "cc").
-        const bool filmed = scene && camera::cameraOf(timeline);
+        const bool filmed = scene && camera::filmingOf(timeline);
         const camera::State shot =
             filmed ? camera::stateAt(timeline, frame, _document.width, _document.height) : camera::State();
+        // With layers attached to the FLA's camera, the others carry its
+        // color themselves.
+        const bool toning = filmed && attachedLayers(timeline);
         const std::vector<BakedRun>& runs = runsOf(timeline);
         std::string out;
         for (int li = static_cast<int>(layers.size()) - 1; li >= 0; --li)
         {
             const Layer* layer = layers[static_cast<size_t>(li)];
+            _tone = toning && layer && !camera::attached(*layer) ? shot.color : ColorTransform();
             // Layers Phoenix's compositing draws together: one picture, in
             // the place of the run's bottom layer.
             const auto run = std::find_if(runs.begin(), runs.end(),
@@ -835,16 +880,21 @@ private:
                     continue;
                 const std::string json = _source.picture(timeline, run->from, run->to, frame);
                 const int art = json.empty() ? -1 : artIndexOf(json);
+                bool attachedIn = false;
+                for (int i = run->from; i < run->to; ++i)
+                    attachedIn = attachedIn || (layers[static_cast<size_t>(i)] && camera::attached(*layers[static_cast<size_t>(i)]));
+                const std::string tone = toning && !attachedIn ? colorJson(shot.color) : std::string();
                 if (art >= 0)
                     out += std::string(out.empty() ? "" : ",") + "{\"k\":" + quoted(prefix + "B" + std::to_string(run->from)) +
                         ",\"d\":" + std::to_string((static_cast<int>(layers.size()) - li) * 65536) + ",\"t\":\"a\",\"id\":" +
-                        std::to_string(art) + "}";
+                        std::to_string(art) + (tone.empty() ? std::string() : ",\"ct\":" + tone) + "}";
                 continue;
             }
             if (!layer || layer->layerType == Layer::Type::Folder || layer->layerType == Layer::Type::Guide || !shown(*layer))
                 continue;
             Transform view;
-            if (filmed && !camera::view(shot, camera::depthOf(*layer), _document.width, _document.height, view))
+            const bool framed = filmed && !camera::attached(*layer) && !camera::isFileCamera(*layer);
+            if (framed && !camera::view(shot, camera::depthOf(*layer), _document.width, _document.height, view))
                 continue;
             int maskGroup = -1, maskedBy = -1;
             if (layer->layerType == Layer::Type::Mask)
@@ -858,7 +908,7 @@ private:
             const int framesIn = frame - span->index;
             Shown here = shownAt(*span, *layer, framesIn, _rate);
             Transform parent = parentTransform(timeline, *layer, *span, frame, here, 0);
-            if (filmed)
+            if (framed)
                 parent = followedBy(parent, view);
             for (size_t ei = 0; ei < here.elements.size(); ++ei)
             {
@@ -917,8 +967,11 @@ private:
             const Transform m = followedBy(own, parent);
             return isIdentity(m) ? std::string() : ",\"m\":" + matrixJson(m);
         };
+        // A camera's color the entry carries (an instance's over its own).
+        bool toned = false;
         const auto masks = [&]() {
-            return (maskGroup >= 0 ? ",\"mk\":" + std::to_string(maskGroup) : std::string()) +
+            return (!toned && !_tone.isIdentity() ? ",\"ct\":" + colorJson(_tone) : std::string()) +
+                (maskGroup >= 0 ? ",\"mk\":" + std::to_string(maskGroup) : std::string()) +
                 (maskedBy >= 0 ? ",\"mb\":" + std::to_string(maskedBy) : std::string());
         };
         switch (element.elementType())
@@ -968,7 +1021,8 @@ private:
                 otherapps::carryEffects(compositing::instanceEffectsOf(own), _frame, carried, colorEffect);
                 filterList.insert(filterList.begin(), carried.begin(), carried.end());
             }
-            const std::string color = colorJson(colorEffect);
+            const std::string color = colorJson(colorEffect, _tone);
+            toned = true;
             if (!color.empty())
                 out += ",\"ct\":" + color;
             const std::string filters = filtersJson(filterList);
@@ -1341,6 +1395,8 @@ private:
     std::map<const Timeline*, std::vector<BakedRun>> _runs;
     /// The frame of the timeline being walked.
     int _frame = 0;
+    /// The camera's color over the layer being written, when it carries it.
+    ColorTransform _tone;
     std::map<const Element*, int> _artByElement;
     std::vector<std::string> _texts;
     std::map<std::string, int> _textIndex;

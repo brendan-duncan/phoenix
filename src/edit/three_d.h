@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../data/point.h"
+#include "../data/transform.h"
 
 #include <array>
 #include <string>
@@ -59,6 +60,26 @@ std::array<double, 9> projection(const Pose& pose, const Point& center, const Po
     double depth = 0.0);
 
 Point project(const std::array<double, 9>& map, const Point& point);
+
+/// The focal length of the document's own perspective, as FLA files keep
+/// it: the view angle (viewAngle3D) across the stage's width, 55 degrees
+/// when it has none.
+double documentFocalLength(const Document& document);
+
+/// The document's vanishing point (vanishingPoint3DX/Y), the stage's middle
+/// when it has none.
+Point vanishingPoint(const Document& document);
+
+/// How an object motion tween in 3D draws its clip, as the FLA's 3D
+/// motion has it: the clip placed by \a placed (its 2D matrix, from its own
+/// space to its parent's), turned about its transformation point \a pivot
+/// (in its own space; \a pivotZ pixels behind it) by \a rotationX, then
+/// \a rotationY (degrees), then its 2D turn, the rest of its 2D matrix
+/// (scale and skew) applied first; pushed \a z into the stage, and seen
+/// from \a focal in front of \a vanishing. A 3x3 matrix, row-major, taking
+/// the clip's own (x, y, 1) to (X, Y, W) for the point (X / W, Y / W).
+std::array<double, 9> motionProjection(const Transform& placed, const Point& pivot, double pivotZ, double rotationX,
+    double rotationY, double z, const Point& vanishing, double focal);
 
 /// The document's light, Phoenix's own (phoenixLight): when on, each clip
 /// turned in 3D is shaded by how squarely it faces the light, so a card
