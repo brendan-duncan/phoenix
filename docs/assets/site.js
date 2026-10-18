@@ -72,6 +72,7 @@ const NAV = [
     { href: "behaviors.html", title: "Behaviors" },
     { href: "node-graph.html", title: "Node graphs" },
     { href: "sound.html", title: "Sound" },
+    { href: "video.html", title: "Video" },
     { href: "actionscript.html", title: "ActionScript and Test Movie" },
   ] },
   { group: "Output", pages: [

@@ -4,11 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Sound · Phoenix User Guide</title>
-<meta name="description" content="Import sounds, place them on frames, choose how they sync and loop, and bring in reference video to animate over.">
+<meta name="description" content="Import sounds, place them on keyframes, choose how they sync, repeat and fade, shape their volume, hear them as you scrub, export them in video, SWF and HTML5, play them from scripts, and key mouths to dialogue.">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Phoenix">
 <meta property="og:title" content="Sound · Phoenix User Guide">
-<meta property="og:description" content="Import sounds, place them on frames, choose how they sync and loop, and bring in reference video to animate over.">
+<meta property="og:description" content="Import sounds, place them on keyframes, choose how they sync, repeat and fade, shape their volume, hear them as you scrub, export them in video, SWF and HTML5, play them from scripts, and key mouths to dialogue.">
 <meta property="og:url" content="https://phoenixanimate.com/sound.html">
 <meta property="og:image" content="https://phoenixanimate.com/assets/shots/hero.webp">
 <meta property="og:image:type" content="image/webp">
@@ -17,7 +17,7 @@
 <meta property="og:image:alt" content="The Phoenix window with three flower characters on the stage, the timeline below and the Properties panel on the right">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:image" content="https://phoenixanimate.com/assets/shots/hero.webp">
-<meta name="keywords" content="sound audio import wav mp3 aiff flac ogg stream event start stop sync loop repeat effect fade envelope waveform mute scrub lip sync rhubarb papagayo mouth chart edit envelope trim split audio reference video ffmpeg">
+<meta name="keywords" content="sound audio import wav mp3 aiff flac ogg library sound properties stream event start stop sync loop repeat effect left channel right channel fade in fade out custom envelope waveform volume trim in point out point mute scrub playback split audio swf sound compression mp3 adpcm raw event sounds stream sounds html5 actionscript attachSound linkage lip sync rhubarb papagayo mouth chart reference video">
 <link rel="icon" href="assets/img/logo.png">
 <link rel="stylesheet" href="assets/site.css">
 <script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
@@ -29,78 +29,131 @@
 
 <p class="eyebrow">Animation</p>
 <h1>Sound</h1>
-<p class="lead">Dialogue, music and effects play with your timeline in Phoenix, and are mixed into exported video.</p>
+<p class="lead">Dialogue, music and effects play with your timeline in Phoenix, and go out with your video, SWF movies and web pages. A sound lives in the library and plays from the keyframes you put it on.</p>
 
 <h2>Bring in sound</h2>
 
-<p>Import sounds with <span class="menu-path">File &rsaquo; Import &rsaquo; Import to Library...</span>, or drag sound files onto the window. Phoenix reads WAV, AIFF, MP3, FLAC and Ogg files. Each sound becomes a library item. <span class="menu-path">File &rsaquo; Import &rsaquo; Import to Stage...</span> (<kbd>Ctrl</kbd>+<kbd>R</kbd>) puts a sound in the library too; to attach it to the current frame as well, drop the sound file on the stage. <span class="menu-path">File &rsaquo; Import &rsaquo; Import Animatic...</span> brings in an animatic's audio tracks, each on a layer of its own; see <a href="pipeline.html#start-from-the-animatic">Start from the animatic</a>.</p>
+<p>Import sounds with <span class="menu-path">File &rsaquo; Import &rsaquo; Import to Library...</span>, or drag sound files onto the window. Phoenix reads WAV, AIFF, MP3, FLAC and Ogg files. Each sound becomes a library item. <span class="menu-path">File &rsaquo; Import &rsaquo; Import to Stage...</span> (<kbd>Ctrl</kbd>+<kbd>R</kbd>) puts a sound in the library too; to attach it to the current frame as well, drop the sound file on the stage. <span class="menu-path">File &rsaquo; Import &rsaquo; Import Animatic...</span> brings in an animatic's audio tracks, each on a layer of its own; see <a href="pipeline.html#start-from-the-animatic">Start from the animatic</a>. <span class="menu-path">File &rsaquo; Import &rsaquo; Import Video...</span> can bring in a video's sound too; see <a href="video.html">Video</a>.</p>
+
+<p>Phoenix plays every sound as 44.1 kHz stereo, whatever it was recorded at, so sounds of different rates mix together cleanly. Sounds that come with an FLA file play as they are stored in it, whether as uncompressed samples or as MP3.</p>
+
+<p>To check a sound, right-click it in the library and choose <strong>Properties...</strong>, or double-click it. <strong>Sound Properties</strong> shows its name, how it is stored and how long it lasts, with <strong>Play</strong> and <strong>Stop</strong> to hear it.</p>
 
 <h2>Put a sound on the timeline</h2>
 
 <ol class="steps">
   <li>Make a keyframe where the sound should start, ideally on a layer of its own.</li>
-  <li>On the Frame tab, under <strong>Sound</strong>, choose the sound from the <strong>Name</strong> list. You can also drag the sound from the library onto the stage to attach it to the current frame, or onto a frame in the timeline to put it on that layer at that frame.</li>
+  <li>With the playhead on that keyframe, open the Frame tab of the Properties panel and choose the sound from the <strong>Name</strong> list under <strong>Sound</strong>. You can also drag the sound from the library onto the stage to attach it to the current frame, or onto a frame in the timeline to put it on that layer at that frame.</li>
 </ol>
 
-<p>The sound's waveform is drawn across the frames it plays over, which makes it easy to time animation to beats and syllables.</p>
+<p>The sound's waveform is drawn across the frames it plays over, so you can time animation to beats and syllables by eye. The sound plays for as long as its keyframe's span lasts, so give the layer enough frames to hold it. To take a sound off, choose <strong>None</strong> from the Name list.</p>
+
+<figure>
+  <img src="assets/shots/timeline-sound-waveform.webp" alt="The timeline with a layer named audio whose stream sound starts at frame 8, its waveform drawn in blue across the frames after it" width="1450" height="171">
+  <figcaption>A dialogue track on its own layer. The waveform shows where the words fall.</figcaption>
+</figure>
 
 <h2>Sound settings</h2>
 
+<p>The Sound section shows only while the playhead is on the keyframe that holds the sound. On a later frame of its span, the Frame tab names the keyframe instead; click the keyframe to get to the sound.</p>
+
+<div class="split">
+  <figure style="margin:0"><img src="assets/shots/properties-frame-sound.webp" alt="The Frame tab of the Properties panel for frame 8 of the audio layer, its Sound section with Name dialogue.aif, Effect None with an Edit button, Sync Stream, and Repeat 1 time" width="391" height="525"></figure>
+  <dl class="defs" style="grid-template-columns:1fr">
+    <dt>Name</dt><dd>The library sound the keyframe plays, or None.</dd>
+    <dt>Effect</dt><dd>How the volume changes as the sound plays. See <a href="#effects">Effects</a>.</dd>
+    <dt>Sync</dt><dd>How the sound follows the timeline: Event, Start, Stop or Stream. See below.</dd>
+    <dt>Repeat or Loop</dt><dd><strong>Repeat</strong> plays the sound the number of times you type beside it, from 1 to 65535. <strong>Loop</strong> plays it over and over for as long as its frames last.</dd>
+  </dl>
+</div>
+
+<h3 id="sync">Sync</h3>
+
 <dl class="defs">
-  <dt>Sync</dt>
-  <dd>
-    <strong>Stream</strong> locks the sound to the timeline: it plays only while the playhead moves through its frames, and scrubbing plays the bit under the playhead. Use it for dialogue and anything that has to stay in sync with the picture.<br>
-    <strong>Event</strong> plays the whole sound from start to finish once triggered, independent of the timeline.<br>
-    <strong>Start</strong> is like Event, but doesn't start the sound again if it is already playing.<br>
-    <strong>Stop</strong> silences the chosen sound.
-  </dd>
-  <dt>Repeat / Loop</dt><dd>Plays the sound a set number of times, or loops it.</dd>
-  <dt>Effect</dt><dd>Left Channel, Right Channel, Fade Left to Right, Fade Right to Left, Fade In and Fade Out, or <strong>Custom</strong>, a volume envelope of your own.</dd>
+  <dt>Event</dt><dd>Plays the whole sound from start to finish once the playhead reaches its keyframe, whatever the timeline does after that. It is the default. Use it for short effects: a door slam, a footstep, a button click.</dd>
+  <dt>Start</dt><dd>Like Event, but if the same sound is already playing it doesn't start a second copy. Use it for a sound that a looping timeline would otherwise pile up.</dd>
+  <dt>Stop</dt><dd>Silences the named sound wherever it is playing. Put it on a keyframe where an event sound should end.</dd>
+  <dt>Stream</dt><dd>Locks the sound to the frames. It plays only while the playhead moves through its span, from the point that matches the frame shown, and stops when the span ends. Use it for dialogue, music and anything that has to stay in step with the picture.</dd>
 </dl>
 
-<p>When you play the document in Phoenix, you hear the sounds on the scene's own timeline and those inside the movie clips on the stage, as each clip plays its own timeline. To hear only the scene's sounds, turn on <span class="menu-path">View &rsaquo; Mute Movie Clip Sounds</span>; Phoenix remembers the choice, and exports include movie clip sounds either way. Sounds inside graphic symbols and buttons stay silent, and sounds on hidden layers are left out of playback and exports.</p>
+<h3 id="effects">Effects</h3>
 
-<p>To work in silence, choose <span class="menu-path">View &rsaquo; Mute Sounds</span> (<kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>M</kbd>).</p>
+<dl class="defs">
+  <dt>None</dt><dd>Full volume in both channels.</dd>
+  <dt>Left Channel, Right Channel</dt><dd>Plays the sound in one speaker only.</dd>
+  <dt>Fade Left to Right, Fade Right to Left</dt><dd>Moves the sound from one speaker to the other over its length.</dd>
+  <dt>Fade In, Fade Out</dt><dd>Rises from silence at the start, or falls to silence at the end.</dd>
+  <dt>Custom</dt><dd>A volume envelope you draw yourself in Edit Envelope.</dd>
+</dl>
 
-<h3>Edit Envelope</h3>
+<h3 id="edit-envelope">Edit Envelope</h3>
 
 <p>Click <strong>Edit...</strong> beside the Effect, or choose Custom, to shape the sound's volume. The waveform shows in two lanes, the left channel over the right, each with its volume as a line from silent at the bottom to full at the top:</p>
 
 <ul>
-  <li>Click a lane to add a point there, up to eight. Drag a point to move it along the sound and to set that channel's volume.</li>
+  <li>Click a lane to add a point there, up to eight. Drag a point to move it along the sound and to set that channel's volume. The volume runs in straight lines between points.</li>
   <li>Drag a point well out of its lane to take it away.</li>
-  <li>Drag the green and red bars on the ruler between the lanes to trim where the sound starts and stops.</li>
+  <li>Drag the green and red bars on the ruler between the lanes to trim where the sound starts and stops. A trimmed sound plays only the part between them, and repeats and loops play that part again.</li>
   <li><strong>Zoom In</strong> and <strong>Zoom Out</strong> to work closely; <strong>Frames</strong> measures the ruler in frames instead of seconds; <strong>Play</strong> and <strong>Stop</strong> preview the sound as the frame will play it; <strong>Clear</strong> sets full volume throughout, untrimmed.</li>
 </ul>
 
-<p>The envelope and trim are one step to undo, and are saved as FLA files keep them.</p>
+<p>Picking one of the ready-made effects after editing replaces your envelope with that effect's. The envelope and trim are one step to undo, and are saved the way FLA files keep them, so other apps that read FLA files hear the same thing.</p>
 
-<h3>Split Audio</h3>
+<h3 id="split-audio">Split Audio</h3>
 
 <p>To cut a stream sound in two, for example to slip the second half of a line a few frames later, put the playhead inside its span on its layer and choose <span class="menu-path">Modify &rsaquo; Timeline &rsaquo; Split Audio</span>. A new keyframe starts there, playing the sound from that point on with the same settings and envelope, and the first keyframe stops where the second begins.</p>
 
+<h2 id="hearing-sound">Hearing sound while you work</h2>
+
+<p>Press <kbd>Enter</kbd> or the play button to play the timeline with its sound. Drag the playhead to scrub: stream sounds play a frame's worth at each frame you pass, so you can find a word or a beat. Event and start sounds play only when playback reaches their keyframes, not while you scrub, and movie clips stay silent while you scrub.</p>
+
+<p>When you play the document in Phoenix, you hear the sounds on the scene's own timeline and those inside the movie clips on the stage, as each clip plays its own timeline. To hear only the scene's sounds, turn on <span class="menu-path">View &rsaquo; Mute Movie Clip Sounds</span>; Phoenix remembers the choice, and exports include movie clip sounds either way. Sounds inside graphic symbols and buttons stay silent while you animate, and sounds on hidden layers are left out of playback and exports.</p>
+
+<p>To work in silence, choose <span class="menu-path">View &rsaquo; Mute Sounds</span> (<kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>M</kbd>).</p>
+
 <h2 id="exporting-sound">Exporting sound</h2>
 
-<p><span class="menu-path">File &rsaquo; Export &rsaquo; Export Movie...</span> (<kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd>) mixes every sound that plays, movie clip sounds included, into the video while <strong>Include sound</strong> is checked: as AAC in an H.264 MP4, or as uncompressed audio in a ProRes MOV. To export the mix on its own, choose the <strong>Sound (WAV)</strong> format. See <a href="export.html#export-movie">Export Movie</a>.</p>
+<h3>In video and WAV files</h3>
 
-<p>SWF movies carry the same mix as a soundtrack that streams with the frames, so it stays in step with the animation. <span class="menu-path">File &rsaquo; Publish &rsaquo; Publish Settings...</span> sets how it is compressed under <strong>SWF sound</strong>:</p>
+<p><span class="menu-path">File &rsaquo; Export &rsaquo; Export Movie...</span> (<kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd>) mixes every sound that plays over the exported frames, movie clip sounds included, into the video while <strong>Include sound</strong> is checked: as 192 kbps AAC in an H.264 MP4, or as uncompressed 16-bit audio in a ProRes MOV. Each sound plays as you hear it in Phoenix, with its sync, effect, envelope, trim and loops. To export the mix on its own, choose the <strong>Sound (WAV)</strong> format: a 16-bit, 44.1 kHz stereo WAV file of the frames you choose. See <a href="export.html#export-movie">Export Movie</a>.</p>
+
+<p>Phoenix doesn't export a single library sound on its own, and has no per-sound export settings. To get one sound out, put it on a layer by itself, hide the others, and export the frames it plays over as Sound (WAV).</p>
+
+<h3 id="swf-sound">In SWF movies</h3>
+
+<p>SWF movies keep stream sounds and event sounds apart, the way SWF players expect:</p>
 
 <ul>
-  <li><strong>MP3</strong>: the smallest, at a bit rate from 16 to 192 kbps. MP3 needs the encoder in Phoenix's ffmpeg; where it has none, the movie gets ADPCM instead and the status bar says so.</li>
+  <li><strong>Stream</strong> sounds are mixed into one soundtrack that streams with the frames, so it stays in step with the animation.</li>
+  <li><strong>Event</strong>, <strong>Start</strong> and <strong>Stop</strong> sounds go in as sounds of their own, each stored once and started and stopped on its keyframes with its loops, trim and envelope. They play to the end like event sounds in any player, and those inside movie clips start with their clips.</li>
+</ul>
+
+<p><span class="menu-path">File &rsaquo; Publish &rsaquo; Publish Settings...</span> sets how the sound is compressed under <strong>SWF sound</strong>:</p>
+
+<ul>
+  <li><strong>MP3</strong>: the smallest, at a bit rate from 8 to 192 kbps. MP3 needs the encoder in Phoenix's ffmpeg; where it has none, the movie gets ADPCM instead and the status bar says so.</li>
   <li><strong>ADPCM</strong>: quick and plain, at 2 to 5 bits a sample (more bits, truer sound, larger file).</li>
   <li><strong>Raw</strong>: uncompressed, for the truest sound.</li>
   <li><strong>None</strong>: a silent movie.</li>
 </ul>
 
-<p>Each also has a sample rate (5.5, 11, 22 or 44 kHz; MP3 starts at 11) and can be stereo or mono. The settings apply to <span class="menu-path">File &rsaquo; Publish</span>, <span class="menu-path">File &rsaquo; Export &rsaquo; Export SWF Movie...</span> and SWF renders from the command line. Because the sounds are mixed into one soundtrack, a sound's own sync, envelope and loops play as they do in Phoenix.</p>
+<p>Each also has a sample rate (5.5, 11, 22 or 44 kHz; MP3 starts at 11) and can be stereo or mono. Lower rates and mono make a smaller file at the cost of clarity: 22 kHz suits speech, 44 kHz suits music. The settings apply to <span class="menu-path">File &rsaquo; Publish</span>, <span class="menu-path">File &rsaquo; Export &rsaquo; Export SWF Movie...</span> and SWF renders from the command line.</p>
 
-<h2>Reference video</h2>
+<p>An FLA file made elsewhere can carry its own compression for each library sound, and separate settings for stream and event sounds. Phoenix keeps them and uses them for the event sounds: a sound with its own settings goes in with those (an MP3 kept at its imported quality goes in as it is), unless the file's publish settings say theirs win. Phoenix itself has no control to set compression for one sound.</p>
 
-<p><span class="menu-path">File &rsaquo; Import &rsaquo; Import Video...</span> brings in live action or an animatic to animate over. Phoenix decodes the video into one still per frame on a locked <a href="masks-guides.html#guide-layers">guide layer</a>, with the stills in a library folder, so it shows while you work but is never exported. You can choose to shrink the video to the stage width and to import its sound as a stream sound.</p>
+<h3>In HTML5 pages</h3>
 
-<p>Most common video formats work, including MP4, MOV, AVI, MKV and WebM. Phoenix reads them with the copy of ffmpeg that comes with it, so nothing else needs to be installed.</p>
+<p>An <a href="export.html#html5">HTML5 page</a> plays event, start, stop and stream sounds as they are set, looping as set, from MP3 files it writes in the page's assets folder. Browsers let a page make sound only once the viewer has clicked or pressed a key on it, so the sound starts then.</p>
 
-<p>An FLA file may hold video items of its own, embedded or linked, placed on the stage. Phoenix lists them in the library (double-click one for its size, frame rate and source), shows each placement as a frame with the video's name, and saves them unchanged; it does not play them.</p>
+<h2 id="sounds-in-scripts">Sounds in scripts</h2>
+
+<p>Sounds on keyframes play in <a href="actionscript.html#test-movie">Test Movie</a> as they do on the timeline. Scripts can play library sounds too: in ActionScript 2, <code>new Sound()</code> with <code>attachSound()</code>, <code>start()</code>, <code>stop()</code>, <code>setVolume()</code> and <code>onSoundComplete</code>; in ActionScript 3, a sound's class with <code>play()</code>; and <code>stopAllSounds()</code> or <code>SoundMixer.stopAll()</code> to silence everything. See <a href="actionscript.html#games">What games use</a>.</p>
+
+<p>A script finds a library sound by its linkage name. Phoenix keeps and uses the linkage of sounds in FLA files, but has no way to give a sound a linkage name yet: the Linkage command is for symbols, and scripts can set linkage on symbols and bitmaps only. To play a new sound from a script, put it in the file with linkage in another app, or start it from a keyframe instead.</p>
+
+<h2 id="reference-video">Reference video</h2>
+
+<p><span class="menu-path">File &rsaquo; Import &rsaquo; Import Video...</span> brings in live action or an animatic to animate over, as a still per frame on a locked guide layer, with its sound as a stream sound if you like. See <a href="video.html">Video</a>.</p>
 
 <h2 id="lip-sync">Lip sync</h2>
 

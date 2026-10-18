@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Video · Phoenix User Guide</title>
+<meta name="description" content="Bring in live action or an animatic as reference to animate over, with its sound, see how Phoenix treats video items in FLA files, and make video files of your animation.">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Phoenix">
+<meta property="og:title" content="Video · Phoenix User Guide">
+<meta property="og:description" content="Bring in live action or an animatic as reference to animate over, with its sound, see how Phoenix treats video items in FLA files, and make video files of your animation.">
+<meta property="og:url" content="https://phoenixanimate.com/video.html">
+<meta property="og:image" content="https://phoenixanimate.com/assets/shots/hero.webp">
+<meta property="og:image:type" content="image/webp">
+<meta property="og:image:width" content="1704">
+<meta property="og:image:height" content="1061">
+<meta property="og:image:alt" content="The Phoenix window with three flower characters on the stage, the timeline below and the Properties panel on the right">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://phoenixanimate.com/assets/shots/hero.webp">
+<meta name="keywords" content="video import video reference footage live action rotoscope animatic guide layer stills mp4 mov m4v avi mkv webm flv wmv mpg ffmpeg video sound stream embedded video linked video flv video properties export video h.264 prores">
+<link rel="icon" href="assets/img/logo.png">
+<link rel="stylesheet" href="assets/site.css">
+<script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<main>
+<article class="content">
+
+<p class="eyebrow">Animation</p>
+<h1>Video</h1>
+<p class="lead">Bring in footage or an animatic to animate over, and turn your animation into video files. Phoenix reads and writes video with the copy of ffmpeg that comes with it, so nothing else needs to be installed.</p>
+
+<h2 id="import-video">Import reference video</h2>
+
+<p>Use reference video to trace live action, match a performance, or time your animation to an animatic.</p>
+
+<div class="split">
+  <figure style="margin:0"><img src="assets/shots/menu-file-import.webp" alt="File, Import submenu: Import to Stage, Import to Library, Open External Library, Import Animatic and Import Video" width="240" height="126"></figure>
+  <ol class="steps">
+    <li>Open the timeline you want the video on: the scene, or a symbol you are editing.</li>
+    <li>Choose <span class="menu-path">File &rsaquo; Import &rsaquo; Import Video...</span> and pick the video file.</li>
+    <li>Choose the options, then click <strong>OK</strong>. A progress bar follows ffmpeg through the video; <strong>Cancel</strong> stops it and adds nothing.</li>
+  </ol>
+</div>
+
+<dl class="defs">
+  <dt>Shrink to the stage width</dt><dd>On by default. A video wider than the stage is scaled down to the stage's width, keeping its shape, so the frames are lighter to store and draw. A smaller video is never scaled up. Turn it off to keep the video's full size.</dd>
+  <dt>Import its sound, as a stream</dt><dd>On by default. The video's sound comes in as a library sound named after the video, set to <a href="sound.html#sync">Stream</a> on the layer's first keyframe, so it plays in step as you scrub and play. A video with no sound simply brings none.</dd>
+</dl>
+
+<h3>What you get</h3>
+
+<ul>
+  <li>A new layer at the bottom of the timeline, named after the video. It is a <a href="masks-guides.html#guide-layers">guide layer</a> and starts locked, so you can't move or select the footage by accident while you draw above it.</li>
+  <li>One keyframe per frame of the document, each showing a still of the video at that moment. Phoenix samples the video at the document's frame rate, so a 30 fps video in a 24 fps document comes in as 24 stills a second, and the timing matches.</li>
+  <li>The stills, as JPEG bitmaps, in a library folder named after the video with <em>frames</em> on the end.</li>
+  <li>The sound, if you asked for it.</li>
+</ul>
+
+<p>Because it is a guide layer, the video shows while you work but is never exported or published. The whole import is one step to undo.</p>
+
+<h3>Working with the reference</h3>
+
+<ul>
+  <li>Hide the layer to see your drawing alone, and show it again to compare. Remember that sounds on hidden layers are silent, so hiding the video layer silences its sound too.</li>
+  <li>Unlock the layer to move or scale a still, for example to line footage up with your stage. Each keyframe holds its own still, so a change to one leaves the others where they were.</li>
+  <li>Use <span class="menu-path">Modify &rsaquo; Timeline &rsaquo; Split Audio</span> on the sound to slip part of the track; see <a href="sound.html#split-audio">Split Audio</a>.</li>
+  <li>When you are done with it, delete the layer, then the library folder of stills, to keep the file small. A long video at full size adds a lot of pictures to the document.</li>
+</ul>
+
+<h3>Video formats</h3>
+
+<p>Import Video lists MP4, MOV, M4V, AVI, MKV, WebM, FLV, WMV, MPG and MPEG files. Anything ffmpeg can decode in those containers works. If a file can't be read, Phoenix shows the message ffmpeg gave.</p>
+
+<p>For an animatic cut as an edit list rather than one video, see <a href="pipeline.html#start-from-the-animatic">Start from the animatic</a>.</p>
+
+<h2 id="video-in-fla-files">Video in FLA files</h2>
+
+<p>An FLA file made elsewhere may hold video items of its own, embedded in the file or linked to a video beside it, placed on the stage. Phoenix keeps them and their placements as they are, and saves them back unchanged, so the file still works in the app that made it. It does not play them:</p>
+
+<ul>
+  <li>The library lists each video item. Double-click one to see whether it is embedded or linked, its size in pixels, its frame rate and the file it was imported from.</li>
+  <li>On the stage, each placement draws as a dark frame with film-strip holes down its sides and the video's name in the middle, at the size the video was placed.</li>
+  <li>HTML5 pages leave placed videos out.</li>
+</ul>
+
+<p>To animate over such footage, get the original video file and bring it in with Import Video.</p>
+
+<h2 id="make-video">Make video files</h2>
+
+<p><span class="menu-path">File &rsaquo; Export &rsaquo; Export Movie...</span> (<kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd>) renders your animation to video, with the soundtrack mixed in:</p>
+
+<ul>
+  <li><strong>H.264 (MP4)</strong>, to watch and share. Name the file <code>.mov</code> for a QuickTime movie with the same video inside.</li>
+  <li><strong>ProRes 422 HQ (MOV)</strong>, for editing.</li>
+  <li><strong>ProRes 4444 with alpha (MOV)</strong>, which can keep a transparent background, for compositing.</li>
+</ul>
+
+<p>A PNG sequence, an animated GIF or a set of compositing passes come from the same dialog, and the <a href="export.html#render-queue">render queue</a> and the <a href="command-line.html">command line</a> make videos in the background. See <a href="export.html#export-movie">Export Movie</a> for every option.</p>
+
+<p>Phoenix makes MP4 and MOV files only. There is no FLV, AVI, WebM or WMV export; to get one of those, convert the MP4 or a PNG sequence with a video tool.</p>
+
+<h2 id="ffmpeg">About ffmpeg</h2>
+
+<p>Phoenix always uses its own copy of ffmpeg, installed beside Phoenix itself, never another one on the machine, so imports and exports come out the same everywhere. If that copy is missing, Import Video and video export say so and name the folder it belongs in; reinstalling Phoenix puts it back. See <a href="export.html#about-ffmpeg">About ffmpeg</a> for its license.</p>
+
+</article>
+</main>
+</body>
+</html>

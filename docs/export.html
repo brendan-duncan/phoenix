@@ -4,11 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Exporting and Publishing · Phoenix User Guide</title>
-<meta name="description" content="Export your animation as MP4 or MOV video, animated GIF, PNG sequences, per-layer PNG sequences, SVG sequences, compositing passes, single images, SVG, SWF, sprite sheets or WAV, and publish or queue renders.">
+<meta name="description" content="Export your animation as MP4 or MOV video, animated GIF, PNG, SVG and EXR sequences, compositing passes, PNG, JPEG or GIF images, SVG, SWF, sprite sheets or WAV, with their quality, palette and codec settings, and publish HTML5 pages or queue renders.">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Phoenix">
 <meta property="og:title" content="Exporting and Publishing · Phoenix User Guide">
-<meta property="og:description" content="Export your animation as MP4 or MOV video, animated GIF, PNG sequences, per-layer PNG sequences, SVG sequences, compositing passes, single images, SVG, SWF, sprite sheets or WAV, and publish or queue renders.">
+<meta property="og:description" content="Export your animation as MP4 or MOV video, animated GIF, PNG, SVG and EXR sequences, compositing passes, PNG, JPEG or GIF images, SVG, SWF, sprite sheets or WAV, with their quality, palette and codec settings, and publish HTML5 pages or queue renders.">
 <meta property="og:url" content="https://phoenixanimate.com/export.html">
 <meta property="og:image" content="https://phoenixanimate.com/assets/shots/hero.webp">
 <meta property="og:image:type" content="image/webp">
@@ -17,7 +17,7 @@
 <meta property="og:image:alt" content="The Phoenix window with three flower characters on the stage, the timeline below and the Properties panel on the right">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:image" content="https://phoenixanimate.com/assets/shots/hero.webp">
-<meta name="keywords" content="export movie video mp4 mov h.264 ffmpeg gif animated png sequence per layer transparent background image jpeg svg wav audio size frame range matte render prores exr passes swf publish sprite sheet render queue shots">
+<meta name="keywords" content="export movie video mp4 mov h.264 prores 4444 alpha codec crf aac ffmpeg gif animated palette colors dither loop repeat transparency 8-bit png jpeg quality progressive webp png sequence per layer transparent background image jpeg svg wav audio size frame range matte render prores exr passes swf publish sprite sheet trim padding packed json render queue csv render from data shots publish settings configurations swf sound">
 <link rel="icon" href="assets/img/logo.png">
 <link rel="stylesheet" href="assets/site.css">
 <script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
@@ -29,18 +29,25 @@
 
 <p class="eyebrow">Output</p>
 <h1>Exporting and Publishing</h1>
-<p class="lead">Exports render through the same drawing code as the stage, so what you see is what you get. All export commands are under <span class="menu-path">File &rsaquo; Export</span>.</p>
+<p class="lead">Exports render through the same drawing code as the stage, so what you see is what you get. All export commands are under <span class="menu-path">File &rsaquo; Export</span>, and <span class="menu-path">File &rsaquo; Publish</span> writes a set of formats at once.</p>
 
-<figure class="narrow">
-  <img src="assets/shots/menu-file-export.webp" alt="File, Export submenu: Export to SVG, Export Image, Export Movie, Export Sprite Sheet, Export Shots and Export SWF Movie" width="219" height="150">
-</figure>
+<div class="split">
+  <figure style="margin:0"><img src="assets/shots/menu-file-export.webp" alt="File, Export submenu: Export FLA for Other Apps, Render from Data, Export to SVG, Export Image, Export Movie, Export Sprite Sheet, Export Shots and Export SWF Movie" width="257" height="201"></figure>
+  <dl class="defs" style="grid-template-columns:1fr">
+    <dt>One picture</dt><dd><a href="#export-image">Export Image</a> (PNG, JPEG, GIF) or <a href="#export-to-svg">Export to SVG</a>.</dd>
+    <dt>Moving pictures</dt><dd><a href="#export-movie">Export Movie</a>: video, animated GIF, PNG, SVG and EXR sequences, compositing passes, or the sound alone.</dd>
+    <dt>For players and the web</dt><dd><a href="#swf">Export SWF Movie</a>, and <a href="#publish">Publish</a> for HTML5 pages, SWF and images together.</dd>
+    <dt>For games</dt><dd><a href="#sprite-sheets">Export Sprite Sheet</a>.</dd>
+    <dt>For the studio</dt><dd><a href="#export-shots">Export Shots</a>, <strong>Render from Data</strong> (a movie for each row of a CSV file; see <a href="symbols.html#templates">Templates</a>), and <strong>Export FLA for Other Apps</strong> (a copy with Phoenix's own motion baked in; see <a href="behaviors.html#bake">Bake to keyframes</a>).</dd>
+  </dl>
+</div>
 
 <h2>Export Movie</h2>
 
 <p>Choose <span class="menu-path">File &rsaquo; Export &rsaquo; Export Movie...</span> (<kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd>) to render a range of frames.</p>
 
 <div class="split">
-  <figure style="margin:0"><img src="assets/shots/export-movie.webp" alt="Export Movie dialog with format, codec, file, size, frame range, options, area, GIF colors, SVG options, layers and scenes" width="341" height="524"></figure>
+  <figure style="margin:0"><img src="assets/shots/export-movie.webp" alt="Export Movie dialog set to Video with the H.264 codec: file, size, frames 1 to 1140, the options with Include sound and Through the camera checked, area, GIF colors, SVG options, layers and scenes" width="341" height="562"></figure>
   <dl class="defs" style="grid-template-columns:1fr">
     <dt>Format</dt><dd>What to make. See the table below.</dd>
     <dt>File</dt><dd>Where to save it. <strong>Browse...</strong> picks a location.</dd>
@@ -70,6 +77,40 @@
 
 <p>In every export, movie clips play their own animation, guide layers are left out, and locked layers are included. With <span class="menu-path">Control &rsaquo; Enable Simple Frame Actions</span> on, movie clips follow the <code>stop()</code>, <code>play()</code> and goto calls in their frame scripts; see <a href="frames.html#frame-scripts">Frame scripts</a>.</p>
 
+<p>Every format plays at the document's frame rate; to change it, change the frame rate in the Doc tab of the Properties panel first. The file's extension follows the format you pick, and the dialog remembers the format, codec, GIF colors, area and image linking for next time. A progress bar shows while Phoenix renders; <strong>Cancel</strong> stops it, and a cancelled video is deleted rather than left half-written.</p>
+
+<h3 id="video-settings">Video settings</h3>
+
+<p>Phoenix picks the encoder settings for each codec, so there is nothing to tune:</p>
+
+<table>
+  <thead><tr><th>Codec</th><th>Picture</th><th>Sound</th></tr></thead>
+  <tbody>
+    <tr><td>H.264</td><td class="wrap">High quality (constant quality 18), 4:2:0 color, arranged to start playing before it has fully downloaded on the web.</td><td class="wrap">AAC at 192 kbps.</td></tr>
+    <tr><td>ProRes 422 HQ</td><td class="wrap">10-bit 4:2:2 color.</td><td class="wrap">Uncompressed 16-bit.</td></tr>
+    <tr><td>ProRes 4444</td><td class="wrap">10-bit 4:4:4 color, with an alpha channel when <strong>Transparent background</strong> is checked.</td><td class="wrap">Uncompressed 16-bit.</td></tr>
+  </tbody>
+</table>
+
+<p>These codecs need an even width and height, so an odd size loses its last row or column of pixels. Sound is 44.1 kHz stereo; frames with no sound make a video with no audio track. Only H.264 MP4 or MOV and ProRes MOV are made; for another format, convert the MP4 or a PNG sequence with a video tool. See also <a href="video.html">Video</a>.</p>
+
+<h3 id="animated-gif">Animated GIFs</h3>
+
+<p>An animated GIF holds at most 256 colors at a time, so Phoenix chooses a palette for each frame on its own, from the colors that frame uses most, and the colors stay true through a long animation.</p>
+
+<ul>
+  <li><strong>Colors</strong> sets how many each frame may use, from 2 to 256. Fewer colors make a smaller file. Flat cartoon colors survive a small palette well; gradients, soft shadows and photographs need more.</li>
+  <li><strong>Dither</strong> spreads what each pixel misses of its true color onto its neighbors, so gradients look smooth instead of banded. Dithered frames make a larger file and can shimmer as they play; leave it off for flat art.</li>
+  <li><strong>Transparent background</strong> makes the empty parts of each frame clear. GIF has no partial transparency: a pixel more than half see-through becomes clear, and the rest are solid, so soft edges get a hard outline. Over a known background color, export with the stage color instead.</li>
+  <li><strong>Loop forever</strong> plays the GIF over and over; cleared, it plays once. To repeat it a set number of times, publish the GIF from <a href="#publish">Publish Settings</a>.</li>
+</ul>
+
+<p>GIF counts time in hundredths of a second, so Phoenix varies each frame's delay by a hundredth where needed to keep the whole animation in time with the frame rate.</p>
+
+<h3>Image sequences</h3>
+
+<p>Sequences number their files from 0001 after the name you give, with more digits for more than 9999 frames. PNG sequences keep full color and, with <strong>Transparent background</strong>, a clear background with soft edges intact. With <strong>Each scene to its own file</strong>, each scene's sequence is named after the scene.</p>
+
 <h3>About ffmpeg</h3>
 
 <p>Phoenix encodes and reads video with <a href="https://ffmpeg.org/">ffmpeg</a>, which comes with Phoenix: it is installed beside Phoenix itself, so video export and <a href="sound.html#reference-video">video import</a> work with nothing else installed. Phoenix always uses its own copy, never another ffmpeg on the machine, so a movie comes out the same everywhere. ffmpeg is a separate program under the GNU General Public License; its license, and where to get the source it was built from, are in the <code>licenses/ffmpeg</code> folder of the installation (on macOS, inside Phoenix.app).</p>
@@ -79,23 +120,35 @@
 <p><span class="menu-path">File &rsaquo; Export &rsaquo; Export Image...</span> renders a single frame.</p>
 
 <figure>
-  <img src="assets/shots/export-image.webp" alt="Export Image dialog with file, format, size, frame, matte and quality" width="480" height="304">
+  <img src="assets/shots/export-image.webp" alt="Export Image dialog: file, format PNG, size 1920 by 1080 with Keep proportions, frame 1, matte Stage color with a color swatch, quality 90, PNG full color, colors 256 with Dither, and Include safe zones" width="480" height="326">
 </figure>
 
 <dl class="defs">
-  <dt>Format</dt><dd>PNG, JPEG or GIF.</dd>
-  <dt>Size</dt><dd>Any size, with proportions kept if you like.</dd>
-  <dt>Frame</dt><dd>Which frame to render.</dd>
-  <dt>Matte</dt><dd>The background: the stage color, transparent (not for JPEG), or any color.</dd>
+  <dt>File</dt><dd>Where to save it. Typing a name ending in <code>.png</code>, <code>.jpg</code> or <code>.gif</code> picks that format, and picking a format changes the extension.</dd>
+  <dt>Format</dt><dd>PNG, JPEG or GIF. Settings a format doesn't use are grayed out.</dd>
+  <dt>Size</dt><dd>Any size up to 16384 pixels a side, with the stage's proportions kept if you like. The whole stage is drawn at that size, so a larger size gives a sharper picture of the same area.</dd>
+  <dt>Frame</dt><dd>Which frame to render. It starts at the frame the playhead is on.</dd>
+  <dt>Matte</dt><dd>What shows where nothing is drawn: the stage color, transparent (not for JPEG), or any color you pick with the swatch beside it. A stage color that is partly see-through keeps its transparency in a PNG or GIF.</dd>
+  <dt>Quality</dt><dd>For JPEG, from 0 to 100. Higher looks better and makes a larger file. The default is 90.</dd>
+  <dt>PNG</dt><dd><strong>Full color</strong> (24-bit, or 32-bit with transparency), or <strong>8-bit</strong>: a palette of at most 256 colors, a smaller file for flat-colored art.</dd>
+  <dt>Colors</dt><dd>For an 8-bit PNG or a GIF: how many colors the palette has, from 2 to 256, and <strong>Dither</strong> to mix them so gradients stay smooth. Phoenix chooses the palette from the colors the picture uses most.</dd>
   <dt>Include safe zones</dt><dd>Draws the safe zones and aspect-ratio frames over the picture, for a review copy.</dd>
-  <dt>Quality</dt><dd>For JPEG, from 0 to 100. The default is 90.</dd>
-  <dt>PNG</dt><dd><strong>Full color</strong>, or <strong>8-bit</strong>: a palette of at most 256 colors, a smaller file for flat-colored art. Transparency is kept.</dd>
-  <dt>Colors</dt><dd>For an 8-bit PNG or a GIF: how many colors the palette has, and <strong>Dither</strong> to mix them so gradients stay smooth.</dd>
 </dl>
+
+<p>Which to choose: PNG for art with sharp edges, flat color or transparency; JPEG for a picture like a photograph where a small file matters more than crisp edges; GIF or 8-bit PNG for a small file of flat-colored art. In a GIF, and an 8-bit PNG, a pixel is either clear or solid, so soft edges against transparency get a hard outline. Full-color PNG keeps soft edges.</p>
+
+<p>Images are drawn smoothed (anti-aliased), like the stage. Export Image draws the whole stage; to export only part of it, set the size and crop the picture afterward, or use <strong>Everything</strong> in Export Movie for a PNG sequence of all the artwork, pasteboard included. Other image formats, such as WebP, TIFF or BMP, are not available.</p>
 
 <h2>Export to SVG</h2>
 
 <p><span class="menu-path">File &rsaquo; Export &rsaquo; Export to SVG...</span> writes the current frame as an SVG file, which scales cleanly for print and the web. Hidden layers are left out and images are embedded. Masks are written as SVG clip paths, so masked art stays vector; a feathered mask is written as an SVG mask, its shape blurred, so the soft edge stays soft and the art stays vector too. Filters, which SVG cannot express the same way, are included as images, and blend modes draw as Normal.</p>
+
+<p>Export to SVG asks only where to save, and writes the frame the playhead is on at the stage's size. For more control, there are two other ways to get SVG:</p>
+
+<ul>
+  <li><strong>SVG Sequence</strong> in <a href="#export-movie">Export Movie</a> writes one SVG a frame, with <strong>Include hidden layers</strong>, <strong>Link images</strong> to write each bitmap once beside the files, a transparent background, and the <strong>Everything</strong> area for art on the pasteboard. Set the first and last frame to the same frame for a single SVG with these options.</li>
+  <li><strong>SVG image</strong> in <a href="#publish">Publish Settings</a> writes the <code>#Static</code> frame, or the first, with <strong>Include hidden layers</strong> and <strong>Embed images</strong> (cleared, the images are written beside the SVG).</li>
+</ul>
 
 <h2 id="swf">SWF movies</h2>
 
@@ -109,7 +162,20 @@
 
 <h2 id="publish">Publish</h2>
 
-<p><span class="menu-path">File &rsaquo; Publish &rsaquo; Publish Settings...</span> (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>F12</kbd>) chooses what <span class="menu-path">File &rsaquo; Publish</span> (<kbd>Shift</kbd>+<kbd>F12</kbd>) writes: an HTML5 page that plays the movie in any browser (see <a href="#html5">HTML5 pages</a>), an SWF movie and an HTML page that plays it, and PNG, JPEG, GIF and SVG images, each named after the document or with a name of its own. Images take the stage's size or one of their own. PNG can be 24-bit with alpha (a clear background), 24-bit, or 8-bit with a number of colors; JPEG has a quality and can be progressive; GIF can be still or animated, looping forever, playing once or repeating a number of times, with a number of colors; SVG can include hidden layers and embed its images or write them beside it. <strong>SWF sound</strong> sets how the movie's sound is compressed: MP3, ADPCM, raw or none, with its quality, sample rate and channels.</p>
+<p><span class="menu-path">File &rsaquo; Publish &rsaquo; Publish Settings...</span> (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>F12</kbd>) chooses what <span class="menu-path">File &rsaquo; Publish</span> (<kbd>Shift</kbd>+<kbd>F12</kbd>) writes: an HTML5 page that plays the movie in any browser (see <a href="#html5">HTML5 pages</a>), an SWF movie and an HTML page that plays it, and PNG, JPEG, GIF and SVG images. Publish Settings is one page, with where the files go and which formats on the left, and each format's options on the right:</p>
+
+<dl class="defs">
+  <dt>Formats</dt><dd>Check each format to publish. Each has a file name; with <strong>Name each after the document</strong> checked, they are the document's name with the format's extension, and the HTML5 page becomes <code><em>name</em>_html5.html</code> while the HTML page has the plain name. Clear it to type names of your own.</dd>
+  <dt>Image size</dt><dd><strong>Match the stage</strong>, or a width and height of their own for the PNG, JPEG, GIF and SVG images.</dd>
+  <dt>PNG</dt><dd><strong>24-bit with Alpha</strong> (a clear background), <strong>24-bit</strong> (the stage color behind), or <strong>8-bit</strong>, a palette of the number of <strong>Colors</strong> you set.</dd>
+  <dt>JPEG</dt><dd><strong>Quality</strong> from 0 to 100 (80 to start), and <strong>Progressive</strong>, which lets a browser show a rough picture while the rest loads.</dd>
+  <dt>GIF</dt><dd>A still picture, or <strong>Animated</strong>: <strong>Loop forever</strong>, <strong>Play once</strong>, or <strong>Repeat</strong> a number of times, with a number of <strong>Colors</strong>.</dd>
+  <dt>SVG</dt><dd><strong>Include hidden layers</strong>, and <strong>Embed images</strong> in the SVG or write them beside it.</dd>
+  <dt>HTML5</dt><dd><strong>Fit to the window</strong> and <strong>Loop</strong>; see <a href="#html5">HTML5 pages</a>.</dd>
+  <dt>SWF sound</dt><dd>How the SWF movie's sound is compressed: MP3 at 8 to 192 kbps, ADPCM at 2 to 5 bits, Raw or None, with its sample rate and <strong>Stereo</strong>. See <a href="sound.html#swf-sound">In SWF movies</a>.</dd>
+</dl>
+
+<p>The SWF movie itself has no options here: it takes the document's stage size, frame rate and ActionScript version. Settings such as a player version or a password are not available.</p>
 
 <p>A document that has no publish settings of its own publishes an HTML5 page. A file that already has them (from another app, or saved before) publishes what they say; the configuration another app made for every file is called Default.</p>
 
@@ -191,15 +257,18 @@
 </figure>
 
 <dl class="defs">
-  <dt>Frames, Scale</dt><dd>Which frames, and how big, as a percentage.</dd>
+  <dt>File</dt><dd>The PNG to write. The data file goes beside it with the same name.</dd>
+  <dt>Frames, Scale</dt><dd>Which frames, and how big, from 1% to 800% of their size on the stage.</dd>
   <dt>Layout</dt><dd><strong>Grid</strong> puts each frame in a cell the size of the largest, in as many columns as you set (Auto for a sheet as square as fits). <strong>One row</strong> puts them side by side. <strong>Packed</strong> fits them closely, tallest first, in rows no wider than <strong>Max width</strong>.</dd>
-  <dt>Padding</dt><dd>Clear pixels between frames, so a scaled sprite never picks up its neighbor, and around the sheet.</dd>
+  <dt>Padding</dt><dd><strong>Between</strong>: clear pixels between frames (2 to start), so a scaled sprite never picks up its neighbor. <strong>Around</strong>: clear pixels around the edge of the sheet.</dd>
   <dt>Trim clear edges</dt><dd>Keeps only each frame's drawn pixels. The description says where they sit in the whole frame, so the sprite stays put as it plays.</dd>
   <dt>Share repeated frames</dt><dd>A frame the same as an earlier one points at its pixels rather than taking room of its own.</dd>
   <dt>Power-of-two size</dt><dd>Rounds the sheet's sides up to 256, 512, 1024 and so on, for engines that want it.</dd>
   <dt>Stage color behind</dt><dd>Off, the sheet is clear wherever nothing is drawn.</dd>
   <dt>Data</dt><dd>A JSON file beside the image with the same name, describing each frame's place, trim and size, in the hash or array layout most engines and texture tools read; or none.</dd>
 </dl>
+
+<p>Under the preview, the dialog gives the sheet's size and how many frames it holds and draws; a sheet too large for one image says so, and you can lower the scale, use fewer frames, or pack it under a <strong>Max width</strong>. Each frame is named in the data after the scene or symbol and a four-digit frame number (<code>Walk 0001</code>). The dialog remembers its settings for next time. Sprite sheets are PNG only, and the data is JSON only.</p>
 
 <h2 id="render-queue">Render queue</h2>
 
@@ -208,6 +277,8 @@
 <figure>
   <img src="assets/shots/render-queue.webp" alt="Render Queue window listing a document, its output, frames and status, with Add Current, Add Files, Edit, Remove, Up, Down, Clear Finished, Render All and Stop" width="760" height="380">
 </figure>
+
+<p><strong>Add Data...</strong> queues the current document once for each row of a CSV file, its <a href="symbols.html#templates">template fields</a> filled from the row, into a folder you choose, as MP4, MOV, GIF or PNG. The first row names the fields, and a <code>file</code> column names each movie. <strong>Edit...</strong> changes the selected job, and <strong>Up</strong> and <strong>Down</strong> change the order. The queue renders the saved file, so save before you queue.</p>
 
 <p><strong>Render All</strong> runs every waiting job in order, and <strong>Stop</strong> ends the one running. A job shows Waiting, Rendering, Done or Failed; hold the pointer over a failed job to see why. The queue is kept when Phoenix closes.</p>
 
