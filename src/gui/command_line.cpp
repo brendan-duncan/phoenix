@@ -38,6 +38,7 @@
 #include "../data/symbol_list.h"
 #include "../writer/fla_writer.h"
 #include "../edit/phoenix_features.h"
+#include "capture_steps.h"
 #include "tutorial_lesson.h"
 #include <QAbstractButton>
 #include <QApplication>
@@ -157,6 +158,7 @@ const char* const kHelp =
     "                 [--show <panel>] [--panel <name>] [--menu <path>]\n"
     "                 [--action <path> [--press <button>]] [--crop x,y,w,h]\n"
     "                 [--dock-width N] [--trigger <path>] [--drag x1,y1,x2,y2[,shift|alt]]\n"
+    "                 [--steps <file>]\n"
     "                 [--theme <name>]\n"
     "      Draws the window with the file open, unseen, with default\n"
     "      settings, after the script has set it up (selected something,\n"
@@ -166,7 +168,9 @@ const char* const kHelp =
     "      a menu item opens (--press clicks one of its buttons first, by its\n"
     "      text). --trigger runs a menu item (\"View>Onion Skin\") and --drag\n"
     "      drags on the stage, in its own pixels, before the picture is\n"
-    "      taken. Nothing is saved.\n"
+    "      taken. --steps then plays clicks, drags, keys, menu commands and\n"
+    "      dialog answers from a file, as a lesson's steps (see capture_steps.h),\n"
+    "      drawing pictures along the way. Nothing is saved.\n"
     "\n"
     "  run-script <script.jsfl|script.py> [document ...] [--timeout SECONDS]\n"
     "             [--no-native-extensions]\n"
@@ -1463,6 +1467,17 @@ int captureWindow(const QStringList& args)
             send(QEvent::MouseButtonRelease, to, Qt::NoButton);
             settle(200);
         }
+    const QString steps = option(args, "--steps");
+    if (!steps.isEmpty())
+    {
+        QString error;
+        if (!runCaptureSteps(window, steps, error))
+        {
+            std::fprintf(stderr, "capture-window: %s\n", qPrintable(error));
+            return 1;
+        }
+        settle(300);
+    }
 
     QPixmap picture;
     const QString panel = option(args, "--panel");

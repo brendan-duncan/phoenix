@@ -26,6 +26,9 @@ What changed in each release of Phoenix, newest first.
 - Squash and Stretch: Alt-drag a bone to stretch it and its art, optionally thinning as it grows
 - IK Stretch lets a limb grow, up to the amount you choose, to reach past its length
 - Locks, targets and stretches are worked into ordinary poses, so other apps play the same motion
+- The guide has six new tutorials, also lessons in Help > Tutorials: bones between symbols, bones inside a shape and the Bind tool, bone springs, Asset Warp pins on a picture, the Curve Deformer, and the Frame Picker
+- Ctrl-click with the Bind tool unbinds a point, and with the Asset Warp tool joins two pins with a bone, instead of calling up the Selection tool
+- A symbol bent by a deformer is picked by clicking where it shows bent, not where it was drawn
 
 ## 0.19.0
 

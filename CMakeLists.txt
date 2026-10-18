@@ -143,6 +143,7 @@ set(HEADERS
     src/gui/test_movie_window.h
     src/gui/movie_hooks.h
     src/gui/command_line.h
+    src/gui/capture_steps.h
     src/gui/notes_panel.h
     src/gui/controllers_panel.h
     src/gui/palettes_panel.h
@@ -447,6 +448,7 @@ set(SOURCES
     src/gui/test_movie_window.cpp
     src/gui/movie_hooks.cpp
     src/gui/command_line.cpp
+    src/gui/capture_steps.cpp
     src/gui/notes_panel.cpp
     src/gui/controllers_panel.cpp
     src/gui/palettes_panel.cpp

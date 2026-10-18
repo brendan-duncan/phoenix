@@ -411,6 +411,44 @@ Point apply(const Deformer& deformer, const Point& point)
     return deformer.kind == Kind::Curve ? applyCurve(deformer, point) : applyEnvelope(deformer, point);
 }
 
+Point unapply(const Deformer& deformer, const Point& shown)
+{
+    if (!deformer.valid() || atRest(deformer))
+        return shown;
+    // Newton's method from the point itself, the deformer's slope there
+    // measured a half pixel each way.
+    Point at = shown;
+    const double h = 0.5;
+    for (int i = 0; i < 30; ++i)
+    {
+        const Point now = apply(deformer, at);
+        const double rx = shown.x - now.x;
+        const double ry = shown.y - now.y;
+        if (rx * rx + ry * ry < 1.0e-6)
+            break;
+        const Point dx = apply(deformer, Point(at.x + h, at.y));
+        const Point dy = apply(deformer, Point(at.x, at.y + h));
+        const double a = (dx.x - now.x) / h, b = (dy.x - now.x) / h;
+        const double c = (dx.y - now.y) / h, d = (dy.y - now.y) / h;
+        const double det = a * d - b * c;
+        if (std::abs(det) < 1.0e-9)
+            break;
+        double stepX = (d * rx - b * ry) / det;
+        double stepY = (a * ry - c * rx) / det;
+        // Never more than a few pixels at once, so it settles on the
+        // nearest place rather than leaping across a fold.
+        const double size = std::hypot(stepX, stepY);
+        const double most = 20.0;
+        if (size > most)
+        {
+            stepX *= most / size;
+            stepY *= most / size;
+        }
+        at = Point(at.x + stepX, at.y + stepY);
+    }
+    return at;
+}
+
 } // namespace deform
 
 } // namespace fla

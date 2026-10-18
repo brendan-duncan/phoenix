@@ -46,7 +46,7 @@
   <li>To grow the armature, drag from any instance already in it to another instance. The new bone starts at that instance's joint, so one instance can branch into several bones. Bones can be added at any time, on any frame of the span: in every other pose the new bone turns with the bone it hangs from. An instance can be in only one armature.</li>
 </ol>
 
-<p>Each bone added is a single step to undo.</p>
+<p>Each bone added is a single step to undo. To build and pose an arm of symbols step by step, follow the <a href="tutorial-robot-arm.html">Bones between symbols</a> tutorial.</p>
 
 <h3>Bones inside a shape</h3>
 
@@ -68,7 +68,7 @@
   <li><kbd>Shift</kbd>-click a point to bind it, or to unbind it if it is already bound. <kbd>Ctrl</kbd>-click a point to unbind it.</li>
 </ol>
 
-<p>A point bound to several bones follows them evenly. Every frame of the armature is bent again from its first frame by the new binding, and each change is a single step to undo.</p>
+<p>A point bound to several bones follows them evenly. Every frame of the armature is bent again from its first frame by the new binding, and each change is a single step to undo. The <a href="tutorial-cat-tail-bones.html">Bones inside a shape</a> tutorial bones a cat's tail and fixes its points step by step.</p>
 
 <p>A point can also follow one bone more than another. With a bone chosen, <kbd>Alt</kbd>-click a point to give that bone a quarter more of it, and <kbd>Alt</kbd>+<kbd>Shift</kbd>-click to give it a quarter less; the point's other bones share out the rest. The points the chosen bone moves are yellow, paler the less of them it has, and a shared point shows the bone's share beside it (<em>25%</em>, <em>50%</em>).</p>
 
@@ -95,7 +95,7 @@
 
 <h3 id="springs">Springs</h3>
 
-<p>The same dialog gives a bone a spring, for a tail, an antenna, ears or a ponytail that swings on its own. With <strong>Spring</strong> above None, the bone trails behind as the bones above it move and as its own poses change, swings past and settles back where its pose has it. A low spring swings wide and slow, a high one quick and small; <strong>Damping</strong> says how quickly the swinging dies away, from 0 (it goes on bouncing) to 100 (it settles at once). Springs move the instances of an armature of symbols, and bend a boned shape where its bones swing, the same every time it plays, on the stage, in Test Movie and in exports. The swing is worked into every frame of the armature when you set a spring or change a pose, so the bones swing too, and a span can end swung past its last pose. FLA files keep springs the same way, so an armature with springs from another app plays as it was saved.</p>
+<p>The same dialog gives a bone a spring, for a tail, an antenna, ears or a ponytail that swings on its own. With <strong>Spring</strong> above None, the bone trails behind as the bones above it move and as its own poses change, swings past and settles back where its pose has it. A low spring swings wide and slow, a high one quick and small; <strong>Damping</strong> says how quickly the swinging dies away, from 0 (it goes on bouncing) to 100 (it settles at once). Springs move the instances of an armature of symbols, and bend a boned shape where its bones swing, the same every time it plays, on the stage, in Test Movie and in exports. The swing is worked into every frame of the armature when you set a spring or change a pose, so the bones swing too, and a span can end swung past its last pose. FLA files keep springs the same way, so an armature with springs from another app plays as it was saved. Try it on a dinosaur's tail in the tutorial <a href="tutorial-springy-tail.html">A springy tail</a>.</p>
 
 <h3 id="gravity-and-wind">Gravity and wind</h3>
 
@@ -279,7 +279,7 @@
   <li><kbd>Alt</kbd>-click a pin, or click it and press <kbd>Delete</kbd>, to take it away.</li>
 </ul>
 
-<p>Making a puppet, and each pin change, is a single step to undo. Pins are kept on each keyframe's instance, so a classic tween between two keyframes bends the art from one set of pins to the other. To bend art by handles without making it a puppet, use a <a href="rigging.html">deformer</a>.</p>
+<p>Making a puppet, and each pin change, is a single step to undo. Pins are kept on each keyframe's instance, so a classic tween between two keyframes bends the art from one set of pins to the other. To bend art by handles without making it a puppet, use a <a href="rigging.html">deformer</a>. The <a href="tutorial-asset-warp.html">Warp a picture with pins</a> tutorial puppets a picture step by step.</p>
 
 <p>All armature and warp data is kept when you save, so saved FLA files keep them intact.</p>
 

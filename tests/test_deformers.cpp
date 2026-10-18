@@ -123,3 +123,23 @@ TEST(corner_pin_maps_corners_exactly_and_keeps_lines_straight)
     const fla::deform::Deformer half = fla::deform::blend(fla::deform::cornerPinAround(0.0, 0.0, 200.0, 100.0), pin, 0.5);
     CHECK(near(half.posed[1], 190.0, 15.0));
 }
+
+TEST(deformers_find_where_bent_art_was_drawn)
+{
+    // A tentacle hanging down, its end swung out to the side: a point where
+    // the art shows bent is found again where it was drawn, so the stage
+    // picks the art where it shows.
+    fla::deform::Deformer bent = fla::deform::curveAround(-20.0, 0.0, 20.0, 300.0);
+    bent.posed[3] = fla::Point(100.0, 250.0);
+    bent.posed[2] = fla::Point(60.0, 160.0);
+    for (const fla::Point& drawn : {fla::Point(0.0, 280.0), fla::Point(10.0, 150.0), fla::Point(-15.0, 40.0)})
+    {
+        const fla::Point shown = fla::deform::apply(bent, drawn);
+        const fla::Point found = fla::deform::unapply(bent, shown);
+        CHECK(std::abs(found.x - drawn.x) < 0.05 && std::abs(found.y - drawn.y) < 0.05);
+    }
+    // At rest it is the point itself.
+    const fla::deform::Deformer still = fla::deform::curveAround(-20.0, 0.0, 20.0, 300.0);
+    const fla::Point same = fla::deform::unapply(still, fla::Point(5.0, 70.0));
+    CHECK(same.x == 5.0 && same.y == 70.0);
+}

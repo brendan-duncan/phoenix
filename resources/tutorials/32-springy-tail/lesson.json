@@ -1,0 +1,74 @@
+{
+  "title": "A springy tail",
+  "summary": "Give the bones of a dinosaur's tail springs, so the tail trails, whips and settles on its own while you pose only its base.",
+  "minutes": 7,
+  "order": 32,
+  "guide": "bones.html",
+  "tags": ["Animation", "Rigging"],
+  "start": {"document": "start"},
+  "final": "final",
+  "steps": [
+    {
+      "title": "Welcome",
+      "text": "<p>The dinosaur's tail is already boned: four bones inside the tail, on the <i>Armature_1</i> layer. Its poses on frames 10, 20, 30 and 40 swing the first bone, at the tail's base, up and down. The other bones just follow it, stiff as a stick.</p><p>A spring makes a bone lag behind the bones before it, swing past and settle back, as a real tail does.</p>"
+    },
+    {
+      "title": "Play it",
+      "text": "<p>Press <kbd>Enter</kbd>, or click the play button in the timeline header. The tail swings up and down in one piece.</p>",
+      "target": "widget:timelinePlay",
+      "wait": {"playing": true}
+    },
+    {
+      "title": "Choose the Bone tool",
+      "text": "<p>Press <kbd>Enter</kbd> again to stop, then click frame 1 of <i>Armature_1</i>, so the tail rests where it was drawn. Press <kbd>M</kbd> for the Bone tool.</p>",
+      "target": "tool:Bone",
+      "wait": {"tool": "Bone"}
+    },
+    {
+      "title": "A spring on the second bone",
+      "text": "<p>Click the second bone from the dinosaur's body, without dragging. In the <b>Joint Rotation and Spring</b> window, set <b>Spring</b> to 40 and <b>Damping</b> to 20, and click <b>OK</b>.</p><p><b>Spring</b> is how stiffly the bone pulls back to its pose: low swings wide and slow, high quick and small. <b>Damping</b> is how quickly the swinging dies away.</p>",
+      "target": "stage:410,430,100,60",
+      "wait": {"command": "Joint Rotation and Spring"}
+    },
+    {
+      "title": "The third bone",
+      "text": "<p>Click the third bone and give it the same: <b>Spring</b> 40, <b>Damping</b> 20, <b>OK</b>.</p>",
+      "target": "stage:340,395,90,60",
+      "wait": {"command": "Joint Rotation and Spring"}
+    },
+    {
+      "title": "The tip",
+      "text": "<p>And the last bone, at the tip: <b>Spring</b> 40, <b>Damping</b> 20, <b>OK</b>.</p>",
+      "target": "stage:265,355,85,55",
+      "wait": {"command": "Joint Rotation and Spring"}
+    },
+    {
+      "title": "Play it again",
+      "text": "<p>Press <kbd>Enter</kbd>. Now the tail trails behind its base and whips at each turn, the tip most of all.</p>",
+      "target": "widget:timelinePlay",
+      "wait": {"playing": true}
+    },
+    {
+      "title": "After the last pose",
+      "text": "<p>Press <kbd>Enter</kbd> to stop, then click frame 56 of <i>Armature_1</i>. The last pose is on frame 40, yet the tail is still swinging here: it settles over the frames after it.</p><p>Phoenix works the swing out once and keeps it in every frame of the armature, whenever you set a spring or change a pose. So the tail moves the same every time, on the stage, in Test Movie and in exports.</p>",
+      "target": "frame:Armature_1:56",
+      "wait": {"frame": 56}
+    },
+    {
+      "title": "Change a pose",
+      "text": "<p>Press <kbd>V</kbd> for the Selection tool and click frame 20 of <i>Armature_1</i>. Drag the first bone, at the tail's base, by its end a little further down. Phoenix works the springs out again, so the swing after it changes too.</p>",
+      "target": "stage:480,450,80,80",
+      "wait": {"command": "Pose Armature"}
+    },
+    {
+      "title": "Play it",
+      "text": "<p>Press <kbd>Enter</kbd> and watch the new swing.</p>",
+      "target": "widget:timelinePlay",
+      "wait": {"playing": true}
+    },
+    {
+      "title": "What you did",
+      "text": "<p>You gave three bones springs and let them do the follow-through, while you posed only the tail's base. Springs work on bones inside shapes and on armatures of symbols alike, for tails, antennae, ears and ponytails.</p><p>Try other settings: a <b>Damping</b> of 0 keeps bouncing, 100 settles at once, and a <b>Spring</b> of 0 (None) takes the spring away. FLA files keep the swing in the frames, so it plays as it was saved.</p>"
+    }
+  ]
+}

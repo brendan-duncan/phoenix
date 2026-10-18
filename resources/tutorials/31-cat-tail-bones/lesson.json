@@ -1,0 +1,108 @@
+{
+  "title": "Bones inside a shape",
+  "summary": "Put three bones inside a cat's tail drawn as a plain shape, swing it up, then use the Bind tool to fix the points that follow the wrong bone.",
+  "minutes": 8,
+  "order": 31,
+  "guide": "bones.html",
+  "tags": ["Animation", "Rigging"],
+  "start": {"document": "start"},
+  "final": "final",
+  "steps": [
+    {
+      "title": "Welcome",
+      "text": "<p>Bones can go inside a drawing too. Then it bends rather than turning in pieces: each point of its outline follows the bone nearest it.</p><p>The cat's tail is one plain shape on the <i>Tail</i> layer, not a symbol. Its end is hidden under the cat's body.</p>"
+    },
+    {
+      "title": "Choose the Bone tool",
+      "text": "<p>Press <kbd>M</kbd>, or click the Bone tool in the toolbox.</p>",
+      "target": "tool:Bone",
+      "wait": {"tool": "Bone"}
+    },
+    {
+      "title": "The first bone",
+      "text": "<p>Drag inside the tail from where it comes out from under the cat, beside its back paw, to the left along the tail to where it starts to curve up, and let go.</p><p>Phoenix moves the tail into a symbol of its own on a new layer, <i>Armature_1</i>, and ties each point of its outline to the bone nearest it.</p>",
+      "target": "stage:440,530,150,70",
+      "wait": {"command": "Add Bone"}
+    },
+    {
+      "title": "The second bone",
+      "text": "<p>Press on the round joint at the end of that bone and drag up the curve to its middle. A new bone grows from the joint.</p>",
+      "target": "stage:380,450,110,120",
+      "wait": {"command": "Add Bone"}
+    },
+    {
+      "title": "The third bone",
+      "text": "<p>Drag from the new joint up to near the tip of the tail.</p>",
+      "target": "stage:370,350,90,140",
+      "wait": {"command": "Add Bone"}
+    },
+    {
+      "title": "Go to frame 12",
+      "text": "<p>Press <kbd>V</kbd> for the Selection tool. In the timeline, click frame 12 of the <i>Armature_1</i> layer.</p>",
+      "target": "frame:Armature_1:12",
+      "wait": {"frame": 12}
+    },
+    {
+      "title": "Swing the tail up",
+      "text": "<p>Drag the bone nearest the tip by its end, up and to the right toward the cat's ear. The whole tail swings up and bends to follow.</p>",
+      "target": "stage:380,280,160,140",
+      "wait": {"command": "Pose Armature"}
+    },
+    {
+      "title": "Look closely",
+      "text": "<p>Under the cat, a square corner of the tail now pokes out below its body: the end hidden under the cat turned with the first bone and swung out. Where the tail bends near the floor, its outline makes a sharp corner too.</p><p>Both come from points that follow the wrong bones. The Bind tool changes which bones a point follows.</p>",
+      "target": "stage:420,470,240,150"
+    },
+    {
+      "title": "Back to frame 1",
+      "text": "<p>Click frame 1 of <i>Armature_1</i>. Points are best bound where the tail is as you drew it.</p>",
+      "target": "frame:Armature_1:1",
+      "wait": {"frame": 1}
+    },
+    {
+      "title": "Choose the Bind tool",
+      "text": "<p>The Bind tool shares a slot with the Bone tool: press and hold the slot, then choose <b>Bind</b>. Every point of the tail's outline shows as a small square.</p>",
+      "target": "tool:Bind",
+      "wait": {"tool": "Bind"}
+    },
+    {
+      "title": "Choose the first bone",
+      "text": "<p>Click the bone nearest the cat. It is outlined in green, and the points that follow it turn yellow, among them the four at the tail's end, under the cat's body.</p>",
+      "target": "stage:470,530,170,80"
+    },
+    {
+      "title": "Let the hidden end stay",
+      "text": "<p>Hold <kbd>Ctrl</kbd> and click each of the four yellow points under the cat's body, to the right of the bone's round end. Each turns white with a red outline: it follows no bone now, so it stays where it is.</p>",
+      "target": "stage:570,525,70,85",
+      "wait": {"command": "Bind Points"}
+    },
+    {
+      "title": "Round the bend",
+      "text": "<p>With the first bone still chosen, click the point on the tail's lower edge just to the left of the first joint. It follows the second bone; now it follows the first one as well, and shows as a triangle.</p>",
+      "target": "stage:420,540,40,35",
+      "wait": {"command": "Bind Points"}
+    },
+    {
+      "title": "And the other side",
+      "text": "<p>Click the second bone, then the point on the lower edge just to the right of the same joint. It becomes a triangle too: the two points on either side of the bend follow both bones evenly.</p>",
+      "target": "stage:455,560,40,40",
+      "wait": {"command": "Bind Points"}
+    },
+    {
+      "title": "See the difference",
+      "text": "<p>Press <kbd>V</kbd> and click frame 12 of <i>Armature_1</i>. The tail's end stays hidden under the cat, and the bend near the floor is rounder.</p>",
+      "target": "frame:Armature_1:12",
+      "wait": {"frame": 12}
+    },
+    {
+      "title": "Play it",
+      "text": "<p>Press <kbd>Enter</kbd>, or click the play button in the timeline header. The tail sweeps up.</p>",
+      "target": "widget:timelinePlay",
+      "wait": {"playing": true}
+    },
+    {
+      "title": "What you did",
+      "text": "<p>You boned a plain shape and posed it, then changed which bones some of its points follow. Every frame of the armature is bent again from frame 1 when you bind, and each bind is one step to undo.</p><p>With the Bind tool, a click on a point binds it to the chosen bone as well as to those it follows, <kbd>Ctrl</kbd>-click unbinds it, and <kbd>Shift</kbd>-click does one or the other. A square follows one bone, a triangle several, and a red outline none. The second joint, higher up, can be rounded the same way.</p>"
+    }
+  ]
+}

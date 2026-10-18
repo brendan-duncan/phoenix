@@ -83,6 +83,10 @@ bool atRest(const Deformer& deformer);
 /// Where the deformer takes \a point.
 Point apply(const Deformer& deformer, const Point& point);
 
+/// The point the deformer takes to \a shown, near it: where to look in the
+/// art as drawn for what shows bent at \a shown (picking it on the stage).
+Point unapply(const Deformer& deformer, const Point& shown);
+
 } // namespace deform
 
 } // namespace fla

@@ -132,6 +132,8 @@ public:
     bool mousePress(PhoenixView& view, QMouseEvent* event, const QPointF& documentPos) override;
     void paintOverlay(PhoenixView& view, QPainter& painter, double scale) override;
     bool showsSelectionBounds() const override { return false; }
+    /// Ctrl-click unbinds a point, so ctrl does not call up the arrow.
+    bool usesControlKey() const override { return true; }
     void deactivate(PhoenixView& view) override;
 
     /// The bone chosen, by the joint at its tail, with its armature's frame
