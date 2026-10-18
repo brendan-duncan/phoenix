@@ -401,20 +401,72 @@ if version &lt;= 1: kind 1: CString script; kind 2: nothing; kind 0: action list
 
 <p><strong>Action list</strong> (MX and MX 2004 scripts written in normal mode) [S]: <code>u32 0,
 u32 n</code>, then n actions, each a u32 naming it and its fields (u = u32,
-s = CString): 0x00 go to (uussu), 0x01 next frame, 0x02 stop, 0x04 play,
-0x05 get URL (ussu), 0x08 tell target (usu), 0x0A if frame is loaded
-(ussu), 0x0B on a button event (uuu), 0x0C end of the event, 0x0F if (us),
-0x10 end of the if, 0x11 else if (us), 0x12 else, 0x13 end of if frame is
-loaded, 0x17 set property (uususu), 0x18 set variable (ususu), 0x1A with
-(usuuuuu), 0x1C comment (us), 0x29 expression (us), 0x2C for (usss),
-0x3E call (usss); 0x09, 0x1D, 0x2D and 0x2E end blocks. Blocks nest by
-their end actions. Read from 700 lists; an action not in the table stops
-the stream.
-<strong>Flash 5 actions</strong> (frame schema 18, button schema 4) are records rather
-than script text [S]: <code>u32 n</code>, then n x (<code>u8 9</code>, <code>u32</code> action, 5 bytes,
-3 x CString, 32 bytes, <code>u32 -1</code>, <code>u16</code>, 2 x CString, 67 bytes). The strings
-are the parameters ("allowscale", "false" for an fscommand; "MouseDown =
-true" for an expression). Phoenix reads past them.</p>
+s = CString). Each starts with a u32 (0, or 1 for 0x29 and 0x2C); a u32
+after a string is often 1 when the string is an expression and 0 when it
+is text. Phoenix turns the list into the ActionScript it stands for. The
+fields were learned by comparing each list with the bytecode of the SWF
+published from the same document (SpaceBunny, Solitaire, Loft4 and other
+files):</p>
+
+<table>
+<tr><th>Code</th><th>Fields</th><th>Action, as ActionScript</th></tr>
+<tr><td>0x00</td><td>u kind, s scene, s frame, u play</td><td>go to: kind 0 a frame number, 1 a label, 2 an expression
+  (<code>gotoAndPlay("Scene 1", 1)</code>; play 0 is gotoAndStop); 3 <code>nextFrame()</code>,
+  4 <code>prevFrame()</code>, 5 <code>nextScene()</code>, 6 <code>prevScene()</code></td></tr>
+<tr><td>0x01, 0x02, 0x04</td><td>none</td><td><code>play()</code>, <code>stop()</code>, <code>stopAllSounds()</code></td></tr>
+<tr><td>0x05</td><td>s URL, s window, u method, u, u</td><td><code>getURL(url, window)</code></td></tr>
+<tr><td>0x07</td><td>u 0, s URL, u, u, s location, u level (1), u</td><td><code>loadMovieNum(url, 1)</code> or <code>loadMovie(url, target)</code></td></tr>
+<tr><td>0x1F</td><td>s location, u level (1), u</td><td><code>unloadMovieNum(0)</code> or <code>unloadMovie(target)</code></td></tr>
+<tr><td>0x08 ... 0x09</td><td>s target, u expression</td><td><code>tellTarget (target) { ... }</code></td></tr>
+<tr><td>0x0A ... 0x13</td><td>s scene, s frame, u</td><td><code>ifFrameLoaded ("Scene 1", 5) { ... }</code></td></tr>
+<tr><td>0x0B ... 0x0C</td><td>u events, u key</td><td><code>on (press, release) { ... }</code>: 1 press, 2 release, 4 release
+  outside (6 is release and release outside), 8 roll over, 16 roll out, 32 drag over, 64 drag out, 128 a key</td></tr>
+<tr><td>0x0D ... 0x0E</td><td>u events</td><td><code>onClipEvent (enterFrame) { ... }</code>, the player's event bits (1 load,
+  2 enterFrame, 4 unload, 8 mouseMove, 16 mouseDown, 32 mouseUp, 64 keyDown, 128 keyUp, 256 data)</td></tr>
+<tr><td>0x0F, 0x10, 0x11, 0x12</td><td>s condition (0x0F, 0x11)</td><td><code>if (...) {</code>, <code>} else {</code>, <code>} else if (...) {</code>, <code>}</code></td></tr>
+<tr><td>0x16</td><td>s frame, u expression</td><td><code>call(frame)</code></td></tr>
+<tr><td>0x17</td><td>u property, s value, u expression, s target, u expression</td><td><code>setProperty(target, _visible, value)</code>; the
+  property by the player's number (0 _x, 1 _y, 7 _visible...)</td></tr>
+<tr><td>0x18</td><td>s name, u expression, s value, u expression</td><td><code>name = value;</code>, or <code>set(name, value)</code> for a name
+  given by an expression</td></tr>
+<tr><td>0x1A</td><td>s target, u expression, s left, s top, s right, s bottom, u lock, u constrain, u</td><td><code>startDrag(target, lock[, left, top, right, bottom])</code></td></tr>
+<tr><td>0x1D</td><td>none</td><td><code>stopDrag()</code></td></tr>
+<tr><td>0x1C</td><td>s text</td><td>a comment</td></tr>
+<tr><td>0x29</td><td>s statement</td><td>a statement as typed</td></tr>
+<tr><td>0x2A, 0x2B</td><td>s condition (0x2B)</td><td><code>do {</code> ... <code>} while (...);</code></td></tr>
+<tr><td>0x2C ... 0x2D</td><td>s start, s condition, s step</td><td><code>for (...; ...; ...) { ... }</code></td></tr>
+<tr><td>0x2E</td><td>none</td><td><code>break;</code></td></tr>
+<tr><td>0x32 ... 0x33</td><td>s object, u expression</td><td><code>with (object) { ... }</code></td></tr>
+<tr><td>0x3E</td><td>s object, s method, s arguments</td><td><code>object.method(arguments);</code></td></tr>
+</table>
+
+<p>Text fields become quoted strings and expressions are written as typed,
+slash syntax variables (<code>/:x</code>, <code>../:x</code>) as dot syntax. Every
+code in the 1,603 binary FLAs on hand is in the table. An action of another
+code has no known length: its fields are guessed as the fewest (u32s and
+CStrings, a u32 first) after which the rest of the list reads as known,
+plausible actions, and a comment stands in its place; when no guess fits,
+the stream stops there.</p>
+
+<p><strong>Flash 5 actions</strong> (frame schema 18, button schema 4) are records rather
+than script text [S]: <code>u32 n</code>, then n x (<code>u8 9</code>, <code>u8</code> action,
+3 x CString, <code>u16</code> frame, <code>u16 0xC180</code>, CString label, 3 x CString,
+8 x <code>u32</code>, <code>s32</code> property, <code>u16</code>, 2 x CString, 5 bytes, CString
+location, 61 bytes of flags). The strings sit by what they are: a URL and a
+window (first and second), a scene (third), a value or condition (fourth),
+a second value (fifth), a target (sixth), a depth (seventh), a variable
+(eighth). Flag byte 9 marks the value an expression, 29 the target, 33 the
+depth, 45 a drag locked to the center. The actions: 0x01 play, 0x02 stop,
+0x03 next frame, 0x04 previous frame, 0x08 go to and stop and 0x0A go to and
+play (a scene, then the label, the frame, or an expression when the frame is
+0xFFFF), 0x09 get URL, 0x0E ... 0x0F tell target, 0x10 fscommand, 0x11 load
+movie (a level as the location), 0x12 ... 0x13 if frame is loaded, 0x14 ...
+0x15 on a button event (the eight u32s: release second, press third, release
+outside fourth, then roll over, roll out, drag over, drag out), 0x16 ... 0x18
+if (0x17 else), 0x1D set variable, 0x1E set property, 0x22 start drag, 0x23
+duplicate movie clip. Expressions may be in Flash 4's syntax, which Phoenix
+writes as ActionScript: <code>=</code> and <code>&lt;&gt;</code> compare, <code>&amp;</code> joins text
+(<code>add</code>), and function names lose their capitals.</p>
 
 <h3>2.10 CPicBitmap (a bitmap on the stage)</h3>
 
@@ -608,13 +660,13 @@ applies directly (<code>Bitmap::datData</code>).</p>
 <li>Video: the library items and stage instances are structural [S], and
   the video data in their streams is not read.</li>
 <li><code>CPicButton</code> instance names.</li>
-<li>Flash 5 actions as scripts: the records are read past (2.9), not turned
-  into ActionScript.</li>
-<li>Some objects in the older files: of the 1,616 binary FLAs surveyed, all
-  open and 1,397 read with nothing missing; in the rest, about 560
+<li>Flash 5 actions: a few record kinds (constrained drags, keys, else) are
+  read by their place among the others rather than seen in a file.</li>
+<li>Some objects in the older files: of the 1,603 binary FLAs surveyed, all
+  open and 1,520 read with nothing missing; in the other 83, some
   streams (mostly Flash 5) still stop early.</li>
-<li>Normal-mode action lists as scripts: read past, not turned into
-  ActionScript.</li>
+<li>Normal-mode action lists: get URL's method and load movie's second u32
+  have only been seen as 0.</li>
 </ul>
 
 <p>A class not described here ends the stream it is in: MFC objects carry no

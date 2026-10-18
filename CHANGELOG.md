@@ -4,6 +4,10 @@ What changed in each release of Phoenix, newest first.
 
 ## Unreleased
 
+- Old binary FLA files: scripts written in normal mode, and Flash 5 action records, open as the ActionScript they stand for, so their buttons, frames and clips work in Test Movie (about 11,500 more scripts in 258 more of the 1,603 files on hand)
+- Test Movie runs ActionScript 1 as old movies use it: a variable never set reads as undefined, `add`, `eq`, `ne`, `and`, `or` and `not` work, and so do `set()`, `eval()` and `call()`
+- Saving as XFL works when a library item's name has a character no file name can hold, such as `?`: its file gets a safe name and the item keeps its own
+- Command line: `play --click` and `--drag` press ActionScript 1 and 2 buttons as the window does, so drag and drop movies can be checked
 - Old binary FLA files saved with a printer chosen in Page Setup open in full (ten more of the 1,603 on hand)
 - The Brush, Nib Brush and Ink Brush paint in the fill color with Fill unchecked, and the Pencil and Paint Brush draw with the stroke's color, weight and brush with Stroke unchecked, not a black hairline
 - Old binary FLA files whose buttons carry scripts saved by Flash 8 open in full

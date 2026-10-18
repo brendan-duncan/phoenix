@@ -37,6 +37,10 @@
 <h2 id="vunreleased">Unreleased</h2>
 
 <ul>
+  <li>Old binary FLA files: scripts written in normal mode, and Flash 5 action records, open as the ActionScript they stand for, so their buttons, frames and clips work in Test Movie (about 11,500 more scripts in 258 more of the 1,603 files on hand)</li>
+  <li>Test Movie runs ActionScript 1 as old movies use it: a variable never set reads as undefined, <code>add</code>, <code>eq</code>, <code>ne</code>, <code>and</code>, <code>or</code> and <code>not</code> work, and so do <code>set()</code>, <code>eval()</code> and <code>call()</code></li>
+  <li>Saving as XFL works when a library item's name has a character no file name can hold, such as <code>?</code>: its file gets a safe name and the item keeps its own</li>
+  <li>Command line: <code>play --click</code> and <code>--drag</code> press ActionScript 1 and 2 buttons as the window does, so drag and drop movies can be checked</li>
   <li>Old binary FLA files saved with a printer chosen in Page Setup open in full (ten more of the 1,603 on hand)</li>
   <li>The Brush, Nib Brush and Ink Brush paint in the fill color with Fill unchecked, and the Pencil and Paint Brush draw with the stroke's color, weight and brush with Stroke unchecked, not a black hairline</li>
   <li>Old binary FLA files whose buttons carry scripts saved by Flash 8 open in full</li>
