@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hands and faces with the Frame Picker · Phoenix User Guide</title>
+<meta name="description" content="Swap Pip's hand poses and mouth shapes by clicking pictures in the Frame Picker, key them along the timeline, and set the eyes looping so they blink.">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Phoenix">
+<meta property="og:title" content="Hands and faces with the Frame Picker · Phoenix User Guide">
+<meta property="og:description" content="Swap Pip's hand poses and mouth shapes by clicking pictures in the Frame Picker, key them along the timeline, and set the eyes looping so they blink.">
+<meta property="og:url" content="https://phoenixanimate.com/tutorial-frame-picker.html">
+<meta property="og:image" content="https://phoenixanimate.com/assets/shots/hero.webp">
+<meta property="og:image:type" content="image/webp">
+<meta property="og:image:width" content="1704">
+<meta property="og:image:height" content="1061">
+<meta property="og:image:alt" content="The Phoenix window with three flower characters on the stage, the timeline below and the Properties panel on the right">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://phoenixanimate.com/assets/shots/hero.webp">
+<meta name="keywords" content="tutorial lesson step by step frame picker graphic symbol first frame single frame loop play once ping pong create keyframe hand poses mouth shapes blink swap drawings">
+<link rel="icon" href="assets/img/logo.png">
+<link rel="stylesheet" href="assets/site.css">
+<script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<main>
+<article class="content">
+
+<p class="eyebrow">Tutorials</p>
+
+<h1>Hands and faces with the Frame Picker</h1>
+
+<p class="lead">Swap Pip's hand poses and mouth shapes by clicking pictures in the Frame Picker, key them along the timeline, and set the eyes looping so they blink.</p>
+
+<div class="callout">
+  <span class="label">Try it in Phoenix</span>
+  <p>This page is also a lesson inside Phoenix: choose <span class="menu-path">Help &rsaquo; Tutorials...</span> and start <strong>Hands and faces with the Frame Picker</strong>, and Phoenix points at each control as you go. It takes about 7 minutes.</p>
+</div>
+
+<p>To follow along here instead, download the starting document, <a href="assets/tutorials/frame-picker.fla" download>frame-picker.fla</a>, and open it with <span class="menu-path">File &rsaquo; Open...</span>.</p>
+
+<figure>
+  <img src="assets/shots/tutorial-frame-picker.webp" alt="Four frames of Pip, a round yellow character: pointing and smiling, thumbs up with a grin, blinking, and a peace sign with an open mouth" width="1000" height="198">
+  <figcaption>Pip on frames 1, 24, 42 and 48: hands and mouths picked from pictures, and eyes that loop a blink.</figcaption>
+</figure>
+
+<p>Pip's hand, mouth and eyes are graphic symbols, each on a layer of its own. Each symbol holds a set of drawings, one on each of its frames: <i>Hand</i> has five poses, labeled <b>Open</b>, <b>Point</b>, <b>Fist</b>, <b>Thumbs</b> and <b>Peace</b>; <i>Mouth</i> has <b>Smile</b>, <b>Grin</b>, <b>Oh</b> and <b>Frown</b>; <i>Eyes</i> is a blink, 48 frames long.</p><p>Each instance is set to <b>Single Frame</b>, so it shows one drawing and holds it. The Frame Picker chooses which.</p>
+
+<h2>1. Select the hand</h2>
+
+<p>In the timeline, click frame 1 of the <i>Hand</i> layer. That selects the hand on the stage.</p>
+
+<h2>2. Open the Frame Picker</h2>
+
+<div class="split">
+  <figure style="margin:0"><img src="assets/shots/frame-picker-hand.webp" alt="The Frame Picker for Hand: Single Frame, Create Keyframe unchecked, and five hand pictures captioned 1 Open, 2 Point, 3 Fist, 4 Thumbs and 5 Peace" width="391" height="290"></figure>
+  <div>
+    <p>Choose <span class="menu-path">Window &rsaquo; Frame Picker</span>. It shows each frame of <i>Hand</i> as a picture, captioned with its frame number and label.</p>
+  </div>
+</div>
+
+<h2>3. Point</h2>
+
+<p>Click <b>2 Point</b>. Pip points up.</p>
+
+<h2>4. Key as you pick</h2>
+
+<p>Check <b>Create Keyframe</b> at the top of the Frame Picker. Now each picture you click goes on a new keyframe at the playhead, and the frames before keep what they had.</p>
+
+<h2>5. Go to frame 24</h2>
+
+<p>Click frame 24 of the <i>Hand</i> layer. The hand is still selected: it is the same pose, held from frame 1.</p>
+
+<h2>6. Thumbs up</h2>
+
+<p>Click <b>4 Thumbs</b>. Phoenix adds a keyframe on frame 24 with the thumbs up on it.</p>
+
+<h2>7. Peace on frame 48</h2>
+
+<p>Click frame 48 of the <i>Hand</i> layer, then <b>5 Peace</b>.</p>
+
+<h2>8. The mouth</h2>
+
+<p>Click frame 24 of the <i>Mouth</i> layer. The Frame Picker now shows the mouth's shapes. Click <b>2 Grin</b>.</p>
+
+<h2>9. Surprise</h2>
+
+<p>Click frame 48 of the <i>Mouth</i> layer, then <b>3 Oh</b>.</p>
+
+<figure>
+  <img src="assets/shots/frame-picker-timeline.webp" alt="The timeline: the Hand and Mouth layers with keyframes on frames 1, 24 and 48" width="900" height="103">
+  <figcaption>Each pick with <b>Create Keyframe</b> checked made a keyframe.</figcaption>
+</figure>
+
+<h2>10. Let the eyes blink</h2>
+
+<p>Click frame 1 of the <i>Eyes</i> layer. The list beside <b>Create Keyframe</b> shows how the selected instance plays: <b>Single Frame</b>, so the eyes never blink. Choose <b>Loop</b> from it: the eyes play their 48 frames over and over, blinking once each time.</p>
+
+<h2>11. Play it</h2>
+
+<p>Press <kbd>Enter</kbd>, or click the play button in the timeline header. Pip points and smiles, gives a thumbs up with a grin, then a peace sign with an "Oh!", blinking all the while.</p>
+
+<h2>What you did</h2>
+
+<p>You swapped drawings by picture instead of typing frame numbers, and keyed them as you went. Each pick is one step to undo.</p><p>The list also has <b>Play Once</b>, which plays the symbol's frames once and stops on the last, <b>Loop Reverse</b> and <b>Play Once Reverse</b>, which play them backward, and <b>Ping Pong</b>, which plays them forward and back. The Properties panel has the same choices. For your own characters, put a drawing on each frame of a graphic symbol and label the frames, so the Frame Picker captions them.</p>
+
+<p>For everything this tutorial touches on, see <a href="symbols.html#the-frame-picker">The Frame Picker</a>.</p>
+
+</article>
+</main>
+</body>
+</html>

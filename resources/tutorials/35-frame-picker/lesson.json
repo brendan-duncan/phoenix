@@ -1,0 +1,85 @@
+{
+  "title": "Hands and faces with the Frame Picker",
+  "summary": "Swap Pip's hand poses and mouth shapes by clicking pictures in the Frame Picker, key them along the timeline, and set the eyes looping so they blink.",
+  "minutes": 7,
+  "order": 35,
+  "guide": "symbols.html",
+  "tags": ["Animation", "Symbols"],
+  "start": {"document": "start"},
+  "final": "final",
+  "steps": [
+    {
+      "title": "Welcome",
+      "text": "<p>Pip's hand, mouth and eyes are graphic symbols, each on a layer of its own. Each symbol holds a set of drawings, one on each of its frames: <i>Hand</i> has five poses, labeled <b>Open</b>, <b>Point</b>, <b>Fist</b>, <b>Thumbs</b> and <b>Peace</b>; <i>Mouth</i> has <b>Smile</b>, <b>Grin</b>, <b>Oh</b> and <b>Frown</b>; <i>Eyes</i> is a blink, 48 frames long.</p><p>Each instance is set to <b>Single Frame</b>, so it shows one drawing and holds it. The Frame Picker chooses which.</p>"
+    },
+    {
+      "title": "Select the hand",
+      "text": "<p>In the timeline, click frame 1 of the <i>Hand</i> layer. That selects the hand on the stage.</p>",
+      "target": "frame:Hand:1",
+      "wait": {"selection": "instance"}
+    },
+    {
+      "title": "Open the Frame Picker",
+      "text": "<p>Choose <b>Window &gt; Frame Picker</b>. It shows each frame of <i>Hand</i> as a picture, captioned with its frame number and label.</p>",
+      "target": "menu:Window/Frame Picker",
+      "wait": {"action": "Window/Frame Picker"}
+    },
+    {
+      "title": "Point",
+      "text": "<p>Click <b>2 Point</b>. Pip points up.</p>",
+      "target": "dock:Frame Picker",
+      "wait": {"command": "Pick Frame"}
+    },
+    {
+      "title": "Key as you pick",
+      "text": "<p>Check <b>Create Keyframe</b> at the top of the Frame Picker. Now each picture you click goes on a new keyframe at the playhead, and the frames before keep what they had.</p>",
+      "target": "dock:Frame Picker"
+    },
+    {
+      "title": "Go to frame 24",
+      "text": "<p>Click frame 24 of the <i>Hand</i> layer. The hand is still selected: it is the same pose, held from frame 1.</p>",
+      "target": "frame:Hand:24",
+      "wait": {"frame": 24}
+    },
+    {
+      "title": "Thumbs up",
+      "text": "<p>Click <b>4 Thumbs</b>. Phoenix adds a keyframe on frame 24 with the thumbs up on it.</p>",
+      "target": "dock:Frame Picker",
+      "wait": {"command": "Pick Frame"}
+    },
+    {
+      "title": "Peace on frame 48",
+      "text": "<p>Click frame 48 of the <i>Hand</i> layer, then <b>5 Peace</b>.</p>",
+      "target": "frame:Hand:48",
+      "wait": {"command": "Pick Frame"}
+    },
+    {
+      "title": "The mouth",
+      "text": "<p>Click frame 24 of the <i>Mouth</i> layer. The Frame Picker now shows the mouth's shapes. Click <b>2 Grin</b>.</p>",
+      "target": "frame:Mouth:24",
+      "wait": {"command": "Pick Frame"}
+    },
+    {
+      "title": "Surprise",
+      "text": "<p>Click frame 48 of the <i>Mouth</i> layer, then <b>3 Oh</b>.</p>",
+      "target": "frame:Mouth:48",
+      "wait": {"command": "Pick Frame"}
+    },
+    {
+      "title": "Let the eyes blink",
+      "text": "<p>Click frame 1 of the <i>Eyes</i> layer. The list beside <b>Create Keyframe</b> shows how the selected instance plays: <b>Single Frame</b>, so the eyes never blink. Choose <b>Loop</b> from it: the eyes play their 48 frames over and over, blinking once each time.</p>",
+      "target": "frame:Eyes:1",
+      "wait": {"command": "Looping"}
+    },
+    {
+      "title": "Play it",
+      "text": "<p>Press <kbd>Enter</kbd>, or click the play button in the timeline header. Pip points and smiles, gives a thumbs up with a grin, then a peace sign with an \"Oh!\", blinking all the while.</p>",
+      "target": "widget:timelinePlay",
+      "wait": {"playing": true}
+    },
+    {
+      "title": "What you did",
+      "text": "<p>You swapped drawings by picture instead of typing frame numbers, and keyed them as you went. Each pick is one step to undo.</p><p>The list also has <b>Play Once</b>, which plays the symbol's frames once and stops on the last, <b>Loop Reverse</b> and <b>Play Once Reverse</b>, which play them backward, and <b>Ping Pong</b>, which plays them forward and back. The Properties panel has the same choices. For your own characters, put a drawing on each frame of a graphic symbol and label the frames, so the Frame Picker captions them.</p>"
+    }
+  ]
+}
