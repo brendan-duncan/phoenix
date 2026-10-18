@@ -2,6 +2,10 @@
 
 What changed in each release of Phoenix, newest first.
 
+## Unreleased
+
+- The guide has six new tutorials, also lessons in Help > Tutorials: bones between symbols, bones inside a shape and the Bind tool, bone springs, Asset Warp pins on a picture, the Curve Deformer, and the Frame Picker
+
 ## 0.19.0
 
 - The scene name above the stage drops down: switch scenes, add, duplicate or delete one, or open the Scene panel

@@ -41,6 +41,12 @@ const NAV = [
     { href: "tutorial-node-graph.html", title: "Glow through a node graph" },
     { href: "tutorial-instance-effects.html", title: "Effects on one instance" },
     { href: "tutorial-lip-sync.html", title: "Lip sync" },
+    { href: "tutorial-robot-arm.html", title: "Bones between symbols" },
+    { href: "tutorial-cat-tail-bones.html", title: "Bones inside a shape" },
+    { href: "tutorial-springy-tail.html", title: "A springy tail" },
+    { href: "tutorial-asset-warp.html", title: "Warp a picture with pins" },
+    { href: "tutorial-curve-deformer.html", title: "A tentacle with the Curve Deformer" },
+    { href: "tutorial-frame-picker.html", title: "Hands and faces with the Frame Picker" },
   ] },
   { group: "Workspace", pages: [
     { href: "workspace.html", title: "The workspace" },
