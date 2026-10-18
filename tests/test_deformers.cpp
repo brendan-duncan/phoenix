@@ -70,3 +70,23 @@ TEST(deformers_leave_art_alone_at_rest_and_bend_it_posed)
     stack.undo();
     CHECK(!fla::deform::of(instance) && instance.extraAttributes.size() == 1);
 }
+
+TEST(deformers_find_where_bent_art_was_drawn)
+{
+    // A tentacle hanging down, its end swung out to the side: a point where
+    // the art shows bent is found again where it was drawn, so the stage
+    // picks the art where it shows.
+    fla::deform::Deformer bent = fla::deform::curveAround(-20.0, 0.0, 20.0, 300.0);
+    bent.posed[3] = fla::Point(100.0, 250.0);
+    bent.posed[2] = fla::Point(60.0, 160.0);
+    for (const fla::Point& drawn : {fla::Point(0.0, 280.0), fla::Point(10.0, 150.0), fla::Point(-15.0, 40.0)})
+    {
+        const fla::Point shown = fla::deform::apply(bent, drawn);
+        const fla::Point found = fla::deform::unapply(bent, shown);
+        CHECK(std::abs(found.x - drawn.x) < 0.05 && std::abs(found.y - drawn.y) < 0.05);
+    }
+    // At rest it is the point itself.
+    const fla::deform::Deformer still = fla::deform::curveAround(-20.0, 0.0, 20.0, 300.0);
+    const fla::Point same = fla::deform::unapply(still, fla::Point(5.0, 70.0));
+    CHECK(same.x == 5.0 && same.y == 70.0);
+}

@@ -8316,13 +8316,21 @@ void PhoenixView::hitTestElement(fla::Element& element, fla::Frame* frame,
         const bool puppet = instance.otherSymbolType == "puppet";
         const int frameOffset = puppet ? 0 : symbolFrame(instance);
         const fla::LoopType instanceLoop = fla::LoopType::SingleFrame;
+        // Art a deformer bends is picked where it shows bent: looked for
+        // where the deformer takes the point from.
+        QPointF lookAt = documentPos;
+        if (std::optional<fla::deform::Deformer> deformer = fla::deform::of(instance))
+        {
+            const fla::Point drawn = fla::deform::unapply(*deformer, fla::Point(localPos.x(), localPos.y()));
+            lookAt = elementToDocument.map(QPointF(drawn.x, drawn.y));
+        }
 
         for (const fla::Timeline* timeline : symbol->timelines)
         {
             if (timeline->visible)
             {
                 hitTestTimeline(*timeline, instanceLoop, frameOffset, elementToDocument,
-                    documentPos, tolerance, inner);
+                    lookAt, tolerance, inner);
             }
         }
 
