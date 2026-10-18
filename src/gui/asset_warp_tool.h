@@ -43,6 +43,8 @@ public:
     bool keyPress(PhoenixView& view, QKeyEvent* event) override;
     void paintOverlay(PhoenixView& view, QPainter& painter, double scale) override;
     bool showsSelectionBounds() const override { return false; }
+    /// Ctrl-click joins two pins with a bone, so ctrl does not call up the arrow.
+    bool usesControlKey() const override { return true; }
     void deactivate(PhoenixView& view) override;
 
 private:
