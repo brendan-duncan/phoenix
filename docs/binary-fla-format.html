@@ -233,7 +233,10 @@ u16 soundLoop  u8 soundSync (3 = stream [X])  u32 inPoint44  s32 outPoint44 (0x3
 u16 soundZoom (0xFFFF = XFL soundZoomLevel 65535) [X]
 CString label       always empty in corpus           [G] (best candidate position)
 action block (2.9)  frame ActionScript               [X] 5 scripts in Freya Scene 1
-u32 x3
+u32 rotate          motion tween rotation: 0 auto (XFL leaves motionTweenRotate out),
+                    1 clockwise [X], 2 counter-clockwise [S]
+u32 rotateTimes     motionTweenRotateTimes           [X] Freya's loading_txt
+u32                 0, or 1 on a few frames (not all tweens) [S]
 ReadObject morph    CPicMorphShape (2.11) on the first keyframe of a shape tween, else null [S]
 u32
 ReadObject hints    CObList of CMorphHintItem (2.11): the tween's shape hints, else null [S]
@@ -360,7 +363,11 @@ CPicButton only:
 <pre><code>CPicObj base; u8 textSchema (4, 5, 9, 12, 13, 14); matrix [X]
 4 x s32 bounds twips: xmin, xmax, ymin, ymax.
   (XFL left/width differ by about 2 twips on each side.)
-u8 1, u8 0, u32 flags, u16 0 (not in schema 4), CString instance name [S]
+u8 autoExpand (1: grows to fit its lines, XFL autoExpand="true" [X] all five texts
+  with a twin; 0: a fixed width that wraps [G]), u8 0 or 1,
+u32 flags, u16 0 (not in schema 4), CString instance name [S]
+  Line breaks inside a run are CR, written to XFL as &amp;#xD; (a literal CR reads
+  back as LF, which the reference app draws as a box) [X]
   (text kind static/dynamic/input is probably here [G])
 if textSchema &gt;= 5 and 0x2000 is set in either half of the flags: CString
   (seen twice, a CS3 and a CS4 text, the CS4 one static with a link) [S]
@@ -514,7 +521,12 @@ CPicVideo (MX): CPicObj base; u8 schema (0); matrix; u16 N            [S]
 
 <pre><code>u16 version; 5 to 29 zero bytes (the table in section 0)          [S]
 scene list:  ReadObject CDocumentPage ... until null tag
-u16 next Page number, u16 1, u16 next scene number
+u16 next scene number (XFL nextSceneIdentifier [X]), u16 1,
+u16 the current scene: an object reference (MFC load index; the class is 1, the
+  scenes 2, 3, ...) to the scene open when the document was saved, XFL
+  currentTimeline (1-based) [X] Yard_Sale_03 (tag 7, the sixth scene),
+  Pet_Cemetery_04 (tag 23, the 22nd). The reference app opens on it; JSFL's
+  getTimeline() and its frame and layer counts are that scene's.
 symbol list: ReadObject CDocumentPage ... until null tag
 u16 next Symbol number
 media list:  ReadObject CMediaBits / CMediaSound / CMediaVideoStream / CMediaVideo ... until null tag

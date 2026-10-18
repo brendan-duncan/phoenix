@@ -6,6 +6,9 @@ What changed in each release of Phoenix, newest first.
 
 - The scene name above the stage drops down: switch scenes, add, duplicate or delete one, or open the Scene panel
 - Old binary FLA files saved again as FLA open in other apps: the saved file names its XFL version, and JPEG images are marked as JPEGs with their size
+- Old binary FLA files open on the scene they were saved on, not always the first
+- Text in old binary FLA files keeps its line breaks and grows to fit its lines, as it was made, instead of wrapping in a fixed box
+- Motion tweens in old binary FLA files keep their clockwise and counterclockwise turns
 - Text runs of only spaces, such as the space between two differently styled words, are no longer lost when an FLA opens
 - Fill and stroke colors with transparency open at exactly the opacity the FLA gives, not one step lower
 - View > Guides > Lock Guides is kept in the document, as FLA files keep it, instead of being one setting for every file
