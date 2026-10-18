@@ -17,7 +17,7 @@
 <meta property="og:image:alt" content="The Phoenix window with three flower characters on the stage, the timeline below and the Properties panel on the right">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:image" content="https://phoenixanimate.com/assets/shots/hero.webp">
-<meta name="keywords" content="3d rotation tool 3d translation tool movie clip perspective z depth rotation x rotation y vanishing point perspective angle reset view extrusion lights shadows depth of field 3d motion tween classic tween fla">
+<meta name="keywords" content="3d rotation tool 3d translation tool movie clip perspective z depth sort by depth stacking order rotation x rotation y vanishing point perspective angle reset view extrusion lights shadows depth of field 3d motion tween classic tween fla">
 <link rel="icon" href="assets/img/logo.png">
 <link rel="stylesheet" href="assets/site.css">
 <script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
@@ -81,6 +81,23 @@
 
 <p>The lesson <a href="tutorial-3d-cards.html">3D cards in the light</a> walks through all of this step by step.</p>
 
+<h2 id="sort-by-depth">Sorting by depth</h2>
+
+<p>Normally a layer draws its objects in the order you placed them: the last one placed is on top, whatever its Z. So a card you push far back can still cover a card right in front of you, which looks wrong. Turn on <strong>Sort by Depth</strong> for the layer and Phoenix draws its movie clips by their Z instead: the furthest first, the nearest on top.</p>
+
+<figure>
+  <img src="assets/shots/depth-sort.webp" alt="Two sets of three cards, red near, gold further back and blue furthest. On the left, as placed, the blue and gold cards wrongly cover the red one; on the right, sorted by depth, the red card is in front and the blue one behind" width="700" height="300">
+  <figcaption>The same three cards as placed (left) and sorted by depth (right).</figcaption>
+</figure>
+
+<ol>
+  <li>Put the clips that should pass in front of and behind each other on the same layer.</li>
+  <li>Right-click the layer's name in the timeline and choose <strong>Sort by Depth</strong>. Choose it again to turn it off.</li>
+  <li>Set each clip's Z with the 3D Translation tool or the Z field. Key Z on two keyframes with a classic tween between them, and the stacking changes by itself at the moment one clip passes behind another, like cards on a carousel.</li>
+</ol>
+
+<p>Clips at the same Z, and anything that is not a movie clip (shapes, text, graphics), keep the order you placed them in. Sorting works within one layer: a clip on one layer cannot go behind a clip on a layer below it, whatever their Z, so keep clips that swap places on one layer. Clicking on the stage picks the clip you see on top.</p>
+
 <h2>Animating in 3D</h2>
 
 <p>A clip's 3D turn and depth are keyed on keyframes like any other property. Set them on two keyframes and make a <strong>classic tween</strong> between them, and the clip turns and moves smoothly from one to the other, its shading, shadows and blur following along. See <a href="tweens.html#classic-tweens">Classic tweens</a>.</p>
@@ -93,7 +110,8 @@
   <li><strong>Phoenix documents</strong> (.phx) keep everything on this page.</li>
   <li><strong>FLA and XFL files</strong> keep a clip's 3D turn, depth and thickness, and the document's angle, lights, shadows and depth of field, as Phoenix's own settings beside the clip's ordinary placement. Phoenix reads them back, but another app opening the file shows the clips flat, unshaded, sharp and without shadows. When you save such a document as FLA, Phoenix lists the Phoenix features it uses before it writes.</li>
   <li>A clip that an FLA file places with a 3D matrix opens where it belongs, and saves back as it was, though Phoenix draws it without its perspective unless a motion tween turns it.</li>
-  <li><strong>Exports.</strong> Images, image sequences and movies show the 3D as the stage does. An SWF movie gets a scene with 3D as frames of vector shapes, and an HTML5 page gets the layers with turned clips as pictures. See <a href="export.html">Export</a>.</li>
+  <li><strong>Sort by Depth</strong> is kept in FLA and XFL files as a Phoenix setting of the layer; another app opening the file stacks the clips in the order they were placed. <span class="menu-path">File &rsaquo; Export &rsaquo; Export FLA for Other Apps</span> lists each sorted layer's clips in depth order on every keyframe instead, so other apps stack them the same way. Where clips pass each other during a tween, that part of the tween becomes a keyframe on every frame, each listing the clips in that frame's order. A shape tween's keyframes are left in the order placed.</li>
+  <li><strong>Exports.</strong> Images, image sequences and movies show the 3D as the stage does, sorted layers included. An SWF movie gets a scene with 3D as frames of vector shapes, and an HTML5 page gets the layers with turned clips as pictures. See <a href="export.html">Export</a>.</li>
 </ul>
 
 </article>

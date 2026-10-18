@@ -60,6 +60,7 @@ set(PHOENIX_CORE_SOURCES
     edit/controllers.cpp
     edit/curve_fit.cpp
     edit/deformers.cpp
+    edit/depth_sort.cpp
     edit/document_session.cpp
     edit/document_settings.cpp
     edit/drawing_style.cpp

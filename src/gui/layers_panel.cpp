@@ -1,4 +1,5 @@
 #include "layers_panel.h"
+#include "../edit/depth_sort.h"
 #include "../edit/motion_blur.h"
 #include "../edit/adjustments.h"
 #include "../edit/layer_effects.h"
@@ -1730,6 +1731,12 @@ void LayersPanel::showLayerMenu(QTreeWidgetItem* item, const QPoint& globalPos)
         blur->setCheckable(true);
         blur->setChecked(fla::motionblur::on(*layer));
         blur->setStatusTip("Smear what moves fast on this layer along its path; the shutter is on the Properties panel's Doc tab");
+        QAction* depth = menu.addAction("Sort by Depth", this, [=]() {
+            emit compositingRequested(layer, fla::depthsort::sorts(*layer) ? "depthsort:off" : "depthsort:on");
+        });
+        depth->setCheckable(true);
+        depth->setChecked(fla::depthsort::sorts(*layer));
+        depth->setStatusTip("Draw this layer's movie clips by their Z, the furthest behind, as they move in 3D");
 
         // Layer parenting: the layer follows another's object, as a forearm
         // its arm.

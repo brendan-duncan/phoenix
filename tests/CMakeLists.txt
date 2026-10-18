@@ -55,6 +55,7 @@ set(TEST_SOURCES
     test_frame_actions.cpp
     test_function_curves.cpp
     test_deformers.cpp
+    test_depth_sort.cpp
     test_onion_shift.cpp
     test_scene_commands.cpp
     test_script_edit.cpp

@@ -3,6 +3,7 @@
 #include "adjustments.h"
 #include "behaviors.h"
 #include "deformers.h"
+#include "depth_sort.h"
 #include "frame_bake.h"
 #include "layer_commands.h"
 #include "element_clone.h"
@@ -1567,7 +1568,7 @@ bool needsBaking(const Document& document)
     {
         for (const Layer* layer : timeline->layers)
             if (layer && (compositing::isAdjustment(*layer) || compositing::matteOf(*layer) != compositing::Matte::None ||
-                             !compositing::moreMasksOf(*layer).empty()))
+                             !compositing::moreMasksOf(*layer).empty() || depthsort::sorts(*layer)))
                 return true;
         bool found = false;
         eachElement(*timeline, [&](Element* element) {
@@ -1619,6 +1620,9 @@ void bakeCompositing(Document& document, std::vector<std::string>& notes, const 
 {
     // What effects with no filter make is drawn first, while the document
     // is still as Phoenix shows it.
+    // Layers sorted by depth list their clips in that order first, so what
+    // is drawn below is drawn in the order other apps stack them.
+    depthsort::bake(document, document.frameRate, notes);
     Bitmaps bitmaps{document, {}};
     Drawn drawn;
     if (render)

@@ -7,6 +7,7 @@
 #include "stage_controls.h"
 #include "safe_zones_dialog.h"
 #include "../edit/canvas_document.h"
+#include "../edit/depth_sort.h"
 #include "../edit/motion_blur.h"
 #include "../edit/safe_zones.h"
 #include "tutorial_lesson.h"
@@ -3560,6 +3561,11 @@ void MainWindow::setupUI()
         {
             after = fla::motionblur::withOn(*layer, what == "motionblur:on");
             name = "Motion Blur";
+        }
+        else if (what.startsWith("depthsort:"))
+        {
+            after = fla::depthsort::withSorting(*layer, what == "depthsort:on");
+            name = "Sort by Depth";
         }
         else
         {

@@ -18,6 +18,7 @@
 #include "display_painter.h"
 #include "../edit/pegs.h"
 #include "preferences.h"
+#include "../edit/depth_sort.h"
 #include "../edit/three_d.h"
 #include "../edit/layer_effects.h"
 #include "../edit/image_blur.h"
@@ -86,6 +87,7 @@
 #include <set>
 #include <memory>
 #include <map>
+#include <numeric>
 #include <iostream>
 #include <cmath>
 
@@ -4870,8 +4872,30 @@ void PhoenixView::drawFrame(QPainter& painter, const fla::Frame* frame, const fl
     // What each element tweens toward, paired by fla::pairTweenElements.
     const std::vector<int> pairs = nextTweenFrame && frame->tweenType == fla::TweenType::Motion
         ? fla::pairTweenElements(frame->elements, nextTweenFrame->elements) : std::vector<int>();
-    for (const fla::Element* element : frame->elements)
+    // A layer sorted by depth draws its deepest clips first, their Z part
+    // way along a classic tween as the rest of them are.
+    std::vector<size_t> drawOrder(frame->elements.size());
+    std::iota(drawOrder.begin(), drawOrder.end(), size_t(0));
+    const auto* owner = dynamic_cast<const fla::Layer*>(frame->parent);
+    if (owner && drawOrder.size() > 1 && fla::depthsort::sorts(*owner))
     {
+        std::vector<double> depths;
+        for (size_t i = 0; i < frame->elements.size(); ++i)
+        {
+            const fla::Element* element = frame->elements[i];
+            double depth = element ? fla::depthsort::depthOf(*element) : 0.0;
+            const int paired = i < pairs.size() ? pairs[i] : -1;
+            if (paired >= 0 && nextTweenFrame->elements[static_cast<size_t>(paired)])
+                depth += (fla::depthsort::depthOf(*nextTweenFrame->elements[static_cast<size_t>(paired)]) - depth) *
+                    tweenProgress;
+            depths.push_back(depth);
+        }
+        drawOrder = fla::depthsort::order(depths);
+    }
+    for (const size_t at : drawOrder)
+    {
+        const fla::Element* element = frame->elements[at];
+        nextElementIndex = static_cast<int>(at);
         if (element->visible)
         {
             const int paired = static_cast<size_t>(nextElementIndex) < pairs.size() ? pairs[nextElementIndex] : -1;
@@ -8356,9 +8380,12 @@ void PhoenixView::hitTestTimeline(const fla::Timeline& timeline, fla::LoopType l
         // Layers draw last to first, so the first layer is on top and this walk
         // meets the topmost first. Within a frame later elements draw over
         // earlier ones, so they are walked backwards, and the first hit is the
-        // one the user sees.
-        for (size_t index = state.frame->elements.size(); index-- > 0;)
+        // one the user sees. A layer sorted by depth is walked in the order
+        // it draws in.
+        const std::vector<size_t> drawn = fla::depthsort::drawOrder(*layer, *state.frame, state.offset);
+        for (size_t walk = drawn.size(); walk-- > 0;)
         {
+            const size_t index = drawn[walk];
             fla::Element* element = state.frame->elements[index];
             if (element && element->elementType() == fla::Element::Type::SymbolInstance &&
                 fla::behaviors::any(*static_cast<const fla::SymbolInstance*>(element)))

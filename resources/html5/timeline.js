@@ -255,6 +255,14 @@ function applyState(object, index) {
         var child = object._timelineChildren.get(entry.k);
         if (child) {
             update(child, entry, false);
+            // A layer sorted by depth stacks its clips anew as they move in Z.
+            if (entry.d !== undefined && entry.d !== child._depth && child._parent === object) {
+                child._depth = entry.d;
+                var at = object._children.indexOf(child);
+                if (at >= 0)
+                    object._children.splice(at, 1);
+                object._children.splice(indexForDepth(object, child._depth), 0, child);
+            }
             continue;
         }
         child = object._premade && object._premade.get(entry.k);
