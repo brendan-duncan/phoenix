@@ -2,7 +2,7 @@
 
 What changed in each release of Phoenix, newest first.
 
-## Unreleased
+## 0.18.2
 
 - The guide covers much more: new pages on importing artwork, 3D and video, and filters, text, tweens, export, sound, symbols, the timeline, color and the drawing tools in depth, with new pictures
 - Dragging the edge of a brush stroke or other smooth outline with the Selection tool bends it in one smooth curve, spreading along the outline instead of creasing at the point grabbed
