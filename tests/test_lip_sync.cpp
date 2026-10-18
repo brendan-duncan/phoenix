@@ -127,6 +127,19 @@ TEST(lip_sync_listens_to_loudness_without_rhubarb)
     CHECK(shapeAt(1.9) == "X");
     CHECK(cues.back().shape == "X");
 
+    // A voice that swells over its first frames opens the mouth on the
+    // first of them, not once it is loud.
+    samples.clear();
+    add(0.5, 0.0, 0.0);
+    add(1.0 / 24.0, 0.5, 220.0);
+    add(1.0 / 24.0, 0.27, 220.0);
+    add(0.75, 0.65, 220.0);
+    add(0.5, 0.0, 0.0);
+    const std::vector<fla::lipsync::Cue> swell = fla::lipsync::listen(samples, 1, rate, 24.0);
+    CHECK(swell.size() >= 2 && swell[0].shape == "X" && swell[1].shape != "X");
+    if (swell.size() >= 2)
+        CHECK(std::abs(swell[1].time - 0.5) < 1.0e-9);
+
     // As Rhubarb writes it, and read back the same.
     const std::vector<fla::lipsync::Cue> again = fla::lipsync::parse(fla::lipsync::tsvOf(cues), 24.0);
     CHECK(again.size() == cues.size() && again[1].shape == cues[1].shape);

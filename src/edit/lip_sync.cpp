@@ -90,12 +90,16 @@ std::vector<Cue> listen(const std::vector<int16_t>& samples, int channels, int s
         shapes.push_back(shape);
     }
     // A dip to closed between two open shapes reads as a syllable break;
-    // anything else held under two frames takes the shape before it.
+    // anything else held under two frames takes the shape before it, or
+    // the one after it where the voice starts from rest, so the mouth opens
+    // with the first sound rather than frames late.
+    const std::vector<std::string> heard = shapes;
     for (size_t i = 1; i < shapes.size(); ++i)
     {
-        const bool lone = shapes[i] != shapes[i - 1] && (i + 1 >= shapes.size() || shapes[i + 1] != shapes[i]);
-        if (lone && shapes[i] != "A")
-            shapes[i] = shapes[i - 1];
+        const bool lone = heard[i] != heard[i - 1] && (i + 1 >= heard.size() || heard[i + 1] != heard[i]);
+        if (!lone || heard[i] == "A")
+            continue;
+        shapes[i] = shapes[i - 1] == "X" && i + 1 < heard.size() ? heard[i + 1] : shapes[i - 1];
     }
     for (size_t i = 0; i < shapes.size(); ++i)
     {
