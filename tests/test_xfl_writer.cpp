@@ -60,9 +60,13 @@ public:
         check(a.frameRate == b.frameRate, "document frameRate");
         check(a.filetypeGUID == b.filetypeGUID, "document filetypeGUID");
         check(a.fileGUID == b.fileGUID, "document fileGUID");
-        check(a.currentTimeline == b.currentTimeline, "document currentTimeline");
-        check(a.xflVersion == b.xflVersion, "document xflVersion");
-        check(a.creatorInfo == b.creatorInfo, "document creatorInfo");
+        // A document without these gets the ones a new document has on save.
+        const auto orDefault = [](const std::string& value, const char* fallback) {
+            return value.empty() ? std::string(fallback) : value;
+        };
+        check(orDefault(a.currentTimeline, "1") == b.currentTimeline, "document currentTimeline");
+        check(orDefault(a.xflVersion, "23.0") == b.xflVersion, "document xflVersion");
+        check(orDefault(a.creatorInfo, "Phoenix") == b.creatorInfo, "document creatorInfo");
         check(a.platform == b.platform, "document platform");
         check(a.versionInfo == b.versionInfo, "document versionInfo");
         check(a.majorVersion == b.majorVersion, "document majorVersion");
@@ -1788,4 +1792,32 @@ TEST(the_files_camera_layer_plays_as_phoenixs_camera)
         "<DOMDocument xmlns='http://ns.adobe.com/xfl/2008/' width='1920' height='1080'><timelines>"
         "<DOMTimeline name='Scene 1'><layers>" + camera + layers + "</layers></DOMTimeline></timelines></DOMDocument>");
     CHECK(off && !off->timelines.empty() && fla::camera::filmingOf(*off->timelines[0]) == nullptr);
+}
+
+TEST(xfl_save_names_the_xfl_version_when_the_source_had_none)
+{
+    // A document read from a binary FLA or a SWF has no XFL version, and the
+    // reference app will not open a DOMDocument without one.
+    std::unique_ptr<fla::Document> document = parseDocumentText(
+        "<DOMDocument xmlns='http://ns.adobe.com/xfl/2008/' width='550' height='400'>"
+        "<timelines><DOMTimeline name='Scene 1'/></timelines></DOMDocument>");
+    CHECK(document != nullptr);
+    if (!document)
+        return;
+    XFLWriter writer;
+    const std::string written = writer.writeDocument(*document);
+    CHECK(written.find("xflVersion=\"23.0\"") != std::string::npos);
+    CHECK(written.find("creatorInfo=\"Phoenix\"") != std::string::npos);
+    CHECK(written.find("currentTimeline=\"1\"") != std::string::npos);
+
+    // One that has a version keeps it.
+    document = parseDocumentText(
+        "<DOMDocument xmlns='http://ns.adobe.com/xfl/2008/' xflVersion='2.97' creatorInfo='Other'>"
+        "<timelines><DOMTimeline name='Scene 1'/></timelines></DOMDocument>");
+    CHECK(document != nullptr);
+    if (!document)
+        return;
+    const std::string kept = writer.writeDocument(*document);
+    CHECK(kept.find("xflVersion=\"2.97\"") != std::string::npos);
+    CHECK(kept.find("creatorInfo=\"Other\"") != std::string::npos);
 }

@@ -2,6 +2,10 @@
 
 What changed in each release of Phoenix, newest first.
 
+## Unreleased
+
+- Old binary FLA files saved again as FLA open in other apps: the saved file names its XFL version, and JPEG images are marked as JPEGs with their size
+
 ## 0.18.2
 
 - The guide covers much more: new pages on importing artwork, 3D and video, and filters, text, tweens, export, sound, symbols, the timeline, color and the drawing tools in depth, with new pictures

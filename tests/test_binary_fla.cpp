@@ -1,5 +1,6 @@
 #include "test_util.h"
 
+#include "../src/data/bitmap.h"
 #include "../src/data/document.h"
 #include "../src/data/fla_document.h"
 #include "../src/data/frame.h"
@@ -162,6 +163,35 @@ TEST(binary_fla_reads_as_its_xfl_twin)
         CHECK(da.frameRate == db.frameRate);
         CHECK(da.timelines.size() == db.timelines.size());
         CHECK(da.resources.size() == db.resources.size());
+        // Bitmaps say what the twin says: a JPEG is marked as one and has its
+        // size, as the reference app needs.
+        const auto isJpeg = [](const fla::Bitmap& bitmap) {
+            for (const auto& [key, value] : bitmap.extraAttributes)
+            {
+                if (key == "isJPEG")
+                    return value == "true";
+            }
+            return false;
+        };
+        for (const fla::Resource* ra : da.resources)
+        {
+            if (!ra || ra->resourceType() != fla::Resource::Type::Bitmap)
+                continue;
+            const fla::Bitmap& ba = *static_cast<const fla::Bitmap*>(ra);
+            for (const fla::Resource* rb : db.resources)
+            {
+                if (!rb || rb->resourceType() != fla::Resource::Type::Bitmap)
+                    continue;
+                const fla::Bitmap& bb = *static_cast<const fla::Bitmap*>(rb);
+                if (bb.name != ba.name)
+                    continue;
+                const bool same = ba.frameRight == bb.frameRight && ba.frameBottom == bb.frameBottom &&
+                    isJpeg(ba) == isJpeg(bb);
+                if (!same)
+                    std::printf("    %s: bitmap %s differs\n", pair.first, ba.name.c_str());
+                CHECK(same);
+            }
+        }
         for (size_t t = 0; t < da.timelines.size() && t < db.timelines.size(); ++t)
         {
             const fla::Timeline& ta = *da.timelines[t];

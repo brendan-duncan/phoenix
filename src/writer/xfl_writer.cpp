@@ -1358,9 +1358,12 @@ std::string XFLWriter::writeDocument(const Document& document)
     setInt(root, "width", document.width, 550);
     setInt(root, "height", document.height, 400);
     setDouble(root, "frameRate", document.frameRate, 24.0);
-    setString(root, "currentTimeline", document.currentTimeline);
-    setString(root, "xflVersion", document.xflVersion);
-    setString(root, "creatorInfo", document.creatorInfo);
+    // The reference app refuses a document without an XFL version, so one
+    // read from an older file or another format gets the version Phoenix
+    // writes for a new document.
+    setString(root, "currentTimeline", document.currentTimeline.empty() ? "1" : document.currentTimeline);
+    setString(root, "xflVersion", document.xflVersion.empty() ? "23.0" : document.xflVersion);
+    setString(root, "creatorInfo", document.creatorInfo.empty() ? "Phoenix" : document.creatorInfo);
     setString(root, "platform", document.platform);
     setString(root, "versionInfo", document.versionInfo);
     setInt(root, "majorVersion", document.majorVersion, 0);
