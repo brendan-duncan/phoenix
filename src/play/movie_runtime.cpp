@@ -729,6 +729,8 @@ void MovieRuntime::start()
     _as3 = _version == 3 ? !scriptsLookLikeActionScript2() || scriptsLookLikeActionScript3()
                          : _version == 0 && (!_classSources.empty() || !_documentClass.empty() ||
                                                 scriptsLookLikeActionScript3());
+    // ActionScript 1 and 2 read a variable never set as undefined.
+    _vm->setLooseNames(!_as3);
     std::vector<Clip*> entered{_root.get()};
     if (_as3)
     {
@@ -1019,6 +1021,67 @@ void MovieRuntime::setupGlobals()
         _current = was;
         return Value::makeUndefined();
     });
+    // set and eval: a variable named by text, "x", "a.b.x", "/a:x" or
+    // "../:x", on the timeline its path leads to.
+    const auto variableAt = [this, current](const std::string& name, std::string& variable) -> Clip* {
+        size_t split = name.rfind(':');
+        if (split == std::string::npos)
+            split = name.rfind('.');
+        if (split == std::string::npos)
+        {
+            variable = name;
+            return &current();
+        }
+        variable = name.substr(split + 1);
+        const std::string path = name.substr(0, split);
+        return path.empty() ? &current() : resolve(current(), path);
+    };
+    vm.registerBuiltin("set", [this, arg, variableAt](const Args& args) {
+        std::string variable;
+        if (Clip* clip = variableAt(arg(args, 0)->toString(), variable))
+            objectFor(*clip)->setProperty(variable, arg(args, 1));
+        return arg(args, 1);
+    });
+    vm.registerBuiltin("eval", [this, current, arg, variableAt](const Args& args) {
+        const ValuePtr name = arg(args, 0);
+        if (!name->isString())
+            return name;
+        // A path to a clip is the clip.
+        if (Clip* clip = resolve(current(), name->toString()))
+            return objectFor(*clip);
+        std::string variable;
+        Clip* clip = variableAt(name->toString(), variable);
+        return clip ? objectFor(*clip)->getProperty(variable) : Value::makeUndefined();
+    });
+    // call(frame): a frame's script run where the script is, the frame named
+    // as "path:frame" when on another timeline.
+    vm.registerBuiltin("call", [this, current, arg](const Args& args) {
+        Clip* clip = &current();
+        ValuePtr frame = arg(args, 0);
+        const std::string text = frame->isString() ? frame->toString() : std::string();
+        const size_t colon = text.rfind(':');
+        if (colon != std::string::npos)
+        {
+            clip = resolve(current(), text.substr(0, colon));
+            frame = Value::makeString(text.substr(colon + 1));
+        }
+        const int index = clip ? frameOf(*clip, frame) : -1;
+        if (clip && index >= 0)
+            runFrameActions(*clip, index);
+        return Value::makeUndefined();
+    });
+    vm.registerBuiltin("toggleHighQuality", [](const Args&) { return Value::makeUndefined(); });
+    // Other movies are not loaded here; the movie is told so.
+    for (const char* name : {"loadMovie", "loadMovieNum", "unloadMovie", "unloadMovieNum", "loadVariables",
+             "loadVariablesNum"})
+    {
+        const std::string what = name;
+        vm.registerBuiltin(what, [this, arg, what](const Args& args) {
+            if (notice && what.rfind("unload", 0) != 0)
+                notice("The movie asked to load " + arg(args, 0)->toString() + ", which playing it here does not do.");
+            return Value::makeUndefined();
+        });
+    }
     vm.setGlobal("_root", objectFor(*_root));
     vm.setGlobal("_level0", objectFor(*_root));
     if (!_as3)

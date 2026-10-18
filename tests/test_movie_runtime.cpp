@@ -224,6 +224,40 @@ TEST(movie_runtime_scripts_share_globals_through_global)
         std::printf("    %s\n", error.c_str());
 }
 
+TEST(movie_runtime_runs_actionscript_1)
+{
+    // What scripts from old movies use: a variable never set is undefined,
+    // the word operators, set and eval by name (slash syntax too), and call
+    // running another frame's script.
+    Movie movie;
+    fla::Layer* actions = movie.layer(*movie.root, "actions");
+    movie.frame(*actions, 0, 1,
+        "if (MouseDown == true) { trace('no'); }\n"
+        "trace(never, 'a' add 1, 'x' eq 'x', 1 and not 0);\n"
+        "set('/:count', 4);\nset('total', count + 1);\n"
+        "trace(_root.count, eval('total'), eval('/:count'));\n"
+        "call('other');\nstop();");
+    fla::Frame* other = movie.frame(*actions, 1, 1, "trace('called');");
+    other->name = "other";
+    fla::play::MovieRuntime runtime(*movie.root, 24.0);
+    std::vector<std::string> traced;
+    std::vector<std::string> errors;
+    runtime.trace = [&traced](const std::string& line) { traced.push_back(line); };
+    runtime.error = [&errors](const std::string& line) { errors.push_back(line); };
+    runtime.start();
+    runtime.step();
+    CHECK(traced.size() == 3);
+    CHECK(traced.size() > 0 && traced[0] == "undefined a1 true true");
+    CHECK(traced.size() > 1 && traced[1] == "4 5 4");
+    CHECK(traced.size() > 2 && traced[2] == "called");
+    CHECK(errors.empty());
+    CHECK(!runtime.root().playing && runtime.root().frame == 0);
+    for (const std::string& line : traced)
+        std::printf("    %s\n", line.c_str());
+    for (const std::string& error : errors)
+        std::printf("    %s\n", error.c_str());
+}
+
 TEST(movie_runtime_scripts_find_clips_by_path_and_dot)
 {
     Movie movie;
