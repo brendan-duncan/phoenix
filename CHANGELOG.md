@@ -2,7 +2,7 @@
 
 What changed in each release of Phoenix, newest first.
 
-## Unreleased
+## 0.19.0
 
 - The scene name above the stage drops down: switch scenes, add, duplicate or delete one, or open the Scene panel
 - Old binary FLA files saved again as FLA open in other apps: the saved file names its XFL version, and JPEG images are marked as JPEGs with their size
