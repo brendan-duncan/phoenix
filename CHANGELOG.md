@@ -2,6 +2,13 @@
 
 What changed in each release of Phoenix, newest first.
 
+## Unreleased
+
+- Bone corrections: as a bone turns, it can correct the boned shape it bends, such as an elbow that keeps its crease, drawn with the bone turned
+- A bone can swap a graphic's drawings as it turns, for a hand or a head that turns, or fade an instance in or out
+- Bones that drive a correction are ringed in orange; the Bone Corrections dialog lists, changes and removes what each bone drives
+- Bone corrections play in exported movies and images, and are drawn in when publishing HTML5, exporting SWF and exporting FLA for other apps
+
 ## 0.19.0
 
 - The scene name above the stage drops down: switch scenes, add, duplicate or delete one, or open the Scene panel
