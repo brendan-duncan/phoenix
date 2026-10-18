@@ -2395,6 +2395,11 @@ void IKArmature::writePlaces(size_t pose, const std::vector<IKJoint>& joints)
         angle += 2.0 * kPi * std::round((kept - angle) / (2.0 * kPi));
         if (std::fabs(angle - kept) > 1.0e-9)
             setNumber(state, "angle", angle);
+        // Only a root moves, and only a bone that can stretch changes
+        // length: the others keep their places as posed, which joints shown
+        // between frames would only blur.
+        if (parent >= 0 && !_nodes[i].element->Attribute("phoenixLength"))
+            continue;
         if (std::fabs(place.x - state->DoubleAttribute("x", 0.0)) > 0.01 || std::fabs(place.y - state->DoubleAttribute("y", 0.0)) > 0.01)
         {
             setNumber(state, "x", place.x);
