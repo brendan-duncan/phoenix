@@ -4,6 +4,7 @@ What changed in each release of Phoenix, newest first.
 
 ## Unreleased
 
+- The guide covers much more: new pages on importing artwork, 3D and video, and filters, text, tweens, export, sound, symbols, the timeline, color and the drawing tools in depth, with new pictures
 - Dragging the edge of a brush stroke or other smooth outline with the Selection tool bends it in one smooth curve, spreading along the outline instead of creasing at the point grabbed
 - Motion tweens from FLA files play their 3D: clips turned about X and Y and moved in Z show in perspective, at the file's view angle and vanishing point
 - Motion tweens from FLA files ease each property by its own Motion Editor ease: eases in and out, stop and start, bounce in and custom curves
