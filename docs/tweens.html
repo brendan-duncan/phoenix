@@ -112,6 +112,10 @@
   <li><strong>Tween ease</strong> eases the whole tween, from -100 (ease in) to 100 (ease out). A property that the file marks to ignore the tween's ease keeps its own timing.</li>
 </ul>
 
+<p>A motion tween in an FLA file can give each property an ease of its own in place of the tween's: an ease in or out (quadratic to quintic, by an amount), a stop and start in the middle, a bounce in, or a custom curve. Phoenix plays them, each property by its own ease.</p>
+
+<p>A movie clip's motion tween in an FLA file can also turn it about its horizontal and vertical axes (Rotation X and Y) and move it toward or away from you (Z). Phoenix draws it in perspective: turned about its transformation point, seen from in front of the document's vanishing point at the file's perspective angle, as it plays and in every export. An SWF movie gets such a scene as frames of shapes, and an HTML5 page as pictures of its frames.</p>
+
 <p>Changing an instance's color effect in the Properties panel part way through a motion tween keys it there too, just as moving it does.</p>
 
 <p>Select an instance with the <a href="behaviors.html">Time Remap</a> behavior and the list has <strong>Frame shown (Time Remap)</strong>: the frame of the symbol it shows, over the frames of its keyframe. Shape it like any other curve: ease out of a freeze, speed up into slow motion, or bend a run backwards. Between two points without handles the frame shown runs in a straight line, as when it is keyed in the Behaviors panel; keying a value there afterwards keeps the curve's handles.</p>
@@ -157,7 +161,7 @@
 
 <div class="callout planned">
   <span class="label">Planned</span>
-  <p>3D rotation in motion tweens (classic tweens carry it).</p>
+  <p>Keying 3D rotation and Z in motion tweens in Phoenix (those of FLA files play; classic tweens carry Phoenix's own 3D).</p>
 </div>
 
 </article>

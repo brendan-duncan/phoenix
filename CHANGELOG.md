@@ -2,6 +2,15 @@
 
 What changed in each release of Phoenix, newest first.
 
+## Unreleased
+
+- Motion tweens from FLA files play their 3D: clips turned about X and Y and moved in Z show in perspective, at the file's view angle and vanishing point
+- Motion tweens from FLA files ease each property by its own Motion Editor ease: eases in and out, stop and start, bounce in and custom curves
+- A clip that FLA files place with a 3D matrix opens where it belongs, and saves back as it was
+- FLA camera layers play: pan, zoom, rotation and color effect, tweened; layers attached to the camera stay put and keep their color
+- The Camera tool moves an FLA file's camera layer, keying its keyframes as the file keeps them
+- HTML5 pages and SWF movies show the 3D motion and the camera as the stage does
+
 ## 0.18.1
 
 - Old binary FLA files: scripts written in normal mode, and the action records of the oldest files, open as the ActionScript they stand for, so their buttons, frames and clips work in Test Movie
