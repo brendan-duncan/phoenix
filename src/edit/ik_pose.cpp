@@ -429,6 +429,7 @@ std::vector<IKJoint> IKArmature::jointsAt(int frame) const
         }
         joints.push_back(joint);
     }
+    measure(joints);
     return joints;
 }
 
@@ -527,6 +528,7 @@ std::vector<IKJoint> IKArmature::shownAt(int frame) const
         joints[i].position.y += (next[i].position.y - joints[i].position.y) * fraction;
         joints[i].angle += (next[i].angle - joints[i].angle) * fraction;
     }
+    measure(joints);
     return joints;
 }
 
@@ -579,6 +581,7 @@ std::vector<IKJoint> IKArmature::posedAt(int frame) const
         joint.position = Point(above.position.x + offset.x, above.position.y + offset.y);
         joint.angle = above.angle + pose.angle;
     }
+    measure(joints);
     return joints;
 }
 
@@ -593,6 +596,18 @@ void IKArmature::storeJoints()
     std::vector<std::vector<IKJoint>> posed(static_cast<size_t>(std::max(0, count)));
     for (int frame = 0; frame < count; ++frame)
         posed[static_cast<size_t>(frame)] = posedAt(frame);
+    // Locks, targets and bone options, worked into the poses they move and
+    // then into every frame.
+    if (hasGoals())
+    {
+        posed = withGoals(posed);
+        if (writeBackPoses(posed))
+        {
+            for (int frame = 0; frame < count; ++frame)
+                posed[static_cast<size_t>(frame)] = posedAt(frame);
+            posed = withGoals(posed);
+        }
+    }
     if (hasSprings())
         posed = simulate([&posed](int frame) { return posed[static_cast<size_t>(frame)]; });
     std::vector<std::vector<double>> xs(_nodes.size()), ys(_nodes.size()), angles(_nodes.size());
@@ -841,6 +856,12 @@ Transform IKArmature::carried(int joint, const Transform& stored, int frame) con
             now = Point(sprung[static_cast<size_t>(joint)].position.x + offset.x,
                 sprung[static_cast<size_t>(joint)].position.y + offset.y);
         }
+    }
+    // A joint whose bone stretches scales what hangs on it too.
+    for (size_t i = 0; i < _nodes.size() && !playsSprings(); ++i)
+    {
+        if (_nodes[i].parent == joint && _nodes[i].element->Attribute("phoenixLength"))
+            return then(stored, boneMove(jointsAt(0), jointsAt(std::min(frame, frames() - 1)), joint));
     }
     // Off the first frame's registration point, turned, onto this frame's.
     Transform moved = stored;
@@ -1531,12 +1552,11 @@ Point skinPoint(const Point& point, const std::vector<IKJoint>& before, const st
         if (parent < 0 || static_cast<size_t>(parent) >= after.size())
             continue;
         const IKJoint& from = before[parent];
-        const IKJoint& to = after[parent];
         const double d = distanceToSegment(point, from.position, before[i].position);
         const double weight = 1.0 / std::pow(d * d + 1.0, 2.0);
-        const Point local = rotated(Point(point.x - from.position.x, point.y - from.position.y), to.angle - from.angle);
-        sum.x += weight * (to.position.x + local.x);
-        sum.y += weight * (to.position.y + local.y);
+        const Point carried = carryOnBone(point, before, after, static_cast<int>(i));
+        sum.x += weight * carried.x;
+        sum.y += weight * carried.y;
         total += weight;
     }
     if (total <= 0.0)
@@ -1673,11 +1693,9 @@ void bindShape(Shape& shape, const Transform& toArmature, const ShapeBinding& bi
             const int parent = before[bound.bone].parent;
             if (parent < 0 || static_cast<size_t>(parent) >= after.size())
                 continue;
-            const IKJoint& from = before[parent];
-            const IKJoint& to = after[parent];
-            const Point local = rotated(Point(p.x - from.position.x, p.y - from.position.y), to.angle - from.angle);
-            sum.x += bound.weight * (to.position.x + local.x);
-            sum.y += bound.weight * (to.position.y + local.y);
+            const Point carried = carryOnBone(p, before, after, bound.bone);
+            sum.x += bound.weight * carried.x;
+            sum.y += bound.weight * carried.y;
             total += bound.weight;
         }
         return total > 0.0 ? Point(sum.x / total, sum.y / total) : p;
@@ -1950,6 +1968,799 @@ void carryPoses(const IKArmature& old, IKArmature& rebuilt)
     }
     // And the eases between them.
     rebuilt.copyEases(old);
+}
+
+// ---------------------------------------------------------------------------
+// Locks, targets and bone options.
+
+namespace {
+
+bool hangsBelow(const std::vector<IKJoint>& joints, size_t joint, int above)
+{
+    for (int at = static_cast<int>(joint); at >= 0; at = joints[static_cast<size_t>(at)].parent)
+    {
+        if (at == above)
+            return true;
+    }
+    return false;
+}
+
+/// Turns \a pivot, and every joint below it, by \a angle about the pivot.
+void turnBelow(std::vector<IKJoint>& joints, int pivot, double angle)
+{
+    if (pivot < 0 || static_cast<size_t>(pivot) >= joints.size() || std::fabs(angle) < 1.0e-15)
+        return;
+    const Point centre = joints[static_cast<size_t>(pivot)].position;
+    for (size_t i = 0; i < joints.size(); ++i)
+    {
+        if (!hangsBelow(joints, i, pivot))
+            continue;
+        joints[i].angle += angle;
+        const Point offset = rotated(Point(joints[i].position.x - centre.x, joints[i].position.y - centre.y), angle);
+        joints[i].position = Point(centre.x + offset.x, centre.y + offset.y);
+    }
+}
+
+/// Moves \a joint, and every joint below it, by \a by.
+void moveBelow(std::vector<IKJoint>& joints, int joint, const Point& by)
+{
+    for (size_t i = 0; i < joints.size(); ++i)
+    {
+        if (hangsBelow(joints, i, joint))
+            joints[i].position = Point(joints[i].position.x + by.x, joints[i].position.y + by.y);
+    }
+}
+
+double boneLength(const std::vector<IKJoint>& joints, int joint)
+{
+    const int head = joints[static_cast<size_t>(joint)].parent;
+    if (head < 0)
+        return 0.0;
+    const Point& a = joints[static_cast<size_t>(head)].position;
+    const Point& b = joints[static_cast<size_t>(joint)].position;
+    return std::hypot(b.x - a.x, b.y - a.y);
+}
+
+/// Makes the bone ending at \a joint \a length long, the joints below it
+/// moving with its tail.
+void setBoneLength(std::vector<IKJoint>& joints, int joint, double length)
+{
+    const int head = joints[static_cast<size_t>(joint)].parent;
+    const double now = boneLength(joints, joint);
+    if (head < 0 || now < 1.0e-9)
+        return;
+    const Point& a = joints[static_cast<size_t>(head)].position;
+    const Point& b = joints[static_cast<size_t>(joint)].position;
+    const double grow = length / now - 1.0;
+    moveBelow(joints, joint, Point((b.x - a.x) * grow, (b.y - a.y) * grow));
+}
+
+/// One pass of cyclic coordinate descent: each of \a pivots in turn swings
+/// \a end toward \a goal, no further than its limits allow.
+void reachPass(std::vector<IKJoint>& joints, const std::vector<int>& pivots, int end, const Point& goal,
+    const std::vector<JointLimit>& limits)
+{
+    for (int pivot : pivots)
+    {
+        const Point centre = joints[static_cast<size_t>(pivot)].position;
+        const Point tip = joints[static_cast<size_t>(end)].position;
+        if (std::hypot(tip.x - centre.x, tip.y - centre.y) < 1.0e-9 ||
+            std::hypot(goal.x - centre.x, goal.y - centre.y) < 1.0e-9)
+        {
+            continue;
+        }
+        double turn = wrapAngle(std::atan2(goal.y - centre.y, goal.x - centre.x) - std::atan2(tip.y - centre.y, tip.x - centre.x));
+        // A chain lying straight toward a goal nearer than its end cannot
+        // fold by turning toward it: the joint nearest the end bends it a
+        // little first.
+        if (pivot == pivots.front() && pivots.size() > 1 && std::fabs(turn) < 1.0e-6 &&
+            std::hypot(goal.x - centre.x, goal.y - centre.y) < std::hypot(tip.x - centre.x, tip.y - centre.y) - 1.0e-3)
+        {
+            turn = 0.2;
+        }
+        if (static_cast<size_t>(pivot) < limits.size() && limits[static_cast<size_t>(pivot)].constrained)
+        {
+            const int above = joints[static_cast<size_t>(pivot)].parent;
+            const double relative = joints[static_cast<size_t>(pivot)].angle - (above >= 0 ? joints[static_cast<size_t>(above)].angle : 0.0);
+            const double low = std::min(limits[static_cast<size_t>(pivot)].min, limits[static_cast<size_t>(pivot)].max);
+            const double high = std::max(limits[static_cast<size_t>(pivot)].min, limits[static_cast<size_t>(pivot)].max);
+            turn = std::max(low, std::min(high, relative + turn)) - relative;
+        }
+        turnBelow(joints, pivot, turn);
+    }
+}
+
+/// Up to \a passes of reachPass, until \a end is there.
+void reachStep(std::vector<IKJoint>& joints, const std::vector<int>& pivots, int end, const Point& goal,
+    const std::vector<JointLimit>& limits, int passes = 1)
+{
+    for (int pass = 0; pass < passes; ++pass)
+    {
+        const Point& tip = joints[static_cast<size_t>(end)].position;
+        if (pass > 0 && std::hypot(tip.x - goal.x, tip.y - goal.y) < 1.0e-3)
+            break;
+        reachPass(joints, pivots, end, goal, limits);
+    }
+}
+
+/// Grows or shrinks the bones with IK stretch from \a top (a joint above
+/// \a end) down to \a end so the chain, laid straight, would just reach
+/// \a goal: no shorter than their own lengths, no longer than they may grow.
+void stretchToward(std::vector<IKJoint>& joints, int top, int end, const Point& goal, const PoseGoals& goals)
+{
+    double rigid = 0.0;
+    double own = 0.0;
+    double most = 0.0;
+    std::vector<int> stretchy;
+    for (int at = end; at >= 0 && at != top; at = joints[static_cast<size_t>(at)].parent)
+    {
+        const size_t i = static_cast<size_t>(at);
+        const double length = i < goals.lengths.size() ? goals.lengths[i] : 0.0;
+        const double stretch = i < goals.options.size() ? goals.options[i].maxStretch : 1.0;
+        if (length > 0.0 && stretch > 1.0)
+        {
+            stretchy.push_back(at);
+            own += length;
+            most += length * stretch;
+        }
+        else
+            rigid += boneLength(joints, at);
+    }
+    if (stretchy.empty() || top < 0)
+        return;
+    const Point& base = joints[static_cast<size_t>(top)].position;
+    const double reach = std::hypot(goal.x - base.x, goal.y - base.y);
+    const double factor = std::clamp(reach - rigid, own, most) / own;
+    for (int bone : stretchy)
+    {
+        const size_t i = static_cast<size_t>(bone);
+        setBoneLength(joints, bone, goals.lengths[i] * std::min(factor, goals.options[i].maxStretch));
+    }
+}
+
+/// The joints that turn to bring \a end where it is wanted: from the joint
+/// above it up to the nearest one where the armature branches, short of
+/// any \a blocked; those \a held keep their angles and are passed over.
+std::vector<int> chainAbove(const std::vector<IKJoint>& joints, int end, const std::vector<bool>& blocked,
+    const std::vector<bool>& held, const std::vector<int>& children)
+{
+    std::vector<int> pivots;
+    const int first = joints[static_cast<size_t>(end)].parent;
+    for (int at = first; at >= 0; at = joints[static_cast<size_t>(at)].parent)
+    {
+        const size_t i = static_cast<size_t>(at);
+        if (blocked[i] || (at != first && children[i] > 1))
+            break;
+        if (!held[i])
+            pivots.push_back(at);
+    }
+    return pivots;
+}
+
+std::string pointText(const Point& p)
+{
+    char buffer[96];
+    std::snprintf(buffer, sizeof(buffer), "%.4f,%.4f", p.x, p.y);
+    return buffer;
+}
+
+} // namespace
+
+bool PoseGoals::any() const
+{
+    if (!pins.empty() || !reaches.empty() || !level.empty())
+        return true;
+    for (const BoneOptions& each : options)
+    {
+        if (each.maxStretch > 1.0)
+            return true;
+    }
+    return false;
+}
+
+std::vector<IKJoint> solvePose(std::vector<IKJoint> joints, const PoseGoals& goals, int effector, const Point& target,
+    const std::vector<JointLimit>& limits, int iterations)
+{
+    const bool dragging = effector >= 0 && static_cast<size_t>(effector) < joints.size();
+    if (!goals.any())
+        return dragging ? solveIK(joints, effector, target, iterations, limits) : joints;
+    const size_t count = joints.size();
+    std::vector<int> children(count, 0);
+    for (const IKJoint& joint : joints)
+    {
+        if (joint.parent >= 0 && static_cast<size_t>(joint.parent) < count)
+            ++children[static_cast<size_t>(joint.parent)];
+    }
+    // The joints the drag turns, which nothing else may.
+    std::vector<int> dragged;
+    std::vector<bool> blocked(count, false);
+    for (int at = dragging ? joints[static_cast<size_t>(effector)].parent : -1; at >= 0; at = joints[static_cast<size_t>(at)].parent)
+    {
+        dragged.push_back(at);
+        blocked[static_cast<size_t>(at)] = true;
+    }
+    std::vector<bool> held(count, false);
+    for (const auto& [joint, angle] : goals.level)
+    {
+        if (joint >= 0 && static_cast<size_t>(joint) < count)
+            held[static_cast<size_t>(joint)] = true;
+    }
+    const auto keepLevel = [&]() {
+        for (const auto& [joint, angle] : goals.level)
+        {
+            if (joint >= 0 && static_cast<size_t>(joint) < count && !blocked[static_cast<size_t>(joint)])
+                turnBelow(joints, joint, wrapAngle(angle - joints[static_cast<size_t>(joint)].angle));
+        }
+    };
+    const auto valid = [count](int joint) { return joint >= 0 && static_cast<size_t>(joint) < count; };
+
+    for (int iteration = 0; iteration < iterations; ++iteration)
+    {
+        if (!dragged.empty())
+        {
+            stretchToward(joints, dragged.back(), effector, target, goals);
+            reachStep(joints, dragged, effector, target, limits);
+        }
+        keepLevel();
+        for (const PoseGoals::Reach& reach : goals.reaches)
+        {
+            if (!valid(reach.joint) || reach.joint == effector)
+                continue;
+            const Point goal = valid(reach.toJoint) ? joints[static_cast<size_t>(reach.toJoint)].position : reach.at;
+            const std::vector<int> pivots = chainAbove(joints, reach.joint, blocked, held, children);
+            if (pivots.empty())
+                continue;
+            stretchToward(joints, pivots.back(), reach.joint, goal, goals);
+            reachStep(joints, pivots, reach.joint, goal, limits, 8);
+        }
+        keepLevel();
+        // Locked bones last, so nothing moves them: each head back in its
+        // place by the joints above it, or by moving the whole armature when
+        // it is the root, and turned to its angle.
+        for (const PoseGoals::Pin& pin : goals.pins)
+        {
+            if (!valid(pin.joint) || pin.joint == effector)
+                continue;
+            const int head = joints[static_cast<size_t>(pin.joint)].parent;
+            if (!valid(head))
+                continue;
+            IKJoint& at = joints[static_cast<size_t>(head)];
+            if (at.parent < 0)
+                moveBelow(joints, head, Point(pin.head.x - at.position.x, pin.head.y - at.position.y));
+            else
+            {
+                const std::vector<int> pivots = chainAbove(joints, head, blocked, held, children);
+                if (!pivots.empty())
+                {
+                    stretchToward(joints, pivots.back(), head, pin.head, goals);
+                    reachStep(joints, pivots, head, pin.head, limits, 8);
+                }
+            }
+            if (!blocked[static_cast<size_t>(head)])
+                turnBelow(joints, head, wrapAngle(pin.angle - joints[static_cast<size_t>(head)].angle));
+        }
+    }
+    return joints;
+}
+
+std::vector<IKJoint> stretchBone(std::vector<IKJoint> joints, int joint, const Point& to, const PoseGoals& goals,
+    const std::vector<JointLimit>& limits)
+{
+    if (joint < 0 || static_cast<size_t>(joint) >= joints.size())
+        return joints;
+    const int head = joints[static_cast<size_t>(joint)].parent;
+    if (head < 0)
+        return joints;
+    // Turned about its head, as one pass of the solver turns a joint.
+    reachStep(joints, {head}, joint, to, limits);
+    const size_t i = static_cast<size_t>(joint);
+    const double own = i < goals.lengths.size() ? goals.lengths[i] : 0.0;
+    if (own > 0.0 && i < goals.options.size() && goals.options[i].squash)
+    {
+        const Point& from = joints[static_cast<size_t>(head)].position;
+        setBoneLength(joints, joint, std::clamp(std::hypot(to.x - from.x, to.y - from.y), 0.05 * own, 20.0 * own));
+    }
+    return solvePose(joints, goals, -1, Point(), limits);
+}
+
+Transform boneMove(const std::vector<IKJoint>& before, const std::vector<IKJoint>& after, int joint)
+{
+    if (joint < 0 || static_cast<size_t>(joint) >= before.size() || static_cast<size_t>(joint) >= after.size())
+        return Transform();
+    // The bone below it that stretches, if one does.
+    int child = -1;
+    for (size_t i = 0; i < before.size() && i < after.size() && child < 0; ++i)
+    {
+        if (before[i].parent == joint && (before[i].stretch != 1.0 || after[i].stretch != 1.0 ||
+                                             before[i].thickness != 1.0 || after[i].thickness != 1.0))
+        {
+            child = static_cast<int>(i);
+        }
+    }
+    // The joint's frame, scaled along and across that bone.
+    const auto frameOf = [&](const std::vector<IKJoint>& joints) {
+        const IKJoint& at = joints[static_cast<size_t>(joint)];
+        Transform placed;
+        if (child >= 0)
+        {
+            const IKJoint& end = joints[static_cast<size_t>(child)];
+            const Point along = rotated(Point(end.position.x - at.position.x, end.position.y - at.position.y), -at.angle);
+            const double beta = std::atan2(along.y, along.x);
+            placed = then(then(turn(-beta), Transform(end.stretch, 0.0, 0.0, end.thickness, 0.0, 0.0)), turn(beta));
+        }
+        placed = then(placed, turn(at.angle));
+        placed.tx += at.position.x;
+        placed.ty += at.position.y;
+        return placed;
+    };
+    Transform back;
+    if (!inverse(frameOf(before), back))
+        return Transform();
+    return then(back, frameOf(after));
+}
+
+Point carryOnBone(const Point& point, const std::vector<IKJoint>& before, const std::vector<IKJoint>& after, int bone)
+{
+    if (bone < 0 || static_cast<size_t>(bone) >= before.size() || static_cast<size_t>(bone) >= after.size())
+        return point;
+    const int head = before[static_cast<size_t>(bone)].parent;
+    if (head < 0 || static_cast<size_t>(head) >= after.size())
+        return point;
+    const IKJoint& from = before[static_cast<size_t>(head)];
+    const IKJoint& to = after[static_cast<size_t>(head)];
+    Point local(point.x - from.position.x, point.y - from.position.y);
+    // Scaled along the bone and across it as it stretches.
+    const IKJoint& was = before[static_cast<size_t>(bone)];
+    const IKJoint& now = after[static_cast<size_t>(bone)];
+    const double along = was.stretch > 1.0e-9 ? now.stretch / was.stretch : 1.0;
+    const double across = was.thickness > 1.0e-9 ? now.thickness / was.thickness : 1.0;
+    const double length = std::hypot(was.position.x - from.position.x, was.position.y - from.position.y);
+    if ((along != 1.0 || across != 1.0) && length > 1.0e-9)
+    {
+        const Point d((was.position.x - from.position.x) / length, (was.position.y - from.position.y) / length);
+        const double a = (local.x * d.x + local.y * d.y) * along;
+        const double b = (local.y * d.x - local.x * d.y) * across;
+        local = Point(d.x * a - d.y * b, d.y * a + d.x * b);
+    }
+    local = rotated(local, to.angle - from.angle);
+    return Point(to.position.x + local.x, to.position.y + local.y);
+}
+
+int IKArmature::jointNamed(const std::string& name) const
+{
+    for (size_t i = 0; i < _nodes.size(); ++i)
+    {
+        const char* own = _nodes[i].element->Attribute("name");
+        if (own && name == own)
+            return static_cast<int>(i);
+    }
+    return -1;
+}
+
+std::string IKArmature::nodeName(int joint) const
+{
+    if (joint < 0 || static_cast<size_t>(joint) >= _nodes.size())
+        return std::string();
+    const char* name = _nodes[static_cast<size_t>(joint)].element->Attribute("name");
+    return name ? name : std::string();
+}
+
+size_t IKArmature::poseIndexAt(int frame) const
+{
+    const std::vector<int> starts = poses();
+    size_t k = 0;
+    while (k + 1 < starts.size() && starts[k + 1] <= frame)
+        ++k;
+    return k;
+}
+
+tinyxml2::XMLElement* IKArmature::stateOf(int joint, size_t pose) const
+{
+    if (joint < 0 || static_cast<size_t>(joint) >= _nodes.size())
+        return nullptr;
+    const std::vector<tinyxml2::XMLElement*> list = states(_nodes[static_cast<size_t>(joint)].element, "State");
+    return pose < list.size() ? list[pose] : nullptr;
+}
+
+bool IKArmature::ensurePose(int frame)
+{
+    if (frame < 0 || frame >= frames())
+        return false;
+    const std::vector<int> starts = poses();
+    if (std::find(starts.begin(), starts.end(), frame) != starts.end())
+        return true;
+    return setPlacedPose(frame, shownAt(frame));
+}
+
+void IKArmature::writePlaces(size_t pose, const std::vector<IKJoint>& joints)
+{
+    for (size_t i = 0; i < _nodes.size() && i < joints.size(); ++i)
+    {
+        tinyxml2::XMLElement* state = stateOf(static_cast<int>(i), pose);
+        if (!state)
+            continue;
+        const int parent = _nodes[i].parent;
+        // The angle from the parent's, the nearest turn of it to the one
+        // kept, and the place in the parent's frame, in twips.
+        double angle = joints[i].angle;
+        Point place(joints[i].position.x * 20.0, joints[i].position.y * 20.0);
+        if (parent >= 0 && static_cast<size_t>(parent) < joints.size())
+        {
+            const IKJoint& above = joints[static_cast<size_t>(parent)];
+            angle -= above.angle;
+            const Point offset = rotated(Point(joints[i].position.x - above.position.x, joints[i].position.y - above.position.y), -above.angle);
+            place = Point(offset.x * 20.0, offset.y * 20.0);
+        }
+        const double kept = state->DoubleAttribute("angle", 0.0);
+        angle += 2.0 * kPi * std::round((kept - angle) / (2.0 * kPi));
+        if (std::fabs(angle - kept) > 1.0e-9)
+            setNumber(state, "angle", angle);
+        if (std::fabs(place.x - state->DoubleAttribute("x", 0.0)) > 0.01 || std::fabs(place.y - state->DoubleAttribute("y", 0.0)) > 0.01)
+        {
+            setNumber(state, "x", place.x);
+            setNumber(state, "y", place.y);
+        }
+    }
+}
+
+bool IKArmature::setPlacedPose(int frame, const std::vector<IKJoint>& joints)
+{
+    if (joints.size() != _nodes.size())
+        return false;
+    std::vector<double> angles;
+    for (const IKJoint& joint : joints)
+        angles.push_back(joint.angle);
+    if (!setPose(frame, angles))
+        return false;
+    writePlaces(poseIndexAt(frame), joints);
+    storeJoints();
+    return true;
+}
+
+void IKArmature::measure(std::vector<IKJoint>& joints) const
+{
+    for (size_t i = 0; i < joints.size() && i < _nodes.size(); ++i)
+    {
+        const double own = _nodes[i].element->DoubleAttribute("phoenixLength", 0.0);
+        const int parent = joints[i].parent;
+        if (own <= 0.0 || parent < 0 || static_cast<size_t>(parent) >= joints.size())
+            continue;
+        const double stretch = std::max(1.0e-3, boneLength(joints, static_cast<int>(i)) / own);
+        joints[i].stretch = stretch;
+        const char* squash = _nodes[i].element->Attribute("phoenixSquash");
+        joints[i].thickness = squash && std::strcmp(squash, "volume") == 0 ? 1.0 / stretch : 1.0;
+    }
+}
+
+bool IKArmature::locked(int joint, int frame) const
+{
+    const tinyxml2::XMLElement* state = stateOf(joint, poseIndexAt(frame));
+    return state && state->BoolAttribute("phoenixLocked", false);
+}
+
+bool IKArmature::setLocked(int joint, int frame, bool on)
+{
+    if (joint < 0 || static_cast<size_t>(joint) >= _nodes.size() || _nodes[static_cast<size_t>(joint)].parent < 0 ||
+        frame < 0 || frame >= frames())
+    {
+        return false;
+    }
+    // Nothing to do when this pose and every later one are so already.
+    bool same = true;
+    for (size_t k = poseIndexAt(frame); k < poses().size() && same; ++k)
+    {
+        const tinyxml2::XMLElement* state = stateOf(joint, k);
+        same = state && state->BoolAttribute("phoenixLocked", false) == on;
+    }
+    if (same || !ensurePose(frame))
+        return false;
+    const std::vector<int> starts = poses();
+    const size_t first = poseIndexAt(frame);
+    // Where the bone is on the pose, which the later ones keep it.
+    const std::vector<IKJoint> here = jointsAt(frame);
+    const int head = _nodes[static_cast<size_t>(joint)].parent;
+    PoseGoals goals = goalsAt(frame, here);
+    goals.pins.clear();
+    goals.reaches.clear();
+    goals.level.clear();
+    goals.pins.push_back({joint, here[static_cast<size_t>(head)].position, here[static_cast<size_t>(head)].angle});
+    const std::vector<JointLimit> limited = limits();
+    for (size_t k = first; k < starts.size(); ++k)
+    {
+        tinyxml2::XMLElement* state = stateOf(joint, k);
+        if (!state || state->BoolAttribute("phoenixLocked", false) == on)
+            continue;
+        if (!on)
+        {
+            state->DeleteAttribute("phoenixLocked");
+            continue;
+        }
+        state->SetAttribute("phoenixLocked", "true");
+        if (k > first)
+            writePlaces(k, solvePose(posedAt(starts[k]), goals, -1, Point(), limited));
+    }
+    storeJoints();
+    return true;
+}
+
+BoneTarget IKArmature::target(int joint, int frame) const
+{
+    BoneTarget found;
+    const size_t k = poseIndexAt(frame);
+    const tinyxml2::XMLElement* state = stateOf(joint, k);
+    if (!state)
+        return found;
+    if (const char* name = state->Attribute("phoenixTarget"))
+    {
+        found.joint = jointNamed(name);
+        return found;
+    }
+    const auto pointOf = [](const tinyxml2::XMLElement* each, Point& at) {
+        const std::vector<double> values = numbers(each ? each->Attribute("phoenixTargetPoint") : nullptr);
+        if (values.size() < 2)
+            return false;
+        at = Point(values[0], values[1]);
+        return true;
+    };
+    if (!pointOf(state, found.at))
+        return found;
+    found.point = true;
+    // Eased toward the next pose's point.
+    const std::vector<int> starts = poses();
+    Point next;
+    if (k + 1 < starts.size() && pointOf(stateOf(joint, k + 1), next))
+    {
+        const double t = easedTime(static_cast<int>(k),
+            static_cast<double>(frame - starts[k]) / std::max(1, starts[k + 1] - starts[k]));
+        found.at = Point(found.at.x + (next.x - found.at.x) * t, found.at.y + (next.y - found.at.y) * t);
+    }
+    return found;
+}
+
+bool IKArmature::setTarget(int joint, int frame, const BoneTarget& target, bool onward)
+{
+    if (joint < 0 || static_cast<size_t>(joint) >= _nodes.size() || _nodes[static_cast<size_t>(joint)].parent < 0 ||
+        frame < 0 || frame >= frames())
+    {
+        return false;
+    }
+    // Not a joint below it, which would move as it reaches.
+    const std::vector<IKJoint> joints = posedAt(0);
+    if (target.joint >= 0 && (static_cast<size_t>(target.joint) >= joints.size() ||
+                                 hangsBelow(joints, static_cast<size_t>(target.joint), joint)))
+    {
+        return false;
+    }
+    const std::string name = target.joint >= 0 ? nodeName(target.joint) : std::string();
+    const std::string point = target.joint < 0 && target.point ? pointText(target.at) : std::string();
+    const auto write = [&](tinyxml2::XMLElement* state) {
+        const char* oldName = state->Attribute("phoenixTarget");
+        const char* oldPoint = state->Attribute("phoenixTargetPoint");
+        if ((oldName ? oldName : "") == name && (oldPoint ? oldPoint : "") == point)
+            return false;
+        state->DeleteAttribute("phoenixTarget");
+        state->DeleteAttribute("phoenixTargetPoint");
+        if (!name.empty())
+            state->SetAttribute("phoenixTarget", name.c_str());
+        if (!point.empty())
+            state->SetAttribute("phoenixTargetPoint", point.c_str());
+        return true;
+    };
+    // Nothing to do when the poses have it already.
+    bool same = true;
+    for (size_t k = poseIndexAt(frame); k < poses().size() && same; ++k)
+    {
+        const tinyxml2::XMLElement* state = stateOf(joint, k);
+        const char* oldName = state ? state->Attribute("phoenixTarget") : nullptr;
+        const char* oldPoint = state ? state->Attribute("phoenixTargetPoint") : nullptr;
+        same = state && (oldName ? oldName : "") == name && (oldPoint ? oldPoint : "") == point;
+        if (!onward)
+            break;
+    }
+    const std::vector<int> before = poses();
+    if ((same && std::find(before.begin(), before.end(), frame) != before.end()) || !ensurePose(frame))
+        return false;
+    const size_t first = poseIndexAt(frame);
+    const size_t last = onward ? poses().size() : first + 1;
+    for (size_t k = first; k < last; ++k)
+    {
+        if (tinyxml2::XMLElement* state = stateOf(joint, k))
+            write(state);
+    }
+    storeJoints();
+    return true;
+}
+
+BoneOptions IKArmature::options(int joint) const
+{
+    BoneOptions found;
+    if (joint < 0 || static_cast<size_t>(joint) >= _nodes.size())
+        return found;
+    const tinyxml2::XMLElement* element = _nodes[static_cast<size_t>(joint)].element;
+    found.independent = element->BoolAttribute("phoenixIndependent", false);
+    const char* squash = element->Attribute("phoenixSquash");
+    found.squash = squash != nullptr;
+    found.keepVolume = squash && std::strcmp(squash, "volume") == 0;
+    found.maxStretch = std::max(1.0, element->DoubleAttribute("phoenixStretch", 1.0));
+    return found;
+}
+
+void IKArmature::setOptions(int joint, const BoneOptions& options)
+{
+    if (joint < 0 || static_cast<size_t>(joint) >= _nodes.size() || _nodes[static_cast<size_t>(joint)].parent < 0)
+        return;
+    tinyxml2::XMLElement* element = _nodes[static_cast<size_t>(joint)].element;
+    for (const char* name : {"phoenixIndependent", "phoenixSquash", "phoenixStretch"})
+        element->DeleteAttribute(name);
+    if (options.independent)
+        element->SetAttribute("phoenixIndependent", "true");
+    if (options.squash)
+        element->SetAttribute("phoenixSquash", options.keepVolume ? "volume" : "stretch");
+    if (options.maxStretch > 1.0)
+        setNumber(element, "phoenixStretch", std::min(options.maxStretch, 10.0));
+    // The bone's own length, which its stretching is measured from.
+    const bool sizes = options.squash || options.maxStretch > 1.0;
+    if (sizes && !element->Attribute("phoenixLength"))
+        setNumber(element, "phoenixLength", boneLength(posedAt(0), joint));
+    else if (!sizes && element->Attribute("phoenixLength"))
+    {
+        // Back to that length in every pose.
+        const double own = element->DoubleAttribute("phoenixLength", 0.0);
+        for (tinyxml2::XMLElement* state : states(element, "State"))
+        {
+            const double x = state->DoubleAttribute("x", 0.0);
+            const double y = state->DoubleAttribute("y", 0.0);
+            const double length = std::hypot(x, y);
+            if (own > 0.0 && length > 1.0e-9)
+            {
+                setNumber(state, "x", x * own * 20.0 / length);
+                setNumber(state, "y", y * own * 20.0 / length);
+            }
+        }
+        element->DeleteAttribute("phoenixLength");
+    }
+    storeJoints();
+}
+
+bool IKArmature::hasGoals() const
+{
+    for (const Node& node : _nodes)
+    {
+        if (node.element->BoolAttribute("phoenixIndependent", false) || node.element->DoubleAttribute("phoenixStretch", 1.0) > 1.0)
+            return true;
+        for (const tinyxml2::XMLElement* state : states(node.element, "State"))
+        {
+            if (state->Attribute("phoenixLocked") || state->Attribute("phoenixTarget") || state->Attribute("phoenixTargetPoint"))
+                return true;
+        }
+    }
+    return false;
+}
+
+PoseGoals IKArmature::goalsAt(int frame, const std::vector<IKJoint>& shown, int dragged) const
+{
+    PoseGoals goals;
+    const size_t count = _nodes.size();
+    goals.options.resize(count);
+    goals.lengths.resize(count, 0.0);
+    for (size_t i = 0; i < count; ++i)
+    {
+        goals.options[i] = options(static_cast<int>(i));
+        goals.lengths[i] = _nodes[i].element->DoubleAttribute("phoenixLength", 0.0);
+    }
+    if (shown.size() != count)
+        return goals;
+    // The joints the drag turns keep no angle of their own.
+    std::vector<bool> turning(count, false);
+    for (int at = dragged >= 0 && static_cast<size_t>(dragged) < count ? _nodes[static_cast<size_t>(dragged)].parent : -1; at >= 0;
+         at = _nodes[static_cast<size_t>(at)].parent)
+    {
+        turning[static_cast<size_t>(at)] = true;
+    }
+    for (size_t i = 0; i < count; ++i)
+    {
+        const int head = _nodes[i].parent;
+        if (head < 0 || static_cast<int>(i) == dragged)
+            continue;
+        if (goals.options[i].independent && !turning[static_cast<size_t>(head)])
+            goals.level.emplace_back(head, shown[static_cast<size_t>(head)].angle);
+        if (locked(static_cast<int>(i), frame))
+            goals.pins.push_back({static_cast<int>(i), shown[static_cast<size_t>(head)].position, shown[static_cast<size_t>(head)].angle});
+        const BoneTarget aim = target(static_cast<int>(i), frame);
+        if (aim.joint >= 0)
+            goals.reaches.push_back({static_cast<int>(i), Point(), aim.joint});
+        else if (aim.point)
+            goals.reaches.push_back({static_cast<int>(i), aim.at, -1});
+    }
+    return goals;
+}
+
+std::vector<std::vector<IKJoint>> IKArmature::withGoals(const std::vector<std::vector<IKJoint>>& posed) const
+{
+    std::vector<std::vector<IKJoint>> kept = posed;
+    const std::vector<int> starts = poses();
+    if (starts.empty() || posed.empty())
+        return kept;
+    const std::vector<JointLimit> limited = limits();
+    const size_t count = _nodes.size();
+    std::vector<PoseGoals::Pin> spanPins;
+    for (size_t f = 0; f < posed.size(); ++f)
+    {
+        const int frame = static_cast<int>(f);
+        const size_t k = poseIndexAt(frame);
+        const bool spanStart = k < starts.size() && starts[k] == frame;
+        // The targets, as for posing; then the independent angles eased
+        // from pose to pose on the stage, rather than from their parents.
+        PoseGoals goals = goalsAt(frame, posed[f]);
+        goals.pins.clear();
+        goals.level.clear();
+        for (size_t i = 0; i < count; ++i)
+        {
+            const int head = _nodes[i].parent;
+            if (head < 0 || !goals.options[i].independent)
+                continue;
+            const size_t h = static_cast<size_t>(head);
+            const size_t from = static_cast<size_t>(std::clamp(starts[k], 0, static_cast<int>(posed.size()) - 1));
+            double angle = posed[from][h].angle;
+            if (k + 1 < starts.size() && static_cast<size_t>(starts[k + 1]) < posed.size())
+            {
+                double next = posed[static_cast<size_t>(starts[k + 1])][h].angle;
+                next += 2.0 * kPi * std::round((angle - next) / (2.0 * kPi));
+                const double t = easedTime(static_cast<int>(k),
+                    static_cast<double>(frame - starts[k]) / std::max(1, starts[k + 1] - starts[k]));
+                angle += (next - angle) * t;
+            }
+            goals.level.emplace_back(head, angle);
+        }
+        // Bones locked on the pose and the next stay where the pose has
+        // them.
+        if (!spanStart)
+            goals.pins = spanPins;
+        kept[f] = solvePose(posed[f], goals, -1, Point(), limited);
+        if (spanStart)
+        {
+            spanPins.clear();
+            for (size_t i = 0; i < count; ++i)
+            {
+                const int head = _nodes[i].parent;
+                const tinyxml2::XMLElement* here = stateOf(static_cast<int>(i), k);
+                const tinyxml2::XMLElement* next = k + 1 < starts.size() ? stateOf(static_cast<int>(i), k + 1) : nullptr;
+                if (head < 0 || !here || !here->BoolAttribute("phoenixLocked", false) ||
+                    (k + 1 < starts.size() && !(next && next->BoolAttribute("phoenixLocked", false))))
+                {
+                    continue;
+                }
+                const IKJoint& at = kept[f][static_cast<size_t>(head)];
+                spanPins.push_back({static_cast<int>(i), at.position, at.angle});
+            }
+        }
+    }
+    return kept;
+}
+
+bool IKArmature::writeBackPoses(const std::vector<std::vector<IKJoint>>& joints)
+{
+    bool changed = false;
+    const std::vector<int> starts = poses();
+    for (size_t k = 0; k < starts.size(); ++k)
+    {
+        if (starts[k] < 0 || static_cast<size_t>(starts[k]) >= joints.size())
+            continue;
+        const std::vector<IKJoint> posed = posedAt(starts[k]);
+        const std::vector<IKJoint>& kept = joints[static_cast<size_t>(starts[k])];
+        bool differs = false;
+        for (size_t i = 0; i < posed.size() && i < kept.size() && !differs; ++i)
+        {
+            differs = std::fabs(wrapAngle(posed[i].angle - kept[i].angle)) > 1.0e-7 ||
+                std::hypot(posed[i].position.x - kept[i].position.x, posed[i].position.y - kept[i].position.y) > 1.0e-4;
+        }
+        if (differs)
+        {
+            writePlaces(k, kept);
+            changed = true;
+        }
+    }
+    return changed;
 }
 
 } // namespace fla

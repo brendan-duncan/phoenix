@@ -38,6 +38,12 @@ struct IKJoint
     double angle = 0.0;
     /// The joint above, by index; -1 for the joint at the armature's root.
     int parent = -1;
+    /// How far the bone ending at this joint is stretched from its own
+    /// length, along it, and how thick it is across it, when it has squash
+    /// and stretch or IK stretch (see BoneOptions); 1 and 1 otherwise. Its
+    /// art scales with them.
+    double stretch = 1.0;
+    double thickness = 1.0;
 };
 
 /// How far a joint may turn from its parent bone, in radians, when it is
@@ -90,6 +96,72 @@ struct BoneSpring
     bool present = false;
     double strength = 0.0;
     double damping = 0.0;
+};
+
+// ---------------------------------------------------------------------------
+// Locks, targets and bone options: Phoenix's own, kept on an armature's nodes
+// as phoenix... attributes. What they do is worked into the poses and every
+// frame's joints, which any app plays.
+
+/// A bone's options, kept on the node at its tail.
+struct BoneOptions
+{
+    /// The bone keeps the angle on the stage its poses give it as the bones
+    /// above turn (phoenixIndependent="true"): a foot stays level as the leg
+    /// moves.
+    bool independent = false;
+    /// Changing the bone's length scales its art along it
+    /// (phoenixSquash="stretch"); with keepVolume, thinner as it grows and
+    /// fatter as it shrinks (phoenixSquash="volume").
+    bool squash = false;
+    bool keepVolume = false;
+    /// How long the bone may grow, as a multiple of its own length, to reach
+    /// what its chain reaches for (phoenixStretch); 1 for not at all.
+    double maxStretch = 1.0;
+};
+
+/// What a bone's tail reaches for, set on a pose (phoenixTarget on the
+/// bone's State): another bone's tail, or a point on the stage, eased from
+/// pose to pose.
+struct BoneTarget
+{
+    /// The joint at the other bone's tail, or -1.
+    int joint = -1;
+    /// Or a point, when there is no joint.
+    bool point = false;
+    Point at;
+
+    bool any() const { return joint >= 0 || point; }
+};
+
+/// What a pose is solved to keep, besides the bone being dragged.
+struct PoseGoals
+{
+    /// A locked bone, numbered by its tail: its head stays at \a head and
+    /// its angle on the stage at \a angle.
+    struct Pin
+    {
+        int joint = -1;
+        Point head;
+        double angle = 0.0;
+    };
+    /// A bone whose tail reaches for a point, or another joint as it now is.
+    struct Reach
+    {
+        int joint = -1;
+        Point at;
+        int toJoint = -1;
+    };
+    std::vector<Pin> pins;
+    std::vector<Reach> reaches;
+    /// Joints whose angle on the stage is held, with the angle: the heads
+    /// of bones with independent angles.
+    std::vector<std::pair<int, double>> level;
+    /// Each joint's options and own length (0 for none kept).
+    std::vector<BoneOptions> options;
+    std::vector<double> lengths;
+
+    bool any() const;
 };
 
 /// An IK armature's pose span, read from and written back to the IKTree
@@ -261,6 +333,55 @@ public:
     void setBinding(const ShapeBinding& binding, const std::vector<Point>& anchors, const Transform& contour,
         const std::string& style = std::string());
 
+    // Locks, targets and bone options (see BoneOptions). Every frame's
+    // joints are worked out with them, and the poses they move are written
+    // back as ordinary poses.
+
+    /// The joint whose node is named \a name, or -1; and a joint's node name.
+    int jointNamed(const std::string& name) const;
+    std::string nodeName(int joint) const;
+
+    /// Whether the bone ending at \a joint is locked by the pose in effect
+    /// at \a frame (phoenixLocked on its State). A bone locked on a pose and
+    /// on the next stays where the first has it in the frames between;
+    /// locked on a pose and not on the next, it eases free.
+    bool locked(int joint, int frame) const;
+    /// Locks or frees the bone from \a frame on: the pose there (added when
+    /// there is none) and every later one. Locked, each later pose is solved
+    /// to keep the bone where \a frame has it. False when nothing changes.
+    bool setLocked(int joint, int frame, bool on);
+
+    /// What the bone ending at \a joint reaches for at \a frame: the target
+    /// of the pose in effect, a point eased toward the next pose's.
+    BoneTarget target(int joint, int frame) const;
+    /// Sets what the bone reaches for on the pose at \a frame (added when
+    /// there is none) and, when \a onward, every later pose. False when
+    /// nothing changes.
+    bool setTarget(int joint, int frame, const BoneTarget& target, bool onward = true);
+
+    /// The options of the bone ending at \a joint.
+    BoneOptions options(int joint) const;
+    /// Sets them, keeping the bone's length as it is on the span's first
+    /// frame as its own (phoenixLength) while it can change length; taking
+    /// both away puts the bone back to that length in every pose.
+    void setOptions(int joint, const BoneOptions& options);
+
+    /// Whether any bone is locked, reaches, stretches or keeps its angle.
+    bool hasGoals() const;
+
+    /// The goals posing at \a frame keeps, from \a shown (the joints there):
+    /// locked bones where they are shown, bones with independent angles at
+    /// theirs (but those \a dragged turns), and targets. \a dragged, the
+    /// joint at the tail of the bone being dragged, is never pinned or sent
+    /// to its target; -1 for none.
+    PoseGoals goalsAt(int frame, const std::vector<IKJoint>& shown, int dragged = -1) const;
+
+    /// Poses the armature at \a frame as \a joints are: their angles, as
+    /// setPose takes them, and each joint's place from its parent (and a
+    /// root's on the stage), so bones that stretch and roots that move keep
+    /// it. False as setPose is.
+    bool setPlacedPose(int frame, const std::vector<IKJoint>& joints);
+
 private:
     struct Node
     {
@@ -298,6 +419,24 @@ private:
     /// its bones' tails, under the names FLA files use.
     void upgradeSprings();
 
+    /// The pose in effect at \a frame, by number; and a joint's State there.
+    size_t poseIndexAt(int frame) const;
+    tinyxml2::XMLElement* stateOf(int joint, size_t pose) const;
+    /// Makes \a frame a pose, as it shows, when it is not one; false when it
+    /// is outside the span.
+    bool ensurePose(int frame);
+    /// Writes each joint's angle and place from its parent into pose \a
+    /// pose's States, where they differ.
+    void writePlaces(size_t pose, const std::vector<IKJoint>& joints);
+    /// Sets each joint's stretch and thickness from its bone's length.
+    void measure(std::vector<IKJoint>& joints) const;
+    /// Each frame's joints, from \a posed, with the locks, targets and
+    /// options at work.
+    std::vector<std::vector<IKJoint>> withGoals(const std::vector<std::vector<IKJoint>>& posed) const;
+    /// Writes the poses as \a joints have them on their frames, where they
+    /// differ; true when any did.
+    bool writeBackPoses(const std::vector<std::vector<IKJoint>>& joints);
+
     std::unique_ptr<tinyxml2::XMLDocument> _document;
     std::vector<Node> _nodes;
     bool _bendsShape = false;
@@ -314,6 +453,33 @@ private:
 /// turns no further than it allows. Returns the joints posed.
 std::vector<IKJoint> solveIK(std::vector<IKJoint> joints, int effector, const Point& target, int iterations = 16,
     const std::vector<JointLimit>& limits = {});
+
+/// solveIK with \a goals kept as well: bones with IK stretch grow (up to
+/// their most) to reach, targets are reached for by the joints above them
+/// up to the nearest joint where the armature branches, locked bones are
+/// held by theirs, and heads of bones with independent angles keep their
+/// angles. \a effector -1 drags nothing and only keeps the goals. Without
+/// goals, just solveIK.
+std::vector<IKJoint> solvePose(std::vector<IKJoint> joints, const PoseGoals& goals, int effector, const Point& target,
+    const std::vector<JointLimit>& limits = {}, int iterations = 16);
+
+/// Turns the bone ending at \a joint toward \a to about its head, the
+/// joints below it turning with it, and, when it has squash and stretch in
+/// \a goals, makes it reach \a to; then keeps the other goals.
+std::vector<IKJoint> stretchBone(std::vector<IKJoint> joints, int joint, const Point& to, const PoseGoals& goals,
+    const std::vector<JointLimit>& limits = {});
+
+/// How what hangs on \a joint (an instance of an armature of symbols)
+/// moves as the joints move from \a before to \a after: turned and carried
+/// with the joint, and scaled along and across the bone to the child that
+/// stretches, if one does.
+Transform boneMove(const std::vector<IKJoint>& before, const std::vector<IKJoint>& after, int joint);
+
+/// Where \a point (in the armature's space) goes with the bone ending at
+/// \a bone as the joints move from \a before to \a after: rigidly with the
+/// frame of the joint at its head, and scaled along and across the bone as
+/// it stretches.
+Point carryOnBone(const Point& point, const std::vector<IKJoint>& before, const std::vector<IKJoint>& after, int bone);
 
 /// The IKTree text of a new armature of symbol instances, one pose \a
 /// frames long, posed as \a joints are (parents before children), as

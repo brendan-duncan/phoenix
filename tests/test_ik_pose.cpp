@@ -13,6 +13,7 @@
 #include "../src/data/timeline.h"
 #include "../src/edit/ik_pose.h"
 #include "../src/edit/new_document.h"
+#include "../src/edit/phoenix_features.h"
 #include "../src/edit/shape_merge.h"
 #include "../src/parser/fla_parser.h"
 #include "../src/parser/path_parser.h"
@@ -20,11 +21,13 @@
 
 #include <tinyxml2.h>
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
 #include <memory>
+#include <regex>
 #include <tuple>
 #include <string>
 #include <vector>
@@ -1145,4 +1148,301 @@ TEST(clearing_a_pose_lets_the_armature_tween_past_it)
     const double middle = armature.jointsAt(5)[0].angle;
     CHECK(std::fabs(end - start - 1.0) < 1.0e-6);
     CHECK(middle > start + 0.3 && middle < end - 0.3);
+}
+
+// ---------------------------------------------------------------------------
+// Locks, targets and bone options.
+
+namespace {
+
+/// Four joints in a row along x: 100, 100 and 50 pixels apart, posed the
+/// same at frames 0 and 10, every frame worked out.
+fla::IKArmature fourJoints()
+{
+    const std::string xml = "<IKTree><IKNode name=\"root\"><childNodes>" +
+        node("a", 0.0, 0.0, node("b", 2000.0, 0.0, node("c", 2000.0, 0.0, node("d", 1000.0, 0.0, "")))) +
+        "</childNodes></IKNode><states><IKState duration=\"10\"/><IKState duration=\"1\"/></states></IKTree>";
+    fla::IKArmature armature;
+    armature.parse(xml);
+    armature.setFrames(11);
+    return armature;
+}
+
+fla::IKArmature threeJoints()
+{
+    fla::IKArmature armature;
+    armature.parse(chain());
+    armature.setFrames(11);
+    return armature;
+}
+
+/// \a joints moved by \a dx, \a dy, as dragging the root's joint moves its
+/// armature.
+std::vector<fla::IKJoint> movedBy(std::vector<fla::IKJoint> joints, double dx, double dy)
+{
+    for (fla::IKJoint& joint : joints)
+        joint.position = fla::Point(joint.position.x + dx, joint.position.y + dy);
+    return joints;
+}
+
+} // namespace
+
+TEST(a_locked_bone_stays_put_as_the_armature_moves)
+{
+    // The last bone locked from frame 0, so on both poses; the root moved
+    // at frame 10, as dragging its joint does.
+    fla::IKArmature armature = fourJoints();
+    CHECK(armature.setLocked(3, 0, true));
+    CHECK(armature.locked(3, 0) && armature.locked(3, 5) && armature.locked(3, 10));
+    CHECK(!armature.setLocked(3, 0, true));
+    const std::vector<fla::IKJoint> start = armature.shownAt(10);
+    const fla::PoseGoals goals = armature.goalsAt(10, start);
+    CHECK(goals.pins.size() == 1 && goals.pins[0].joint == 3);
+    const std::vector<fla::IKJoint> solved = fla::solvePose(movedBy(start, 30.0, 20.0), goals, -1, fla::Point());
+    // The root where it was dragged; the locked bone where it was, at its
+    // angle, the knee bending to keep it there.
+    CHECK(near(solved[0].position, 30.0, 20.0));
+    CHECK(near(solved[2].position, 200.0, 0.0, 0.1) && near(solved[3].position, 250.0, 0.0, 0.1));
+    CHECK(std::fabs(std::hypot(solved[1].position.x - 30.0, solved[1].position.y - 20.0) - 100.0) < 1.0e-6);
+    CHECK(armature.setPlacedPose(10, solved));
+
+    // Planted on every frame between, as the root eases down.
+    for (int frame : {0, 3, 5, 8, 10})
+    {
+        const std::vector<fla::IKJoint> joints = armature.jointsAt(frame);
+        CHECK(near(joints[2].position, 200.0, 0.0, 0.1) && near(joints[3].position, 250.0, 0.0, 0.1));
+    }
+    CHECK(near(armature.jointsAt(5)[0].position, 15.0, 10.0, 1.0e-3));
+
+    // Freed from frame 10 on.
+    CHECK(armature.setLocked(3, 10, false));
+    CHECK(armature.locked(3, 0) && !armature.locked(3, 10));
+}
+
+TEST(a_bone_reaches_for_a_point_eased_from_pose_to_pose)
+{
+    fla::IKArmature armature = threeJoints();
+    fla::BoneTarget point;
+    point.point = true;
+    point.at = fla::Point(150.0, 80.0);
+    CHECK(armature.setTarget(2, 0, point));
+    CHECK(near(armature.jointsAt(0)[2].position, 150.0, 80.0, 0.1));
+    CHECK(near(armature.jointsAt(10)[2].position, 150.0, 80.0, 0.1));
+    // The point moved on the last pose alone: halfway, it is halfway.
+    point.at = fla::Point(150.0, -80.0);
+    CHECK(armature.setTarget(2, 10, point, false));
+    CHECK(armature.target(2, 5).point && near(armature.target(2, 5).at, 150.0, 0.0));
+    CHECK(near(armature.jointsAt(5)[2].position, 150.0, 0.0, 0.1));
+    CHECK(near(armature.jointsAt(10)[2].position, 150.0, -80.0, 0.1));
+    // The bones keep their lengths.
+    const std::vector<fla::IKJoint> joints = armature.jointsAt(5);
+    CHECK(std::fabs(std::hypot(joints[1].position.x, joints[1].position.y) - 100.0) < 1.0e-3);
+    // Taken away, nothing is left to keep.
+    CHECK(armature.setTarget(2, 0, fla::BoneTarget()));
+    CHECK(!armature.hasGoals());
+}
+
+TEST(a_bone_reaches_for_another_bone)
+{
+    // Two arms off a root at the origin: a, b along x; c, d along y then x,
+    // so d is at (100, 100).
+    const std::string xml = "<IKTree><IKNode name=\"root\"><childNodes>" +
+        node("r", 0.0, 0.0, node("a", 2000.0, 0.0, node("b", 2000.0, 0.0, "")) +
+            node("c", 0.0, 2000.0, node("d", 2000.0, 0.0, ""))) +
+        "</childNodes></IKNode><states><IKState duration=\"10\"/><IKState duration=\"1\"/></states></IKTree>";
+    fla::IKArmature armature;
+    CHECK(armature.parse(xml));
+    armature.setFrames(11);
+    CHECK(near(armature.jointsAt(0)[4].position, 100.0, 100.0));
+    fla::BoneTarget other;
+    other.joint = 4;
+    CHECK(armature.setTarget(2, 0, other));
+    CHECK(armature.target(2, 7).joint == 4);
+    // Only the joint below the branch turns: b swings round a onto d.
+    const std::vector<fla::IKJoint> joints = armature.jointsAt(7);
+    CHECK(near(joints[2].position, 100.0, 100.0, 0.1) && near(joints[1].position, 100.0, 0.0, 1.0e-6));
+    // Not a bone below it.
+    fla::BoneTarget below;
+    below.joint = 2;
+    CHECK(!armature.setTarget(1, 0, below));
+}
+
+TEST(an_independent_bone_keeps_its_angle_as_its_parent_turns)
+{
+    fla::IKArmature armature = threeJoints();
+    fla::BoneOptions level;
+    level.independent = true;
+    armature.setOptions(2, level);
+    CHECK(armature.options(2).independent && armature.hasGoals());
+    // The first bone dragged a quarter turn down: the second stays level.
+    const std::vector<fla::IKJoint> start = armature.shownAt(10);
+    const fla::PoseGoals goals = armature.goalsAt(10, start, 1);
+    CHECK(goals.level.size() == 1 && goals.level[0].first == 1);
+    const std::vector<fla::IKJoint> solved = fla::solvePose(start, goals, 1, fla::Point(0.0, 100.0));
+    CHECK(near(solved[1].position, 0.0, 100.0, 0.05) && near(solved[2].position, 100.0, 100.0, 0.05));
+    // Without, it swings round with its parent.
+    CHECK(near(fla::solveIK(start, 1, fla::Point(0.0, 100.0))[2].position, 0.0, 200.0, 0.05));
+    CHECK(armature.setPlacedPose(10, solved));
+    CHECK(near(armature.jointsAt(10)[2].position, 100.0, 100.0, 0.1));
+    CHECK(std::fabs(armature.jointsAt(5)[1].angle) < 1.0e-6);
+    // Dragging the bone itself turns it.
+    const fla::PoseGoals own = armature.goalsAt(10, armature.shownAt(10), 2);
+    CHECK(own.level.empty());
+}
+
+TEST(squash_and_stretch_scales_a_bone_and_keeps_its_volume)
+{
+    fla::IKArmature armature = threeJoints();
+    fla::BoneOptions squash;
+    squash.squash = true;
+    squash.keepVolume = true;
+    armature.setOptions(2, squash);
+    const std::vector<fla::IKJoint> start = armature.shownAt(0);
+    const fla::PoseGoals goals = armature.goalsAt(0, start, 2);
+    CHECK(std::fabs(goals.lengths[2] - 100.0) < 1.0e-6 && goals.lengths[1] == 0.0);
+    // Pulled out to twice its length.
+    const std::vector<fla::IKJoint> stretched = fla::stretchBone(start, 2, fla::Point(300.0, 0.0), goals);
+    CHECK(near(stretched[2].position, 300.0, 0.0));
+    CHECK(armature.setPlacedPose(0, stretched));
+    const fla::IKJoint first = armature.jointsAt(0)[2];
+    CHECK(std::fabs(first.stretch - 2.0) < 1.0e-6 && std::fabs(first.thickness - 0.5) < 1.0e-6);
+    // Halfway to the unstretched last pose, half as much.
+    CHECK(std::fabs(armature.jointsAt(5)[2].stretch - 1.5) < 1.0e-3);
+    // Its art grows along it and thins across it.
+    CHECK(near(fla::carryOnBone(fla::Point(150.0, 10.0), start, armature.jointsAt(0), 2), 200.0, 5.0, 1.0e-6));
+    // Without keeping volume, only along.
+    squash.keepVolume = false;
+    armature.setOptions(2, squash);
+    CHECK(std::fabs(armature.jointsAt(0)[2].thickness - 1.0) < 1.0e-9);
+    // Taken off, the bone is its own length again.
+    armature.setOptions(2, fla::BoneOptions());
+    CHECK(near(armature.jointsAt(0)[2].position, 200.0, 0.0, 1.0e-3) && armature.jointsAt(0)[2].stretch == 1.0);
+}
+
+TEST(ik_stretch_reaches_past_a_chains_length)
+{
+    fla::IKArmature armature = threeJoints();
+    fla::BoneOptions grow;
+    grow.maxStretch = 1.5;
+    armature.setOptions(1, grow);
+    armature.setOptions(2, grow);
+    const std::vector<fla::IKJoint> start = armature.shownAt(0);
+    const fla::PoseGoals goals = armature.goalsAt(0, start, 2);
+    CHECK(near(fla::solvePose(start, goals, 2, fla::Point(260.0, 0.0))[2].position, 260.0, 0.0, 0.5));
+    // No further than half as long again.
+    CHECK(near(fla::solvePose(start, goals, 2, fla::Point(400.0, 0.0))[2].position, 300.0, 0.0, 0.5));
+    // Within reach, its own length.
+    const std::vector<fla::IKJoint> bent = fla::solvePose(start, goals, 2, fla::Point(100.0, 100.0));
+    CHECK(near(bent[2].position, 100.0, 100.0, 0.5));
+    CHECK(std::fabs(std::hypot(bent[1].position.x, bent[1].position.y) - 100.0) < 1.0e-3);
+}
+
+TEST(a_stretched_bone_scales_the_instance_on_it)
+{
+    // The middle instance hangs on joint 1, at (200, 100), with its
+    // registration point at (190, 60); its bone runs on to joint 2.
+    fla::IKArmature armature = threeSymbols();
+    fla::BoneOptions squash;
+    squash.squash = true;
+    armature.setOptions(2, squash);
+    const std::vector<fla::IKJoint> start = armature.shownAt(5);
+    const std::vector<fla::IKJoint> stretched =
+        fla::stretchBone(start, 2, fla::Point(400.0, 100.0), armature.goalsAt(5, start, 2));
+    CHECK(armature.setPlacedPose(5, stretched));
+    fla::Transform middle;
+    middle.tx = 190.0;
+    middle.ty = 60.0;
+    const fla::Transform shown = armature.carried(1, middle, 5);
+    // Twice as long along the bone from its joint, as tall as it was.
+    CHECK(near(mapped(shown, fla::Point(0.0, 0.0)), 180.0, 60.0, 0.05));
+    CHECK(near(mapped(shown, fla::Point(60.0, 40.0)), 300.0, 100.0, 0.05));
+    // The last instance is carried along to the bone's new end, unscaled.
+    fla::Transform last;
+    last.tx = 290.0;
+    last.ty = 60.0;
+    const fla::Transform end = armature.carried(2, last, 5);
+    CHECK(near(mapped(end, fla::Point(0.0, 0.0)), 390.0, 60.0, 0.05) && std::fabs(end.m11 - 1.0) < 1.0e-6);
+}
+
+TEST(locks_targets_and_bone_options_round_trip_and_play_without_phoenix)
+{
+    // A locked, moved armature with a target and options, on a document's
+    // armature layer.
+    fla::IKArmature armature = fourJoints();
+    fla::BoneOptions options;
+    options.independent = true;
+    armature.setOptions(1, options);
+    options = fla::BoneOptions();
+    options.squash = true;
+    options.keepVolume = true;
+    options.maxStretch = 2.0;
+    armature.setOptions(2, options);
+    CHECK(armature.setLocked(3, 0, true));
+    const std::vector<fla::IKJoint> start = armature.shownAt(10);
+    CHECK(armature.setPlacedPose(10, fla::solvePose(movedBy(start, 30.0, 20.0), armature.goalsAt(10, start), -1, fla::Point())));
+    fla::BoneTarget point;
+    point.point = true;
+    point.at = fla::Point(80.0, -60.0);
+    CHECK(armature.setTarget(1, 5, point, false));
+    CHECK(armature.poses() == std::vector<int>({0, 5, 10}));
+
+    std::unique_ptr<fla::FLADocument> fla(fla::createEmptyDocument(640, 360));
+    CHECK(fla && fla->document && !fla->document->timelines.empty());
+    if (!fla || !fla->document || fla->document->timelines.empty())
+        return;
+    fla::Timeline* scene = fla->document->timelines.front();
+    fla::Frame* pose = nullptr;
+    fla::Layer* layer = fla::newArmatureLayer(*scene, *scene->layers.front(), "Armature_1", 0, 11, pose);
+    pose->extraChildren.push_back(armature.xml());
+    pose->extraAttributes.back().second = "0,5,10";
+    scene->layers.insert(scene->layers.begin(), layer);
+    const std::vector<std::string> features = fla::features::ids(fla::features::used(*fla->document));
+    CHECK(std::find(features.begin(), features.end(), "bone-controls") != features.end());
+
+    const std::filesystem::path out = std::filesystem::temp_directory_path() / "phoenix_ik_tests" / "bone_controls";
+    std::filesystem::remove_all(out);
+    fla::XFLFolderWriter writer;
+    CHECK(writer.write(*fla->document, out.string(), "bone_controls"));
+    FLAParser parser;
+    std::unique_ptr<fla::FLADocument> back(parser.parse((out / "bone_controls.xfl").string()));
+    CHECK(back && back->document && !back->document->timelines.empty());
+    if (!back || !back->document || back->document->timelines.empty())
+        return;
+    const fla::Frame* read = back->document->timelines.front()->layers.front()->frames.front();
+    fla::IKArmature again;
+    CHECK(!read->extraChildren.empty() && again.parse(read->extraChildren.back()));
+    CHECK(again.options(1).independent && !again.options(2).independent);
+    CHECK(again.options(2).squash && again.options(2).keepVolume && again.options(2).maxStretch == 2.0);
+    CHECK(again.locked(3, 0) && again.locked(3, 10));
+    CHECK(again.target(1, 5).point && near(again.target(1, 5).at, 80.0, -60.0) && !again.target(1, 0).any());
+    for (int frame = 0; frame < 11; ++frame)
+    {
+        const std::vector<fla::IKJoint> was = armature.jointsAt(frame);
+        const std::vector<fla::IKJoint> is = again.jointsAt(frame);
+        for (size_t i = 0; i < was.size() && i < is.size(); ++i)
+            CHECK(near(is[i].position, was[i].position.x, was[i].position.y, 1.0e-3));
+    }
+
+    // Without Phoenix's attributes, as another app reads it: every frame
+    // plays as Phoenix shows it, and the poses are ordinary poses that put
+    // the bones there.
+    const std::string plain =
+        std::regex_replace(armature.xml(), std::regex(" phoenix[A-Za-z]+=\"[^\"]*\""), std::string());
+    CHECK(plain.find("phoenix") == std::string::npos);
+    fla::IKArmature other;
+    CHECK(other.parse(plain) && !other.hasGoals());
+    for (int frame = 0; frame < 11; ++frame)
+    {
+        const std::vector<fla::IKJoint> was = armature.jointsAt(frame);
+        const std::vector<fla::IKJoint> is = other.jointsAt(frame);
+        for (size_t i = 0; i < was.size() && i < is.size(); ++i)
+            CHECK(near(is[i].position, was[i].position.x, was[i].position.y, 1.0e-3));
+    }
+    for (int at : other.poses())
+    {
+        const std::vector<fla::IKJoint> posed = other.posedAt(at);
+        const std::vector<fla::IKJoint> shown = armature.jointsAt(at);
+        for (size_t i = 0; i < posed.size() && i < shown.size(); ++i)
+            CHECK(near(posed[i].position, shown[i].position.x, shown[i].position.y, 0.05));
+    }
 }

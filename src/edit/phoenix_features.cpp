@@ -69,6 +69,10 @@ const std::vector<Feature>& all()
             {"phoenixParentScale", "phoenixParentSkew", "phoenixParentFlip"}},
         {"shape-binding", "Bones bound in Phoenix", "boned shapes as drawn; posing them may bend them differently",
             {"phoenixBinding"}},
+        {"bone-controls", "Bone locks, targets and stretch",
+            "the poses as made, which play the same, but the bones no longer lock, reach, keep their angles or stretch when posed",
+            {"phoenixLocked", "phoenixTarget", "phoenixTargetPoint", "phoenixIndependent", "phoenixSquash", "phoenixStretch",
+                "phoenixLength"}},
         {"shape-hints", "Shape hints", "shape tweens without the hints steering them", {"phoenixShapeHints"}},
         {"mouth-charts", "Lip sync mouth charts", "the mouth frames as set, without the chart",
             {"phoenixMouthChart"}},
@@ -184,6 +188,20 @@ std::vector<Use> used(const Document& document)
                     continue;
                 const std::string at = where + ", frame " + std::to_string(frame->index + 1);
                 note(frame->extraAttributes, at);
+                // An armature's own, inside the IKTree it keeps.
+                for (const std::string& child : frame->extraChildren)
+                {
+                    if (child.find("<IKTree") == std::string::npos)
+                        continue;
+                    Attributes kept;
+                    for (size_t found = child.find(" phoenix"); found != std::string::npos; found = child.find(" phoenix", found + 1))
+                    {
+                        const size_t equals = child.find('=', found);
+                        if (equals != std::string::npos)
+                            kept.emplace_back(child.substr(found + 1, equals - found - 1), std::string());
+                    }
+                    note(kept, at);
+                }
                 for (const Element* item : frame->elements)
                     element(item, at);
             }
