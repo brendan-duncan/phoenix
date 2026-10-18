@@ -65,6 +65,7 @@
 
 class QDockWidget;
 class HotDoubleSpinBox;
+class BoneCorrector;
 
 class Updater;
 
@@ -361,6 +362,10 @@ private slots:
 
     /// How far a joint of the armature on \a frame may turn, in a dialog.
     void editJointLimits(fla::Frame* frame, size_t child, int joint);
+
+    /// The Bone Corrections dialog and the drawing of shape corrections,
+    /// made when first wanted.
+    BoneCorrector* boneCorrector();
 
     /// Every stroke style in the document's shapes, main timelines and
     /// symbols alike.
@@ -673,6 +678,7 @@ private:
     fla::Selection _selection;
     fla::Snapper _snapper;
     std::unique_ptr<SelectionTool> _selectionTool;
+    BoneCorrector* _boneCorrector = nullptr;
     std::unique_ptr<FreeTransformTool> _freeTransformTool;
     std::unique_ptr<PrimitiveTool> _rectangleTool;
     std::unique_ptr<PrimitiveTool> _ovalTool;

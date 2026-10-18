@@ -27,6 +27,7 @@
 #include "../edit/guide_command.h"
 #include "../edit/timeline_edit.h"
 #include "../edit/brush_texture.h"
+#include "../edit/bone_corrections.h"
 #include "../edit/camera.h"
 #include "../edit/graphic_loop.h"
 #include "../parser/ik_tree.h"
@@ -3560,6 +3561,83 @@ const PhoenixView::ShapeSwap* PhoenixView::sprungShapes(const fla::Frame& pose, 
     return swap.empty() ? nullptr : &swap;
 }
 
+fla::corrections::Rig& PhoenixView::correctionRig()
+{
+    if (!_correctionRig)
+        _correctionRig = std::make_unique<fla::corrections::Rig>();
+    // Read again once anything in the document changes.
+    if (_correctionRevision != _revision)
+    {
+        _correctionRig->clear();
+        for (const auto& [key, swap] : _correctedShapes)
+            for (const auto& [shape, moved] : swap)
+                _pathCache.remove(moved.get());
+        _correctedShapes.clear();
+        _correctionRevision = _revision;
+    }
+    return *_correctionRig;
+}
+
+void PhoenixView::pauseCorrections(const fla::SymbolInstance* container)
+{
+    _correctionsPaused = container;
+    clearCaches();
+    update();
+}
+
+const PhoenixView::ShapeSwap* PhoenixView::correctedShapes(const fla::Frame& pose, const fla::SymbolInstance& container,
+    int frameOffset, const ShapeSwap* under)
+{
+    if (&container == _correctionsPaused || !fla::corrections::any(container) || container.symbol->timelines.empty() ||
+        !container.symbol->timelines.front())
+        return under;
+    fla::corrections::Rig& rig = correctionRig();
+    const fla::IKArmature* armature = rig.armatureOf(pose);
+    const int into = frameOffset - container.firstFrame;
+    if (!armature || !armature->bendsShape() || into < 0 || into >= armature->frames())
+        return under;
+    const auto done = _correctedShapes.find({&pose, frameOffset});
+    if (done != _correctedShapes.end())
+        return done->second.empty() ? under : &done->second;
+    ShapeSwap& swap = _correctedShapes[{&pose, frameOffset}];
+    const std::vector<fla::corrections::Correction> list = fla::corrections::of(container);
+    const auto frameAt = [](const fla::Layer& layer, int index) -> const fla::Frame* {
+        for (const fla::Frame* frame : layer.frames)
+            if (frame && frame->index <= index && index < frame->index + std::max(1, frame->duration))
+                return frame;
+        return nullptr;
+    };
+    const std::vector<fla::Layer*>& layers = container.symbol->timelines.front()->layers;
+    for (size_t li = 0; li < layers.size(); ++li)
+    {
+        const fla::Frame* shown = layers[li] ? frameAt(*layers[li], frameOffset) : nullptr;
+        const fla::Frame* first = layers[li] ? frameAt(*layers[li], container.firstFrame) : nullptr;
+        for (size_t ei = 0; shown && first && ei < shown->elements.size() && ei < first->elements.size(); ++ei)
+        {
+            const fla::Element* element = shown->elements[ei];
+            const fla::Element* rest = first->elements[ei];
+            if (!element || !rest || element->elementType() != fla::Element::Type::Shape ||
+                rest->elementType() != fla::Element::Type::Shape)
+                continue;
+            const auto* shape = static_cast<const fla::Shape*>(element);
+            // From what the springs make of it, when they move it.
+            const fla::Shape* from = shape;
+            if (under)
+            {
+                const auto sprung = under->find(shape);
+                if (sprung != under->end())
+                    from = sprung->second.get();
+            }
+            std::unique_ptr<fla::Shape> moved(fla::cloneShape(*from, shape->parent));
+            moved->transform = from->transform;
+            if (fla::corrections::correctShape(*moved, *static_cast<const fla::Shape*>(rest), container, *armature, into,
+                    static_cast<int>(li), static_cast<int>(ei), list) || from != shape)
+                swap.emplace(shape, std::move(moved));
+        }
+    }
+    return swap.empty() ? under : &swap;
+}
+
 fla::Transform PhoenixView::shownTransform(const LayerFrame& state, size_t elementIndex, bool behaviors)
 {
     if (!state.frame || elementIndex >= state.frame->elements.size() || !state.frame->elements[elementIndex])
@@ -4991,6 +5069,16 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
                 behaviorDelta = copies.front();
             transform = fla::behaviors::apply(transform, element->transformationPoint, behaviorDelta);
         }
+        // Bone corrections swap a graphic's drawing and fade it as the
+        // bones driving them turn.
+        if (keyframe && instance != _correctionsPaused && fla::corrections::any(*instance))
+        {
+            const fla::corrections::Effect effect =
+                correctionRig().effect(*instance, keyframe->index + std::max(0, _elapsed));
+            if (effect.frame >= 0)
+                behaviorDelta.hold = effect.frame;
+            behaviorDelta.alpha *= effect.alpha;
+        }
     }
 
     // Playing a movie (Test Movie): a movie clip or button shows as its
@@ -5311,7 +5399,11 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
             } swapScope{_shapeSwap, _shapeSwap};
             if (symbol->otherSymbolType == "ik container")
                 if (const auto* pose = dynamic_cast<const fla::Frame*>(element->parent))
+                {
                     _shapeSwap = sprungShapes(*pose, *instance, frameOffset);
+                    // And moved by the bone corrections on it.
+                    _shapeSwap = correctedShapes(*pose, *instance, frameOffset, _shapeSwap);
+                }
             // A template's color field: the named clip tinted all one color.
             // A slider holds the clip on a frame; an image field draws a
             // file in place of its bitmap.
@@ -10450,6 +10542,26 @@ void PhoenixView::drawIKBones(QPainter& painter, const fla::Frame& frame, double
     {
         painter.drawEllipse(QPointF(bone.head.x, bone.head.y), headRadius, headRadius);
         painter.drawEllipse(QPointF(bone.tail.x, bone.tail.y), tailRadius, tailRadius);
+    }
+    // A joint whose bone drives corrections: ringed in orange, a dot in it.
+    const auto* timeline = layer ? dynamic_cast<const fla::Timeline*>(layer->parent) : nullptr;
+    const fla::IKArmature* armature = timeline ? correctionRig().armatureOf(frame) : nullptr;
+    if (armature)
+    {
+        const std::vector<fla::IKJoint> joints = fla::corrections::jointsAt(*armature, into);
+        painter.setBrush(Qt::NoBrush);
+        painter.setPen(QPen(QColor(255, 140, 0), 2.0 * scale));
+        for (const std::string& node : fla::corrections::drivingJoints(*timeline, armature->name()))
+        {
+            const int joint = fla::corrections::jointNamed(*armature, node);
+            if (joint < 0 || static_cast<size_t>(joint) >= joints.size())
+                continue;
+            const QPointF at(joints[static_cast<size_t>(joint)].position.x, joints[static_cast<size_t>(joint)].position.y);
+            painter.setBrush(Qt::NoBrush);
+            painter.drawEllipse(at, headRadius * 1.7, headRadius * 1.7);
+            painter.setBrush(QColor(255, 140, 0));
+            painter.drawEllipse(at, headRadius * 0.45, headRadius * 0.45);
+        }
     }
     painter.restore();
 }

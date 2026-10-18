@@ -62,6 +62,9 @@ class QTimer;
 namespace fla {
 class Bitmap;
 class IKArmature;
+namespace corrections {
+class Rig;
+}
 class StaticText;
 class SymbolInstance;
 class Command;
@@ -615,6 +618,9 @@ public:
     void clearCaches();
     /// Counts up whenever the caches are cleared: something may have changed.
     unsigned revision() const { return _revision; }
+    /// Draws \a container without its bone corrections (null for all
+    /// with theirs), while its correction is being drawn in place.
+    void pauseCorrections(const fla::SymbolInstance* container);
     /// The next click on the stage picks a symbol instance for \a picked
     /// (null when it misses or Esc is pressed), instead of going to the tool.
     void pickInstance(std::function<void(fla::SymbolInstance*)> picked);
@@ -1745,6 +1751,21 @@ private:
     unsigned _sprungRevision = 0;
     /// While a boned shape's container draws, the shapes it draws instead.
     const ShapeSwap* _shapeSwap = nullptr;
+
+    /// Bone corrections (bone_corrections.h): the armatures driving them,
+    /// read once until the document changes.
+    fla::corrections::Rig& correctionRig();
+    /// The shapes \a container (on the pose frame \a pose) draws at frame
+    /// \a frameOffset of its symbol, moved by its shape corrections, over
+    /// \a under (the springs' swap, or null); \a under itself when it has
+    /// none. Kept until the document changes.
+    const ShapeSwap* correctedShapes(const fla::Frame& pose, const fla::SymbolInstance& container, int frameOffset,
+        const ShapeSwap* under);
+    std::unique_ptr<fla::corrections::Rig> _correctionRig;
+    std::map<std::pair<const fla::Frame*, int>, ShapeSwap> _correctedShapes;
+    unsigned _correctionRevision = 0;
+    /// The instance whose corrections are left out while one is drawn.
+    const fla::SymbolInstance* _correctionsPaused = nullptr;
 
     /// The path of the motion guide a frame's layer is guided by, from the
     /// guide layer's strokes as shown now; null when it has none.
