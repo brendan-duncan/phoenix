@@ -5,12 +5,23 @@
 // failure to open). Run it from Commands > Run Command; it closes every
 // file it opens without saving.
 (function () {
-    var folder = fl.scriptURI.replace(/[^\/]*$/, "");
-    var list = FLfile.read(folder + "files.txt");
+    // The folder prepare made: beside the script when it was run from there,
+    // otherwise asked for.
+    var folder = (fl.scriptURI || "").replace(/[^\/]*$/, "");
+    var list = folder && FLfile.exists(folder + "files.txt") ? FLfile.read(folder + "files.txt") : "";
     if (!list) {
-        alert("No files.txt beside the script: run tools/animate_check.py prepare first.");
+        var chosen = fl.browseForFolderURL("Choose the folder tools/animate_check.py prepare made (it holds files.txt)");
+        if (!chosen)
+            return;
+        folder = chosen.replace(/\/?$/, "/");
+        list = FLfile.exists(folder + "files.txt") ? FLfile.read(folder + "files.txt") : "";
+    }
+    if (!list) {
+        alert("No files.txt in " + FLfile.uriToPlatformPath(folder) +
+            ": run tools/animate_check.py prepare first, then pick the folder it made.");
         return;
     }
+    fl.trace("Checking the files listed in " + FLfile.uriToPlatformPath(folder + "files.txt"));
     var out = folder + "animate/";
     FLfile.createFolder(out);
     var names = list.replace(/\r/g, "").split("\n").filter(function (name) { return name.length > 0; });
