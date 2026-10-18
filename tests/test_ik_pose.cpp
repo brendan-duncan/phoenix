@@ -1575,9 +1575,9 @@ TEST(bone_controls_bend_a_boned_shape)
         point.point = true;
         point.at = fla::Point(300.0, 262.0);
         CHECK(leg.armature.setTarget(2, 0, point));
-        point.at = fla::Point(370.0, 190.0);
+        point.at = fla::Point(350.0, 230.0);
         CHECK(leg.armature.setTarget(2, 10, point, false));
-        CHECK(near(leg.armature.jointsAt(10)[2].position, 370.0, 190.0, 0.1));
+        CHECK(near(leg.armature.jointsAt(10)[2].position, 350.0, 230.0, 0.1));
         bendAndWrite(leg, "bone_target");
     }
     // The thigh swung forward with the foot keeping its angle.
@@ -1589,13 +1589,13 @@ TEST(bone_controls_bend_a_boned_shape)
         leg.armature.setOptions(3, level);
         const std::vector<fla::IKJoint> start = leg.armature.shownAt(10);
         CHECK(leg.armature.setPlacedPose(10,
-            fla::solvePose(start, leg.armature.goalsAt(10, start, 1), 1, fla::Point(360.0, 150.0))));
+            fla::solvePose(start, leg.armature.goalsAt(10, start, 1), 1, fla::Point(345.0, 170.0))));
         CHECK(std::fabs(leg.armature.jointsAt(10)[2].angle - leg.armature.jointsAt(0)[2].angle) < 1.0e-6);
         CHECK(std::fabs(leg.armature.jointsAt(10)[0].angle - leg.armature.jointsAt(0)[0].angle) > 0.5);
         bendAndWrite(leg, "bone_independent");
     }
-    // The lower half of a post stretched to twice its length, keeping its
-    // volume: half as wide.
+    // The lower half of a post stretched to 1.75 times its length, keeping
+    // its volume: 1.75 times thinner.
     {
         BonedPart post;
         CHECK(bonePart(post, "!5600 1800|6400 1800|6400 3600|6400 5400|5600 5400|5600 3600|5600 1800",
@@ -1606,14 +1606,14 @@ TEST(bone_controls_bend_a_boned_shape)
         post.armature.setOptions(2, squash);
         const std::vector<fla::IKJoint> start = post.armature.shownAt(10);
         CHECK(post.armature.setPlacedPose(10,
-            fla::stretchBone(start, 2, fla::Point(300.0, 340.0), post.armature.goalsAt(10, start, 2))));
+            fla::stretchBone(start, 2, fla::Point(300.0, 320.0), post.armature.goalsAt(10, start, 2))));
         bendAndWrite(post, "bone_squash");
         // Its bottom corner, 20 to the side and 90 past the middle joint,
-        // now 10 to the side and 180 past it (in the container's space).
+        // now 20 / 1.75 to the side and 90 * 1.75 past it.
         const fla::Point middle = post.armature.jointsAt(10)[1].position;
         const fla::Transform& placed = post.boned.instance->transform;
         const fla::Point corner = mapped(placed, fla::shapeAnchors(*partShape(post, 10))[3]);
-        CHECK(near(corner, middle.x + 10.0, middle.y + 180.0, 0.2));
+        CHECK(near(corner, middle.x + 20.0 / 1.75, middle.y + 157.5, 0.2));
     }
     // The ankle reaching for a point past the leg's length, the thigh and
     // shin stretching up to half as long again to get there.
@@ -1628,9 +1628,9 @@ TEST(bone_controls_bend_a_boned_shape)
         point.point = true;
         point.at = fla::Point(300.0, 262.0);
         CHECK(leg.armature.setTarget(2, 0, point));
-        point.at = fla::Point(380.0, 310.0);
+        point.at = fla::Point(360.0, 320.0);
         CHECK(leg.armature.setTarget(2, 10, point, false));
-        CHECK(near(leg.armature.jointsAt(10)[2].position, 380.0, 310.0, 0.5));
+        CHECK(near(leg.armature.jointsAt(10)[2].position, 360.0, 320.0, 0.5));
         CHECK(leg.armature.jointsAt(10)[2].stretch > 1.2);
         bendAndWrite(leg, "bone_stretch");
     }

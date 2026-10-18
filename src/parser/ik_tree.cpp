@@ -203,8 +203,21 @@ std::vector<IKBone> ikBones(const std::string& xml, int frame)
          root = root->NextSiblingElement("IKNode"))
     {
         Point joint;
-        if (jointOf(root, at, joint))
-            collect(root, joint, at, bones);
+        if (!jointOf(root, at, joint))
+            continue;
+        // The root's joint is the posed node under it of the same name,
+        // which keeps every frame's place as the armature moves.
+        const tinyxml2::XMLElement* children = root->FirstChildElement("childNodes");
+        const char* name = root->Attribute("name");
+        for (const tinyxml2::XMLElement* child = children && name ? children->FirstChildElement("ChildNode") : nullptr;
+             child; child = child->NextSiblingElement("ChildNode"))
+        {
+            const char* own = child->Attribute("name");
+            Point moved;
+            if (own && std::strcmp(own, name) == 0 && child->Attribute("xArray") && jointOf(child, at, moved))
+                joint = moved;
+        }
+        collect(root, joint, at, bones);
     }
     return bones;
 }
