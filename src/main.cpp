@@ -159,6 +159,16 @@ int main(int argc, char *argv[])
         qEnvironmentVariableIsEmpty("QT_QPA_PLATFORM"))
         qputenv("QT_QPA_PLATFORM", "offscreen");
 #endif
+    // capture-window draws the whole window for the guide with settings of
+    // its own, so the panels sit in their default places and the user's
+    // own layout and recent files are left alone.
+    if (argc > 1 && std::strcmp(argv[1], "capture-window") == 0)
+    {
+        if (qEnvironmentVariableIsEmpty("PHOENIX_SETTINGS_DIR"))
+            qputenv("PHOENIX_SETTINGS_DIR",
+                QDir(QDir::tempPath()).filePath("phoenix-capture-" + QString::number(QCoreApplication::applicationPid()))
+                    .toLocal8Bit());
+    }
 
 #ifdef Q_OS_WIN
     // Exporting headless (QT_QPA_PLATFORM=offscreen) reads fonts from a

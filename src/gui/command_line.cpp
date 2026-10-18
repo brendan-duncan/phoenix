@@ -46,7 +46,11 @@
 #include "../play/movie_runtime.h"
 #include "../play/display/stage.h"
 
+#include <QDialog>
 #include <QDir>
+#include <QDockWidget>
+#include <QMenuBar>
+#include <QTimer>
 #include <QDirIterator>
 #include <QElapsedTimer>
 #include <QJsonDocument>
@@ -146,6 +150,16 @@ const char* const kHelp =
     "      [--columns N] [--height H] [--orientation horizontal] [--width W]\n"
     "      [--flyout <tool>] (the Tools panel, taking more columns or rows\n"
     "      where it is too short or narrow, a slot's flyout beside it).\n"
+    "\n"
+    "  capture-window <file|-> --out <png> [--script <jsfl>] [--size WxH]\n"
+    "                 [--show <panel>] [--panel <name>] [--menu <path>]\n"
+    "                 [--action <path>] [--crop x,y,w,h] [--theme <name>]\n"
+    "      Draws the window with the file open, unseen, with default\n"
+    "      settings, after the script has set it up (selected something,\n"
+    "      gone to a frame), for the guide's pictures. --show opens a panel\n"
+    "      by its object name; --panel draws one panel or widget rather than\n"
+    "      the window, --menu one menu (\"Modify>Bitmap\"), --action the dialog\n"
+    "      a menu item opens. Nothing is saved.\n"
     "\n"
     "  run-script <script.jsfl|script.py> [document ...] [--timeout SECONDS]\n"
     "             [--no-native-extensions]\n"
@@ -1262,11 +1276,203 @@ int captureDialog(const QStringList& args)
     return 0;
 }
 
+/// Lets queued work (layout, repaints, timers a panel starts) run for
+/// \a ms milliseconds.
+void settle(int ms)
+{
+    QElapsedTimer timer;
+    timer.start();
+    while (timer.elapsed() < ms)
+        QApplication::processEvents(QEventLoop::AllEvents, 20);
+}
+
+/// The menu bar's action at \a path ("Modify>Bitmap>Trace Bitmap..."),
+/// matched without "&" or a trailing "...".
+QAction* menuAction(QMainWindow& window, const QString& path)
+{
+    const auto plain = [](QString text) {
+        text.remove('&');
+        if (text.endsWith("..."))
+            text.chop(3);
+        return text.trimmed();
+    };
+    QList<QAction*> actions = window.menuBar()->actions();
+    QAction* found = nullptr;
+    for (const QString& part : path.split('>'))
+    {
+        found = nullptr;
+        for (QAction* action : actions)
+            if (!action->isSeparator() && plain(action->text()).compare(plain(part), Qt::CaseInsensitive) == 0)
+            {
+                found = action;
+                break;
+            }
+        if (!found)
+            return nullptr;
+        // A menu fills some of its items as it opens.
+        if (QMenu* menu = found->menu())
+        {
+            emit menu->aboutToShow();
+            actions = menu->actions();
+        }
+        else
+            actions.clear();
+    }
+    return found;
+}
+
+/// Keeps every window that opens (a dialog, a menu) off the screen while
+/// it is drawn, as the main window is.
+class Unseen : public QObject
+{
+public:
+    bool eventFilter(QObject* object, QEvent* event) override
+    {
+        if (event->type() == QEvent::Polish || event->type() == QEvent::PolishRequest)
+            if (QWidget* widget = qobject_cast<QWidget*>(object); widget && widget->isWindow())
+                widget->setAttribute(Qt::WA_DontShowOnScreen);
+        return false;
+    }
+};
+
+/// capture-window <file> --out <png> [--script <jsfl>] [--size WxH]
+/// [--show <dock>]... [--panel <name>] [--menu <path>] [--action <path>]
+/// [--crop x,y,w,h] [--theme <name>]: the main window with the file open,
+/// never on the screen, after a script has set it up (selected something,
+/// moved to a frame), for the guide's pictures. --panel draws one widget
+/// (a dock or any widget by object name), --menu one menu as it drops
+/// down, --action the dialog a menu item opens (closed again after).
+int captureWindow(const QStringList& args)
+{
+    const QString out = option(args, "--out");
+    if (args.isEmpty() || out.isEmpty())
+    {
+        std::fprintf(stderr, "capture-window: <file> --out <png> [--script <jsfl>] [--size WxH] [--show <dock>] "
+                             "[--panel <name>] [--menu <path>] [--action <path>] [--crop x,y,w,h]\n");
+        return 1;
+    }
+    const QString theme = option(args, "--theme");
+    theme::preview(theme::load(theme.isEmpty() ? QString("Dark") : theme));
+    Unseen unseen;
+    qApp->installEventFilter(&unseen);
+    MainWindow window(QString(), nullptr, false);
+    QSize size(1800, 1100);
+    const QStringList wh = option(args, "--size").split('x');
+    if (wh.size() == 2 && wh.at(0).toInt() > 0 && wh.at(1).toInt() > 0)
+        size = QSize(wh.at(0).toInt(), wh.at(1).toInt());
+    window.resize(size);
+    // Laid out and drawn as if shown, but never on the screen.
+    window.setAttribute(Qt::WA_DontShowOnScreen);
+    window.show();
+    settle(200);
+    if (args.at(0) != "-")
+        window.openDocumentPath(QFileInfo(args.at(0)).absoluteFilePath());
+    settle(500);
+    for (int i = 0; i + 1 < args.size(); ++i)
+        if (args.at(i) == "--show")
+        {
+            QDockWidget* dock = window.findChild<QDockWidget*>(args.at(i + 1));
+            if (!dock)
+            {
+                std::fprintf(stderr, "capture-window: no panel %s\n", qPrintable(args.at(i + 1)));
+                return 1;
+            }
+            dock->show();
+            dock->raise();
+        }
+    const QString script = option(args, "--script");
+    if (!script.isEmpty() && !window.scripts()->runFile(QFileInfo(script).absoluteFilePath()))
+    {
+        std::fprintf(stderr, "capture-window: %s failed\n", qPrintable(script));
+        return 1;
+    }
+    window.refreshAfterScript();
+    settle(500);
+
+    QPixmap picture;
+    const QString panel = option(args, "--panel");
+    const QString menuPath = option(args, "--menu");
+    const QString actionPath = option(args, "--action");
+    if (!actionPath.isEmpty())
+    {
+        QAction* action = menuAction(window, actionPath);
+        if (!action)
+        {
+            std::fprintf(stderr, "capture-window: no menu item %s\n", qPrintable(actionPath));
+            return 1;
+        }
+        // The dialog it opens is drawn once it is up, then closed.
+        QTimer::singleShot(600, [&picture]() {
+            QWidget* dialog = QApplication::activeModalWidget();
+            if (!dialog)
+                for (QWidget* top : QApplication::topLevelWidgets())
+                    if (top->isVisible() && qobject_cast<QDialog*>(top))
+                        dialog = top;
+            if (!dialog)
+                return;
+            picture = dialog->grab();
+            if (QDialog* asDialog = qobject_cast<QDialog*>(dialog))
+                asDialog->reject();
+            else
+                dialog->close();
+        });
+        action->trigger();
+        settle(800);
+        if (picture.isNull())
+        {
+            std::fprintf(stderr, "capture-window: %s opened no dialog\n", qPrintable(actionPath));
+            return 1;
+        }
+    }
+    else if (!menuPath.isEmpty())
+    {
+        QAction* action = menuAction(window, menuPath);
+        QMenu* menu = action ? action->menu() : nullptr;
+        if (!menu)
+        {
+            std::fprintf(stderr, "capture-window: no menu %s\n", qPrintable(menuPath));
+            return 1;
+        }
+        menu->ensurePolished();
+        menu->adjustSize();
+        picture = menu->grab();
+    }
+    else if (!panel.isEmpty())
+    {
+        QWidget* widget = window.findChild<QWidget*>(panel);
+        if (!widget)
+        {
+            std::fprintf(stderr, "capture-window: no panel %s\n", qPrintable(panel));
+            return 1;
+        }
+        picture = widget->grab();
+    }
+    else
+        picture = window.grab();
+    const QStringList crop = option(args, "--crop").split(',');
+    if (crop.size() == 4)
+    {
+        const double ratio = picture.devicePixelRatio();
+        const QRect area(QPoint(crop.at(0).toInt(), crop.at(1).toInt()) * ratio,
+            QSize(crop.at(2).toInt(), crop.at(3).toInt()) * ratio);
+        if (area.isValid())
+            picture = picture.copy(area);
+    }
+    if (!picture.save(out))
+    {
+        std::fprintf(stderr, "Could not write %s\n", qPrintable(out));
+        return 1;
+    }
+    std::printf("Drew %dx%d to %s\n", picture.width(), picture.height(), qPrintable(out));
+    // Nothing is saved: the document stays as it was on disk.
+    return 0;
+}
+
 } // namespace
 
 bool isCommand(const QString& name)
 {
-    return name == "capture-dialog" || name == "play" || name == "display-check" || name == "benchmark" || name == "render" || name == "run-script" || name == "doctor" || name == "diff" || name == "batch" || name == "shots" || name == "links" || name == "shortcuts" || name == "lessons" || name == "help" ||
+    return name == "capture-dialog" || name == "capture-window" || name == "play" || name == "display-check" || name == "benchmark" || name == "render" || name == "run-script" || name == "doctor" || name == "diff" || name == "batch" || name == "shots" || name == "links" || name == "shortcuts" || name == "lessons" || name == "help" ||
            name == "--help";
 }
 
@@ -1392,6 +1598,8 @@ int run(const QStringList& arguments)
         return batch(args);
     if (name == "shots")
         return splitShots(args);
+    if (name == "capture-window")
+        return captureWindow(args);
     if (name == "capture-dialog")
         return captureDialog(args);
     if (name == "links")
