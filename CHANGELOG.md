@@ -2,6 +2,13 @@
 
 What changed in each release of Phoenix, newest first.
 
+## Unreleased
+
+- Clicking a fill or stroke swatch (toolbox or Properties) opens a swatch pop-up: the document's colors, a row of gradients, recent colors, hex and alpha fields, No Color and the full color picker
+- Pick a gradient from the pop-up to fill the selected shape with it, fitted to the shape, or to draw new shapes with it
+- A shape's gradient fill or stroke now shows in its swatch on the Properties panel, and a gradient swatch can be picked for a shape's stroke
+- Gradient swatches saved in an FLA show in the pop-up; documents without any get white to black, color and ramp gradients
+
 ## 0.21.0
 
 - First-use hints are off until you turn them on with Help > Show Hints

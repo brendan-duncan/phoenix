@@ -17,7 +17,7 @@
 <meta property="og:image:alt" content="The Phoenix window with three flower characters on the stage, the timeline below and the Properties panel on the right">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:image" content="https://phoenixanimate.com/assets/shots/hero.webp">
-<meta name="keywords" content="color panel fill stroke solid linear radial gradient stops add move remove flow overflow extend reflect repeat linear rgb bitmap fill tiled clipped gradient transform tool handles focal point skew rotate lock fill swatches default palette web 216 sort import export act gpl alpha transparency hex hsb rgb channels black and white swap colors no color stroke style dashed dotted ragged stipple hatched hairline cap join miter limit scale hinting width profile taper swell pinch eyedropper ink bottle paint bucket gap size tagged swatch find replace color color wheel hsv triangle hue recent colors color history pop-up palette popup favorite tools">
+<meta name="keywords" content="color panel fill stroke solid linear radial gradient stops add move remove flow overflow extend reflect repeat linear rgb bitmap fill tiled clipped gradient transform tool handles focal point skew rotate lock fill swatches default palette web 216 sort import export act gpl alpha transparency hex hsb rgb channels black and white swap colors no color stroke style dashed dotted ragged stipple hatched hairline cap join miter limit scale hinting width profile taper swell pinch eyedropper ink bottle paint bucket gap size swatch pop-up gradient swatches tagged swatch find replace color color wheel hsv triangle hue recent colors color history pop-up palette popup favorite tools">
 <link rel="icon" href="assets/img/logo.png">
 <link rel="stylesheet" href="assets/site.css">
 <script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
@@ -33,17 +33,17 @@
 
 <h2>Picking colors</h2>
 
-<p>The quickest way to set colors is the pair of overlapping swatches after the tools in the toolbox: the fill, a solid square, at the top left, and the stroke, a square ring, at the bottom right. Click either one to bring it to the front and open a color picker, where you can also set transparency (alpha). The color picker can also take a color from anywhere on your screen.</p>
+<p>The quickest way to set colors is the pair of overlapping swatches after the tools in the toolbox: the fill, a solid square, at the top left, and the stroke, a square ring, at the bottom right. Click either one to bring it to the front and open the <a href="#the-swatch-pop-up">swatch pop-up</a> under it: the document's colors and gradients, with alpha, No Color and the full color picker.</p>
 
 <dl class="defs">
   <dt>Black and white</dt><dd>The small button beside the swatches sets a black stroke and a white fill, turns both on, and makes the fill a solid color again.</dd>
   <dt>Swap colors</dt><dd>The other button swaps the stroke and fill colors. Whether each is on swaps too: with only the fill on, only the stroke is on after a swap.</dd>
-  <dt>No color</dt><dd>A red line across a swatch means no fill or no stroke. To draw without one, uncheck <strong>Fill</strong> or <strong>Stroke</strong> on the Tool tab, or choose <strong>None</strong> in the <a href="#the-color-panel">Color panel</a> for the fill.</dd>
+  <dt>No color</dt><dd>A red line across a swatch means no fill or no stroke. To draw without one, uncheck <strong>Fill</strong> or <strong>Stroke</strong> on the Tool tab, click <strong>No color</strong> in the swatch pop-up, or choose <strong>None</strong> in the <a href="#the-color-panel">Color panel</a> for the fill.</dd>
 </dl>
 
 <p>These buttons have no keys by default; there is no command for them in Keyboard Shortcuts.</p>
 
-<p>The Tool tab shows the same two colors under <strong>Color and Style</strong>, each with a checkbox to turn it off. To change the colors of artwork that is already drawn, select it with the Selection tool and use the swatches on the Object tab, where the fill also has an alpha percentage. A shape filled with a gradient or bitmap shows <strong>Edit...</strong> there, which opens its fill in the Color panel; change it and click <strong>Apply to Selection</strong> to put it back.</p>
+<p>The Tool tab shows the same two colors under <strong>Color and Style</strong>, each with a checkbox to turn it off. To change the colors of artwork that is already drawn, select it with the Selection tool and use the swatches on the Object tab, which open the same pop-up, gradients included; a solid fill also has an alpha percentage. A gradient or bitmap fill shows in its swatch, and <strong>Edit...</strong> beside it which opens its fill in the Color panel; change it and click <strong>Apply to Selection</strong> to put it back.</p>
 
 <p>Picking a color with the toolbox swatches or the Swatches panel also recolors the selected shapes: a fill color fills them, a stroke color recolors their strokes.</p>
 
@@ -133,6 +133,25 @@
 
 <p><strong>Recent colors</strong>, under the wheel, are the colors you have drawn with lately, newest first. Click one to use it again, for the fill or the stroke as the buttons above say. The list keeps the last sixteen and is remembered the next time you start Phoenix. The same colors are in the pop-up palette.</p>
 
+<h2 id="the-swatch-pop-up">The swatch pop-up</h2>
+
+<p>Clicking a fill or stroke swatch, in the toolbox or under <strong>Color and Style</strong> on the Properties panel, opens the swatch pop-up just under it.</p>
+
+<figure class="narrow">
+  <img src="assets/shots/swatch-popup.webp" alt="The swatch pop-up: a color chip, hex and alpha fields and a color wheel button along the top, a grid of color swatches, and a row of gradient swatches at the bottom" width="200" height="351">
+</figure>
+
+<ul>
+  <li><strong>Colors:</strong> the document's swatches, the same ones as the <a href="#swatches">Swatches panel</a>, or the default palette when the document has none. Click one to use it.</li>
+  <li><strong>Gradients:</strong> the row under the colors. Click one to fill with that gradient. On a selected shape, every fill (or stroke) takes it, fitted to the art it covers, as one step you can undo. From the toolbox or the Tool tab, it becomes the fill for new art, and the Color panel shows it. A document saved with gradient swatches shows its own; otherwise you get white to black (linear and radial), white to red, green and blue, two color ramps and a soft gray. The toolbox stroke and the Tool tab's stroke draw new lines in one color, so their pop-ups have no gradients.</li>
+  <li><strong>Recent colors</strong> are the last row, when you have some.</li>
+  <li><strong>Hex and alpha:</strong> the fields show the color under the pointer as you move over the swatches. Type a hex color and press <kbd>Enter</kbd> to use it. The alpha percentage goes with the color you pick, so you can set it first.</li>
+  <li><strong>No color</strong> (the white square with a red line) turns the fill or stroke off. On a selected shape it takes the fills or strokes away, so it is there only when the shape has the other one.</li>
+  <li><strong>The color wheel button</strong> opens the full color picker, which can also take a color from anywhere on your screen.</li>
+</ul>
+
+<p>The pop-up closes when you pick something, click outside it, or press <kbd>Esc</kbd>. To change a gradient's colors or add stops, use the <a href="#the-color-panel">Color panel</a>.</p>
+
 <h2 id="the-pop-up-palette">The pop-up palette</h2>
 
 <p>The pop-up palette puts your favorite tools and colors right where you are drawing, so you do not have to reach for the panels.</p>
@@ -184,7 +203,7 @@
   <img src="assets/shots/swatches-panel.webp" alt="The Swatches panel showing a grid of color swatches" width="391" height="255">
 </figure>
 
-<p>The Swatches panel (<span class="menu-path">Window &rsaquo; Swatches</span>, <kbd>Ctrl</kbd>+<kbd>F9</kbd>) shows the document's saved colors. Hover over a swatch to see its hex value, and its alpha if it is partly clear. Click a swatch to make it the fill color, or the stroke color when the panel's <strong>Stroke</strong> option is checked. <strong>Add Swatch</strong> saves the current fill color. Right-click a swatch to duplicate or delete it. Swatches are saved with the document, including FLA files. They hold solid colors; gradients are not kept as swatches.</p>
+<p>The Swatches panel (<span class="menu-path">Window &rsaquo; Swatches</span>, <kbd>Ctrl</kbd>+<kbd>F9</kbd>) shows the document's saved colors. Hover over a swatch to see its hex value, and its alpha if it is partly clear. Click a swatch to make it the fill color, or the stroke color when the panel's <strong>Stroke</strong> option is checked. <strong>Add Swatch</strong> saves the current fill color. Right-click a swatch to duplicate or delete it. Swatches are saved with the document, including FLA files. The panel holds solid colors. Gradient swatches saved in an FLA are kept with it and show in the <a href="#the-swatch-pop-up">swatch pop-up</a>.</p>
 
 <p>The <strong>&#9776;</strong> menu beside Add Swatch has the rest:</p>
 
