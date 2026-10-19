@@ -74,6 +74,7 @@ set(PHOENIX_CORE_SOURCES
     edit/find_replace.cpp
     edit/frame_actions.cpp
     edit/frame_bake.cpp
+    edit/inbetween.cpp
     edit/frame_commands.cpp
     edit/frame_sound.cpp
     edit/function_curves.cpp

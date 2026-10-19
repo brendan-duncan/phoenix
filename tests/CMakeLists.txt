@@ -36,6 +36,7 @@ set(TEST_SOURCES
     test_shape_merge.cpp
     test_shape_transform.cpp
     test_shape_tween.cpp
+    test_inbetween.cpp
     test_frame_commands.cpp
     test_layer_commands.cpp
     test_timeline_edit.cpp

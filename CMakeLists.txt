@@ -344,6 +344,7 @@ set(HEADERS
     src/edit/library_media.h
     src/edit/frame_sound.h
     src/edit/frame_bake.h
+    src/edit/inbetween.h
     src/edit/shot_breakdown.h
     src/edit/linked_assets.h
     src/edit/review_notes.h
@@ -516,6 +517,7 @@ set(SOURCES
     src/gui/tutorial_runner.cpp
     src/gui/script_api.cpp
     src/gui/script_runner.cpp
+    src/gui/main_window_inbetween.cpp
     src/gui/output_panel.cpp
     src/gui/xul_dialog.cpp
     src/gui/mcp_server.cpp

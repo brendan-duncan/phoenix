@@ -516,6 +516,13 @@ private slots:
     /// Modify > Timeline > Convert to Frame-by-Frame Animation and Reverse
     /// Frames.
     void convertToFrameByFrame();
+    /// Modify > Timeline > Insert Inbetween (a drawing \a t of the way
+    /// between the keys around the selection) and Fill Inbetweens (every
+    /// frame between, spaced as fla::inbetween::Spacing \a spacing), with
+    /// their menus (main_window_inbetween.cpp).
+    void insertInbetween(double t);
+    void fillInbetweens(int spacing);
+    void addInbetweenMenus(QMenu* timelineMenu, QMenu* framesMenu);
     /// Bake to Keyframes: the selected frames' behaviors left as keyframes
     /// (Modify > Timeline), or the whole runs of the selected instances
     /// (the Behaviors panel).

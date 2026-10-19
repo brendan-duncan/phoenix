@@ -7451,6 +7451,7 @@ void MainWindow::setupMenus()
     QAction* splitAudioAction = modifyTimelineMenu->addAction("Split &Audio");
     splitAudioAction->setStatusTip("Cut the stream sound on the current layer at the playhead into two keyframes");
     connect(splitAudioAction, &QAction::triggered, this, &MainWindow::splitAudio);
+    addInbetweenMenus(modifyTimelineMenu, _framesMenu);
 
     // Modify > Shape.
     QMenu* shapeMenu = modifyMenu->addMenu("S&hape");
