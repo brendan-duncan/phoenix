@@ -1,5 +1,7 @@
 #include "swatches_panel.h"
 
+#include "swatch_popup.h"
+
 #include "../data/document.h"
 #include "../data/fla_document.h"
 #include "../edit/palettes.h"
@@ -26,6 +28,15 @@ namespace {
 
 constexpr int kCell = 14;
 
+/// \a gradients as swatch list items, one after another.
+std::string itemsOf(const std::vector<fla::swatches::Gradient>& gradients)
+{
+    std::string items;
+    for (const fla::swatches::Gradient& gradient : gradients)
+        items += fla::swatches::itemOf(gradient);
+    return items;
+}
+
 } // namespace
 
 /// The swatches as a grid of small squares, as many to a row as fit.
@@ -42,6 +53,17 @@ public:
     {
         _colors = colors;
         _tags = tags;
+        updateGeometry();
+        relayout();
+        update();
+    }
+
+    /// Shows gradient swatches instead of colors.
+    void setGradients(const std::vector<fla::swatches::Gradient>& gradients)
+    {
+        _gradients = gradients;
+        _colors.assign(gradients.size(), fla::swatches::Color{0, 0, 0, 255});
+        _tags.clear();
         updateGeometry();
         relayout();
         update();
@@ -71,6 +93,13 @@ protected:
             const int y = static_cast<int>(i) / columns * kCell;
             const auto& c = _colors[i];
             const QRect cell(x, y, kCell, kCell);
+            if (i < _gradients.size())
+            {
+                painter.fillRect(cell, brushOf(_gradients[i]));
+                painter.setPen(QColor(30, 30, 30));
+                painter.drawRect(cell.adjusted(0, 0, -1, -1));
+                continue;
+            }
             if (c[3] < 255)
             {
                 painter.fillRect(cell, Qt::white);
@@ -105,7 +134,14 @@ protected:
         if (at != _hover)
         {
             _hover = at;
-            if (at >= 0)
+            if (at >= 0 && at < static_cast<int>(_gradients.size()))
+            {
+                const fla::swatches::Gradient& gradient = _gradients[static_cast<size_t>(at)];
+                setToolTip(QString("%1 gradient, %2 colors")
+                               .arg(gradient.radial ? "Radial" : "Linear")
+                               .arg(gradient.stops.size()));
+            }
+            else if (at >= 0)
             {
                 const auto& c = _colors[static_cast<size_t>(at)];
                 const QString tag = at < static_cast<int>(_tags.size()) && !_tags[static_cast<size_t>(at)].empty()
@@ -151,6 +187,7 @@ private:
     }
 
     std::vector<fla::swatches::Color> _colors;
+    std::vector<fla::swatches::Gradient> _gradients;
     std::vector<std::string> _tags;
     int _hover = -1;
 };
@@ -158,11 +195,33 @@ private:
 SwatchesPanel::SwatchesPanel(QWidget* parent)
     : QWidget(parent)
 {
-    _grid = new Grid(this);
+    // The colors, and the gradients in their own rows below them.
+    QWidget* swatches = new QWidget(this);
+    _grid = new Grid(swatches);
+    _gradientGrid = new Grid(swatches);
+    _gradientGrid->setObjectName("swatchesGradients");
+    QVBoxLayout* rows = new QVBoxLayout(swatches);
+    rows->setContentsMargins(0, 0, 0, 0);
+    rows->setSpacing(6);
+    rows->addWidget(_grid);
+    rows->addWidget(_gradientGrid);
+    rows->addStretch(1);
     QScrollArea* scroll = new QScrollArea(this);
-    scroll->setWidget(_grid);
+    scroll->setWidget(swatches);
     scroll->setWidgetResizable(true);
     scroll->setFrameShape(QFrame::NoFrame);
+
+    _gradientGrid->clicked = [this](int index) {
+        if (index >= 0 && index < static_cast<int>(_gradients.size()))
+            emit gradientPicked(_gradients[static_cast<size_t>(index)], _stroke->isChecked());
+    };
+    _gradientGrid->rightClicked = [this](int index, const QPoint& where) {
+        // The default gradients become the document's own when one goes.
+        QMenu menu(this);
+        QAction* remove = menu.addAction("Delete Swatch");
+        if (menu.exec(where) == remove)
+            emit gradientRemoveRequested(index);
+    };
 
     _grid->clicked = [this](int index) {
         if (index < 0 || index >= static_cast<int>(_shown.size()))
@@ -200,7 +259,7 @@ SwatchesPanel::SwatchesPanel(QWidget* parent)
     _stroke = new QCheckBox("Stroke", this);
     _stroke->setToolTip("A click sets the stroke color instead of the fill color");
     QPushButton* add = new QPushButton("Add Swatch", this);
-    add->setToolTip("Keep the fill color among the document's swatches");
+    add->setToolTip("Keep the fill, a color or a gradient, among the document's swatches");
     connect(add, &QPushButton::clicked, this, &SwatchesPanel::addRequested);
 
     QPushButton* more = new QPushButton(QString::fromUtf8("\u2630"), this);
@@ -232,7 +291,7 @@ void SwatchesPanel::refreshIfStale()
 {
     const fla::Document* doc = _document ? _document->document : nullptr;
     const std::vector<fla::swatches::Color> own = doc ? fla::swatches::of(*doc) : std::vector<fla::swatches::Color>();
-    if ((_ownColors && own != _shown) || (!_ownColors && !own.empty()))
+    if ((_ownColors && own != _shown) || (!_ownColors && !own.empty()) || itemsOf(fla::swatches::shownGradients(doc)) != _gradientItems)
     {
         rebuild();
         return;
@@ -271,6 +330,9 @@ void SwatchesPanel::rebuild()
                         _tags[i] = color.name;
     }
     _grid->setColors(_shown, _tags);
+    _gradients = fla::swatches::shownGradients(doc);
+    _gradientItems = itemsOf(_gradients);
+    _gradientGrid->setGradients(_gradients);
 }
 
 namespace {

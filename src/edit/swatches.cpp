@@ -6,6 +6,7 @@
 #include "../data/stroke_style.h"
 #include "../data/swatch.h"
 #include "../data/swatch_list.h"
+#include "color_art.h"
 
 #include <algorithm>
 #include <cmath>
@@ -84,6 +85,14 @@ std::vector<Color> colorsIn(const std::string& xml)
     return colors;
 }
 
+/// Whether a section the document keeps as read is its extended swatch
+/// lists.
+bool isExtendedSection(const std::string& xml)
+{
+    const size_t first = xml.find_first_not_of(" \t\r\n");
+    return first != std::string::npos && xml.compare(first, 20, "<extendedSwatchLists") == 0;
+}
+
 } // namespace
 
 std::vector<Color> defaults()
@@ -112,6 +121,13 @@ std::vector<Color> of(const Document& document)
 State stateOf(const Document& document)
 {
     State state;
+    for (const Document::RawSection& section : document.extraSections)
+        if (isExtendedSection(section.xml))
+        {
+            state.extended = true;
+            state.extendedXml = section.xml;
+            break;
+        }
     if (document.swatchLists.empty() || !document.swatchLists.front())
         return state;
     state.exists = true;
@@ -327,9 +343,21 @@ std::vector<Gradient> defaultGradients()
     };
 }
 
-std::vector<Gradient> gradientsIn(const std::string& xml)
+namespace {
+
+/// A gradient swatch in swatch list text: where its item starts and ends.
+struct GradientItem
 {
-    std::vector<Gradient> gradients;
+    size_t start = 0;
+    size_t end = 0;
+    Gradient gradient;
+};
+
+/// The gradient swatches of \a xml with their places, those with fewer
+/// than two stops passed over.
+std::vector<GradientItem> gradientItems(const std::string& xml)
+{
+    std::vector<GradientItem> items;
     size_t at = 0;
     while (true)
     {
@@ -345,11 +373,13 @@ std::vector<Gradient> gradientsIn(const std::string& xml)
         const std::string head = xml.substr(start, open + 1 - start);
         // Its stops run to the closing tag; <...SwatchItem/> has none.
         size_t end = open + 1;
+        size_t itemEnd = open + 1;
         if (xml[open - 1] != '/')
         {
-            const char* close = isRadial ? "</RadialGradientSwatchItem>" : "</LinearGradientSwatchItem>";
+            const std::string close = isRadial ? "</RadialGradientSwatchItem>" : "</LinearGradientSwatchItem>";
             const size_t closing = xml.find(close, open);
             end = closing == std::string::npos ? xml.size() : closing;
+            itemEnd = closing == std::string::npos ? xml.size() : closing + close.size();
         }
         Gradient gradient;
         gradient.radial = isRadial;
@@ -372,26 +402,153 @@ std::vector<Gradient> gradientsIn(const std::string& xml)
             entry = tagEnd + 1;
         }
         if (gradient.stops.size() >= 2)
-            gradients.push_back(gradient);
+            items.push_back({start, itemEnd, gradient});
         at = end;
     }
+    return items;
+}
+
+/// \a items put in at the end of the first swatches of \a xml; false when
+/// it has none.
+bool insertItems(std::string& xml, const std::string& items)
+{
+    size_t close = xml.find("</swatches>");
+    if (close == std::string::npos)
+    {
+        // A list with no swatches yet may be written <swatches/>.
+        const size_t empty = xml.find("<swatches/>");
+        if (empty == std::string::npos)
+            return false;
+        xml.replace(empty, 11, "<swatches></swatches>");
+        close = xml.find("</swatches>");
+    }
+    xml.insert(close, items);
+    return true;
+}
+
+/// \a state with the default gradients its own, in its extended swatch
+/// lists, when it has no gradients of its own.
+State withOwnGradients(const State& state)
+{
+    if (!gradientsOf(state).empty())
+        return state;
+    State after = state;
+    if (!after.extended || after.extendedXml.empty())
+    {
+        after.extended = true;
+        after.extendedXml = "<extendedSwatchLists><swatchList><swatchListInfo name=\"Default Swatches\"/>"
+                            "<swatches></swatches></swatchList></extendedSwatchLists>";
+    }
+    std::string items;
+    for (const Gradient& gradient : defaultGradients())
+        items += itemOf(gradient);
+    return insertItems(after.extendedXml, items) ? after : state;
+}
+
+} // namespace
+
+std::vector<Gradient> gradientsIn(const std::string& xml)
+{
+    std::vector<Gradient> gradients;
+    for (const GradientItem& item : gradientItems(xml))
+        gradients.push_back(item.gradient);
     return gradients;
 }
 
 std::vector<Gradient> gradientsOf(const Document& document)
 {
+    return gradientsOf(stateOf(document));
+}
+
+std::vector<Gradient> gradientsOf(const State& state)
+{
     std::vector<Gradient> gradients;
-    if (!document.swatchLists.empty() && document.swatchLists.front())
-        gradients = gradientsIn(document.swatchLists.front()->xml);
-    for (const Document::RawSection& section : document.extraSections)
-    {
-        const size_t first = section.xml.find_first_not_of(" \t\r\n");
-        if (first == std::string::npos || section.xml.compare(first, 20, "<extendedSwatchLists") != 0)
-            continue;
-        for (const Gradient& gradient : gradientsIn(section.xml))
+    if (state.exists)
+        gradients = gradientsIn(state.xml);
+    if (state.extended)
+        for (const Gradient& gradient : gradientsIn(state.extendedXml))
             gradients.push_back(gradient);
-    }
     return gradients;
+}
+
+std::vector<Color> shownColors(const Document* document)
+{
+    std::vector<Color> colors = document ? of(*document) : std::vector<Color>();
+    return colors.empty() ? defaults() : colors;
+}
+
+std::vector<Gradient> shownGradients(const Document* document)
+{
+    std::vector<Gradient> gradients = document ? gradientsOf(*document) : std::vector<Gradient>();
+    return gradients.empty() ? defaultGradients() : gradients;
+}
+
+std::string itemOf(const Gradient& gradient)
+{
+    const char* name = gradient.radial ? "RadialGradientSwatchItem" : "LinearGradientSwatchItem";
+    std::string item = std::string("<") + name;
+    if (!gradient.spread.empty() && gradient.spread != "pad")
+        item += " spreadMethod=\"" + gradient.spread + "\"";
+    if (gradient.linearRGB)
+        item += " interpolationMethod=\"linearRGB\"";
+    item += ">";
+    char buffer[64];
+    for (const DrawingStyle::Stop& stop : gradient.stops)
+    {
+        // As the reference app writes them: black needs no color, and an
+        // opaque stop no alpha.
+        item += "<GradientEntry";
+        if (stop.color[0] || stop.color[1] || stop.color[2])
+        {
+            std::snprintf(buffer, sizeof(buffer), " color=\"#%02X%02X%02X\"", stop.color[0], stop.color[1], stop.color[2]);
+            item += buffer;
+        }
+        if (stop.color[3] != 255)
+        {
+            std::snprintf(buffer, sizeof(buffer), " alpha=\"%.15g\"", stop.color[3] / 255.0);
+            item += buffer;
+        }
+        std::snprintf(buffer, sizeof(buffer), " ratio=\"%.15g\"/>", std::max(0.0, std::min(1.0, stop.ratio)));
+        item += buffer;
+    }
+    return item + "</" + name + ">";
+}
+
+State withGradientAdded(const State& state, const Gradient& gradient)
+{
+    if (gradient.stops.size() < 2)
+        return state;
+    State after = withOwnGradients(state);
+    if (!after.extended || after.extendedXml.empty())
+    {
+        after.extended = true;
+        after.extendedXml = "<extendedSwatchLists><swatchList><swatchListInfo name=\"Default Swatches\"/>"
+                            "<swatches></swatches></swatchList></extendedSwatchLists>";
+    }
+    return insertItems(after.extendedXml, itemOf(gradient)) ? after : state;
+}
+
+State withGradientRemoved(const State& state, size_t index)
+{
+    State after = withOwnGradients(state);
+    // Those in the swatch list come first, then the extended lists'.
+    if (after.exists)
+    {
+        const std::vector<GradientItem> items = gradientItems(after.xml);
+        if (index < items.size())
+        {
+            after.xml.erase(items[index].start, items[index].end - items[index].start);
+            return after;
+        }
+        index -= items.size();
+    }
+    if (!after.extended)
+        return state;
+    const std::vector<GradientItem> items = gradientItems(after.extendedXml);
+    if (index >= items.size())
+        return state;
+    after.extendedXml.erase(items[index].start, items[index].end - items[index].start);
+    return after;
 }
 
 void useGradient(DrawingStyle& style, const Gradient& gradient)
@@ -474,6 +631,17 @@ void paintStrokes(Shape& shape, const Color& color)
     }
 }
 
+Shape* withoutPart(const Shape& shape, bool strokes)
+{
+    Shape* after = strokes ? colorart::fillsOnly(shape) : colorart::strokesOnly(shape);
+    if (after && after->edges.empty())
+    {
+        delete after;
+        return nullptr;
+    }
+    return after;
+}
+
 } // namespace swatches
 
 SetSwatchesCommand::SetSwatchesCommand(Document* document, swatches::State before, swatches::State after,
@@ -499,6 +667,16 @@ void SetSwatchesCommand::apply(const swatches::State& state)
 {
     if (!_document)
         return;
+    // The extended swatch lists, where the gradients are.
+    std::vector<Document::RawSection>& sections = _document->extraSections;
+    const auto section = std::find_if(sections.begin(), sections.end(),
+        [](const Document::RawSection& raw) { return swatches::isExtendedSection(raw.xml); });
+    if (state.extended && section != sections.end())
+        section->xml = state.extendedXml;
+    else if (state.extended)
+        sections.push_back({state.extendedXml, false});
+    else if (section != sections.end())
+        sections.erase(section);
     std::vector<SwatchList*>& lists = _document->swatchLists;
     if (!state.exists)
     {

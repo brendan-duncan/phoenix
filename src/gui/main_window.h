@@ -37,6 +37,7 @@
 #include "../edit/edit_context.h"
 #include "../edit/selection.h"
 #include "../edit/drawing_style.h"
+#include "../edit/swatches.h"
 #include "../edit/snapping.h"
 
 #include <map>
@@ -1143,6 +1144,15 @@ private:
     /// A color picked for drawing goes onto the selected shapes too: their
     /// fills, or their strokes.
     void recolorSelection(bool stroke);
+    /// A gradient swatch picked: new art and the selected shapes' fills
+    /// take it.
+    void useGradientSwatch(const fla::swatches::Gradient& gradient);
+    /// The selected shapes' strokes take \a gradient as one undo step;
+    /// false when no shape is selected.
+    bool paintSelectedStrokes(const fla::swatches::Gradient& gradient);
+    /// No Color for the fill (or stroke) takes it off the selected shapes,
+    /// keeping it on any that would be left with neither.
+    void removeFromSelection(bool stroke);
 
     /// Shows the selected graphic instance's frames in the Frame Picker.
     void updateFramePicker();

@@ -6,10 +6,13 @@
 #include <QBrush>
 #include <QColor>
 #include <QIcon>
+#include <QPointer>
 #include <QWidget>
 
+#include <memory>
 #include <vector>
 
+class PhoenixView;
 class QLineEdit;
 class QSpinBox;
 class QToolButton;
@@ -17,6 +20,8 @@ class QToolButton;
 namespace fla {
 class Document;
 class FillStyle;
+class SetShapeContentsCommand;
+class Shape;
 }
 
 /// A gradient swatch, or a fill, as a brush to draw a swatch with: the
@@ -51,6 +56,7 @@ public:
     };
 
     explicit SwatchPopup(QWidget* parent);
+    ~SwatchPopup() override;
 
     /// Opens a pop-up under \a anchor, showing \a current, with the
     /// swatches of \a document (null for the defaults).
@@ -63,6 +69,12 @@ public:
     /// The current fill shown in the chip when it is not a solid color.
     void setCurrentBrush(const QBrush& brush);
     void popupUnder(QWidget* anchor);
+
+    /// Shows the swatch under the pointer on \a shapes in \a view, on their
+    /// fills or with \a strokes their strokes, without an undo step. Moving
+    /// off the swatches or closing puts them back; a pick puts them back
+    /// before it is applied, so it is one undo step from how they were.
+    void previewOn(PhoenixView* view, const std::vector<fla::Shape*>& shapes, bool strokes);
 
     /// The pop-up's swatches, for the grid that draws them.
     struct Item
@@ -85,6 +97,7 @@ signals:
     void nonePicked();
 
 protected:
+    void hideEvent(QHideEvent* event) override;
     void keyPressEvent(QKeyEvent* event) override;
     void paintEvent(QPaintEvent* event) override;
 
@@ -95,6 +108,8 @@ private:
     /// Shows \a item in the chip and fields while the pointer is on it;
     /// null goes back to the current color.
     void preview(const Item* item);
+    /// The shapes previewed showing \a item, or as they were for null.
+    void previewShapes(const Item* item);
     void pick(const Item& item);
     void pickTyped();
     void openPicker();
@@ -110,4 +125,9 @@ private:
     QColor _current;
     QBrush _currentBrush;
     bool _offersGradients = false;
+    QPointer<PhoenixView> _view;
+    std::vector<fla::Shape*> _previewShapes;
+    bool _previewStrokes = false;
+    /// The previews showing, each undone to put its shape back.
+    std::vector<std::unique_ptr<fla::SetShapeContentsCommand>> _previews;
 };

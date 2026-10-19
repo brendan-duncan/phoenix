@@ -202,6 +202,18 @@ void answer(QWidget* dialog, const Answer& answer, QStringList& problems)
     problems << QString("the dialog has no %1 button").arg(answer.press);
 }
 
+/// The pop-up open, if one is: the active one, or one showing off the
+/// screen, which the application does not count as active.
+QWidget* openPopup()
+{
+    if (QWidget* popup = QApplication::activePopupWidget())
+        return popup;
+    for (QWidget* widget : QApplication::topLevelWidgets())
+        if (widget->isVisible() && widget->windowType() == Qt::Popup)
+            return widget;
+    return nullptr;
+}
+
 QDockWidget* dockNamed(MainWindow& window, const QString& name)
 {
     for (QDockWidget* dock : window.findChildren<QDockWidget*>())
@@ -232,6 +244,32 @@ bool runCaptureSteps(MainWindow& window, const QString& path, QString& error)
     watch.setInterval(100);
     QObject::connect(&watch, &QTimer::timeout, [&]() {
         QWidget* dialog = QApplication::activeModalWidget();
+        QWidget* popup = openPopup();
+        if (!dialog && popup && popup->objectName() == "swatchPopup" && pending.armed)
+        {
+            // A swatch pop-up waited for as a dialog is: drawn, then given
+            // the hex= color typed, or closed.
+            const Answer now = pending;
+            pending = Answer();
+            pump(50);
+            if (!now.picture.isEmpty())
+            {
+                if (popup->grab().save(now.picture))
+                    std::printf("Drew the pop-up to %s\n", qPrintable(now.picture));
+                else
+                    problems << QString("could not write %1").arg(now.picture);
+            }
+            QLineEdit* hex = popup->findChild<QLineEdit*>("swatchPopupHex");
+            for (const QString& value : now.values)
+                if (hex && value.startsWith("hex=", Qt::CaseInsensitive))
+                {
+                    hex->setText(value.mid(4));
+                    emit hex->returnPressed();
+                    return;
+                }
+            popup->close();
+            return;
+        }
         if (!dialog)
             return;
         if (pending.armed)
@@ -339,8 +377,29 @@ bool runCaptureSteps(MainWindow& window, const QString& path, QString& error)
             QKeyEvent press(QEvent::KeyPress, combination.key(), combination.keyboardModifiers(),
                 QKeySequence(combination.key()).toString().toLower());
             QKeyEvent release(QEvent::KeyRelease, combination.key(), combination.keyboardModifiers());
-            QApplication::sendEvent(view, &press);
-            QApplication::sendEvent(view, &release);
+            // An open pop-up takes the keys before the stage, as it would.
+            QWidget* to = openPopup() ? openPopup() : view;
+            QApplication::sendEvent(to, &press);
+            QApplication::sendEvent(to, &release);
+            pump(60);
+        }
+        else if (step == "hover")
+        {
+            // widget:<name>@x,y: the pointer over that point, no button down.
+            QString spec = first;
+            QPointF at(-1.0, -1.0);
+            if (const int sign = spec.indexOf('@'); sign > 0)
+            {
+                const QStringList xy = spec.mid(sign + 1).split(',');
+                if (xy.size() == 2)
+                    at = QPointF(xy.at(0).toDouble(), xy.at(1).toDouble());
+                spec.truncate(sign);
+            }
+            const TutorialTarget target = tutorials::resolve(window, spec, true);
+            if (!target.widget || at.x() < 0.0)
+                return fail(target.problem.isEmpty() ? QString("hover where?") : target.problem);
+            mouse(target.widget, QEvent::MouseMove, at, Qt::NoButton, Qt::NoButton, {});
+            pump(60);
         }
         else if (step == "menu")
         {

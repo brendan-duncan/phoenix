@@ -11,7 +11,9 @@
 #include "../src/edit/element_clone.h"
 #include "../src/edit/element_commands.h"
 #include "../src/edit/swatches.h"
+#include "../src/parser/document_parser.h"
 #include "../src/parser/path_parser.h"
+#include "../src/writer/xfl_writer.h"
 
 #include <algorithm>
 #include <cmath>
@@ -178,4 +180,122 @@ TEST(swatches_gradient_swatch_fills_a_shape_fitted_and_undoes_in_one_step)
     style.hasFill = false;
     fla::swatches::useGradient(style, radial);
     CHECK(style.hasFill && style.fillKind == fla::DrawingStyle::FillKind::Radial && style.gradient.size() == 2);
+}
+
+namespace {
+
+std::unique_ptr<fla::Document> parsed(const std::string& xml)
+{
+    DocumentParser parser(nullptr);
+    return std::unique_ptr<fla::Document>(parser.parse(xml, nullptr));
+}
+
+} // namespace
+
+TEST(swatches_gradient_swatches_add_delete_undo_and_round_trip)
+{
+    // A document with only solid swatches shows the default gradients.
+    const std::string source =
+        "<DOMDocument xmlns=\"http://ns.adobe.com/xfl/2008/\" width=\"550\" height=\"400\"><timelines/>"
+        "<swatchLists><swatchList><swatchListInfo name=\"Default Swatches\"/><swatches>"
+        "<SolidSwatchItem color=\"#FF0000\"/></swatches></swatchList></swatchLists></DOMDocument>";
+    std::unique_ptr<fla::Document> document = parsed(source);
+    CHECK(document != nullptr);
+    if (!document)
+        return;
+    CHECK(fla::swatches::gradientsOf(*document).empty());
+    CHECK(fla::swatches::shownGradients(document.get()).size() == 8);
+    fla::XFLWriter writer;
+    const std::string unchanged = writer.writeDocument(*document);
+
+    // A see-through, reflected radial gradient added: the defaults become
+    // the document's own ahead of it, in its extended swatch lists.
+    fla::swatches::Gradient added;
+    added.radial = true;
+    added.spread = "reflect";
+    added.linearRGB = true;
+    added.stops.resize(3);
+    added.stops[0].color[0] = 255;
+    added.stops[0].color[3] = 128;
+    added.stops[1].ratio = 0.25;
+    added.stops[1].color[1] = 255;
+    added.stops[2].ratio = 1.0;
+    fla::CommandStack stack;
+    const fla::swatches::State before = fla::swatches::stateOf(*document);
+    stack.push(fla::CommandPtr(new fla::SetSwatchesCommand(document.get(), before,
+        fla::swatches::withGradientAdded(before, added), "Add Swatch")));
+    std::vector<fla::swatches::Gradient> own = fla::swatches::gradientsOf(*document);
+    CHECK(own.size() == 9 && fla::swatches::of(*document).size() == 1);
+    CHECK(document->extraSections.size() == 1);
+
+    // Written and read back as it was added.
+    const std::string written = writer.writeDocument(*document);
+    CHECK(written.find("<extendedSwatchLists>") != std::string::npos);
+    std::unique_ptr<fla::Document> reread = parsed(written);
+    CHECK(reread != nullptr);
+    if (reread)
+    {
+        const std::vector<fla::swatches::Gradient> back = fla::swatches::gradientsOf(*reread);
+        CHECK(back.size() == 9);
+        if (back.size() == 9)
+        {
+            const fla::swatches::Gradient& last = back.back();
+            CHECK(last.radial && last.spread == "reflect" && last.linearRGB && last.stops.size() == 3);
+            CHECK(last.stops[0].color[0] == 255 && last.stops[0].color[3] == 128 && last.stops[1].ratio == 0.25);
+            CHECK(last.stops[1].color[1] == 255 && last.stops[2].color[0] == 0 && last.stops[2].color[3] == 255);
+            CHECK(!back[0].radial && back[0].stops[0].color[0] == 255);
+        }
+        CHECK(fla::swatches::of(*reread).size() == 1);
+    }
+
+    // The first deleted: the radial white to black leads.
+    const fla::swatches::State withNine = fla::swatches::stateOf(*document);
+    stack.push(fla::CommandPtr(new fla::SetSwatchesCommand(document.get(), withNine,
+        fla::swatches::withGradientRemoved(withNine, 0), "Delete Swatch")));
+    own = fla::swatches::gradientsOf(*document);
+    CHECK(own.size() == 8 && own[0].radial);
+    // A solid swatch edit leaves the gradients be.
+    const fla::swatches::State withEight = fla::swatches::stateOf(*document);
+    stack.push(fla::CommandPtr(new fla::SetSwatchesCommand(document.get(), withEight,
+        fla::swatches::withAdded(withEight, {0, 0, 255, 255}), "Add Swatch")));
+    CHECK(fla::swatches::gradientsOf(*document).size() == 8 && fla::swatches::of(*document).size() == 2);
+
+    // Each undone in turn, back to the file as read, written the same.
+    stack.undo();
+    CHECK(fla::swatches::gradientsOf(*document).size() == 8);
+    stack.undo();
+    CHECK(fla::swatches::gradientsOf(*document).size() == 9);
+    stack.undo();
+    CHECK(fla::swatches::gradientsOf(*document).empty() && document->extraSections.empty());
+    CHECK(writer.writeDocument(*document) == unchanged);
+
+    // Gradients in the swatch list itself come first when deleting.
+    fla::swatches::State mixed;
+    mixed.exists = true;
+    mixed.xml = "<swatchList><swatches>" + fla::swatches::itemOf(added) + "</swatches></swatchList>";
+    mixed = fla::swatches::withGradientAdded(mixed, fla::swatches::defaultGradients()[0]);
+    CHECK(fla::swatches::gradientsOf(mixed).size() == 2);
+    const fla::swatches::State gone = fla::swatches::withGradientRemoved(mixed, 0);
+    CHECK(fla::swatches::gradientsOf(gone).size() == 1 && !fla::swatches::gradientsOf(gone)[0].radial);
+    CHECK(fla::swatches::gradientsOf(fla::swatches::withGradientRemoved(mixed, 5)).size() == 2);
+}
+
+TEST(swatches_no_color_keeps_a_fill_or_a_stroke)
+{
+    // Fill and stroke: either can go, the other stays.
+    std::unique_ptr<fla::Shape> shape = redSquare();
+    std::unique_ptr<fla::Shape> strokeOnly(fla::swatches::withoutPart(*shape, false));
+    std::unique_ptr<fla::Shape> fillOnly(fla::swatches::withoutPart(*shape, true));
+    CHECK(strokeOnly && fillOnly);
+    if (!strokeOnly || !fillOnly)
+        return;
+    CHECK(!strokeOnly->edges.empty() && !fillOnly->edges.empty());
+    for (const fla::Edge* edge : strokeOnly->edges)
+        CHECK(edge->fillStyle0 <= 0 && edge->fillStyle1 <= 0 && edge->strokeStyle > 0);
+    for (const fla::Edge* edge : fillOnly->edges)
+        CHECK(edge->strokeStyle <= 0 && edge->fillStyle1 > 0);
+
+    // The last part is never taken: nothing comes back.
+    CHECK(fla::swatches::withoutPart(*strokeOnly, true) == nullptr);
+    CHECK(fla::swatches::withoutPart(*fillOnly, false) == nullptr);
 }

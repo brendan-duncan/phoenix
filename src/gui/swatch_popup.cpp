@@ -2,11 +2,16 @@
 
 #include "color_picker_widgets.h"
 
+#include "phoenix_view.h"
+
 #include "../data/document.h"
 #include "../data/fill_style.h"
 #include "../data/linear_gradient.h"
 #include "../data/radial_gradient.h"
+#include "../data/shape.h"
 #include "../data/solid_color.h"
+#include "../edit/element_commands.h"
+#include "../edit/shape_merge.h"
 
 #include <QColorDialog>
 #include <QCursor>
@@ -350,6 +355,8 @@ SwatchPopup::SwatchPopup(QWidget* parent)
     _none->setIcon(brushSwatchIcon(QBrush(), false));
     _none->setToolTip("No color");
     connect(_none, &QToolButton::clicked, this, [this]() {
+        previewShapes(nullptr);
+        _previewShapes.clear();
         emit nonePicked();
         close();
     });
@@ -402,11 +409,8 @@ void SwatchPopup::setDocument(const fla::Document* document)
 {
     // The document's own colors and gradients, or the defaults where it
     // has none.
-    std::vector<fla::swatches::Color> colors = document ? fla::swatches::of(*document) : std::vector<fla::swatches::Color>();
-    if (colors.empty())
-        colors = fla::swatches::defaults();
     std::vector<Item> items;
-    for (const fla::swatches::Color& color : colors)
+    for (const fla::swatches::Color& color : fla::swatches::shownColors(document))
     {
         Item item;
         item.color = QColor(color[0], color[1], color[2], color[3]);
@@ -414,11 +418,7 @@ void SwatchPopup::setDocument(const fla::Document* document)
     }
     if (_offersGradients)
     {
-        std::vector<fla::swatches::Gradient> gradients =
-            document ? fla::swatches::gradientsOf(*document) : std::vector<fla::swatches::Gradient>();
-        if (gradients.empty())
-            gradients = fla::swatches::defaultGradients();
-        for (const fla::swatches::Gradient& gradient : gradients)
+        for (const fla::swatches::Gradient& gradient : fla::swatches::shownGradients(document))
         {
             Item item;
             item.kind = Item::Kind::Gradient;
@@ -477,6 +477,69 @@ void SwatchPopup::popupUnder(QWidget* anchor)
     activateWindow();
 }
 
+SwatchPopup::~SwatchPopup()
+{
+    previewShapes(nullptr);
+}
+
+void SwatchPopup::previewOn(PhoenixView* view, const std::vector<fla::Shape*>& shapes, bool strokes)
+{
+    previewShapes(nullptr);
+    _view = view;
+    _previewShapes = shapes;
+    _previewStrokes = strokes;
+}
+
+void SwatchPopup::previewShapes(const Item* item)
+{
+    // Each preview undone, putting its shape back as it was.
+    const bool restored = !_previews.empty();
+    for (size_t i = _previews.size(); i-- > 0;)
+    {
+        _previews[i]->undo();
+        if (_view)
+            _view->forgetShape(_previewShapes[i]);
+    }
+    _previews.clear();
+    if (!item || !_view)
+    {
+        // Settled: whatever else drew the shapes is redrawn once.
+        if (restored && _view)
+        {
+            _view->clearCaches();
+            _view->update();
+        }
+        return;
+    }
+    const QColor color = withAlpha(item->color);
+    const fla::swatches::Color rgba = {static_cast<uint8_t>(color.red()), static_cast<uint8_t>(color.green()),
+        static_cast<uint8_t>(color.blue()), static_cast<uint8_t>(color.alpha())};
+    for (fla::Shape* shape : _previewShapes)
+    {
+        std::unique_ptr<fla::Shape> after(fla::cloneShape(*shape, nullptr));
+        if (item->kind == Item::Kind::Gradient)
+        {
+            if (_previewStrokes)
+                fla::swatches::paintStrokes(*after, item->gradient);
+            else
+                fla::swatches::paintFills(*after, item->gradient);
+        }
+        else if (_previewStrokes)
+            fla::swatches::paintStrokes(*after, rgba);
+        else
+            fla::swatches::paintFills(*after, rgba);
+        _previews.emplace_back(new fla::SetShapeContentsCommand(shape, *after, "Preview"));
+        _previews.back()->redo();
+        _view->forgetShape(shape);
+    }
+}
+
+void SwatchPopup::hideEvent(QHideEvent* event)
+{
+    previewShapes(nullptr);
+    QWidget::hideEvent(event);
+}
+
 void SwatchPopup::keyPressEvent(QKeyEvent* event)
 {
     if (event->key() == Qt::Key_Escape)
@@ -497,6 +560,7 @@ void SwatchPopup::paintEvent(QPaintEvent*)
 
 void SwatchPopup::preview(const Item* item)
 {
+    previewShapes(item);
     if (!item)
     {
         _chip->show(_currentBrush);
@@ -524,8 +588,11 @@ QColor SwatchPopup::withAlpha(QColor color) const
 
 void SwatchPopup::pick(const Item& item)
 {
-    // Kept alive through the signal, which may rebuild what owns it.
+    // Kept alive through the signal, which may rebuild what owns it. The
+    // shapes go back as they were first, so the pick is one undo step.
     QPointer<SwatchPopup> self(this);
+    previewShapes(nullptr);
+    _previewShapes.clear();
     if (item.kind == Item::Kind::Gradient)
     {
         emit gradientPicked(item.gradient);

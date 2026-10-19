@@ -30,12 +30,16 @@ std::vector<Color> defaults();
 /// none.
 std::vector<Color> of(const Document& document);
 
-/// The document's first swatch list as text, and whether it has one.
+/// The document's first swatch list as text, and whether it has one; and
+/// its extended swatch lists, where the reference app keeps the gradient
+/// swatches.
 struct State
 {
     bool exists = false;
     std::string xml;
     std::vector<Color> colors;
+    bool extended = false;
+    std::string extendedXml;
 };
 State stateOf(const Document& document);
 
@@ -85,6 +89,26 @@ std::vector<Gradient> gradientsIn(const std::string& xml);
 /// in its extended swatch lists, where the reference app keeps them. Empty
 /// when it has none.
 std::vector<Gradient> gradientsOf(const Document& document);
+std::vector<Gradient> gradientsOf(const State& state);
+
+/// The swatches a document shows: its own colors and gradients, or the
+/// defaults for either it has none of.
+std::vector<Color> shownColors(const Document* document);
+std::vector<Gradient> shownGradients(const Document* document);
+
+/// \a gradient as a swatch list item: a LinearGradientSwatchItem or
+/// RadialGradientSwatchItem with a GradientEntry for each stop.
+std::string itemOf(const Gradient& gradient);
+
+/// \a state with \a gradient added at the end of its extended swatch
+/// lists, made when it has none. A document showing the default gradients
+/// keeps them, now its own, ahead of the new one.
+State withGradientAdded(const State& state, const Gradient& gradient);
+
+/// \a state without its gradient swatch \a index, counted as gradientsOf
+/// counts them; the defaults become the document's own first when it has
+/// none.
+State withGradientRemoved(const State& state, size_t index);
 
 /// \a gradient as the fill new art is drawn with: the style's fill kind,
 /// stops, spread and blending, and its fill switched on.
@@ -101,6 +125,11 @@ void paintFills(Shape& shape, const Color& color);
 /// The same for the strokes: a gradient fitted to each stroke's lines.
 void paintStrokes(Shape& shape, const Gradient& gradient);
 void paintStrokes(Shape& shape, const Color& color);
+
+/// \a shape without its fills, or with \a strokes without its strokes, as
+/// No Color leaves it; null when nothing would be left, since a shape
+/// keeps a fill or a stroke. The caller owns it.
+Shape* withoutPart(const Shape& shape, bool strokes);
 
 } // namespace swatches
 

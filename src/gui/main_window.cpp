@@ -11375,6 +11375,10 @@ void MainWindow::chooseStyleColor(bool stroke)
         QColor(target[0], target[1], target[2], target[3]), stroke ? "Stroke Color" : "Fill Color", offer);
     if (!stroke && _drawingStyle.fillKind != fla::DrawingStyle::FillKind::Solid)
         popup->setCurrentBrush(brushOfStyleFill(_drawingStyle));
+    // The selected shapes show the swatch under the pointer; with nothing
+    // selected only the tool's style changes, so there is nothing to show.
+    if (!_textTool || !_textTool->isEditing())
+        popup->previewOn(_phoenixView, selectedShapes(), stroke);
     const auto styleChanged = [this]() {
         refreshStyleSwatches();
         if (_colorPanel)
@@ -11400,18 +11404,87 @@ void MainWindow::chooseStyleColor(bool stroke)
         if (!_textTool || !_textTool->isEditing())
             recolorSelection(stroke);
     });
-    connect(popup, &SwatchPopup::gradientPicked, this, [this, styleChanged](const fla::swatches::Gradient& gradient) {
-        fla::swatches::useGradient(_drawingStyle, gradient);
-        styleChanged();
-        if (!_textTool || !_textTool->isEditing())
-            fillSelection("Fill Color", true);
+    connect(popup, &SwatchPopup::gradientPicked, this, [this](const fla::swatches::Gradient& gradient) {
+        useGradientSwatch(gradient);
     });
     connect(popup, &SwatchPopup::nonePicked, this, [this, stroke, styleChanged]() {
         (stroke ? _drawingStyle.hasStroke : _drawingStyle.hasFill) = false;
         styleChanged();
+        if (!_textTool || !_textTool->isEditing())
+            removeFromSelection(stroke);
         if (_propertiesPanel)
             _propertiesPanel->refresh();
     });
+}
+
+void MainWindow::useGradientSwatch(const fla::swatches::Gradient& gradient)
+{
+    // New art takes the gradient, and so do the selected shapes' fills.
+    fla::swatches::useGradient(_drawingStyle, gradient);
+    refreshStyleSwatches();
+    if (_colorPanel)
+        _colorPanel->refresh();
+    if (!_textTool || !_textTool->isEditing())
+        fillSelection("Fill Color", true);
+}
+
+bool MainWindow::paintSelectedStrokes(const fla::swatches::Gradient& gradient)
+{
+    const std::vector<fla::Shape*> shapes = selectedShapes();
+    if (!_phoenixView || shapes.empty())
+        return false;
+    _phoenixView->flushPendingMerge();
+    fla::CommandStack& stack = _editContext.commandStack();
+    stack.beginMacro("Stroke Color");
+    for (fla::Shape* shape : shapes)
+    {
+        std::unique_ptr<fla::Shape> after(fla::cloneShape(*shape, nullptr));
+        fla::swatches::paintStrokes(*after, gradient);
+        stack.push(fla::CommandPtr(new fla::SetShapeContentsCommand(shape, *after, "Stroke Color")));
+    }
+    stack.endMacro();
+    stack.breakMergeChain();
+    _phoenixView->clearCaches();
+    _phoenixView->update();
+    return true;
+}
+
+void MainWindow::removeFromSelection(bool stroke)
+{
+    // No Color takes the fills (or strokes) off the selected shapes, as
+    // one step; a shape that would be left with nothing keeps them.
+    const std::vector<fla::Shape*> shapes = selectedShapes();
+    if (!_phoenixView || shapes.empty())
+        return;
+    std::vector<std::pair<fla::Shape*, std::unique_ptr<fla::Shape>>> changes;
+    int kept = 0;
+    for (fla::Shape* shape : shapes)
+    {
+        std::unique_ptr<fla::Shape> after(fla::swatches::withoutPart(*shape, stroke));
+        if (after)
+            changes.emplace_back(shape, std::move(after));
+        else
+            ++kept;
+    }
+    const char* name = stroke ? "No Stroke" : "No Fill";
+    if (!changes.empty())
+    {
+        _phoenixView->flushPendingMerge();
+        fla::CommandStack& stack = _editContext.commandStack();
+        stack.beginMacro(name);
+        for (const auto& change : changes)
+            stack.push(fla::CommandPtr(new fla::SetShapeContentsCommand(change.first, *change.second, name)));
+        stack.endMacro();
+        stack.breakMergeChain();
+        _phoenixView->clearCaches();
+        _phoenixView->update();
+    }
+    if (kept > 0)
+        statusBar()->showMessage(QString("%1 %2 kept %3: a shape needs a fill or a stroke.")
+                                     .arg(kept)
+                                     .arg(kept == 1 ? "shape" : "shapes")
+                                     .arg(stroke ? (kept == 1 ? "its stroke" : "their strokes") : (kept == 1 ? "its fill" : "their fills")),
+            4000);
 }
 
 void MainWindow::recolorSelection(bool stroke)
@@ -11624,15 +11697,47 @@ void MainWindow::setupPropertiesPanel()
         if (!_textTool || !_textTool->isEditing())
             recolorSelection(stroke);
     });
+    connect(_swatchesPanel, &SwatchesPanel::gradientPicked, this, [this](const fla::swatches::Gradient& gradient, bool stroke) {
+        if (!stroke)
+        {
+            useGradientSwatch(gradient);
+            return;
+        }
+        // New strokes take one color; selected strokes can take the gradient.
+        if (!paintSelectedStrokes(gradient))
+            statusBar()->showMessage("New strokes take one color; select shapes to give their strokes a gradient.", 4000);
+    });
     connect(_swatchesPanel, &SwatchesPanel::addRequested, this, [this]() {
         if (!_flaDocument || !_flaDocument->document)
             return;
         fla::Document* document = _flaDocument->document;
         const fla::swatches::State before = fla::swatches::stateOf(*document);
+        using Kind = fla::DrawingStyle::FillKind;
+        if ((_drawingStyle.fillKind == Kind::Linear || _drawingStyle.fillKind == Kind::Radial) &&
+            _drawingStyle.gradient.size() >= 2)
+        {
+            // A gradient fill is kept among the gradient swatches.
+            fla::swatches::Gradient gradient;
+            gradient.radial = _drawingStyle.fillKind == Kind::Radial;
+            gradient.stops = _drawingStyle.gradient;
+            gradient.spread = _drawingStyle.gradientSpread;
+            gradient.linearRGB = _drawingStyle.gradientLinearRGB;
+            _editContext.commandStack().push(fla::CommandPtr(new fla::SetSwatchesCommand(
+                document, before, fla::swatches::withGradientAdded(before, gradient), "Add Swatch")));
+            return;
+        }
         const fla::swatches::Color color = {_drawingStyle.fillColor[0], _drawingStyle.fillColor[1],
             _drawingStyle.fillColor[2], _drawingStyle.fillColor[3]};
         _editContext.commandStack().push(fla::CommandPtr(new fla::SetSwatchesCommand(
             document, before, fla::swatches::withAdded(before, color), "Add Swatch")));
+    });
+    connect(_swatchesPanel, &SwatchesPanel::gradientRemoveRequested, this, [this](int index) {
+        if (!_flaDocument || !_flaDocument->document || index < 0)
+            return;
+        fla::Document* document = _flaDocument->document;
+        const fla::swatches::State before = fla::swatches::stateOf(*document);
+        _editContext.commandStack().push(fla::CommandPtr(new fla::SetSwatchesCommand(
+            document, before, fla::swatches::withGradientRemoved(before, static_cast<size_t>(index)), "Delete Swatch")));
     });
     connect(_swatchesPanel, &SwatchesPanel::colorsEditRequested, this,
         [this](const std::vector<fla::swatches::Color>& colors, const QString& name) {

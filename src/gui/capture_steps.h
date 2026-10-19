@@ -20,6 +20,9 @@ namespace commands {
 ///                                  the button stays down until release
 ///   release                        lets go of a held stroke
 ///   key <keys>                     "F", "Delete", "Ctrl+E", to the stage
+///                                  (or to a pop-up, when one is open)
+///   hover widget:<name>@x,y        the pointer over that point of the
+///                                  widget, no button down
 ///   menu <Modify>Deformer>...>     a menu command
 ///   target <spec>                  clicks a lesson target (frame:Arm:12,
 ///                                  layer:Tail, widget:..., menu:...);
@@ -30,7 +33,9 @@ namespace commands {
 ///                                  answers the next dialog: a spin box or
 ///                                  field by its row's label, a check box by
 ///                                  its text (on/off), draws it, then
-///                                  presses a button
+///                                  presses a button; a swatch pop-up a
+///                                  step waits on is drawn, then given
+///                                  hex=#RRGGBB or closed
 ///   check <text> on|off            a check box in a panel
 ///   combo <panel> <text>           a panel's list, set to the item
 ///   pick <panel> <n>               clicks the panel's nth picture

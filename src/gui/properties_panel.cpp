@@ -2191,6 +2191,7 @@ void PropertiesPanel::addShapeSections(QVBoxLayout* layout, fla::Shape* shape)
             SwatchPopup* popup = SwatchPopup::open(swatch, document(), fill ? toQColor(fill->color) : QColor(Qt::black), "Fill Color", offer);
             if (!fill)
                 popup->setCurrentBrush(brushOf(*anyFill));
+            popup->previewOn(_links.view, {shape}, false);
             paint(popup, false);
         });
         fillLayout->addWidget(swatch);
@@ -2235,6 +2236,7 @@ void PropertiesPanel::addShapeSections(QVBoxLayout* layout, fla::Shape* shape)
                 strokeColor ? toQColor(strokeColor->color) : QColor(Qt::black), "Stroke Color", offer);
             if (!strokeColor && stroke->fill)
                 popup->setCurrentBrush(brushOf(*stroke->fill));
+            popup->previewOn(_links.view, {shape}, true);
             paint(popup, true);
         });
         strokeLayout->addWidget(swatch);
@@ -4436,7 +4438,7 @@ void PropertiesPanel::rebuildDocTab()
     settings->addField(1, 0, "FPS", frameRate);
 
     QToolButton* stage = makeSwatch(doc->backgroundColor, "Stage color");
-    connect(stage, &QToolButton::clicked, this, [this, doc]() {
+    connect(stage, &QToolButton::clicked, this, [this, doc, stage]() {
         // Its alpha makes the stage see-through: exports keep it, as an image
         // or movie with a part-clear background.
         const QColor chosen = QColorDialog::getColor(toQColor(doc->backgroundColor), this, "Stage Color",
