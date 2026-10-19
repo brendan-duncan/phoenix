@@ -8,6 +8,10 @@ What changed in each release of Phoenix, newest first.
 - Pick a gradient from the pop-up to fill the selected shape with it, fitted to the shape, or to draw new shapes with it
 - A shape's gradient fill or stroke now shows in its swatch on the Properties panel, and a gradient swatch can be picked for a shape's stroke
 - Gradient swatches saved in an FLA show in the pop-up; documents without any get white to black, color and ramp gradients
+- The Swatches panel shows the gradient swatches under the colors: click one to fill with it, Add Swatch keeps a gradient fill, and right-click deletes one; FLA files save them
+- Moving over the swatch pop-up shows each color or gradient on the selected shapes; nothing changes until you click, and Esc puts them back
+- No Color from the toolbox takes the fill or stroke off the selected shapes too, keeping it on a shape that has nothing else
+- Text, tint, filter, stage, grid, guide and other color swatches open the swatch pop-up too, with the full color picker a click away
 
 ## 0.21.0
 

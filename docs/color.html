@@ -146,11 +146,15 @@
   <li><strong>Gradients:</strong> the row under the colors. Click one to fill with that gradient. On a selected shape, every fill (or stroke) takes it, fitted to the art it covers, as one step you can undo. From the toolbox or the Tool tab, it becomes the fill for new art, and the Color panel shows it. A document saved with gradient swatches shows its own; otherwise you get white to black (linear and radial), white to red, green and blue, two color ramps and a soft gray. The toolbox stroke and the Tool tab's stroke draw new lines in one color, so their pop-ups have no gradients.</li>
   <li><strong>Recent colors</strong> are the last row, when you have some.</li>
   <li><strong>Hex and alpha:</strong> the fields show the color under the pointer as you move over the swatches. Type a hex color and press <kbd>Enter</kbd> to use it. The alpha percentage goes with the color you pick, so you can set it first.</li>
-  <li><strong>No color</strong> (the white square with a red line) turns the fill or stroke off. On a selected shape it takes the fills or strokes away, so it is there only when the shape has the other one.</li>
+  <li><strong>No color</strong> (the white square with a red line) turns the fill or stroke off. On a selected shape it takes the fills or strokes away, so on the Object tab it is there only when the shape has the other one. From the toolbox it turns the fill or stroke off for new art and takes it off the selected shapes too, as one step you can undo; a selected shape with nothing else keeps it, and the status bar says so.</li>
   <li><strong>The color wheel button</strong> opens the full color picker, which can also take a color from anywhere on your screen.</li>
 </ul>
 
+<p>With shapes selected, the art on the stage shows the swatch under the pointer as you move over the pop-up, so you can try colors and gradients before you pick one. Moving off the swatches, pressing <kbd>Esc</kbd> or clicking outside puts it back; nothing is changed until you click, and the pick is one step you can undo. With nothing selected the pop-up only sets the colors for new art.</p>
+
 <p>The pop-up closes when you pick something, click outside it, or press <kbd>Esc</kbd>. To change a gradient's colors or add stops, use the <a href="#the-color-panel">Color panel</a>.</p>
+
+<p>The other color swatches, such as text color, tint, filter colors, stage color and the grid and guide colors, open the same pop-up without the gradients or No Color. Their alpha field is there only where the color can be see-through, and the color wheel button still opens the full color picker.</p>
 
 <h2 id="the-pop-up-palette">The pop-up palette</h2>
 
@@ -203,7 +207,11 @@
   <img src="assets/shots/swatches-panel.webp" alt="The Swatches panel showing a grid of color swatches" width="391" height="255">
 </figure>
 
-<p>The Swatches panel (<span class="menu-path">Window &rsaquo; Swatches</span>, <kbd>Ctrl</kbd>+<kbd>F9</kbd>) shows the document's saved colors. Hover over a swatch to see its hex value, and its alpha if it is partly clear. Click a swatch to make it the fill color, or the stroke color when the panel's <strong>Stroke</strong> option is checked. <strong>Add Swatch</strong> saves the current fill color. Right-click a swatch to duplicate or delete it. Swatches are saved with the document, including FLA files. The panel holds solid colors. Gradient swatches saved in an FLA are kept with it and show in the <a href="#the-swatch-pop-up">swatch pop-up</a>.</p>
+<p>The Swatches panel (<span class="menu-path">Window &rsaquo; Swatches</span>, <kbd>Ctrl</kbd>+<kbd>F9</kbd>) shows the document's saved colors. Hover over a swatch to see its hex value, and its alpha if it is partly clear. Click a swatch to make it the fill color, or the stroke color when the panel's <strong>Stroke</strong> option is checked. Right-click a swatch to duplicate or delete it.</p>
+
+<p>The gradient swatches are in a row under the colors: the document's own, or the default gradients when it has none, the same ones as the <a href="#the-swatch-pop-up">swatch pop-up</a>. Click one to make it the fill for new art; the selected shapes take it too, fitted to the art they cover. With <strong>Stroke</strong> checked, the selected shapes' strokes take it instead. Right-click a gradient swatch to delete it.</p>
+
+<p><strong>Add Swatch</strong> saves the current fill: a color among the colors, or, when the fill is a gradient, a gradient swatch. Every change to the swatches is a step you can undo. Swatches are saved with the document, including FLA files, gradient swatches among them.</p>
 
 <p>The <strong>&#9776;</strong> menu beside Add Swatch has the rest:</p>
 
