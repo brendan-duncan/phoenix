@@ -2,6 +2,7 @@
 #include "modal.h"
 #include "web_files.h"
 
+#include <QDateTime>
 #include <QDir>
 #include <QFileDialog>
 #include <QFileInfo>
@@ -53,9 +54,13 @@ void save(QWidget* parent, const QString& caption, const QString& suggested, con
     if (name.isEmpty())
         name = "untitled";
     const QString path = QDir(web_files::folder()).filePath(name);
+    // Only what \a done writes is downloaded: a caller that just takes the
+    // path, to write it later, downloads it itself then.
+    const QDateTime before = QFileInfo(path).lastModified();
     if (done)
         done(path);
-    if (QFileInfo(path).isFile())
+    const QFileInfo written(path);
+    if (written.isFile() && written.lastModified() != before)
         web_files::download(path);
 #else
     const QString path = QFileDialog::getSaveFileName(parent, caption, suggested, filter, selectedFilter);

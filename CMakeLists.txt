@@ -805,6 +805,9 @@ if(PHOENIX_WEB)
     set_target_properties(Phoenix PROPERTIES
         QT_WASM_PTHREAD_POOL_SIZE 8
         QT_WASM_INITIAL_MEMORY "256MB")
+    # Phoenix's own page and icon, beside the one Qt writes (Phoenix.html).
+    configure_file(${CMAKE_SOURCE_DIR}/resources/web/index.html ${CMAKE_CURRENT_BINARY_DIR}/index.html COPYONLY)
+    configure_file(${CMAKE_SOURCE_DIR}/src/phoenix.png ${CMAKE_CURRENT_BINARY_DIR}/phoenix.png COPYONLY)
 endif()
 
 qt_finalize_executable(Phoenix)

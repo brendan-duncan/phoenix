@@ -10538,7 +10538,11 @@ void MainWindow::exportSpriteSheet(const QString& symbolName)
     if (!symbol && !_documentPath.isEmpty())
         base = QFileInfo(_documentPath).completeBaseName() + (document->timelines.size() > 1 ? "_" + source : QString());
     base.replace(QRegularExpression("[\\\\/:*?\"<>|]"), "_");
+#ifdef PHOENIX_WEB
+    const QString folder = web_files::folder();
+#else
     const QString folder = _lastDirectory.isEmpty() ? QFileInfo(_documentPath).absolutePath() : _lastDirectory;
+#endif
     SpriteSheetDialog* dialog =
         new SpriteSheetDialog(source, count, document->frameRate, render, QDir(folder).filePath(base + ".png"), this);
     _phoenixView->update();
