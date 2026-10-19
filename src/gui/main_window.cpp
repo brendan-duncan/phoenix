@@ -140,6 +140,7 @@
 #include "../edit/brush_presets.h"
 #include "image_export.h"
 #include "timeline_view.h"
+#include "paper_import_dialog.h"
 #include "../data/frame.h"
 #include "../data/group.h"
 #include "../data/symbol_instance.h"
@@ -6871,6 +6872,12 @@ void MainWindow::setupMenus()
     importVideoAction->setStatusTip("Bring in a video to animate over, on a guide layer");
     connect(importVideoAction, &QAction::triggered, this, &MainWindow::importVideo);
     importMenu->addAction(importVideoAction);
+    QAction* importPaperAction = importMenu->addAction("Import &Paper Drawings...");
+    importPaperAction->setStatusTip("Scanned or photographed pencil drawings, cleaned up and traced into lines, one to a keyframe");
+    connect(importPaperAction, &QAction::triggered, this, [this] {
+        PaperImport::open(this, _flaDocument, _phoenixView, _timelineView, _player, _editContext.commandStack(), _selection,
+            [this](const QString& text) { statusBar()->showMessage(text, 8000); });
+    });
 
     QMenu* exportMenu = fileMenu->addMenu("Export");
 

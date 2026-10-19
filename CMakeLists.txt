@@ -140,6 +140,7 @@ set(HEADERS
     src/gui/terminal_view.h
     src/gui/html_view.h
     src/gui/trace_bitmap_dialog.h
+    src/gui/paper_import_dialog.h
     src/gui/test_movie_window.h
     src/gui/movie_hooks.h
     src/gui/command_line.h
@@ -447,6 +448,7 @@ set(SOURCES
     src/gui/terminal_view.cpp
     src/gui/html_view.cpp
     src/gui/trace_bitmap_dialog.cpp
+    src/gui/paper_import_dialog.cpp
     src/gui/test_movie_window.cpp
     src/gui/movie_hooks.cpp
     src/gui/command_line.cpp
