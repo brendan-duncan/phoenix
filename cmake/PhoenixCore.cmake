@@ -105,6 +105,7 @@ set(PHOENIX_CORE_SOURCES
     edit/shape_tween.cpp
     edit/shot_breakdown.cpp
     edit/snapping.cpp
+    edit/state_graph.cpp
     edit/swatches.cpp
     edit/text_style.cpp
     edit/three_d.cpp

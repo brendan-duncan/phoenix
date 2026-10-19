@@ -89,6 +89,9 @@ const std::vector<Feature>& all()
         {"layer-transparency", "Layer transparency", "the layers drawn solid", {"phoenixTransparency"}},
         {"see-through-stage", "See-through stage", "an opaque stage color", {"phoenixStageAlpha"}},
         {"safe-zones", "Safe zones and aspect-ratio guides", "the stage without them", {"phoenixSafeZones"}},
+        {"interactive-states", "Interactive states",
+            "the scripts the states were turned into, which play the same, but no States panel to change them in",
+            {"phoenixStates"}},
     };
     return list;
 }

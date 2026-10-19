@@ -362,6 +362,7 @@ set(HEADERS
     src/edit/onion_shift.h
     src/edit/scene_commands.h
     src/edit/script_edit.h
+    src/edit/state_graph.h
     src/edit/document_settings.h
     src/edit/text_style.h
     src/edit/font_items.h

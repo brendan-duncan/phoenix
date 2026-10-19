@@ -35,7 +35,7 @@ void writeSample(const fs::path& folder)
         "phoenixPerspectiveAngle=\"60\" phoenixLight=\"-45,45,0.3,1,#FFFFFF\" phoenixDepthOfField=\"0,4\" phoenixSafeZones=\"title=1,90;frames=4:3,1,00BEFFFF,c,0\" "
         "phoenixFutureThing=\"1\">"
         "<symbols><Include href=\"Peg.xml\"/></symbols>"
-        "<timelines><DOMTimeline name=\"Scene 1\" phoenixNodeGraph=\"&lt;graph/&gt;\"><layers>"
+        "<timelines><DOMTimeline name=\"Scene 1\" phoenixNodeGraph=\"&lt;graph/&gt;\" phoenixStates=\"&lt;states/&gt;\"><layers>"
         "<DOMLayer name=\"Camera\" layerType=\"guide\" phoenixCamera=\"true\"><frames>"
         "<DOMFrame index=\"0\" phoenixCameraX=\"275\" phoenixCameraY=\"200\"><elements/></DOMFrame></frames></DOMLayer>"
         "<DOMLayer name=\"Armature_1\"><frames><DOMFrame index=\"0\"><elements/>"
