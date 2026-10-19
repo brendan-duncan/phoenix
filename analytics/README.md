@@ -5,13 +5,13 @@ phoenixanimate.com. A small Node service on the web host stores them in SQLite
 and serves a password-protected dashboard. It has no dependencies, uses Node's
 built-in `node:sqlite`, and runs in about 60–100 MB of RAM. No cookie banner is
 needed and nothing goes to a third party. The public statement of what is
-collected is [docs/privacy.html](../docs/privacy.html); keep it in step with
+collected is [website/privacy.html](../website/privacy.html); keep it in step with
 this file.
 
 | Path | Role |
 | --- | --- |
 | `phoenix_analytics.js` | Client script. Batches events and sends them with `sendBeacon` to `/a/collect`. |
-| `../docs/assets/site.js` | Loads the client (`assets/analytics.js`) after it builds the page, on phoenixanimate.com only. |
+| `../website/assets/site.js` | Loads the client (`assets/analytics.js`) after it builds the page, on phoenixanimate.com only. |
 | `../tools/deploy_site.py` | Publishes the client as `assets/analytics.js` with the site, stamped with the commit. |
 | `collector/server.mjs` | The collector: ingest, safeguards, dashboard API, maintenance, CLI. |
 | `collector/lib/` | Storage (`store.mjs`), dashboard queries, validation and rate limits (`ingest.mjs`), UA parsing, geo lookup, auth. |
@@ -106,7 +106,7 @@ the static IP, both as in `tools/deploy_site.ini`.
    matches them and goes on to the proxy, and `/updates/` and `/download/` never
    reach the proxy. Leave the rules as they are. Only a future catch-all
    RewriteRule would need `RewriteRule ^/a/ - [L]` in front of it. Don't put a
-   folder named `a` in `docs/`; the proxy would hide it.
+   folder named `a` in `website/`; the proxy would hide it.
 6. **Deploy the site** so pages load the client:
    ```powershell
    python tools/deploy_site.py

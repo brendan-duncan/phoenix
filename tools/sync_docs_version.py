@@ -4,7 +4,7 @@
   python tools/sync_docs_version.py [--check]
 
 CMakeLists.txt's project(Phoenix VERSION x.y.z) is the one place a release
-sets the version. The guide shows it in docs/assets/site.js (VERSION, which
+sets the version. The guide shows it in website/assets/site.js (VERSION, which
 fills the header, the footer and the pages' version text as they load) and,
 for readers without JavaScript and for search engines, in the pages' own
 text: elements of class phoenix-version, and the text of elements with a
@@ -20,7 +20,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-DOCS = ROOT / "docs"
+DOCS = ROOT / "website"
 SITE_JS = DOCS / "assets" / "site.js"
 
 

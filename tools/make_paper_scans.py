@@ -5,7 +5,7 @@ unevenly, with specks of dust, as a scanner or a phone would see them.
     python tools/make_paper_scans.py
 
 writes tests/data/paper/scan_1.ppm .. scan_3.ppm (small, for the tests) and
-docs/assets/img/paper-scan-1.jpg .. paper-scan-4.jpg (for the guide).
+website/assets/img/paper-scan-1.jpg .. paper-scan-4.jpg (for the guide).
 Nothing is taken from real scans; the same seed makes the same files.
 """
 
@@ -76,7 +76,7 @@ def main():
     for frame in range(3):
         page = scan(160, 120, frame, 100 + frame)
         page.save(os.path.join(tests, 'scan_%d.ppm' % (frame + 1)))
-    docs = os.path.join(ROOT, 'docs', 'assets', 'img')
+    docs = os.path.join(ROOT, 'website', 'assets', 'img')
     for frame in range(4):
         page = scan(480, 360, frame, 200 + frame)
         page.save(os.path.join(docs, 'paper-scan-%d.jpg' % (frame + 1)), quality=85)

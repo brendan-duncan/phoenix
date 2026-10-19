@@ -2,7 +2,7 @@
 // analytics/collector/ (see analytics/README.md).
 //
 // tools/deploy_site.py publishes this file as assets/analytics.js, and
-// docs/assets/site.js loads it once the page is built, only when the page is
+// website/assets/site.js loads it once the page is built, only when the page is
 // served from phoenixanimate.com. Opened from disk or a local server, the guide
 // never loads it, and this script checks the host again before sending
 // anything.

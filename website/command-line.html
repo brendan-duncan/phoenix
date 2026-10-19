@@ -178,7 +178,7 @@ Phoenix benchmark episode.fla --against episode.animate.json</code></pre>
 
 <p>Times each step of working with a document: reading it, opening it in the editor, drawing its frames at the stage's size (first with nothing cached, then again cached, with the frame rate that gives), saving it as FLA, PHX and XFL, and reopening the PHX. It also reports peak memory. <code>--frames</code> sets how many frames are drawn (240 by default). <code>--json</code> writes the numbers to a file, to track them over time or between machines. Use a Release build for numbers worth comparing.</p>
 
-<p>To compare with an editor that runs JSFL scripts, run <code>docs/benchmark.jsfl</code> in it on the same file: it opens the file, exports every frame as a PNG and saves a copy, timing each, and writes <code><em>file</em>.animate.json</code> beside it. <code>--against</code> that file prints both sets of times side by side.</p>
+<p>To compare with an editor that runs JSFL scripts, run <a href="benchmark.jsfl"><code>benchmark.jsfl</code></a> in it on the same file: it opens the file, exports every frame as a PNG and saves a copy, timing each, and writes <code><em>file</em>.animate.json</code> beside it. <code>--against</code> that file prints both sets of times side by side.</p>
 
 <h2>Export a movie</h2>
 

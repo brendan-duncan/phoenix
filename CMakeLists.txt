@@ -48,12 +48,12 @@ endif()
 # Read by tools/release/pack.py, to check that it packs the version it says.
 file(WRITE "${CMAKE_BINARY_DIR}/phoenix_version.txt" "${PHOENIX_VERSION}")
 
-# The user guide names the release it describes (docs/assets/site.js).
-file(STRINGS "${CMAKE_SOURCE_DIR}/docs/assets/site.js" _phoenix_docs_version REGEX "^const VERSION = ")
+# The user guide names the release it describes (website/assets/site.js).
+file(STRINGS "${CMAKE_SOURCE_DIR}/website/assets/site.js" _phoenix_docs_version REGEX "^const VERSION = ")
 string(REGEX MATCH "[0-9]+\\.[0-9]+\\.[0-9]+" _phoenix_docs_version "${_phoenix_docs_version}")
 string(REGEX MATCH "^[0-9]+\\.[0-9]+\\.[0-9]+" _phoenix_release "${PHOENIX_VERSION}")
 if(NOT _phoenix_docs_version STREQUAL _phoenix_release)
-    message(WARNING "docs/assets/site.js says the guide describes ${_phoenix_docs_version}, but this is "
+    message(WARNING "website/assets/site.js says the guide describes ${_phoenix_docs_version}, but this is "
         "Phoenix ${PHOENIX_VERSION}: update VERSION there.")
 endif()
 

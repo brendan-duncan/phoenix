@@ -6,11 +6,11 @@ the reader to the same page on phoenixanimate.com.
 
 The guide used to be served from brendan-duncan.github.io/phoenix, and links
 to it are still about. .github/workflows/pages.yml publishes what this writes
-there instead of docs/, so an old link lands on the right page of
+there instead of website/, so an old link lands on the right page of
 phoenixanimate.com, its #section kept. Every guide page gets one; the format
-notes Pages showed from docs/*.md (FLA_FORMAT.html and the like) go to the
-pages they became; anything else falls to 404.html, which sends the same path
-to the site.
+notes Pages showed from docs/*.md when docs/ held the site (FLA_FORMAT.html
+and the like) go to the pages they became; anything else falls to 404.html,
+which sends the same path to the site.
 """
 
 import html
@@ -18,7 +18,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-DOCS = ROOT / "docs"
+DOCS = ROOT / "website"
 SITE = "https://phoenixanimate.com/"
 # The notes that were Markdown, as Pages named them, and the pages they became.
 FORMER_NOTES = {

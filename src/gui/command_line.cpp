@@ -214,7 +214,7 @@ const char* const kHelp =
     "  benchmark <file> [--frames N] [--json <out.json>] [--against <animate.json>]\n"
     "      Times opening, drawing (first with nothing cached, then cached),\n"
     "      saving as FLA, PHX and XFL, and reopening the PHX, with peak memory.\n"
-    "      --against compares with the times docs/benchmark.jsfl recorded.\n"
+    "      --against compares with the times website/benchmark.jsfl recorded.\n"
     "\n"
     "  --convert <in> <out>, --export-image, --export-movie and --roundtrip\n"
     "      work as before.\n";

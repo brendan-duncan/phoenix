@@ -8,7 +8,7 @@
  * same macros, and MM_Environment's function pointers in the same order.
  * It was written from the published header and the "C-level
  * extensibility" chapter of the Extending Animate documentation, not
- * copied from it; see docs/scripting.html for what Phoenix supports.
+ * copied from it; see website/scripting.html for what Phoenix supports.
  *
  * A library includes this header, puts MM_STATE in exactly one of its
  * source files, and defines MM_Init, which registers its functions:

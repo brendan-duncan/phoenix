@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Writes docs/changelog.html, the guide's What's New page, from CHANGELOG.md.
+"""Writes website/changelog.html, the guide's What's New page, from CHANGELOG.md.
 
   python tools/build_changelog.py [--check]
 
 CHANGELOG.md stays the one place releases are written up; this turns it into
 a page of the guide, in the same template as the others, so phoenixanimate.com
 carries it. tools/deploy_site.py runs it before each deploy. With --check it
-writes nothing and fails when docs/changelog.html is out of date.
+writes nothing and fails when website/changelog.html is out of date.
 
 Only what the changelog uses is understood: "## version" headings, "- "
 bullets (a bullet may run on over indented lines), plain paragraphs, and
@@ -21,7 +21,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 SOURCE = ROOT / "CHANGELOG.md"
-TARGET = ROOT / "docs" / "changelog.html"
+TARGET = ROOT / "website" / "changelog.html"
 
 HEAD = """<!doctype html>
 <html lang="en">
@@ -143,13 +143,13 @@ def render(markdown):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    parser.add_argument("--check", action="store_true", help="fail if docs/changelog.html is out of date")
+    parser.add_argument("--check", action="store_true", help="fail if website/changelog.html is out of date")
     args = parser.parse_args()
     page = render(SOURCE.read_text(encoding="utf-8"))
     current = TARGET.read_text(encoding="utf-8") if TARGET.exists() else None
     if args.check:
         if current != page:
-            print("docs/changelog.html is out of date: run python tools/build_changelog.py")
+            print("website/changelog.html is out of date: run python tools/build_changelog.py")
             return 1
         return 0
     if current != page:

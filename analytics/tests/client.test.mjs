@@ -75,7 +75,7 @@ describe('where it sends', () => {
 
   it('sends nothing from file://, localhost or any other host', () => {
     for (const url of [
-      'file:///D:/src/phoenix/docs/get-started.html',
+      'file:///D:/src/phoenix/website/get-started.html',
       'http://localhost:8000/get-started.html',
       'http://127.0.0.1:5500/get-started.html',
       'https://brendan-duncan.github.io/phoenix/get-started.html',

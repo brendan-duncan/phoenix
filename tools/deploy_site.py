@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Copies the docs/ site to the web server that hosts phoenixanimate.com.
+"""Copies the website/ site to the web server that hosts phoenixanimate.com.
 
   python tools/deploy_site.py [--mirror] [--dry-run]
 
@@ -15,13 +15,13 @@ writes a template there to fill in:
 
 The site goes up as one archive over scp and is unpacked over ssh, using the
 OpenSSH programs Windows, macOS and Linux all ship. Files on the server are
-added and overwritten; --mirror also removes those no longer in docs/. Either
+added and overwritten; --mirror also removes those no longer in website/. Either
 way the folders the server keeps for itself (updates/, download/) are left
 alone.
 
 First the guide is brought up to date: the version CMakeLists.txt sets goes
 wherever the pages show it (tools/sync_docs_version.py), and the What's New
-page, docs/changelog.html, is made again from CHANGELOG.md
+page, website/changelog.html, is made again from CHANGELOG.md
 (tools/build_changelog.py), so the site has every release.
 
 The site analytics client, analytics/phoenix_analytics.js, goes up with it as
@@ -40,23 +40,23 @@ import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SITE = ROOT / "docs"
+SITE = ROOT / "website"
 CONFIG = Path(__file__).resolve().with_name("deploy_site.ini")
 
-# On the server but not from docs/: the updater's feed and packages, and the
+# On the server but not from website/: the updater's feed and packages, and the
 # installers the download links point at.
 KEEP = ("updates", "download")
 
-# In docs/ but not for the site.
+# In website/ but not for the site.
 SKIP_NAMES = {".DS_Store", "Thumbs.db", "desktop.ini"}
 
-# Published next to the docs: the analytics client, which docs/assets/site.js
+# Published next to the docs: the analytics client, which website/assets/site.js
 # loads on phoenixanimate.com only (see analytics/README.md).
 ANALYTICS_CLIENT = ROOT / "analytics" / "phoenix_analytics.js"
 ANALYTICS_PATH = "assets/analytics.js"
 
 TEMPLATE = """\
-; Where tools/deploy_site.py copies docs/. Kept out of the repository.
+; Where tools/deploy_site.py copies website/. Kept out of the repository.
 [server]
 host =
 user = admin
@@ -147,7 +147,7 @@ def run(cmd):
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--mirror", action="store_true",
-                        help="also remove files on the server that are no longer in docs/")
+                        help="also remove files on the server that are no longer in website/")
     parser.add_argument("--dry-run", action="store_true",
                         help="list what would go up and stop")
     args = parser.parse_args()

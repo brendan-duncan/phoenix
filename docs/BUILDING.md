@@ -107,4 +107,4 @@ Releases are built by the Release workflow (`.github/workflows/release.yml`) whe
 
 ## The guide
 
-The website and guide are plain HTML in `docs/`. Open `docs/index.html` in a browser, or serve the folder (`python -m http.server --directory docs`). `tools/build_changelog.py` makes `docs/changelog.html` from `CHANGELOG.md`.
+The website and guide are plain HTML in `website/`. Open `website/index.html` in a browser, or serve the folder (`python -m http.server --directory website`). `tools/build_changelog.py` makes `website/changelog.html` from `CHANGELOG.md`.

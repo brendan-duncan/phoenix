@@ -4,11 +4,11 @@ Phoenix is an open source vector animation app for Windows and macOS. It has the
 
 ## [PhoenixAnimate.com](https://PhoenixAnimate.com)
 
-![Phoenix](docs/assets/shots/hero.webp)
+![Phoenix](website/assets/shots/hero.webp)
 
 ## Building
 
-See [BUILDING.md](BUILDING.md) to build Phoenix from source and run its tests.
+See [docs/BUILDING.md](docs/BUILDING.md) to build Phoenix from source and run its tests.
 
 ## License
 
