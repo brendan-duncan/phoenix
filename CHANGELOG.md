@@ -2,6 +2,15 @@
 
 What changed in each release of Phoenix, newest first.
 
+## Unreleased
+
+- Paint Bucket Scribble: drag across a drawing and every area you pass over fills, with a preview while you drag
+- Paint Bucket Lasso: draw a loop and every area inside it fills; Only empty regions keeps lines and earlier colors safe
+- Fill on: one Paint Bucket click fills the same area on every drawing in the selected frames, the onion skin range or the rest of the layer
+- Follow moving regions finds the area on each drawing as it moves, and the status bar lists frames where nothing matched
+- File > Import > Import Paper Drawings: scanned or photographed pencil drawings cleaned up and traced into vector lines, one to a keyframe
+- Paper cleanup evens out shadows and paper tint, finds the lines by darkness, removes specks, closes small gaps and smooths, with a live preview
+
 ## 0.20.0
 
 - A boned shape whose last points are bound to no bone keeps the binding of its other points when posed or rebound
