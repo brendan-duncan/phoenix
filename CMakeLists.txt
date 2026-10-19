@@ -179,6 +179,7 @@ set(HEADERS
     src/gui/color_panel.h
     src/gui/color_picker_widgets.h
     src/gui/popup_palette.h
+    src/gui/swatch_popup.h
     src/gui/simple_workspace.h
     src/gui/hint_bubble.h
     src/gui/starter_templates.h
@@ -511,6 +512,7 @@ set(SOURCES
     src/gui/color_panel.cpp
     src/gui/color_picker_widgets.cpp
     src/gui/popup_palette.cpp
+    src/gui/swatch_popup.cpp
     src/gui/hint_bubble.cpp
     src/gui/main_window_friendly.cpp
     src/gui/starter_templates.cpp

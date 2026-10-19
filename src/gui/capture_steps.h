@@ -22,7 +22,9 @@ namespace commands {
 ///   key <keys>                     "F", "Delete", "Ctrl+E", to the stage
 ///   menu <Modify>Deformer>...>     a menu command
 ///   target <spec>                  clicks a lesson target (frame:Arm:12,
-///                                  layer:Tail, widget:..., menu:...)
+///                                  layer:Tail, widget:..., menu:...);
+///                                  widget:<name>@x,y clicks that point
+///                                  of the widget
 ///   goto <frame>                   moves the playhead
 ///   dialog <label=value>... [picture=<out.png>] [press=<button>]
 ///                                  answers the next dialog: a spin box or

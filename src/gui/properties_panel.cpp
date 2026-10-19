@@ -13,7 +13,9 @@
 #include "../data/symbol_list.h"
 #include "../edit/motion_object.h"
 #include "../edit/timeline_edit.h"
+#include "../edit/color_art.h"
 
+#include "swatch_popup.h"
 #include "color_panel.h"
 #include "ease_curve_dialog.h"
 #include "hot_text.h"
@@ -172,6 +174,9 @@ QColor toQColor(const uint8_t rgba[4])
 {
     return QColor(rgba[0], rgba[1], rgba[2], rgba[3]);
 }
+
+/// A clear color, for a swatch whose icon is drawn another way.
+const uint8_t kNoColorRgba[4] = {0, 0, 0, 0};
 
 /// A small glyph for the Object tab's header: what kind of thing is
 /// selected, drawn rather than loaded so it matches the theme.
@@ -538,7 +543,7 @@ void PropertiesPanel::flushRefresh()
 void PropertiesPanel::refreshStyleSwatches()
 {
     if (_fillSwatch)
-        _fillSwatch->setIcon(swatchIcon(_links.style->fillColor));
+        _fillSwatch->setIcon(brushSwatchIcon(brushOfStyleFill(*_links.style), false));
     if (_strokeSwatch)
         _strokeSwatch->setIcon(strokeSwatchIcon(_links.style->strokeColor));
     if (_cornerRadius)
@@ -734,18 +739,32 @@ void PropertiesPanel::buildToolTab()
     QHBoxLayout* fillLayout = new QHBoxLayout(fillRow);
     fillLayout->setContentsMargins(0, 0, 0, 0);
     fillLayout->setSpacing(6);
-    _fillSwatch = makeSwatch(style.fillColor, "Fill color for new shapes");
-    connect(_fillSwatch, &QToolButton::clicked, this, [this]() {
-        fla::DrawingStyle& current = *_links.style;
-        const QColor chosen = QColorDialog::getColor(toQColor(current.fillColor), this, "Fill Color",
-            QColorDialog::ShowAlphaChannel);
-        if (!chosen.isValid())
-            return;
-        applyColor(chosen, current.fillColor);
-        _fillSwatch->setIcon(swatchIcon(current.fillColor));
-        emit toolSettingChanged("fillColor");
-    });
+    _fillSwatch = makeSwatch(style.fillColor, "Fill for new shapes: a color or a gradient. The Color panel edits a gradient's stops.");
+    _fillSwatch->setObjectName("propertiesToolFill");
+    _fillSwatch->setIcon(brushSwatchIcon(brushOfStyleFill(style), false));
     QCheckBox* fillEnabled = new QCheckBox("Fill", fillRow);
+    connect(_fillSwatch, &QToolButton::clicked, this, [this, fillEnabled]() {
+        fla::DrawingStyle& current = *_links.style;
+        SwatchPopup::Offer offer;
+        offer.gradients = true;
+        offer.none = true;
+        SwatchPopup* popup = SwatchPopup::open(_fillSwatch, document(), toQColor(current.fillColor), "Fill Color", offer);
+        if (current.fillKind != fla::DrawingStyle::FillKind::Solid)
+            popup->setCurrentBrush(brushOfStyleFill(current));
+        connect(popup, &SwatchPopup::colorPicked, this, [this, fillEnabled](const QColor& chosen) {
+            fla::DrawingStyle& style = *_links.style;
+            applyColor(chosen, style.fillColor);
+            style.fillKind = fla::DrawingStyle::FillKind::Solid;
+            fillEnabled->setChecked(true);
+            emit toolSettingChanged("fillColor");
+        });
+        connect(popup, &SwatchPopup::gradientPicked, this, [this, fillEnabled](const fla::swatches::Gradient& gradient) {
+            fla::swatches::useGradient(*_links.style, gradient);
+            fillEnabled->setChecked(true);
+            emit toolSettingChanged("fillColor");
+        });
+        connect(popup, &SwatchPopup::nonePicked, this, [fillEnabled]() { fillEnabled->setChecked(false); });
+    });
     fillEnabled->setChecked(style.hasFill);
     connect(fillEnabled, &QCheckBox::toggled, this, [this](bool on) {
         _links.style->hasFill = on;
@@ -763,18 +782,23 @@ void PropertiesPanel::buildToolTab()
     strokeLayout->setContentsMargins(0, 0, 0, 0);
     strokeLayout->setSpacing(6);
     _strokeSwatch = makeSwatch(style.strokeColor, "Stroke color for new shapes");
+    _strokeSwatch->setObjectName("propertiesToolStroke");
     _strokeSwatch->setIcon(strokeSwatchIcon(style.strokeColor));
-    connect(_strokeSwatch, &QToolButton::clicked, this, [this]() {
-        fla::DrawingStyle& current = *_links.style;
-        const QColor chosen = QColorDialog::getColor(toQColor(current.strokeColor), this, "Stroke Color",
-            QColorDialog::ShowAlphaChannel);
-        if (!chosen.isValid())
-            return;
-        applyColor(chosen, current.strokeColor);
-        _strokeSwatch->setIcon(strokeSwatchIcon(current.strokeColor));
-        emit toolSettingChanged("strokeColor");
-    });
     QCheckBox* strokeEnabled = new QCheckBox("Stroke", strokeRow);
+    connect(_strokeSwatch, &QToolButton::clicked, this, [this, strokeEnabled]() {
+        // New strokes are drawn in one color: no gradients here.
+        SwatchPopup::Offer offer;
+        offer.none = true;
+        SwatchPopup* popup =
+            SwatchPopup::open(_strokeSwatch, document(), toQColor(_links.style->strokeColor), "Stroke Color", offer);
+        connect(popup, &SwatchPopup::colorPicked, this, [this, strokeEnabled](const QColor& chosen) {
+            applyColor(chosen, _links.style->strokeColor);
+            _strokeSwatch->setIcon(strokeSwatchIcon(_links.style->strokeColor));
+            strokeEnabled->setChecked(true);
+            emit toolSettingChanged("strokeColor");
+        });
+        connect(popup, &SwatchPopup::nonePicked, this, [strokeEnabled]() { strokeEnabled->setChecked(false); });
+    });
     strokeEnabled->setChecked(style.hasStroke);
     connect(strokeEnabled, &QCheckBox::toggled, this, [this](bool on) {
         _links.style->hasStroke = on;
@@ -1999,19 +2023,48 @@ void PropertiesPanel::addPrimitiveSections(QVBoxLayout* layout, fla::Element* el
     PropertySection* section = addSection(layout, "Color and Style");
     int row = 0;
     fla::FillStyle* fill = *fillSlot;
-    if (fill && fill->type() == fla::FillStyle::Type::SolidColor)
+    if (fill)
     {
-        uint8_t* color = static_cast<fla::SolidColor*>(fill)->color;
-        QToolButton* swatch = makeSwatch(color, "Fill color");
+        const bool solid = fill->type() == fla::FillStyle::Type::SolidColor;
+        QToolButton* swatch = makeSwatch(kNoColorRgba, solid ? "Fill color" : "Fill: pick a color or gradient; the Color panel edits this one's stops");
+        swatch->setObjectName("propertiesFill");
+        swatch->setIcon(brushSwatchIcon(brushOf(*fill), false));
         connect(swatch, &QToolButton::clicked, this, [=]() {
-            const QColor chosen = QColorDialog::getColor(toQColor(color), this, "Fill Color", QColorDialog::ShowAlphaChannel);
-            if (!chosen.isValid())
-                return;
-            uint8_t after[4];
-            applyColor(chosen, after);
-            push(std::unique_ptr<fla::Command>(new fla::SetColorCommand(color, color, after, "Fill Color")));
-            emit documentEdited();
-            QTimer::singleShot(0, this, [this]() { refresh(); });
+            const QColor current = solid ? toQColor(static_cast<fla::SolidColor*>(*fillSlot)->color) : QColor(Qt::black);
+            SwatchPopup::Offer offer;
+            offer.gradients = true;
+            SwatchPopup* popup = SwatchPopup::open(swatch, document(), current, "Fill Color", offer);
+            if (!solid)
+                popup->setCurrentBrush(brushOf(**fillSlot));
+            const auto replace = [=](fla::FillStyle* after) {
+                push(std::unique_ptr<fla::Command>(new fla::ReplaceOwnedCommand<fla::FillStyle>(*fillSlot, after, "Fill Color")));
+                emit documentEdited();
+                QTimer::singleShot(0, this, [this]() { refresh(); });
+            };
+            connect(popup, &SwatchPopup::colorPicked, this, [=](const QColor& chosen) {
+                if ((*fillSlot)->type() == fla::FillStyle::Type::SolidColor)
+                {
+                    uint8_t* color = static_cast<fla::SolidColor*>(*fillSlot)->color;
+                    uint8_t after[4];
+                    applyColor(chosen, after);
+                    push(std::unique_ptr<fla::Command>(new fla::SetColorCommand(color, color, after, "Fill Color")));
+                    emit documentEdited();
+                    QTimer::singleShot(0, this, [this]() { refresh(); });
+                    return;
+                }
+                auto* after = new fla::SolidColor(element);
+                applyColor(chosen, after->color);
+                replace(after);
+            });
+            connect(popup, &SwatchPopup::gradientPicked, this, [=](const fla::swatches::Gradient& gradient) {
+                // Fitted to the primitive's box, as a new one drawn with it.
+                fla::FillStyle* after = fla::swatches::gradientFill(gradient, element);
+                const fla::Rect& box = element->elementType() == fla::Element::Type::Rectangle
+                    ? static_cast<fla::RectanglePrimitive*>(element)->rect
+                    : static_cast<fla::OvalPrimitive*>(element)->rect;
+                fla::DrawingStyle::fitFill(*after, box.topLeft.x, box.topLeft.y, box.bottomRight.x, box.bottomRight.y);
+                replace(after);
+            });
         });
         section->addField(row++, 0, "Fill", swatch);
     }
@@ -2022,15 +2075,17 @@ void PropertiesPanel::addPrimitiveSections(QVBoxLayout* layout, fla::Element* el
         {
             uint8_t* color = static_cast<fla::SolidColor*>(stroke->fill)->color;
             QToolButton* swatch = makeSwatch(color, "Stroke color");
+            swatch->setObjectName("propertiesStroke");
             connect(swatch, &QToolButton::clicked, this, [=]() {
-                const QColor chosen = QColorDialog::getColor(toQColor(color), this, "Stroke Color", QColorDialog::ShowAlphaChannel);
-                if (!chosen.isValid())
-                    return;
-                uint8_t after[4];
-                applyColor(chosen, after);
-                push(std::unique_ptr<fla::Command>(new fla::SetColorCommand(color, color, after, "Stroke Color")));
-                emit documentEdited();
-                QTimer::singleShot(0, this, [this]() { refresh(); });
+                // A primitive's stroke keeps to one color.
+                SwatchPopup* popup = SwatchPopup::open(swatch, document(), toQColor(color), "Stroke Color", SwatchPopup::Offer());
+                connect(popup, &SwatchPopup::colorPicked, this, [=](const QColor& chosen) {
+                    uint8_t after[4];
+                    applyColor(chosen, after);
+                    push(std::unique_ptr<fla::Command>(new fla::SetColorCommand(color, color, after, "Stroke Color")));
+                    emit documentEdited();
+                    QTimer::singleShot(0, this, [this]() { refresh(); });
+                });
             });
             section->addField(row, 0, "Stroke", swatch);
         }
@@ -2056,16 +2111,22 @@ void PropertiesPanel::addPrimitiveSections(QVBoxLayout* layout, fla::Element* el
 void PropertiesPanel::addShapeSections(QVBoxLayout* layout, fla::Shape* shape)
 {
     // The first solid fill and stroke stand for the shape, showing the one
-    // color when a selection has one.
+    // color when a selection has one; with no solid fill, its first
+    // gradient or bitmap does.
     fla::SolidColor* fill = nullptr;
+    fla::FillStyle* anyFill = nullptr;
     for (fla::FillStyle* style : shape->fills)
     {
+        if (style && !anyFill)
+            anyFill = style;
         if (style && style->type() == fla::FillStyle::Type::SolidColor)
         {
             fill = static_cast<fla::SolidColor*>(style);
             break;
         }
     }
+    if (fill)
+        anyFill = fill;
     fla::StrokeStyle* stroke = shape->strokes.empty() ? nullptr : shape->strokes.front();
     fla::SolidColor* strokeColor = nullptr;
     if (stroke && stroke->fill && stroke->fill->type() == fla::FillStyle::Type::SolidColor)
@@ -2083,43 +2144,76 @@ void PropertiesPanel::addShapeSections(QVBoxLayout* layout, fla::Shape* shape)
         emit documentEdited();
     };
 
-    if (fill)
+    // A pick from the swatch pop-up: every fill (or stroke) takes the
+    // color or the gradient, a gradient fitted to the art it covers; No
+    // Color takes the fills (or strokes) away, leaving the rest.
+    const auto paint = [=](SwatchPopup* popup, bool strokes) {
+        const char* name = strokes ? "Stroke Color" : "Fill Color";
+        connect(popup, &SwatchPopup::colorPicked, this, [=](const QColor& chosen) {
+            const fla::swatches::Color color = {static_cast<uint8_t>(chosen.red()), static_cast<uint8_t>(chosen.green()),
+                static_cast<uint8_t>(chosen.blue()), static_cast<uint8_t>(chosen.alpha())};
+            restyle(name, [&](fla::Shape& after) {
+                if (strokes)
+                    fla::swatches::paintStrokes(after, color);
+                else
+                    fla::swatches::paintFills(after, color);
+            });
+        });
+        connect(popup, &SwatchPopup::gradientPicked, this, [=](const fla::swatches::Gradient& gradient) {
+            restyle(name, [&](fla::Shape& after) {
+                if (strokes)
+                    fla::swatches::paintStrokes(after, gradient);
+                else
+                    fla::swatches::paintFills(after, gradient);
+            });
+        });
+        connect(popup, &SwatchPopup::nonePicked, this, [=]() {
+            std::unique_ptr<fla::Shape> after(strokes ? fla::colorart::fillsOnly(*shape) : fla::colorart::strokesOnly(*shape));
+            push(std::unique_ptr<fla::Command>(new fla::SetShapeContentsCommand(shape, *after, strokes ? "No Stroke" : "No Fill")));
+            emit documentEdited();
+        });
+    };
+
+    if (anyFill)
     {
         QWidget* fillRow = new QWidget(this);
         QHBoxLayout* fillLayout = new QHBoxLayout(fillRow);
         fillLayout->setContentsMargins(0, 0, 0, 0);
         fillLayout->setSpacing(6);
-        QToolButton* swatch = makeSwatch(fill->color, "Fill color");
+        QToolButton* swatch = makeSwatch(kNoColorRgba,
+            fill ? QString("Fill color, or a gradient") : QString("Fill: pick a color or gradient; the Color panel edits this one's stops"));
+        swatch->setObjectName("propertiesFill");
+        swatch->setIcon(brushSwatchIcon(brushOf(*anyFill), false));
         connect(swatch, &QToolButton::clicked, this, [=]() {
-            const QColor chosen = QColorDialog::getColor(toQColor(fill->color), this, "Fill Color",
-                QColorDialog::ShowAlphaChannel);
-            if (!chosen.isValid())
-                return;
-            restyle("Fill Color", [&](fla::Shape& after) {
-                for (fla::FillStyle* style : after.fills)
-                {
-                    if (style && style->type() == fla::FillStyle::Type::SolidColor)
-                        applyColor(chosen, static_cast<fla::SolidColor*>(style)->color);
-                }
-            });
+            SwatchPopup::Offer offer;
+            offer.gradients = true;
+            offer.none = stroke != nullptr;
+            SwatchPopup* popup = SwatchPopup::open(swatch, document(), fill ? toQColor(fill->color) : QColor(Qt::black), "Fill Color", offer);
+            if (!fill)
+                popup->setCurrentBrush(brushOf(*anyFill));
+            paint(popup, false);
         });
         fillLayout->addWidget(swatch);
         fillLayout->addWidget(fieldLabel("Fill", fillRow));
         fillLayout->addStretch();
-        HotText* alpha = makeHotText(0, 100, 0, "%");
-        alpha->setValue(fill->color[3] * 100.0 / 255.0);
-        alpha->setToolTip("The fill's opacity");
-        bindLive(alpha, []() {}, [](double) {}, [=]() {
-            const uint8_t a = static_cast<uint8_t>(std::lround(alpha->value() * 255.0 / 100.0));
-            restyle("Fill Alpha", [&](fla::Shape& after) {
-                for (fla::FillStyle* style : after.fills)
-                {
-                    if (style && style->type() == fla::FillStyle::Type::SolidColor)
-                        static_cast<fla::SolidColor*>(style)->color[3] = a;
-                }
+        // The opacity of a solid fill; a gradient's stops carry their own.
+        if (fill)
+        {
+            HotText* alpha = makeHotText(0, 100, 0, "%");
+            alpha->setValue(fill->color[3] * 100.0 / 255.0);
+            alpha->setToolTip("The fill's opacity");
+            bindLive(alpha, []() {}, [](double) {}, [=]() {
+                const uint8_t a = static_cast<uint8_t>(std::lround(alpha->value() * 255.0 / 100.0));
+                restyle("Fill Alpha", [&](fla::Shape& after) {
+                    for (fla::FillStyle* style : after.fills)
+                    {
+                        if (style && style->type() == fla::FillStyle::Type::SolidColor)
+                            static_cast<fla::SolidColor*>(style)->color[3] = a;
+                    }
+                });
             });
-        });
-        fillLayout->addWidget(alpha);
+            fillLayout->addWidget(alpha);
+        }
         section->addWide(row++, fillRow);
     }
 
@@ -2129,24 +2223,20 @@ void PropertiesPanel::addShapeSections(QVBoxLayout* layout, fla::Shape* shape)
         QHBoxLayout* strokeLayout = new QHBoxLayout(strokeRow);
         strokeLayout->setContentsMargins(0, 0, 0, 0);
         strokeLayout->setSpacing(6);
-        static const uint8_t kNoColor[4] = {0, 0, 0, 0};
-        QToolButton* swatch = makeSwatch(strokeColor ? strokeColor->color : kNoColor, "Stroke color");
-        if (strokeColor)
-        {
-            connect(swatch, &QToolButton::clicked, this, [=]() {
-                const QColor chosen = QColorDialog::getColor(toQColor(strokeColor->color), this, "Stroke Color",
-                    QColorDialog::ShowAlphaChannel);
-                if (!chosen.isValid())
-                    return;
-                restyle("Stroke Color", [&](fla::Shape& after) {
-                    for (fla::StrokeStyle* style : after.strokes)
-                    {
-                        if (style && style->fill && style->fill->type() == fla::FillStyle::Type::SolidColor)
-                            applyColor(chosen, static_cast<fla::SolidColor*>(style->fill)->color);
-                    }
-                });
-            });
-        }
+        QToolButton* swatch = makeSwatch(strokeColor ? strokeColor->color : kNoColorRgba, "Stroke color, or a gradient along the lines");
+        swatch->setObjectName("propertiesStroke");
+        if (!strokeColor && stroke->fill)
+            swatch->setIcon(brushSwatchIcon(brushOf(*stroke->fill), false));
+        connect(swatch, &QToolButton::clicked, this, [=]() {
+            SwatchPopup::Offer offer;
+            offer.gradients = true;
+            offer.none = anyFill != nullptr;
+            SwatchPopup* popup = SwatchPopup::open(swatch, document(),
+                strokeColor ? toQColor(strokeColor->color) : QColor(Qt::black), "Stroke Color", offer);
+            if (!strokeColor && stroke->fill)
+                popup->setCurrentBrush(brushOf(*stroke->fill));
+            paint(popup, true);
+        });
         strokeLayout->addWidget(swatch);
         strokeLayout->addWidget(fieldLabel("Stroke", strokeRow));
         strokeLayout->addStretch();

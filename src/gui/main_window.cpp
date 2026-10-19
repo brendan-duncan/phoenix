@@ -104,6 +104,7 @@
 #include "../edit/linked_assets.h"
 #include "command_line.h"
 #include "swatches_panel.h"
+#include "swatch_popup.h"
 #include "../edit/swatches.h"
 #include "swap_symbol_dialog.h"
 #include "../edit/layer_commands.h"
@@ -11363,22 +11364,54 @@ void MainWindow::setupToolBar()
 
 void MainWindow::chooseStyleColor(bool stroke)
 {
-    uint8_t* target = stroke ? _drawingStyle.strokeColor : _drawingStyle.fillColor;
-    const QColor current(target[0], target[1], target[2], target[3]);
-    const QColor chosen = QColorDialog::getColor(current, this, stroke ? "Stroke Color" : "Fill Color",
-        QColorDialog::ShowAlphaChannel);
-    if (!chosen.isValid())
-        return;
-    target[0] = static_cast<uint8_t>(chosen.red());
-    target[1] = static_cast<uint8_t>(chosen.green());
-    target[2] = static_cast<uint8_t>(chosen.blue());
-    target[3] = static_cast<uint8_t>(chosen.alpha());
-    refreshStyleSwatches();
-    // Text being typed takes the fill color on its selection too.
-    if (!stroke && _textTool)
-        _textTool->applyColor(_drawingStyle.fillColor);
-    if (!_textTool || !_textTool->isEditing())
-        recolorSelection(stroke);
+    // The swatch pop-up under the swatch clicked: colors for either, and
+    // for the fill the gradient swatches too (new strokes take one color).
+    const uint8_t* target = stroke ? _drawingStyle.strokeColor : _drawingStyle.fillColor;
+    SwatchPopup::Offer offer;
+    offer.gradients = !stroke;
+    offer.none = true;
+    QWidget* anchor = _colorWell ? static_cast<QWidget*>(stroke ? _colorWell->strokeSwatch() : _colorWell->fillSwatch()) : this;
+    SwatchPopup* popup = SwatchPopup::open(anchor, _flaDocument ? _flaDocument->document : nullptr,
+        QColor(target[0], target[1], target[2], target[3]), stroke ? "Stroke Color" : "Fill Color", offer);
+    if (!stroke && _drawingStyle.fillKind != fla::DrawingStyle::FillKind::Solid)
+        popup->setCurrentBrush(brushOfStyleFill(_drawingStyle));
+    const auto styleChanged = [this]() {
+        refreshStyleSwatches();
+        if (_colorPanel)
+            _colorPanel->refresh();
+    };
+    connect(popup, &SwatchPopup::colorPicked, this, [this, stroke, styleChanged](const QColor& chosen) {
+        uint8_t* color = stroke ? _drawingStyle.strokeColor : _drawingStyle.fillColor;
+        color[0] = static_cast<uint8_t>(chosen.red());
+        color[1] = static_cast<uint8_t>(chosen.green());
+        color[2] = static_cast<uint8_t>(chosen.blue());
+        color[3] = static_cast<uint8_t>(chosen.alpha());
+        if (stroke)
+            _drawingStyle.hasStroke = true;
+        else
+        {
+            _drawingStyle.hasFill = true;
+            _drawingStyle.fillKind = fla::DrawingStyle::FillKind::Solid;
+        }
+        styleChanged();
+        // Text being typed takes the fill color on its selection too.
+        if (!stroke && _textTool)
+            _textTool->applyColor(_drawingStyle.fillColor);
+        if (!_textTool || !_textTool->isEditing())
+            recolorSelection(stroke);
+    });
+    connect(popup, &SwatchPopup::gradientPicked, this, [this, styleChanged](const fla::swatches::Gradient& gradient) {
+        fla::swatches::useGradient(_drawingStyle, gradient);
+        styleChanged();
+        if (!_textTool || !_textTool->isEditing())
+            fillSelection("Fill Color", true);
+    });
+    connect(popup, &SwatchPopup::nonePicked, this, [this, stroke, styleChanged]() {
+        (stroke ? _drawingStyle.hasStroke : _drawingStyle.hasFill) = false;
+        styleChanged();
+        if (_propertiesPanel)
+            _propertiesPanel->refresh();
+    });
 }
 
 void MainWindow::recolorSelection(bool stroke)
@@ -12092,6 +12125,9 @@ void MainWindow::setupPropertiesPanel()
         if (key == "fillColor" || key == "strokeColor")
         {
             refreshStyleSwatches();
+            // A gradient picked for the fill shows in the Color panel.
+            if (_colorPanel)
+                _colorPanel->refresh();
             // Text being typed takes the color on its selection too.
             if (key == "fillColor" && _textTool)
                 _textTool->applyColor(_drawingStyle.fillColor);
@@ -16879,6 +16915,11 @@ void MainWindow::applyFillToStrokes()
 
 void MainWindow::applyFillToSelection()
 {
+    fillSelection("Apply Fill", false);
+}
+
+void MainWindow::fillSelection(const char* name, bool quiet)
+{
     if (!_phoenixView || !_drawingStyle.hasFill)
         return;
     std::vector<fla::Shape*> shapes;
@@ -16887,6 +16928,8 @@ void MainWindow::applyFillToSelection()
         if (element && element->elementType() == fla::Element::Type::Shape)
             shapes.push_back(static_cast<fla::Shape*>(element));
     }
+    if (shapes.empty() && quiet)
+        return;
     if (shapes.empty())
     {
         statusBar()->showMessage("Select shapes to fill.", 3000);
@@ -16894,7 +16937,7 @@ void MainWindow::applyFillToSelection()
     }
     _phoenixView->flushPendingMerge();
     fla::CommandStack& stack = _editContext.commandStack();
-    stack.beginMacro("Apply Fill");
+    stack.beginMacro(name);
     for (fla::Shape* shape : shapes)
     {
         std::unique_ptr<fla::Element> copy(fla::cloneElement(*shape, shape->parent));
@@ -16913,7 +16956,7 @@ void MainWindow::applyFillToSelection()
             entry.second = fill;
         }
         fla::DrawingStyle::fitFills(*after);
-        stack.push(fla::CommandPtr(new fla::SetShapeContentsCommand(shape, *after, "Apply Fill")));
+        stack.push(fla::CommandPtr(new fla::SetShapeContentsCommand(shape, *after, name)));
     }
     stack.endMacro();
     stack.breakMergeChain();

@@ -1136,6 +1136,9 @@ private:
     void motionSketch();
     void applyFillToStrokes();
     void applyFillToSelection();
+    /// Fills the selected shapes with the style's fill as one undo step
+    /// named \a name; \a quiet says nothing when no shape is selected.
+    void fillSelection(const char* name, bool quiet);
 
     /// A color picked for drawing goes onto the selected shapes too: their
     /// fills, or their strokes.

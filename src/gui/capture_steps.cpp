@@ -352,8 +352,21 @@ bool runCaptureSteps(MainWindow& window, const QString& path, QString& error)
         }
         else if (step == "target")
         {
-            const TutorialTarget target = tutorials::resolve(window, first, true);
-            if (target.action)
+            // widget:<name>@x,y clicks that point of the widget rather than
+            // its middle (a swatch of a grid).
+            QString spec = first;
+            QPointF at(-1.0, -1.0);
+            if (const int sign = spec.indexOf('@'); sign > 0)
+            {
+                const QStringList xy = spec.mid(sign + 1).split(',');
+                if (xy.size() == 2)
+                    at = QPointF(xy.at(0).toDouble(), xy.at(1).toDouble());
+                spec.truncate(sign);
+            }
+            const TutorialTarget target = tutorials::resolve(window, spec, true);
+            if (target.widget && at.x() >= 0.0)
+                dragIn(target.widget, at, at, modifiersOf(words, 2));
+            else if (target.action)
                 target.action->trigger();
             else if (target.widget && !target.rect.isEmpty())
             {
