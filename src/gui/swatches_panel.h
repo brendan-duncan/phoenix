@@ -35,6 +35,8 @@ signals:
     void removeRequested(int index);
     /// Delete the gradient swatch \a index, counted as gradientsOf counts.
     void gradientRemoveRequested(int index);
+    /// Copy the gradient swatch \a index to just after it.
+    void gradientDuplicateRequested(int index);
     /// The document's swatches to become \a colors, as one undo step
     /// named \a name (duplicating, sorting, importing...).
     void colorsEditRequested(const std::vector<fla::swatches::Color>& colors, const QString& name);

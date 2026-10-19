@@ -216,11 +216,16 @@ SwatchesPanel::SwatchesPanel(QWidget* parent)
             emit gradientPicked(_gradients[static_cast<size_t>(index)], _stroke->isChecked());
     };
     _gradientGrid->rightClicked = [this](int index, const QPoint& where) {
-        // The default gradients become the document's own when one goes.
+        // The default gradients become the document's own when one goes
+        // or is copied.
         QMenu menu(this);
+        QAction* duplicate = menu.addAction("Duplicate Swatch");
         QAction* remove = menu.addAction("Delete Swatch");
-        if (menu.exec(where) == remove)
+        QAction* chosen = menu.exec(where);
+        if (chosen == remove)
             emit gradientRemoveRequested(index);
+        else if (chosen == duplicate)
+            emit gradientDuplicateRequested(index);
     };
 
     _grid->clicked = [this](int index) {

@@ -110,6 +110,11 @@ State withGradientAdded(const State& state, const Gradient& gradient);
 /// none.
 State withGradientRemoved(const State& state, size_t index);
 
+/// \a state with a copy of its gradient swatch \a index just after it,
+/// counted as gradientsOf counts them; the defaults become the document's
+/// own first when it has none.
+State withGradientDuplicated(const State& state, size_t index);
+
 /// \a gradient as the fill new art is drawn with: the style's fill kind,
 /// stops, spread and blending, and its fill switched on.
 void useGradient(DrawingStyle& style, const Gradient& gradient);

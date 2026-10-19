@@ -11740,6 +11740,15 @@ void MainWindow::setupPropertiesPanel()
         _editContext.commandStack().push(fla::CommandPtr(new fla::SetSwatchesCommand(
             document, before, fla::swatches::withGradientRemoved(before, static_cast<size_t>(index)), "Delete Swatch")));
     });
+    connect(_swatchesPanel, &SwatchesPanel::gradientDuplicateRequested, this, [this](int index) {
+        if (!_flaDocument || !_flaDocument->document || index < 0)
+            return;
+        fla::Document* document = _flaDocument->document;
+        const fla::swatches::State before = fla::swatches::stateOf(*document);
+        _editContext.commandStack().push(fla::CommandPtr(new fla::SetSwatchesCommand(
+            document, before, fla::swatches::withGradientDuplicated(before, static_cast<size_t>(index)), "Duplicate Swatch")));
+        _editContext.commandStack().breakMergeChain();
+    });
     connect(_swatchesPanel, &SwatchesPanel::colorsEditRequested, this,
         [this](const std::vector<fla::swatches::Color>& colors, const QString& name) {
             if (!_flaDocument || !_flaDocument->document)

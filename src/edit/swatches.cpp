@@ -551,6 +551,28 @@ State withGradientRemoved(const State& state, size_t index)
     return after;
 }
 
+State withGradientDuplicated(const State& state, size_t index)
+{
+    State after = withOwnGradients(state);
+    // The item copied as written, so what it does not model goes along.
+    const auto duplicate = [](std::string& xml, size_t& index) {
+        const std::vector<GradientItem> items = gradientItems(xml);
+        if (index >= items.size())
+        {
+            index -= items.size();
+            return false;
+        }
+        const GradientItem& item = items[index];
+        xml.insert(item.end, xml.substr(item.start, item.end - item.start));
+        return true;
+    };
+    if (after.exists && duplicate(after.xml, index))
+        return after;
+    if (after.extended && duplicate(after.extendedXml, index))
+        return after;
+    return state;
+}
+
 void useGradient(DrawingStyle& style, const Gradient& gradient)
 {
     style.hasFill = true;
