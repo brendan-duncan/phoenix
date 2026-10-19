@@ -545,7 +545,7 @@ bool runOne(const MovieExportSettings& settings, PhoenixView& view, TimelineAudi
     if (settings.outputRate > 0.0 && frameRate > 0.0 && std::fabs(settings.outputRate - frameRate) > 1.0e-6)
     {
         stride = frameRate / settings.outputRate;
-        count = std::max(1, static_cast<int>(std::floor(sourceCount / stride + 1.0e-9)));
+        count = std::max(1, static_cast<int>(std::ceil(sourceCount / stride - 1.0e-9)));
         frameRate = settings.outputRate;
     }
     int shownScene = segments.front().scene;

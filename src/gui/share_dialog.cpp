@@ -353,7 +353,7 @@ void ShareDialog::estimate()
     const MovieExportSettings chosen = settings();
     const share::Format kind = format();
     const double rate = chosen.outputRate > 0.0 ? chosen.outputRate : _frameRate;
-    const int frames = std::max(1, static_cast<int>(std::floor(_frameCount * rate / _frameRate + 1.0e-9)));
+    const int frames = std::max(1, static_cast<int>(std::ceil(_frameCount * rate / _frameRate - 1.0e-9)));
     // A few frames from a third of the way in, written for real: the first
     // frame's bytes, and what each later one adds.
     const int samples = std::min(4, frames);
