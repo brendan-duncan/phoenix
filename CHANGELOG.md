@@ -12,6 +12,8 @@ What changed in each release of Phoenix, newest first.
 - Moving over the swatch pop-up shows each color or gradient on the selected shapes; nothing changes until you click, and Esc puts them back
 - No Color from the toolbox takes the fill or stroke off the selected shapes too, keeping it on a shape that has nothing else
 - Text, tint, filter, stage, grid, guide and other color swatches open the swatch pop-up too, with the full color picker a click away
+- Rectangle and oval primitives show the swatch under the pointer too, and the toolbox swatches color selected primitives
+- Right-click a gradient swatch in the Swatches panel to duplicate it
 
 ## 0.21.0
 
