@@ -1,4 +1,5 @@
 #include "color_panel.h"
+#include "color_picker_widgets.h"
 #include "theme.h"
 
 #include "../data/bitmap.h"
@@ -488,6 +489,7 @@ ColorPanel::ColorPanel(fla::DrawingStyle* style, QWidget* parent)
     kindRow->addWidget(_kind, 1);
     layout->addLayout(kindRow);
     layout->addWidget(_pages);
+    setupWheel(layout);
     QHBoxLayout* applyRow = new QHBoxLayout();
     applyRow->addStretch();
     applyRow->addWidget(strokes);
@@ -517,6 +519,11 @@ void ColorPanel::refresh()
         kind = 4;
     _kind->setCurrentIndex(kind);
     _pages->setCurrentIndex(kind == 3 ? 2 : kind == 4 ? 3 : kind);
+    // Only the page shown takes room, so the wheel sits right under it.
+    for (int i = 0; i < _pages->count(); ++i)
+        _pages->widget(i)->setSizePolicy(QSizePolicy::Preferred,
+            i == _pages->currentIndex() ? QSizePolicy::Preferred : QSizePolicy::Ignored);
+    _pages->updateGeometry();
 
     const QColor fill = toQColor(_style->fillColor);
     _solidSwatch->setIcon(swatchIcon(fill));
@@ -531,6 +538,7 @@ void ColorPanel::refresh()
     updateStopColor();
 
     refreshBitmaps();
+    updateWheel();
     _updating = false;
 }
 
@@ -595,4 +603,104 @@ void ColorPanel::updateStopColor()
 void ColorPanel::setStopColor(const QColor& color)
 {
     _bar->setCurrentColor(color);
+}
+
+void ColorPanel::setupWheel(QVBoxLayout* layout)
+{
+    // Which color the wheel and the recent colors set: the fill (on a
+    // gradient, its picked pointer) or the stroke.
+    _wheelFill = new QToolButton(this);
+    _wheelFill->setText("Fill");
+    _wheelFill->setToolTip("The wheel and the recent colors set the fill color");
+    _wheelStroke = new QToolButton(this);
+    _wheelStroke->setText("Stroke");
+    _wheelStroke->setToolTip("The wheel and the recent colors set the stroke color");
+    for (QToolButton* button : {_wheelFill, _wheelStroke})
+    {
+        button->setCheckable(true);
+        button->setAutoRaise(true);
+        button->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+        button->setIconSize(QSize(14, 14));
+    }
+    _wheelFill->setObjectName("colorWheelFill");
+    _wheelStroke->setObjectName("colorWheelStroke");
+    _wheelFill->setChecked(true);
+    connect(_wheelFill, &QToolButton::clicked, this, [this]() {
+        _wheelEditsStroke = false;
+        updateWheel();
+    });
+    connect(_wheelStroke, &QToolButton::clicked, this, [this]() {
+        _wheelEditsStroke = true;
+        updateWheel();
+    });
+    QHBoxLayout* targetRow = new QHBoxLayout();
+    targetRow->addWidget(_wheelFill);
+    targetRow->addWidget(_wheelStroke);
+    targetRow->addStretch();
+
+    _wheel = new HsvWheel(this);
+    _wheel->setObjectName("colorWheel");
+    _wheel->setFixedSize(170, 170);
+    connect(_wheel, &HsvWheel::colorChanged, this, &ColorPanel::pickColor);
+
+    _recentColors = new RecentColorsBar(this);
+    _recentColors->setObjectName("recentColors");
+    connect(_recentColors, &RecentColorsBar::colorPicked, this, [this](const QColor& color) { pickColor(color, true); });
+
+    layout->addLayout(targetRow);
+    layout->addWidget(_wheel, 0, Qt::AlignHCenter);
+    QLabel* recent = new QLabel("Recent colors", this);
+    recent->setEnabled(false);
+    layout->addWidget(recent);
+    layout->addWidget(_recentColors);
+    // The room left goes under them, not between the fill and the wheel.
+    layout->addStretch(1);
+}
+
+void ColorPanel::updateWheel()
+{
+    if (!_wheel)
+        return;
+    const QColor stroke = toQColor(_style->strokeColor);
+    QColor fill = toQColor(_style->fillColor);
+    const bool gradient = _style->hasFill && (_style->fillKind == fla::DrawingStyle::FillKind::Linear ||
+                                                 _style->fillKind == fla::DrawingStyle::FillKind::Radial);
+    const int stop = _bar->current();
+    if (gradient && stop >= 0 && stop < static_cast<int>(_bar->stops().size()))
+        fill = toQColor(_bar->stops()[static_cast<size_t>(stop)].color);
+    _wheelFill->setIcon(swatchIcon(fill));
+    _wheelStroke->setIcon(swatchIcon(stroke));
+    _wheelFill->setChecked(!_wheelEditsStroke);
+    _wheelStroke->setChecked(_wheelEditsStroke);
+    if (!_keepWheel)
+        _wheel->setColor(_wheelEditsStroke ? stroke : fill);
+}
+
+void ColorPanel::pickColor(const QColor& color, bool done)
+{
+    if (_wheelEditsStroke)
+    {
+        fromQColor(color, _style->strokeColor);
+        _style->hasStroke = true;
+    }
+    else if (_style->hasFill && (_style->fillKind == fla::DrawingStyle::FillKind::Linear ||
+                                    _style->fillKind == fla::DrawingStyle::FillKind::Radial))
+    {
+        // A gradient: the picked pointer takes the color.
+        setStopColor(color);
+        return;
+    }
+    else
+    {
+        fromQColor(color, _style->fillColor);
+        _style->hasFill = true;
+        _style->fillKind = fla::DrawingStyle::FillKind::Solid;
+    }
+    // The wheel keeps its own hue while it is dragged, a gray's included.
+    _keepWheel = sender() == _wheel;
+    refresh();
+    _keepWheel = false;
+    emit styleChanged();
+    if (done)
+        emit colorChosen(_wheelEditsStroke);
 }

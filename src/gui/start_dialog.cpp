@@ -1,6 +1,7 @@
 #include "start_dialog.h"
 
 #include "new_document_dialog.h"
+#include "starter_templates.h"
 
 #include <QCheckBox>
 #include <QDialogButtonBox>
@@ -40,7 +41,7 @@ StartDialog::StartDialog(const QStringList& recentFiles, QWidget* parent)
     : QDialog(parent)
 {
     setWindowTitle("Welcome to Phoenix");
-    setMinimumSize(860, 520);
+    setMinimumSize(860, 660);
 
     // --- Create new ---
     _presets = new QListWidget(this);
@@ -148,7 +149,87 @@ StartDialog::StartDialog(const QStringList& recentFiles, QWidget* parent)
 
     QVBoxLayout* layout = new QVBoxLayout(this);
     layout->addLayout(body, 1);
+    addStarterTemplates(layout);
+    addWorkspaceChoice(layout);
     layout->addLayout(footer);
+}
+
+void StartDialog::addStarterTemplates(QVBoxLayout* layout)
+{
+    // Documents with art already in them, to play and pull apart.
+    const QList<StarterTemplate> templates = startertemplates::all();
+    if (templates.isEmpty())
+        return;
+    _templates = new QListWidget(this);
+    _templates->setObjectName("startTemplates");
+    _templates->setViewMode(QListView::IconMode);
+    _templates->setFlow(QListView::LeftToRight);
+    _templates->setWrapping(false);
+    _templates->setMovement(QListView::Static);
+    _templates->setIconSize(QSize(160, 90));
+    _templates->setSpacing(6);
+    _templates->setFixedHeight(150);
+    for (const StarterTemplate& entry : templates)
+    {
+        QListWidgetItem* item = new QListWidgetItem(QIcon(QPixmap::fromImage(entry.thumbnail)), entry.title);
+        item->setData(Qt::UserRole, entry.id);
+        item->setToolTip(entry.summary);
+        item->setSizeHint(QSize(176, 124));
+        _templates->addItem(item);
+    }
+    connect(_templates, &QListWidget::itemActivated, this, [this](QListWidgetItem* item) {
+        _template = item->data(Qt::UserRole).toString();
+        choose(Choice::StarterTemplate);
+    });
+    layout->addWidget(heading("Starter Templates", this));
+    QLabel* note = new QLabel("Ready-made animations to play, change and learn from. Double-click one to open a copy.", this);
+    note->setEnabled(false);
+    layout->addWidget(note);
+    layout->addWidget(_templates);
+}
+
+void StartDialog::addWorkspaceChoice(QVBoxLayout* layout)
+{
+    // How much of Phoenix shows: just what a first animation needs, or
+    // every panel. One click either way, here or on the edit bar.
+    _simple = new QPushButton("Simple", this);
+    _simple->setObjectName("startSimpleWorkspace");
+    _simple->setToolTip("Just the stage, the timeline, the common tools, Properties and Color");
+    _full = new QPushButton("Full", this);
+    _full->setObjectName("startFullWorkspace");
+    _full->setToolTip("Every panel and tool");
+    for (QPushButton* button : {_simple, _full})
+    {
+        button->setCheckable(true);
+        button->setAutoDefault(false);
+    }
+    connect(_simple, &QPushButton::clicked, this, [this]() {
+        setWorkspace("Simple", false);
+        emit workspaceChosen("Simple");
+    });
+    connect(_full, &QPushButton::clicked, this, [this]() {
+        setWorkspace("Essentials", false);
+        emit workspaceChosen("Essentials");
+    });
+    _workspaceNote = new QLabel(this);
+    QHBoxLayout* row = new QHBoxLayout();
+    row->addWidget(new QLabel("Layout:", this));
+    row->addWidget(_simple);
+    row->addWidget(_full);
+    row->addWidget(_workspaceNote, 1);
+    layout->addLayout(row);
+    setWorkspace(QString(), false);
+}
+
+void StartDialog::setWorkspace(const QString& current, bool firstTime)
+{
+    if (!_simple)
+        return;
+    _simple->setChecked(current == "Simple");
+    _full->setChecked(!current.isEmpty() && current != "Simple");
+    _workspaceNote->setText(firstTime ? "New to animation? Simple shows only what you need to start; "
+                                        "you can switch any time on the edit bar."
+                                      : QString());
 }
 
 bool StartDialog::showAtStartup() const

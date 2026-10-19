@@ -174,6 +174,11 @@ set(HEADERS
     src/gui/ease_curve_dialog.h
     src/gui/file_association.h
     src/gui/color_panel.h
+    src/gui/color_picker_widgets.h
+    src/gui/popup_palette.h
+    src/gui/simple_workspace.h
+    src/gui/hint_bubble.h
+    src/gui/starter_templates.h
     src/gui/video_import.h
     src/gui/swatches_panel.h
     src/gui/media_import.h
@@ -387,6 +392,8 @@ set(HEADERS
     src/edit/combine_objects.h
     src/edit/transform_parts.h
     src/edit/swatches.h
+    src/edit/color_history.h
+    src/edit/first_use_hints.h
     src/edit/property_command.h
     src/geom/curve.h
     src/geom/intersect.h
@@ -479,6 +486,11 @@ set(SOURCES
     src/gui/file_association.cpp
     src/gui/crash_dump.cpp
     src/gui/color_panel.cpp
+    src/gui/color_picker_widgets.cpp
+    src/gui/popup_palette.cpp
+    src/gui/hint_bubble.cpp
+    src/gui/main_window_friendly.cpp
+    src/gui/starter_templates.cpp
     src/gui/video_import.cpp
     src/gui/swatches_panel.cpp
     src/gui/media_import.cpp
@@ -635,6 +647,13 @@ file(GLOB_RECURSE PHOENIX_TUTORIAL_FILES CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/
 if(PHOENIX_TUTORIAL_FILES)
     qt_add_resources(Phoenix "tutorials" PREFIX "/" BASE "${CMAKE_SOURCE_DIR}/resources"
         FILES ${PHOENIX_TUTORIAL_FILES})
+endif()
+# The start screen's starter templates, in the app as :/templates
+# (tools/build_templates.py makes them).
+file(GLOB_RECURSE PHOENIX_TEMPLATE_FILES CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/resources/templates/*")
+if(PHOENIX_TEMPLATE_FILES)
+    qt_add_resources(Phoenix "templates" PREFIX "/" BASE "${CMAKE_SOURCE_DIR}/resources"
+        FILES ${PHOENIX_TEMPLATE_FILES})
 endif()
 # The CSInterface shim HTML extension panels start with, and the Node.js
 # modules of those that ask for them (cep_panel.cpp).

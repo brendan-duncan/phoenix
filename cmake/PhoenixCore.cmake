@@ -106,6 +106,8 @@ set(PHOENIX_CORE_SOURCES
     edit/shot_breakdown.cpp
     edit/snapping.cpp
     edit/swatches.cpp
+    edit/color_history.cpp
+    edit/first_use_hints.cpp
     edit/text_style.cpp
     edit/three_d.cpp
     edit/behaviors.cpp
