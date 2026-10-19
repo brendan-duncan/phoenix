@@ -1,0 +1,6 @@
+{
+  "title": "Lip-Sync Head",
+  "summary": "A talking head whose mouth is a graphic with the nine mouth shapes, A to H and X, one a frame and labeled. Import a voice recording, select the mouth and choose Modify > Lip Sync.",
+  "order": 3,
+  "thumbnailFrame": 0
+}
