@@ -140,6 +140,7 @@ if(PHOENIX_TESTS_HAVE_PARSER)
         test_node_graph.cpp
         test_paint_brushes.cpp
         test_bone_corrections.cpp
+        test_view_options.cpp
     )
 endif()
 

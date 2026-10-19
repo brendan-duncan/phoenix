@@ -2,6 +2,7 @@
 
 #include "cursors.h"
 #include "phoenix_view.h"
+#include "reference_board_view.h"
 
 #include "../data/oval_primitive.h"
 #include "../data/rectangle_primitive.h"
@@ -446,6 +447,23 @@ bool EyedropperTool::mousePress(PhoenixView& view, QMouseEvent* event, const QPo
 {
     if (event->button() != Qt::LeftButton)
         return false;
+
+    // A reference image shown there, over the art: its color, as a fill.
+    if (const ReferenceBoardView* board = view.referenceBoard())
+    {
+        if (const std::optional<QColor> color = board->colorAt(view.widgetToStage(event->position())))
+        {
+            _style.fillColor[0] = static_cast<uint8_t>(color->red());
+            _style.fillColor[1] = static_cast<uint8_t>(color->green());
+            _style.fillColor[2] = static_cast<uint8_t>(color->blue());
+            _style.fillColor[3] = static_cast<uint8_t>(color->alpha());
+            _style.fillKind = fla::DrawingStyle::FillKind::Solid;
+            _style.hasFill = true;
+            if (_onSampled)
+                _onSampled(false);
+            return true;
+        }
+    }
 
     const HitResult hit = view.hitTest(documentPos, view.pickTolerance());
     if (!hit)
