@@ -2,6 +2,15 @@
 
 What changed in each release of Phoenix, newest first.
 
+## Unreleased
+
+- Window > States: make a movie clip or the whole movie answer clicks and keys with no code; frame labels become states that loop, play once or hold
+- Transitions between states go on a click, press, release or hover on a named button or clip, a key, the end of a state's animation, a timer or an input's value
+- Inputs (on/off switches, numbers and triggers) and listeners that set them when something is clicked or a key is pressed
+- The states are written as ordinary ActionScript 3, or 1 and 2, so they play in Test Movie, SWF and HTML5 pages and other apps
+- A new tutorial, also a lesson in Help > Tutorials: a pet that answers clicks
+- Test Movie runs ActionScript 1 and 2's createEmptyMovieClip, and handlers set by scripts such as onRelease and onEnterFrame
+
 ## 0.20.0
 
 - A boned shape whose last points are bound to no bone keeps the binding of its other points when posed or rebound

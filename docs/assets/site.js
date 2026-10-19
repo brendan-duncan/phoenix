@@ -53,6 +53,7 @@ const NAV = [
     { href: "tutorial-linked-palettes.html", title: "Linked palettes" },
     { href: "tutorial-linked-masters.html", title: "Linked master symbols" },
     { href: "tutorial-x-sheet.html", title: "Timing with the X-sheet" },
+    { href: "tutorial-interactive-states.html", title: "A pet that answers clicks" },
   ] },
   { group: "Workspace", pages: [
     { href: "workspace.html", title: "The workspace" },
@@ -86,6 +87,7 @@ const NAV = [
     { href: "node-graph.html", title: "Node graphs" },
     { href: "sound.html", title: "Sound" },
     { href: "video.html", title: "Video" },
+    { href: "interactivity.html", title: "Interactive states" },
     { href: "actionscript.html", title: "ActionScript and Test Movie" },
   ] },
   { group: "Output", pages: [
