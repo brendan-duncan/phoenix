@@ -2,7 +2,7 @@
 
 What changed in each release of Phoenix, newest first.
 
-## Unreleased
+## 0.21.0
 
 - First-use hints are off until you turn them on with Help > Show Hints
 - Grayscale has a button beside Mirror View on the edit bar; the Simple workspace is chosen from Window > Workspaces instead of the edit bar
