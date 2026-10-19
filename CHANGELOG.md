@@ -33,6 +33,12 @@ What changed in each release of Phoenix, newest first.
 - The Drawing Guides tool places rulers, parallel rulers, ellipses, concentric ellipses and 1-, 2- and 3-point perspective that freehand strokes snap to, with a magnetism setting; guides are saved with the document and never exported
 - A Stabilizer for the Pencil, Paint Brush, Brush, Nib Brush and Eraser, as the Ink Brush has: the line trails the pen on a string, shown as a circle round the line's end, and catches up when you lift
 - The status bar shows what the tool does and what Shift, Alt and Ctrl add, changing as you hold the keys; View > Tool Hints turns it off
+- Window > States: make a movie clip or the whole movie answer clicks and keys with no code; frame labels become states that loop, play once or hold
+- Transitions between states go on a click, press, release or hover on a named button or clip, a key, the end of a state's animation, a timer or an input's value
+- Inputs (on/off switches, numbers and triggers) and listeners that set them when something is clicked or a key is pressed
+- The states are written as ordinary ActionScript 3, or 1 and 2, so they play in Test Movie, SWF and HTML5 pages and other apps
+- A new tutorial, also a lesson in Help > Tutorials: a pet that answers clicks
+- Test Movie runs ActionScript 1 and 2's createEmptyMovieClip, and handlers set by scripts such as onRelease and onEnterFrame
 
 ## 0.20.0
 

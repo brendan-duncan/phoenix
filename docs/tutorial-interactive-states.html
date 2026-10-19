@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A pet that answers clicks · Phoenix User Guide</title>
+<meta name="description" content="Make a little pet interactive without writing code: its poses become states, a click on Feed sends it to eat, and a Nap button and any key put it to sleep and wake it, with the States panel.">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Phoenix">
+<meta property="og:title" content="A pet that answers clicks · Phoenix User Guide">
+<meta property="og:description" content="Make a little pet interactive without writing code: its poses become states, a click on Feed sends it to eat, and a Nap button and any key put it to sleep and wake it, with the States panel.">
+<meta property="og:url" content="https://phoenixanimate.com/tutorial-interactive-states.html">
+<meta property="og:image" content="https://phoenixanimate.com/assets/shots/hero.webp">
+<meta property="og:image:type" content="image/webp">
+<meta property="og:image:width" content="1704">
+<meta property="og:image:height" content="1061">
+<meta property="og:image:alt" content="The Phoenix window with three flower characters on the stage, the timeline below and the Properties panel on the right">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://phoenixanimate.com/assets/shots/hero.webp">
+<meta name="keywords" content="tutorial lesson step by step states interactive no code button click key transition input listener switch pet game test movie">
+<link rel="icon" href="assets/img/logo.png">
+<link rel="stylesheet" href="assets/site.css">
+<script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<main>
+<article class="content">
+
+<p class="eyebrow">Tutorials</p>
+
+<h1>A pet that answers clicks</h1>
+
+<p class="lead">Make a little pet interactive without writing code: its poses become states, a click on Feed sends it to eat, and a Nap button and any key put it to sleep and wake it, with the States panel.</p>
+
+<div class="callout">
+  <span class="label">Try it in Phoenix</span>
+  <p>This page is also a lesson inside Phoenix: choose <span class="menu-path">Help &rsaquo; Tutorials...</span> and start <strong>A pet that answers clicks</strong>, and Phoenix points at each control as you go. It takes about 10 minutes.</p>
+</div>
+
+<p>To follow along here instead, download the starting document, <a href="assets/tutorials/interactive-states.fla" download>interactive-states.fla</a>, and open it with <span class="menu-path">File &rsaquo; Open...</span>.</p>
+
+<figure>
+  <img src="assets/shots/tutorial-interactive-states.webp" alt="The pet, a round teal face, three times: idle with its eyes open, eating with its mouth wide open, and asleep with its eyes closed under a z Z" width="1104" height="210">
+  <figcaption>The pet's three states: idle, eat and sleep.</figcaption>
+</figure>
+
+<p>This pet has three poses, each on frames with a <b>label</b> on the <i>Labels</i> layer: <b>idle</b> (frames 1 to 12, bobbing), <b>eat</b> (13 to 24, chewing) and <b>sleep</b> (25 to 36, eyes closed). Under it are two buttons, named <b>feedBtn</b> and <b>napBtn</b> in the Properties panel. You will make the pet answer them, without typing any code.</p>
+
+<h2>1. Open the States panel</h2>
+
+<p>Choose <span class="menu-path">Window &rsaquo; States</span>. The panel opens beside the Timeline. It is empty: no states yet.</p>
+
+<h2>2. The first state</h2>
+
+<p>Click <strong>Add State...</strong>. The <strong>Label</strong> list offers the labels that are not states yet. Leave it on <b>idle</b>, leave <strong>It</strong> on <b>loops</b>, and click <strong>OK</strong>.</p><p>A box called <i>idle</i> appears, with a green arrow into it: the movie starts in this state, playing frames 1 to 12 over and over.</p>
+
+<h2>3. Eat and sleep</h2>
+
+<p>Click <strong>Add State...</strong> again and pick <b>eat</b>, with <strong>It</strong> set to <b>plays once</b>. Then add <b>sleep</b>, set to <b>holds its first frame</b>.</p><p>Eating plays its frames once and stops; sleeping stays still on frame 25.</p>
+
+<h2>4. Feed it</h2>
+
+<p>Each box has a small dot on its right edge. Drag from <b>idle</b>'s dot and let go on the <b>eat</b> box. An arrow appears: a <b>transition</b>, from idle to eat.</p><p>The arrow says <b>feedBtn is clicked</b>, and the <strong>Picked</strong> column shows it: <strong>When</strong> something is clicked, <strong>What</strong> feedBtn. That is just what we want.</p>
+
+<h2>5. Back to idle</h2>
+
+<p>Drag from <b>eat</b>'s dot onto <b>idle</b>. In the Picked column, set <strong>When</strong> to <b>Its animation finishes</b>.</p><p>Now when the pet has eaten, it goes back to bobbing.</p>
+
+<h2>6. Try it</h2>
+
+<p>Click <strong>Test</strong> at the top of the States panel. The movie plays in Test Movie: click <b>Feed</b> and the pet chews, then goes back to idle. Close the Test Movie window when you have seen it.</p>
+
+<h2>7. An input</h2>
+
+<p>An <b>input</b> is a value the states can go by. Click <strong>Add Input</strong> under <strong>Inputs</strong>. In the Picked column, type <b>sleepy</b> as its <strong>Name</strong> and press <kbd>Enter</kbd>. It is an <b>On/off switch</b>, and it starts off.</p>
+
+<h2>8. The Nap button turns it on</h2>
+
+<p>A <b>listener</b> changes an input when something is clicked or a key is pressed, whatever state is playing. Click <strong>Add Listener</strong>. In the Picked column, set <strong>What</strong> to <b>napBtn</b> and <strong>Then</strong> to <b>turn on</b>.</p><p>The list reads <i>When napBtn is clicked: turn on sleepy</i>.</p>
+
+<h2>9. Any key turns it off</h2>
+
+<p>Click <strong>Add Listener</strong> again. Set <strong>When</strong> to <b>A key is pressed</b>, leave <strong>Key</strong> on <b>Any key</b>, and set <strong>Then</strong> to <b>turn off</b>.</p>
+
+<h2>10. Fall asleep</h2>
+
+<p>Drag from <b>idle</b>'s dot onto <b>sleep</b>. Set <strong>When</strong> to <b>Only when an input is set</b>, then <strong>Only if</strong> to <b>sleepy</b>, <b>is on</b>. Tick <strong>Wait for its animation to finish first</strong>, so the pet finishes its bob before it nods off.</p>
+
+<h2>11. Wake up</h2>
+
+<p>Drag from <b>sleep</b>'s dot onto <b>idle</b>. Set <strong>When</strong> to <b>Only when an input is set</b> and <strong>Only if</strong> to <b>sleepy</b>, <b>is off</b>.</p>
+
+<figure>
+  <img src="assets/shots/states-panel.webp" alt="The States panel: idle, eat and sleep, with arrows feedBtn is clicked, it finishes, sleepy is on (at its end) and sleepy is off" width="1061" height="344">
+  <figcaption>The finished graph.</figcaption>
+</figure>
+
+<h2>12. Play with it</h2>
+
+<p>Click <strong>Test</strong>. Click <b>Nap</b>: at the end of its bob the pet closes its eyes. Press any key and it wakes. Click <b>Feed</b> and it eats.</p>
+
+<h2>What you did</h2>
+
+<p>You made the pet interactive with no code: its frame labels became <b>states</b>, the arrows between them <b>transitions</b>, and the Nap button and the keyboard set an <b>input</b> through <b>listeners</b>.</p><p>Phoenix wrote the ActionScript for you, on the first frame of a new <i>States</i> layer, between two marked comment lines. That is what plays in Test Movie, in a published SWF or HTML5 page, and in any other app that opens the file. Each change in the panel writes it again, and is one step that <span class="menu-path">Edit &rsaquo; Undo</span> takes back.</p>
+
+<p>For everything this tutorial touches on, see <a href="interactivity.html">Interactive states</a> and <a href="actionscript.html">ActionScript and Test Movie</a>.</p>
+
+</article>
+</main>
+</body>
+</html>

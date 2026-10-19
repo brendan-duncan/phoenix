@@ -37,7 +37,7 @@ void writeSample(const fs::path& folder)
         "phoenixDrawingGuides=\"snap=1 hidden=0 magnetism=80;ruler a=0,0 b=100,0\" phoenixSymmetry=\"on=1 mode=radial x=275 y=200\" "
         "phoenixFutureThing=\"1\">"
         "<symbols><Include href=\"Peg.xml\"/></symbols>"
-        "<timelines><DOMTimeline name=\"Scene 1\" phoenixNodeGraph=\"&lt;graph/&gt;\"><layers>"
+        "<timelines><DOMTimeline name=\"Scene 1\" phoenixNodeGraph=\"&lt;graph/&gt;\" phoenixStates=\"&lt;states/&gt;\"><layers>"
         "<DOMLayer name=\"Camera\" layerType=\"guide\" phoenixCamera=\"true\"><frames>"
         "<DOMFrame index=\"0\" phoenixCameraX=\"275\" phoenixCameraY=\"200\"><elements/></DOMFrame></frames></DOMLayer>"
         "<DOMLayer name=\"Armature_1\"><frames><DOMFrame index=\"0\"><elements/>"

@@ -93,6 +93,9 @@ const std::vector<Feature>& all()
             {"phoenixReferences"}},
         {"drawing-aids", "Drawing guides and symmetry", "the art as drawn, without the guides or the symmetry axis",
             {"phoenixDrawingGuides", "phoenixSymmetry"}},
+        {"interactive-states", "Interactive states",
+            "the scripts the states were turned into, which play the same, but no States panel to change them in",
+            {"phoenixStates"}},
     };
     return list;
 }

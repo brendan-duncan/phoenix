@@ -1071,6 +1071,9 @@ private:
     /// The node graph of the timeline being edited.
     class NodeGraphPanel* _nodeGraph = nullptr;
     QDockWidget* _nodeGraphDock = nullptr;
+    /// Interactive states of the timeline being edited.
+    class StatesPanel* _states = nullptr;
+    QDockWidget* _statesDock = nullptr;
     /// Palettes: linked palettes.
     class PalettesPanel* _palettes = nullptr;
     QDockWidget* _palettesDock = nullptr;

@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Interactive states · Phoenix User Guide</title>
+<meta name="description" content="Make a character or a whole movie answer clicks and keys without writing code: frame labels become states, and arrows between them say what sends the playhead from one to another.">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Phoenix">
+<meta property="og:title" content="Interactive states · Phoenix User Guide">
+<meta property="og:description" content="Make a character or a whole movie answer clicks and keys without writing code: frame labels become states, and arrows between them say what sends the playhead from one to another.">
+<meta property="og:url" content="https://phoenixanimate.com/interactivity.html">
+<meta property="og:image" content="https://phoenixanimate.com/assets/shots/hero.webp">
+<meta property="og:image:type" content="image/webp">
+<meta property="og:image:width" content="1704">
+<meta property="og:image:height" content="1061">
+<meta property="og:image:alt" content="The Phoenix window with three flower characters on the stage, the timeline below and the Properties panel on the right">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://phoenixanimate.com/assets/shots/hero.webp">
+<meta name="keywords" content="states state machine interactive interactivity no code button click hover key press transition input switch number trigger listener frame label loop play once hold test movie actionscript html5 swf game">
+<link rel="icon" href="assets/img/logo.png">
+<link rel="stylesheet" href="assets/site.css">
+<script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<main>
+<article class="content">
+
+<p class="eyebrow">Animation</p>
+<h1>Interactive states</h1>
+<p class="lead">A character that waves when you click it, a menu that opens when the pointer comes over it, a pet that eats when you feed it: the <strong>States</strong> panel makes a movie clip, or the whole movie, answer clicks and keys without writing any code. Each pose or bit of animation is a <strong>state</strong>, and arrows between the states say what sends the playhead from one to another.</p>
+
+<figure>
+  <img src="assets/shots/states-panel.webp" alt="The States panel: three boxes, idle, eat and sleep, with a green arrow into idle; arrows from idle to eat marked feedBtn is clicked, from eat to idle marked it finishes, and between idle and sleep marked sleepy is on (at its end) and sleepy is off" width="1061" height="344">
+  <figcaption>A pet's states: it bobs (idle) until Feed is clicked, eats once, then bobs again; it sleeps while the sleepy switch is on.</figcaption>
+</figure>
+
+<h2 id="before">Before you start</h2>
+
+<p>States are made of two things you already know from the timeline:</p>
+
+<ul>
+  <li><strong>Frame labels.</strong> Put each pose or piece of animation on frames of its own and give the first of them a label in the Properties panel: <i>idle</i> on frames 1 to 12, <i>eat</i> on 13 to 24, <i>sleep</i> from 25. A state plays from its label to the frame before the next label (or the end of the timeline).</li>
+  <li><strong>Instance names.</strong> Something to click needs a name: select the button or movie clip on the stage and type a name such as <i>feedBtn</i> in the Properties panel. It has to be on the same timeline as the labels.</li>
+</ul>
+
+<p>The states can belong to the main timeline (the scene) or to a movie clip symbol: open the symbol by double-clicking it, and the panel shows that symbol's states, so every copy of it on the stage behaves the same way.</p>
+
+<h2 id="open">Open the States panel</h2>
+
+<p>Choose <span class="menu-path">Window &rsaquo; States</span>. The panel opens beside the Timeline and shows the states of the timeline you are editing. The graph is on the left, what you have picked in the middle, and the inputs and listeners on the right.</p>
+
+<h2 id="states">States</h2>
+
+<p>Click <strong>Add State...</strong>. The <strong>Label</strong> list offers the frame labels that are not states yet; pick one. Or type a new name and give the frame where it starts: Phoenix makes the label for you, on a layer called <i>States</i>.</p>
+
+<figure class="narrow">
+  <img src="assets/shots/states-add-state.webp" alt="The Add State dialog: Label, At frame and It, which is set to loops" width="243" height="182">
+  <figcaption>A new label made at frame 37.</figcaption>
+</figure>
+
+<p>Each state does one of three things with its frames:</p>
+
+<table>
+  <thead><tr><th>It</th><th>What happens</th></tr></thead>
+  <tbody>
+    <tr><td>loops</td><td class="wrap">Plays its frames over and over, like a walk cycle or an idle bob.</td></tr>
+    <tr><td>plays once</td><td class="wrap">Plays its frames and stops on the last one: a jump, a wave, a door opening.</td></tr>
+    <tr><td>holds its first frame</td><td class="wrap">Stays still on its first frame: a button that is pressed, a light that is off.</td></tr>
+  </tbody>
+</table>
+
+<p>Click a state's box to change it. <strong>Name</strong> is its frame label: renaming the state renames the label. <strong>Through</strong> lets a state play on through the frames of later labels too. <strong>The movie starts in this state</strong> marks the starting state, shown with a green arrow; the first state you add starts out as that. Drag a box to move it about the graph.</p>
+
+<h2 id="transitions">Transitions</h2>
+
+<p>A transition is an arrow from one state to another. To make one, drag from the small dot on the right edge of a state's box and let go on another box. (Or pick a state and click <strong>Add Transition</strong>.) Click an arrow, or the words on it, to say when it happens:</p>
+
+<figure>
+  <img src="assets/shots/states-transition.webp" alt="The States panel with a transition picked: From idle, To eat, When Something is clicked, What feedBtn with a Use Selected button, Only if no input, and Wait for its animation to finish first" width="1061" height="344">
+  <figcaption>From idle to eat, when the button named feedBtn is clicked.</figcaption>
+</figure>
+
+<table>
+  <thead><tr><th>When</th><th>The transition happens</th></tr></thead>
+  <tbody>
+    <tr><td>Something is clicked</td><td class="wrap">When the instance named in <strong>What</strong> is clicked: pressed and let go over it.</td></tr>
+    <tr><td>Something is pressed</td><td class="wrap">As soon as the mouse button goes down on it.</td></tr>
+    <tr><td>The mouse button is let go over something</td><td class="wrap">When the button comes up over it, wherever it went down.</td></tr>
+    <tr><td>The pointer moves onto something, or off it</td><td class="wrap">When the pointer comes over the instance, or leaves it: for hover effects.</td></tr>
+    <tr><td>A key is pressed</td><td class="wrap">When the <strong>Key</strong> picked is pressed: a letter, a number, Space, Enter, an arrow key, or any key.</td></tr>
+    <tr><td>Its animation finishes</td><td class="wrap">When the state reaches its last frame (for a loop, each time round).</td></tr>
+    <tr><td>Some time goes by</td><td class="wrap">After the number of seconds given in the state.</td></tr>
+    <tr><td>Only when an input is set</td><td class="wrap">As soon as the input in <strong>Only if</strong> has the value given (see <a href="#inputs">Inputs</a>).</td></tr>
+  </tbody>
+</table>
+
+<p>For a click, <strong>What</strong> lists the named buttons and movie clips on the timeline; you can also select one on the stage and click <strong>Use Selected</strong>. <strong>Only if</strong> adds a condition to any transition: <i>feedBtn is clicked, if hungry is on</i>. <strong>Wait for its animation to finish first</strong> lets the state play to its end before going, so a bob or a step is never cut off halfway.</p>
+
+<p>The <strong>Any state</strong> box at the top is for a transition that leaves whatever state is playing: drag from its dot to a state, for example to send a character to <i>hurt</i> whatever it is doing when it is hit.</p>
+
+<h2 id="inputs">Inputs</h2>
+
+<p>An input is a named value the transitions can go by. Click <strong>Add Input</strong>, then name it in the middle column. There are three kinds:</p>
+
+<ul>
+  <li>An <strong>On/off switch</strong>, such as <i>sleepy</i> or <i>door open</i>, that starts on or off. Test it with <i>is on</i> or <i>is off</i>.</li>
+  <li>A <strong>Number</strong>, such as <i>score</i> or <i>lives</i>, that starts at a value. Test it with &gt;, &lt;, =, <i>is not</i>, <i>is at least</i> or <i>is at most</i> a number: <i>score &gt; 3</i>.</li>
+  <li>A <strong>Trigger</strong>, which fires once: the transition that goes because of it uses it up, so it does not send the state on again.</li>
+</ul>
+
+<h2 id="listeners">Listeners</h2>
+
+<p>A listener sets an input when something is clicked or a key is pressed, whatever state is playing. Click <strong>Add Listener</strong> and choose <strong>When</strong> (a click, press, release, hover or key), <strong>What</strong> or <strong>Key</strong>, the <strong>Input</strong>, and <strong>Then</strong>: <i>turn on</i>, <i>turn off</i> or <i>flip</i> a switch, <i>add</i> to a number or <i>set</i> it, or <i>fire</i> a trigger. The list reads like a sentence: <i>When napBtn is clicked: turn on sleepy</i>.</p>
+
+<p>Listeners and transitions together make small games: a listener adds 1 to <i>score</i> each time a coin is clicked, and a transition goes to <i>win</i> when <i>score is at least 10</i>.</p>
+
+<h2 id="test">Try it</h2>
+
+<p>Click <strong>Test</strong> at the top of the panel. The movie plays in <a href="actionscript.html#test-movie">Test Movie</a>, where you can click and press keys and watch the states change.</p>
+
+<p>Each change in the panel is one step that <span class="menu-path">Edit &rsaquo; Undo</span> takes back. <strong>Remove</strong> takes out the state, arrow, input or listener picked; a state's frame label stays on the timeline.</p>
+
+<h2 id="what-phoenix-writes">What Phoenix writes</h2>
+
+<p>You never need to look, but the states are turned into ordinary ActionScript: Phoenix writes it on the first frame of the <i>States</i> layer, between two comment lines that start with <code>// [States]</code> and <code>// [/States]</code>. It is ActionScript 3 for an ActionScript 3 document, and ActionScript 1 and 2 otherwise, as the document's publish settings say. Because it is plain ActionScript, the states work in Test Movie, in a published <a href="export.html#swf">SWF</a> or <a href="export.html#html5">HTML5 page</a>, and in any other app that opens the file, with nothing of Phoenix's needed.</p>
+
+<ul>
+  <li>Each change in the panel writes the lines between the markers again. Lines of your own on that frame, above or below them, are kept as they are; do not change the lines between the markers, as they are replaced.</li>
+  <li>The states themselves are kept in the file in a setting other apps ignore, so Phoenix can show them in the panel again.</li>
+  <li>If the labels move on the timeline, or the document's ActionScript version changes, the panel says the scripts are out of date: click <strong>Update Scripts</strong>. Test does so for you.</li>
+  <li>In ActionScript 1 and 2, the instances clicked get <code>onRelease</code>, <code>onPress</code>, <code>onRollOver</code> or <code>onRollOut</code> handlers, which take the place of handlers of the same name a script of yours sets on the same instance. Their <code>on()</code> handlers still run.</li>
+  <li>Timers count frames at the document's frame rate.</li>
+</ul>
+
+<h2>Learn it step by step</h2>
+
+<p>The lesson <a href="tutorial-interactive-states.html">A pet that answers clicks</a> (<span class="menu-path">Help &rsaquo; Tutorials...</span>) makes a little pet eat when Feed is clicked and sleep when Nap is clicked, with an input, two listeners and four transitions.</p>
+
+</article>
+</main>
+</body>
+</html>
