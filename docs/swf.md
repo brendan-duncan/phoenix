@@ -733,7 +733,7 @@ trace output.
 ## Tests and inspecting output
 
 Tests are in the `phoenix_tests` executable; the argument is a substring
-filter (see [BUILDING.md](BUILDING.md)):
+filter (see [building.md](building.md)):
 
 ```
 build/Release/phoenix_tests swf_

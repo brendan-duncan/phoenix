@@ -8,7 +8,7 @@ Phoenix is an open source vector animation app for Windows and macOS. It has the
 
 ## Building
 
-See [docs/BUILDING.md](docs/BUILDING.md) to build Phoenix from source and run its tests.
+See [docs/building.md](docs/building.md) to build Phoenix from source and run its tests.
 
 ## License
 

@@ -8,7 +8,7 @@ listed in [README.md](README.md).
 
 Phoenix is a C++17 / Qt 6 application. The file formats it reads and writes natively are FLA (the
 zipped XFL package), the XFL folder, the old binary FLA (read only), and its own `.phx` format.
-Building is covered in [BUILDING.md](BUILDING.md).
+Building is covered in [building.md](building.md).
 
 ## 1. The source tree
 
@@ -516,7 +516,7 @@ Headless details from `main.cpp`:
   dot.
 
 `capture-window` and `capture-dialog` draw the window, a panel, a menu or a dialog to a PNG without
-showing it. They produce the user guide's screenshots. As [BUILDING.md](BUILDING.md) notes, run
+showing it. They produce the user guide's screenshots. As [building.md](building.md) notes, run
 them without `offscreen`, which loses the theme. The user-facing reference is
 [website/command-line.html](../website/command-line.html).
 

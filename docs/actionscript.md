@@ -779,7 +779,7 @@ The runtime reports what it lacks once per kind in the console (`phoenix.unsuppo
 ### 9.1 Unit tests
 
 All in `phoenix_tests` ([tests/CMakeLists.txt](../tests/CMakeLists.txt)); pass a substring to run a
-subset, for example `build/Release/phoenix_tests movie_runtime`. See [BUILDING.md](BUILDING.md).
+subset, for example `build/Release/phoenix_tests movie_runtime`. See [building.md](building.md).
 
 | File | Covers |
 |---|---|
@@ -833,7 +833,7 @@ Use it to check the painter against expectations without scripts.
 2. Errors print with their `where` (`Symbol, frame N` or the instance name) and line; AS3 adds the
    stack. Compiled ABC errors name class and method only.
 3. For interaction bugs, script the input (`--click 10:200,150`) and compare traces.
-4. `--image` and the headless renders in [BUILDING.md](BUILDING.md) give a picture without a window.
+4. `--image` and the headless renders in [building.md](building.md) give a picture without a window.
 5. For HTML5, open the published page with `#trace` (output in the page) and `#frame=N` (hold a
    frame) to compare with Phoenix's own render of that frame.
 
