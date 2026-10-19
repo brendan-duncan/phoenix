@@ -41,6 +41,7 @@ What changed in each release of Phoenix, newest first.
 - The states are written as ordinary ActionScript 3, or 1 and 2, so they play in Test Movie, SWF and HTML5 pages and other apps
 - A new tutorial, also a lesson in Help > Tutorials: a pet that answers clicks
 - Test Movie runs ActionScript 1 and 2's createEmptyMovieClip, and handlers set by scripts such as onRelease and onEnterFrame
+- Many brush strokes of one color crossing in a small area, with Object Drawing off or with radial symmetry, no longer merge with pieces missing
 
 ## 0.20.0
 
