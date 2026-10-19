@@ -10,6 +10,7 @@
 #include <QWidget>
 
 #include <memory>
+#include <utility>
 #include <vector>
 
 class PhoenixView;
@@ -18,9 +19,10 @@ class QSpinBox;
 class QToolButton;
 
 namespace fla {
+class Command;
 class Document;
+class Element;
 class FillStyle;
-class SetShapeContentsCommand;
 class Shape;
 }
 
@@ -80,11 +82,18 @@ public:
     void setCurrentBrush(const QBrush& brush);
     void popupUnder(QWidget* anchor);
 
-    /// Shows the swatch under the pointer on \a shapes in \a view, on their
-    /// fills or with \a strokes their strokes, without an undo step. Moving
-    /// off the swatches or closing puts them back; a pick puts them back
-    /// before it is applied, so it is one undo step from how they were.
-    void previewOn(PhoenixView* view, const std::vector<fla::Shape*>& shapes, bool strokes);
+    /// Shows the swatch under the pointer on \a elements in \a view (shapes
+    /// and rectangle and oval primitives), on their fills or with \a strokes
+    /// their strokes, without an undo step. Moving off the swatches or
+    /// closing puts them back; a pick puts them back before it is applied,
+    /// so it is one undo step from how they were.
+    void previewOn(PhoenixView* view, const std::vector<fla::Element*>& elements, bool strokes);
+
+    /// Whether a pop-up is showing a swatch on the document now, which a
+    /// save must not write.
+    static bool previewing();
+    /// Closes every pop-up open, putting back what they show.
+    static void closeAll();
 
     /// The pop-up's swatches, for the grid that draws them.
     struct Item
@@ -137,8 +146,9 @@ private:
     bool _offersGradients = false;
     bool _offersAlpha = true;
     QPointer<PhoenixView> _view;
-    std::vector<fla::Shape*> _previewShapes;
+    std::vector<fla::Element*> _previewElements;
     bool _previewStrokes = false;
-    /// The previews showing, each undone to put its shape back.
-    std::vector<std::unique_ptr<fla::SetShapeContentsCommand>> _previews;
+    /// The previews showing, each undone to put its element back, with
+    /// the shape it changed (null for a primitive).
+    std::vector<std::pair<std::unique_ptr<fla::Command>, fla::Shape*>> _previews;
 };

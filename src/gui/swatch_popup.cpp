@@ -12,6 +12,7 @@
 #include "../data/solid_color.h"
 #include "../edit/element_commands.h"
 #include "../edit/shape_merge.h"
+#include "../edit/swatches.h"
 
 #include <QColorDialog>
 #include <QCursor>
@@ -34,6 +35,13 @@
 #include <algorithm>
 
 namespace {
+
+/// The pop-ups open now.
+std::vector<SwatchPopup*>& livePopups()
+{
+    static std::vector<SwatchPopup*> popups;
+    return popups;
+}
 
 /// The grid: twelve swatches a row, each this many pixels with a pixel
 /// between.
@@ -321,6 +329,7 @@ SwatchPopup::SwatchPopup(QWidget* parent)
 {
     setObjectName("swatchPopup");
     setAttribute(Qt::WA_DeleteOnClose);
+    livePopups().push_back(this);
     QVBoxLayout* layout = new QVBoxLayout(this);
     layout->setContentsMargins(6, 6, 6, 6);
     layout->setSpacing(6);
@@ -357,7 +366,7 @@ SwatchPopup::SwatchPopup(QWidget* parent)
     _none->setToolTip("No color");
     connect(_none, &QToolButton::clicked, this, [this]() {
         previewShapes(nullptr);
-        _previewShapes.clear();
+        _previewElements.clear();
         emit nonePicked();
         close();
     });
@@ -498,25 +507,51 @@ void SwatchPopup::popupUnder(QWidget* anchor)
 SwatchPopup::~SwatchPopup()
 {
     previewShapes(nullptr);
+    std::vector<SwatchPopup*>& popups = livePopups();
+    popups.erase(std::remove(popups.begin(), popups.end(), this), popups.end());
 }
 
-void SwatchPopup::previewOn(PhoenixView* view, const std::vector<fla::Shape*>& shapes, bool strokes)
+bool SwatchPopup::previewing()
+{
+    for (const SwatchPopup* popup : livePopups())
+    {
+        if (!popup->_previews.empty())
+            return true;
+    }
+    return false;
+}
+
+void SwatchPopup::closeAll()
+{
+    // A copy: closing may delete them.
+    const std::vector<QPointer<SwatchPopup>> popups(livePopups().begin(), livePopups().end());
+    for (const QPointer<SwatchPopup>& popup : popups)
+    {
+        if (popup)
+        {
+            popup->previewShapes(nullptr);
+            popup->close();
+        }
+    }
+}
+
+void SwatchPopup::previewOn(PhoenixView* view, const std::vector<fla::Element*>& elements, bool strokes)
 {
     previewShapes(nullptr);
     _view = view;
-    _previewShapes = shapes;
+    _previewElements = elements;
     _previewStrokes = strokes;
 }
 
 void SwatchPopup::previewShapes(const Item* item)
 {
-    // Each preview undone, putting its shape back as it was.
+    // Each preview undone, putting its element back as it was.
     const bool restored = !_previews.empty();
     for (size_t i = _previews.size(); i-- > 0;)
     {
-        _previews[i]->undo();
-        if (_view)
-            _view->forgetShape(_previewShapes[i]);
+        _previews[i].first->undo();
+        if (_view && _previews[i].second)
+            _view->forgetShape(_previews[i].second);
     }
     _previews.clear();
     if (!item || !_view)
@@ -532,8 +567,28 @@ void SwatchPopup::previewShapes(const Item* item)
     const QColor color = withAlpha(item->color);
     const fla::swatches::Color rgba = {static_cast<uint8_t>(color.red()), static_cast<uint8_t>(color.green()),
         static_cast<uint8_t>(color.blue()), static_cast<uint8_t>(color.alpha())};
-    for (fla::Shape* shape : _previewShapes)
+    bool primitives = false;
+    for (fla::Element* element : _previewElements)
     {
+        if (!element)
+            continue;
+        if (fla::swatches::isPrimitive(*element))
+        {
+            // A rectangle or oval primitive keeps its own fill and stroke,
+            // swapped in place.
+            std::unique_ptr<fla::Command> paint(item->kind == Item::Kind::Gradient
+                    ? fla::swatches::paintPrimitive(*element, _previewStrokes, item->gradient, "Preview")
+                    : fla::swatches::paintPrimitive(*element, _previewStrokes, rgba, "Preview"));
+            if (!paint)
+                continue;
+            paint->redo();
+            _previews.emplace_back(std::move(paint), nullptr);
+            primitives = true;
+            continue;
+        }
+        if (element->elementType() != fla::Element::Type::Shape)
+            continue;
+        fla::Shape* shape = static_cast<fla::Shape*>(element);
         std::unique_ptr<fla::Shape> after(fla::cloneShape(*shape, nullptr));
         if (item->kind == Item::Kind::Gradient)
         {
@@ -546,9 +601,14 @@ void SwatchPopup::previewShapes(const Item* item)
             fla::swatches::paintStrokes(*after, rgba);
         else
             fla::swatches::paintFills(*after, rgba);
-        _previews.emplace_back(new fla::SetShapeContentsCommand(shape, *after, "Preview"));
-        _previews.back()->redo();
+        _previews.emplace_back(std::unique_ptr<fla::Command>(new fla::SetShapeContentsCommand(shape, *after, "Preview")), shape);
+        _previews.back().first->redo();
         _view->forgetShape(shape);
+    }
+    if (primitives)
+    {
+        _view->clearCaches();
+        _view->update();
     }
 }
 
@@ -612,7 +672,7 @@ void SwatchPopup::pick(const Item& item)
     // shapes go back as they were first, so the pick is one undo step.
     QPointer<SwatchPopup> self(this);
     previewShapes(nullptr);
-    _previewShapes.clear();
+    _previewElements.clear();
     if (item.kind == Item::Kind::Gradient)
     {
         emit gradientPicked(item.gradient);

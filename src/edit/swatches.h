@@ -12,6 +12,7 @@ namespace fla {
 
 class DOMElement;
 class Document;
+class Element;
 class FillStyle;
 class Shape;
 
@@ -135,6 +136,17 @@ void paintStrokes(Shape& shape, const Color& color);
 /// No Color leaves it; null when nothing would be left, since a shape
 /// keeps a fill or a stroke. The caller owns it.
 Shape* withoutPart(const Shape& shape, bool strokes);
+
+/// Whether \a element is a rectangle or oval primitive.
+bool isPrimitive(const Element& element);
+
+/// A step painting a rectangle or oval primitive's fill, or with
+/// \a strokes its stroke, with \a color or \a gradient (fitted to its
+/// box). Null for any other element, for a part the primitive does not
+/// have, and for a gradient on a stroke, which keeps to one color. The
+/// caller owns it.
+Command* paintPrimitive(Element& element, bool strokes, const Color& color, const std::string& name);
+Command* paintPrimitive(Element& element, bool strokes, const Gradient& gradient, const std::string& name);
 
 } // namespace swatches
 

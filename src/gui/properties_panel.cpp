@@ -473,6 +473,7 @@ void PropertiesPanel::buildTabBar()
     {
         QToolButton* button = new QToolButton(bar);
         button->setText(titles[i]);
+        button->setObjectName(QString("propertiesTab") + titles[i]);
         button->setCheckable(true);
         button->setAutoRaise(true);
         button->setChecked(i == 0);
@@ -2035,6 +2036,7 @@ void PropertiesPanel::addPrimitiveSections(QVBoxLayout* layout, fla::Element* el
             SwatchPopup* popup = SwatchPopup::open(swatch, document(), current, "Fill Color", offer);
             if (!solid)
                 popup->setCurrentBrush(brushOf(**fillSlot));
+            popup->previewOn(_links.view, {element}, false);
             const auto replace = [=](fla::FillStyle* after) {
                 push(std::unique_ptr<fla::Command>(new fla::ReplaceOwnedCommand<fla::FillStyle>(*fillSlot, after, "Fill Color")));
                 emit documentEdited();
@@ -2078,6 +2080,7 @@ void PropertiesPanel::addPrimitiveSections(QVBoxLayout* layout, fla::Element* el
             connect(swatch, &QToolButton::clicked, this, [=]() {
                 // A primitive's stroke keeps to one color.
                 SwatchPopup* popup = SwatchPopup::open(swatch, document(), toQColor(color), "Stroke Color", SwatchPopup::Offer());
+                popup->previewOn(_links.view, {element}, true);
                 connect(popup, &SwatchPopup::colorPicked, this, [=](const QColor& chosen) {
                     uint8_t after[4];
                     applyColor(chosen, after);

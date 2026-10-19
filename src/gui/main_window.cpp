@@ -177,6 +177,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <functional>
 #include <numeric>
 #include <optional>
 #include <algorithm>
@@ -1158,7 +1159,9 @@ void MainWindow::giveAutoSave(DocumentTab& tab)
     links.modified = [reach]() { return reach->owner && reach->owner->tabModified(*reach); };
     links.path = [reach]() { return reach->owner ? reach->owner->tabPath(*reach) : QString(); };
     links.name = [reach]() { return reach->owner ? reach->owner->tabName(*reach) : QString(); };
-    links.busy = []() { return QApplication::mouseButtons() != Qt::NoButton; };
+    // A swatch pop-up showing a color on the art waits too: the copy is of
+    // the art as it is, not as previewed.
+    links.busy = []() { return QApplication::mouseButtons() != Qt::NoButton || SwatchPopup::previewing(); };
     tab.autoSave = std::make_unique<AutoSave>(links);
 }
 
@@ -8476,6 +8479,9 @@ bool MainWindow::confirmPhoenixFeatures()
 bool MainWindow::writeDocumentFile(const fla::Document& document, const QString& filePath, QString& error)
 {
     error.clear();
+    // A swatch shown on the art while the pointer is over it is not saved:
+    // the pop-up closes, putting the art back, before anything is written.
+    SwatchPopup::closeAll();
     if (isPhxPath(filePath))
     {
         phx::SaveOptions options;
@@ -9787,6 +9793,8 @@ void MainWindow::publish(const QString& profile)
 
 bool MainWindow::publishFiles(QStringList& written, QStringList& problems, const QString& profile)
 {
+    // A swatch shown on the art while the pointer is over it is not published.
+    SwatchPopup::closeAll();
     scriptEvent("prePublish");
     struct Published
     {
@@ -9959,6 +9967,7 @@ bool MainWindow::publishFiles(QStringList& written, QStringList& problems, const
 
 bool MainWindow::exportSwf(const QString& path, const QSize& size, QString& error)
 {
+    SwatchPopup::closeAll();
     const fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
     if (!document || !_phoenixView)
     {
@@ -11376,16 +11385,49 @@ void MainWindow::chooseStyleColor(bool stroke)
         QColor(target[0], target[1], target[2], target[3]), stroke ? "Stroke Color" : "Fill Color", offer);
     if (!stroke && _drawingStyle.fillKind != fla::DrawingStyle::FillKind::Solid)
         popup->setCurrentBrush(brushOfStyleFill(_drawingStyle));
-    // The selected shapes show the swatch under the pointer; with nothing
-    // selected only the tool's style changes, so there is nothing to show.
+    // The selected shapes and primitives show the swatch under the pointer;
+    // with nothing selected only the tool's style changes, so there is
+    // nothing to show.
     if (!_textTool || !_textTool->isEditing())
-        popup->previewOn(_phoenixView, selectedShapes(), stroke);
+    {
+        std::vector<fla::Element*> shown;
+        for (fla::Element* element : selectedElements())
+        {
+            if (element && (element->elementType() == fla::Element::Type::Shape || fla::swatches::isPrimitive(*element)))
+                shown.push_back(element);
+        }
+        popup->previewOn(_phoenixView, shown, stroke);
+    }
     const auto styleChanged = [this]() {
         refreshStyleSwatches();
         if (_colorPanel)
             _colorPanel->refresh();
     };
-    connect(popup, &SwatchPopup::colorPicked, this, [this, stroke, styleChanged](const QColor& chosen) {
+    // The selected primitives take the pick too, in the same undo step as
+    // the shapes.
+    const auto paintPrimitives = [this](const std::function<fla::Command*(fla::Element&)>& paint) {
+        bool painted = false;
+        for (fla::Element* element : selectedElements())
+        {
+            if (!element || !fla::swatches::isPrimitive(*element))
+                continue;
+            if (fla::Command* command = paint(*element))
+            {
+                _editContext.commandStack().push(fla::CommandPtr(command));
+                painted = true;
+            }
+        }
+        if (!painted)
+            return;
+        if (_phoenixView)
+        {
+            _phoenixView->clearCaches();
+            _phoenixView->update();
+        }
+        if (_propertiesPanel)
+            _propertiesPanel->refresh();
+    };
+    connect(popup, &SwatchPopup::colorPicked, this, [this, stroke, styleChanged, paintPrimitives](const QColor& chosen) {
         uint8_t* color = stroke ? _drawingStyle.strokeColor : _drawingStyle.fillColor;
         color[0] = static_cast<uint8_t>(chosen.red());
         color[1] = static_cast<uint8_t>(chosen.green());
@@ -11403,10 +11445,30 @@ void MainWindow::chooseStyleColor(bool stroke)
         if (!stroke && _textTool)
             _textTool->applyColor(_drawingStyle.fillColor);
         if (!_textTool || !_textTool->isEditing())
+        {
+            fla::CommandStack& stack = _editContext.commandStack();
+            stack.beginMacro(stroke ? "Stroke Color" : "Fill Color");
             recolorSelection(stroke);
+            const fla::swatches::Color rgba = {color[0], color[1], color[2], color[3]};
+            paintPrimitives([stroke, rgba](fla::Element& element) {
+                return fla::swatches::paintPrimitive(element, stroke, rgba, stroke ? "Stroke Color" : "Fill Color");
+            });
+            stack.endMacro();
+            stack.breakMergeChain();
+        }
     });
-    connect(popup, &SwatchPopup::gradientPicked, this, [this](const fla::swatches::Gradient& gradient) {
+    connect(popup, &SwatchPopup::gradientPicked, this, [this, paintPrimitives](const fla::swatches::Gradient& gradient) {
+        fla::CommandStack& stack = _editContext.commandStack();
+        stack.beginMacro("Fill Color");
         useGradientSwatch(gradient);
+        if (!_textTool || !_textTool->isEditing())
+        {
+            paintPrimitives([&gradient](fla::Element& element) {
+                return fla::swatches::paintPrimitive(element, false, gradient, "Fill Color");
+            });
+        }
+        stack.endMacro();
+        stack.breakMergeChain();
     });
     connect(popup, &SwatchPopup::nonePicked, this, [this, stroke, styleChanged]() {
         (stroke ? _drawingStyle.hasStroke : _drawingStyle.hasFill) = false;

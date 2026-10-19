@@ -1,12 +1,15 @@
 #include "swatches.h"
 
 #include "../data/document.h"
+#include "../data/oval_primitive.h"
+#include "../data/rectangle_primitive.h"
 #include "../data/shape.h"
 #include "../data/solid_color.h"
 #include "../data/stroke_style.h"
 #include "../data/swatch.h"
 #include "../data/swatch_list.h"
 #include "color_art.h"
+#include "property_command.h"
 
 #include <algorithm>
 #include <cmath>
@@ -662,6 +665,79 @@ Shape* withoutPart(const Shape& shape, bool strokes)
         return nullptr;
     }
     return after;
+}
+
+namespace {
+
+/// The primitive's fill, or its stroke's, where it is kept; and its box.
+FillStyle** primitiveSlot(Element& element, bool strokes, const Rect** box, DOMElement** parent)
+{
+    FillStyle** fill = nullptr;
+    StrokeStyle* stroke = nullptr;
+    if (element.elementType() == Element::Type::Rectangle)
+    {
+        auto& rectangle = static_cast<RectanglePrimitive&>(element);
+        fill = &rectangle.fillStyle;
+        stroke = rectangle.strokeStyle;
+        *box = &rectangle.rect;
+    }
+    else if (element.elementType() == Element::Type::Oval)
+    {
+        auto& oval = static_cast<OvalPrimitive&>(element);
+        fill = &oval.fillStyle;
+        stroke = oval.strokeStyle;
+        *box = &oval.rect;
+    }
+    else
+        return nullptr;
+    if (!strokes)
+    {
+        *parent = &element;
+        return *fill ? fill : nullptr;
+    }
+    *parent = stroke;
+    return stroke && stroke->fill ? &stroke->fill : nullptr;
+}
+
+} // namespace
+
+bool isPrimitive(const Element& element)
+{
+    return element.elementType() == Element::Type::Rectangle || element.elementType() == Element::Type::Oval;
+}
+
+Command* paintPrimitive(Element& element, bool strokes, const Color& color, const std::string& name)
+{
+    const Rect* box = nullptr;
+    DOMElement* parent = nullptr;
+    FillStyle** slot = primitiveSlot(element, strokes, &box, &parent);
+    if (!slot)
+        return nullptr;
+    // A solid color keeps its fill and takes the new color; anything else
+    // becomes a solid fill.
+    if ((*slot)->type() == FillStyle::Type::SolidColor)
+    {
+        uint8_t* target = static_cast<SolidColor*>(*slot)->color;
+        return new SetColorCommand(target, target, color.data(), name);
+    }
+    auto* solid = new SolidColor(parent);
+    std::copy(color.begin(), color.end(), solid->color);
+    return new ReplaceOwnedCommand<FillStyle>(*slot, solid, name);
+}
+
+Command* paintPrimitive(Element& element, bool strokes, const Gradient& gradient, const std::string& name)
+{
+    const Rect* box = nullptr;
+    DOMElement* parent = nullptr;
+    FillStyle** slot = strokes ? nullptr : primitiveSlot(element, false, &box, &parent);
+    if (!slot)
+        return nullptr;
+    FillStyle* fill = gradientFill(gradient, parent);
+    if (!fill)
+        return nullptr;
+    // Fitted to the primitive's box, as a new one drawn with it.
+    DrawingStyle::fitFill(*fill, box->topLeft.x, box->topLeft.y, box->bottomRight.x, box->bottomRight.y);
+    return new ReplaceOwnedCommand<FillStyle>(*slot, fill, name);
 }
 
 } // namespace swatches

@@ -3,7 +3,9 @@
 #include "../src/data/document.h"
 #include "../src/data/edge.h"
 #include "../src/data/linear_gradient.h"
+#include "../src/data/oval_primitive.h"
 #include "../src/data/radial_gradient.h"
+#include "../src/data/rectangle_primitive.h"
 #include "../src/data/shape.h"
 #include "../src/data/solid_color.h"
 #include "../src/data/stroke_style.h"
@@ -278,6 +280,79 @@ TEST(swatches_gradient_swatches_add_delete_undo_and_round_trip)
     const fla::swatches::State gone = fla::swatches::withGradientRemoved(mixed, 0);
     CHECK(fla::swatches::gradientsOf(gone).size() == 1 && !fla::swatches::gradientsOf(gone)[0].radial);
     CHECK(fla::swatches::gradientsOf(fla::swatches::withGradientRemoved(mixed, 5)).size() == 2);
+
+    // A duplicate goes just after its original, in either list.
+    const fla::swatches::State twice = fla::swatches::withGradientDuplicated(mixed, 0);
+    const std::vector<fla::swatches::Gradient> doubled = fla::swatches::gradientsOf(twice);
+    CHECK(doubled.size() == 3 && doubled[0].radial && doubled[1].radial && !doubled[2].radial);
+    CHECK(twice.extendedXml == mixed.extendedXml);
+    const std::vector<fla::swatches::Gradient> after = fla::swatches::gradientsOf(fla::swatches::withGradientDuplicated(mixed, 1));
+    CHECK(after.size() == 3 && !after[1].radial && !after[2].radial);
+    CHECK(fla::swatches::gradientsOf(fla::swatches::withGradientDuplicated(mixed, 5)).size() == 2);
+    // The defaults become the document's own, the copy among them.
+    const std::vector<fla::swatches::Gradient> defaults = fla::swatches::defaultGradients();
+    const std::vector<fla::swatches::Gradient> ownCopy =
+        fla::swatches::gradientsOf(fla::swatches::withGradientDuplicated(fla::swatches::State(), 2));
+    CHECK(ownCopy.size() == defaults.size() + 1);
+    if (ownCopy.size() == defaults.size() + 1)
+        CHECK(fla::swatches::itemOf(ownCopy[3]) == fla::swatches::itemOf(defaults[2]) &&
+            fla::swatches::itemOf(ownCopy[4]) == fla::swatches::itemOf(defaults[3]));
+}
+
+TEST(swatches_paint_primitives)
+{
+    // A rectangle primitive with a red fill and a black stroke.
+    fla::RectanglePrimitive rectangle(nullptr);
+    rectangle.rect = fla::Rect(fla::Point(10, 20), fla::Point(110, 70));
+    auto* fill = new fla::SolidColor(&rectangle);
+    fill->color[0] = 255;
+    rectangle.fillStyle = fill;
+    rectangle.strokeStyle = new fla::SolidStroke(&rectangle);
+    auto* line = new fla::SolidColor(rectangle.strokeStyle);
+    rectangle.strokeStyle->fill = line;
+
+    // A color keeps the fill and changes it; undone, it is as it was.
+    std::unique_ptr<fla::Command> blue(fla::swatches::paintPrimitive(rectangle, false, Color{0, 0, 255, 128}, "Fill Color"));
+    CHECK(blue != nullptr);
+    if (!blue)
+        return;
+    blue->redo();
+    CHECK(rectangle.fillStyle == fill && fill->color[0] == 0 && fill->color[2] == 255 && fill->color[3] == 128);
+    blue->undo();
+    CHECK(fill->color[0] == 255 && fill->color[2] == 0 && fill->color[3] == 255);
+
+    // A gradient replaces the fill, fitted to the box; undone, the solid
+    // fill is back.
+    const fla::swatches::Gradient gradient = fla::swatches::defaultGradients()[0];
+    std::unique_ptr<fla::Command> shaded(fla::swatches::paintPrimitive(rectangle, false, gradient, "Fill Color"));
+    CHECK(shaded != nullptr);
+    if (!shaded)
+        return;
+    shaded->redo();
+    CHECK(rectangle.fillStyle != fill && rectangle.fillStyle->type() == fla::FillStyle::Type::LinearGradient);
+    CHECK(rectangle.fillStyle->parent == &rectangle);
+    shaded->undo();
+    CHECK(rectangle.fillStyle == fill);
+
+    // The stroke takes a color but not a gradient.
+    std::unique_ptr<fla::Command> green(fla::swatches::paintPrimitive(rectangle, true, Color{0, 255, 0, 255}, "Stroke Color"));
+    CHECK(green != nullptr);
+    if (green)
+    {
+        green->redo();
+        CHECK(line->color[1] == 255 && fill->color[0] == 255);
+        green->undo();
+        CHECK(line->color[1] == 0);
+    }
+    CHECK(fla::swatches::paintPrimitive(rectangle, true, gradient, "Stroke Color") == nullptr);
+
+    // An oval with no fill has none to paint; a shape is not a primitive.
+    fla::OvalPrimitive oval(nullptr);
+    CHECK(fla::swatches::isPrimitive(oval) && fla::swatches::isPrimitive(rectangle));
+    CHECK(fla::swatches::paintPrimitive(oval, false, Color{0, 0, 0, 255}, "Fill Color") == nullptr);
+    std::unique_ptr<fla::Shape> shape = redSquare();
+    CHECK(!fla::swatches::isPrimitive(*shape));
+    CHECK(fla::swatches::paintPrimitive(*shape, false, Color{0, 0, 0, 255}, "Fill Color") == nullptr);
 }
 
 TEST(swatches_no_color_keeps_a_fill_or_a_stroke)
