@@ -123,6 +123,36 @@ public:
     /// of the shape that has the clicked region's fill.
     bool fillAllRegions = false;
 
+    /// How the bucket picks what to paint: the region clicked, every region
+    /// a scribble passes over, or every region inside a loop drawn round.
+    enum class BucketMode
+    {
+        Click,
+        Scribble,
+        Lasso
+    };
+    BucketMode bucketMode = BucketMode::Click;
+    /// A scribble or a loop paints only regions holding no paint yet, so
+    /// lines drawn as fills and colors already down are left alone.
+    bool bucketOnlyEmpty = true;
+
+    /// Which drawings a click of the bucket fills: the one shown, or the
+    /// same region on each drawing of the current layer in the frames
+    /// selected in the timeline, in the onion skin's range, or from the
+    /// playhead to the end of the layer.
+    enum class FillAcross
+    {
+        ThisDrawing,
+        SelectedFrames,
+        OnionSkin,
+        ToEnd
+    };
+    FillAcross fillAcross = FillAcross::ThisDrawing;
+    /// Fill across frames finds the region on each drawing by following it
+    /// from the drawing before, for a region that moves, rather than by
+    /// what is under the point clicked.
+    bool fillAcrossFollow = false;
+
     static std::vector<Stop> defaultGradient();
 
     bool hasStroke = true;

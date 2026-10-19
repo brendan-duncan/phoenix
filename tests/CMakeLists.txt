@@ -33,6 +33,7 @@ set(TEST_SOURCES
     test_planar_map.cpp
     test_selection.cpp
     test_region_split.cpp
+    test_region_fill.cpp
     test_shape_merge.cpp
     test_shape_transform.cpp
     test_shape_tween.cpp
@@ -66,6 +67,7 @@ set(TEST_SOURCES
     test_three_d.cpp
     test_filter_presets.cpp
     test_trace_bitmap.cpp
+    test_paper_cleanup.cpp
     test_sprite_sheet.cpp
     test_stroke_width.cpp
     test_swatches.cpp

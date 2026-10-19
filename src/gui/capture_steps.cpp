@@ -218,6 +218,9 @@ bool runCaptureSteps(MainWindow& window, const QString& path, QString& error)
     }
     const QStringList lines = QTextStream(&file).readAll().split('\n');
     Answer pending;
+    // A stroke step's button still down, and where.
+    bool held = false;
+    QPointF heldAt;
     QStringList problems;
     // A dialog that opens while a step runs: answered when a dialog step
     // armed an answer, else reported and closed.
@@ -281,6 +284,47 @@ bool runCaptureSteps(MainWindow& window, const QString& path, QString& error)
                 to = from;
             view->setFocus();
             dragIn(view, view->mapToWidget(from), view->mapToWidget(to), modifiersOf(words, drag ? 3 : 2));
+        }
+        else if (step == "stroke")
+        {
+            // A drag through several points, as a scribble or a loop; with
+            // "hold" the button stays down for a picture mid-drag.
+            std::vector<QPointF> through;
+            for (const QString& word : words.mid(1))
+            {
+                QPointF at;
+                if (point(word, at))
+                    through.push_back(at);
+            }
+            if (!view || through.size() < 2)
+                return fail("stroke through which points?");
+            const Qt::KeyboardModifiers modifiers = modifiersOf(words, 1);
+            view->setFocus();
+            mouse(view, QEvent::MouseMove, view->mapToWidget(through.front()), Qt::NoButton, Qt::NoButton, modifiers);
+            mouse(view, QEvent::MouseButtonPress, view->mapToWidget(through.front()), Qt::LeftButton, Qt::LeftButton,
+                modifiers);
+            pump(20);
+            for (size_t i = 1; i < through.size(); ++i)
+                for (int k = 1; k <= 6; ++k)
+                {
+                    const QPointF at = through[i - 1] + (through[i] - through[i - 1]) * (k / 6.0);
+                    mouse(view, QEvent::MouseMove, view->mapToWidget(at), Qt::NoButton, Qt::LeftButton, modifiers);
+                    pump(5);
+                }
+            held = words.contains("hold", Qt::CaseInsensitive);
+            heldAt = through.back();
+            if (!held)
+                mouse(view, QEvent::MouseButtonRelease, view->mapToWidget(heldAt), Qt::LeftButton, Qt::NoButton,
+                    modifiers);
+            pump(60);
+        }
+        else if (step == "release")
+        {
+            if (!view || !held)
+                return fail("no stroke is held");
+            held = false;
+            mouse(view, QEvent::MouseButtonRelease, view->mapToWidget(heldAt), Qt::LeftButton, Qt::NoButton, {});
+            pump(60);
         }
         else if (step == "key")
         {

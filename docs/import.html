@@ -34,7 +34,7 @@
 <h2>The Import commands</h2>
 
 <div class="split">
-  <figure style="margin:0"><img src="assets/shots/import-menu.webp" alt="The File, Import menu: Import to Stage (Ctrl+R), Import to Library, Open External Library (Ctrl+Shift+O), Import Animatic and Import Video" width="240" height="126"></figure>
+  <figure style="margin:0"><img src="assets/shots/import-menu.webp" alt="The File, Import menu: Import to Stage (Ctrl+R), Import to Library, Open External Library (Ctrl+Shift+O), Import Animatic, Import Video and Import Paper Drawings" width="240" height="150"></figure>
   <div>
     <p>Everything starts from <span class="menu-path">File &rsaquo; Import</span>. Pick one or more files in the file browser; Phoenix opens it in the folder you imported from last time.</p>
   </div>
@@ -46,6 +46,7 @@
   <dt>Open External Library...</dt><dd><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>O</kbd>. Opens another document's library in a panel of its own, to copy items from. See <a href="library.html#libraries-of-other-documents">Libraries of other documents</a>.</dd>
   <dt>Import Animatic...</dt><dd>Brings in an animatic's cut (EDL or Final Cut XML) as shot labels, boards and audio. See <a href="pipeline.html#start-from-the-animatic">Start from the animatic</a>.</dd>
   <dt>Import Video...</dt><dd>Brings in a video to animate over, as a still for each frame on a guide layer. See <a href="#video">Video</a>.</dd>
+  <dt>Import Paper Drawings...</dt><dd>Turns scans or photos of pencil drawings into clean vector lines, one drawing to a keyframe. See <a href="#paper-drawings">Paper drawings</a>.</dd>
 </dl>
 
 <p>Each import is a single step you can undo, however many files it brings in. Importing a file whose name the library already uses adds a second item, numbered (<em>photo 2.png</em>); nothing in the library is replaced. When part of a file cannot be brought in, Phoenix lists what was left out when the import finishes.</p>
@@ -63,10 +64,11 @@
     <tr><td>Documents and movies</td><td class="wrap">FLA, XFL, SWF</td><td class="wrap">Their library items, and their main timeline as a movie clip</td></tr>
     <tr><td>Sound</td><td class="wrap">WAV, AIFF, MP3, FLAC, Ogg</td><td class="wrap">A sound in the library</td></tr>
     <tr><td>Video</td><td class="wrap">MP4, MOV, M4V, AVI, MKV, WebM, FLV, WMV, MPEG</td><td class="wrap">Stills on a guide layer, with Import Video</td></tr>
+    <tr><td>Paper drawings</td><td class="wrap">Scans or photos: PNG, JPEG, BMP, TIFF, GIF, WebP</td><td class="wrap">Vector lines, a drawing to a keyframe, with Import Paper Drawings</td></tr>
   </tbody>
 </table>
 
-<p>Phoenix imports without an options dialog: each kind of file comes in one way, described below. Rearrange the result afterward with the usual tools.</p>
+<p>Apart from <a href="#paper-drawings">Import Paper Drawings</a>, Phoenix imports without an options dialog: each kind of file comes in one way, described below. Rearrange the result afterward with the usual tools.</p>
 
 <h2>Images</h2>
 
@@ -84,6 +86,39 @@
 </ul>
 
 <p>Numbers need not be padded or consecutive: <code>walk_1.png</code>, <code>walk_2.png</code> and <code>walk_10.png</code> come in that order. The current layer must not be locked.</p>
+
+<h2 id="paper-drawings">Paper drawings</h2>
+
+<p>If you draw on paper, <span class="menu-path">File &rsaquo; Import &rsaquo; Import Paper Drawings...</span> turns your scanned or photographed pencil drawings into clean vector lines, ready to color with the <a href="ink-and-paint.html#coloring-many-regions">Paint Bucket</a>. Shadows and the color of the paper are taken out, the pencil lines are found and traced, and each drawing goes on a keyframe of its own. The window works in three steps, top to bottom, with a preview of the cleaned-up drawing beside them.</p>
+
+<figure>
+  <img src="assets/shots/import-paper-drawings.webp" alt="The Import Paper Drawings window: 1. Your drawings, with paper-scan-1.jpg picked and the whole numbered sequence of 4 drawings brought in; 2. Clean up, with Even out the paper and Auto levels on, Line darkness 170, Remove specks under 6 px, Close gaps up to 0 px, Smooth lines 1, Curve fit Normal and a black line color; 3. Place, onto a new layer from frame 1, one frame per drawing, fitted to the stage, keeping page position. The preview shows the ball and the ground line as clean black lines on white." width="759" height="694">
+</figure>
+
+<ol>
+  <li><strong>Your drawings.</strong> Click <strong>Browse...</strong> and pick a drawing. If its name ends in a number, such as <code>ball_01.jpg</code>, and the folder holds the rest of the numbered set, <strong>Bring in the whole numbered sequence</strong> brings them all, in number order; the window says how many it found. You can also pick several pictures at once.</li>
+  <li><strong>Clean up.</strong> Watch the preview as you change these; <strong>Preview drawing</strong> picks which drawing it shows and <strong>Show the scan</strong> shows it as it came in, to compare.
+    <ul>
+      <li><strong>Even out the paper</strong> takes out shadows, uneven light from a lamp or a phone, and the paper's tint, so the whole page reads as white. Leave it on unless your scan is already pure white.</li>
+      <li><strong>Auto levels</strong> makes the darkest lines black and the paper white, which helps with faint pencil.</li>
+      <li><strong>Line darkness</strong> is how dark a mark must be to count as a line. Raise it to pick up fainter pencil; lower it to leave out smudges and light construction lines. <strong>Find Line Darkness</strong> sets it from the drawing for you. The line under the preview says how much of the page is line: a few percent is usual.</li>
+      <li><strong>Remove specks under</strong> clears away dust and dots smaller than this many pixels, and fills tiny holes in lines.</li>
+      <li><strong>Close gaps up to</strong> joins lines that almost meet, so the Paint Bucket can fill the shapes they make. Start at 0 and raise it a pixel or two if your lines have small breaks.</li>
+      <li><strong>Smooth lines</strong> evens out the pencil's rough edges before tracing, from 0 (every wobble kept) to 3. <strong>Curve fit</strong> works as it does for <a href="#trace-bitmap">Trace Bitmap</a>. <strong>Line color</strong> is the color the lines are drawn in.</li>
+    </ul>
+  </li>
+  <li><strong>Place.</strong> <strong>Layer</strong> puts the drawings on a new layer named <em>Paper Drawings</em> or on the layer selected in the timeline. <strong>Start at frame</strong> is where the first drawing goes, and <strong>Frames per drawing</strong> how long each one stays: 1 for drawings on ones, 2 for twos. <strong>Size</strong> fits each page to the stage, or keeps a pixel of the scan to a pixel of the stage. <strong>Line up</strong> keeps each page in the same place, which keeps drawings made on pegs lined up with each other; <strong>Center each drawing</strong> puts each drawing's lines in the middle of the stage instead, for loose sketches drawn anywhere on the page.</li>
+</ol>
+
+<p><strong>Import</strong> cleans up and traces every drawing and puts them on their keyframes, as one step you can undo. Phoenix remembers your cleanup settings for next time. Large scans are shrunk to 1,600 pixels on their longest side before tracing, which keeps the lines light to draw and edit.</p>
+
+<figure>
+  <img src="assets/shots/import-paper-result.webp" alt="The four ball drawings imported: the first shows on the stage as black vector lines, and the timeline has a new Paper Drawings layer with keyframes on frames 1 to 4; the status bar says Imported 4 drawings onto Paper Drawings, frames 1 to 4." width="700" height="550">
+</figure>
+
+<p>The lines come in as filled shapes, like brush strokes, so they keep the pencil's varying thickness. To try it, download the four sample drawings of a bouncing ball (<a href="assets/img/paper-scan-1.jpg" download>1</a>, <a href="assets/img/paper-scan-2.jpg" download>2</a>, <a href="assets/img/paper-scan-3.jpg" download>3</a>, <a href="assets/img/paper-scan-4.jpg" download>4</a>) into one folder and pick the first.</p>
+
+<p>Tips for good scans: scan in grayscale at 150 to 300 dpi, or photograph the page flat, from straight above, in even light. Darker, cleaner pencil lines need less cleanup. Lines that run off the page or into each other are fine.</p>
 
 <h2 id="photoshop-files">Photoshop files</h2>
 

@@ -141,6 +141,7 @@
 #include "../edit/brush_presets.h"
 #include "image_export.h"
 #include "timeline_view.h"
+#include "paper_import_dialog.h"
 #include "../data/frame.h"
 #include "../data/group.h"
 #include "../data/symbol_instance.h"
@@ -591,6 +592,17 @@ MainWindow::MainWindow(const QString& initialFile, QWidget* parent, bool startup
     _inkBrushTool = std::make_unique<BrushTool>(BrushTool::Kind::Ink, _selection, stack, _drawingStyle);
     _eraserTool = std::make_unique<EraserTool>(_selection, stack, _drawingStyle);
     _paintBucketTool = std::make_unique<PaintBucketTool>(stack, _drawingStyle);
+    // Fill Across reads the timeline's selected frames, and the bucket
+    // reports what it filled in the status bar.
+    _paintBucketTool->setSelectedFrames([this](int& first, int& last) {
+        const FrameSelection chosen = _timelineView ? _timelineView->frameSelection() : FrameSelection();
+        if (chosen.layers.empty() || chosen.last < chosen.first)
+            return false;
+        first = chosen.first;
+        last = chosen.last;
+        return true;
+    });
+    _paintBucketTool->setReporter([this](const QString& text) { statusBar()->showMessage(text, 8000); });
     _inkBottleTool = std::make_unique<InkBottleTool>(stack, _drawingStyle);
     // Sampling hands over to the bucket or the bottle.
     _eyedropperTool = std::make_unique<EyedropperTool>(_drawingStyle, [this](bool stroke) {
@@ -6868,6 +6880,12 @@ void MainWindow::setupMenus()
     importVideoAction->setStatusTip("Bring in a video to animate over, on a guide layer");
     connect(importVideoAction, &QAction::triggered, this, &MainWindow::importVideo);
     importMenu->addAction(importVideoAction);
+    QAction* importPaperAction = importMenu->addAction("Import &Paper Drawings...");
+    importPaperAction->setStatusTip("Scanned or photographed pencil drawings, cleaned up and traced into lines, one to a keyframe");
+    connect(importPaperAction, &QAction::triggered, this, [this] {
+        PaperImport::open(this, _flaDocument, _phoenixView, _timelineView, _player, _editContext.commandStack(), _selection,
+            [this](const QString& text) { statusBar()->showMessage(text, 8000); });
+    });
 
     QAction* shareAction = fileMenu->addAction("S&hare...");
     shareAction->setStatusTip("Save the animation as a GIF, WebP, animated PNG, MP4 or WebM, sized for the web and social sites");

@@ -140,6 +140,7 @@ set(HEADERS
     src/gui/terminal_view.h
     src/gui/html_view.h
     src/gui/trace_bitmap_dialog.h
+    src/gui/paper_import_dialog.h
     src/gui/test_movie_window.h
     src/gui/movie_hooks.h
     src/gui/command_line.h
@@ -328,6 +329,7 @@ set(HEADERS
     src/edit/shape_merge.h
     src/edit/snapping.h
     src/edit/region_split.h
+    src/edit/region_fill.h
     src/edit/drawing_style.h
     src/edit/brush_stroke.h
     src/edit/brush_presets.h
@@ -395,6 +397,7 @@ set(HEADERS
     src/edit/library_transfer.h
     src/edit/document_session.h
     src/edit/trace_bitmap.h
+    src/edit/paper_cleanup.h
     src/edit/edit_list.h
     src/edit/combine_objects.h
     src/edit/transform_parts.h
@@ -461,6 +464,7 @@ set(SOURCES
     src/gui/terminal_view.cpp
     src/gui/html_view.cpp
     src/gui/trace_bitmap_dialog.cpp
+    src/gui/paper_import_dialog.cpp
     src/gui/test_movie_window.cpp
     src/gui/movie_hooks.cpp
     src/gui/command_line.cpp

@@ -113,6 +113,26 @@ public:
     /// the caller owns. A seam between two faces of one color disappears.
     Shape* withFaceFill(int face, int fillIndex) const;
 
+    /// The shape's contents with each of \a faces painted \a fillIndex, as
+    /// a new shape the caller owns: what a scribble or a lasso fills at once.
+    Shape* withFacesFill(const std::vector<int>& faces, int fillIndex) const;
+
+    /// Every bounded face: each enclosed region, painted or not.
+    std::vector<int> boundedFaces() const;
+
+    /// A bounded face's outline as polylines, its outer boundary first and
+    /// then each hole, for drawing it. Empty for no such face.
+    std::vector<std::vector<Point>> faceOutline(int face) const;
+
+    /// The area a bounded face covers, its holes left out, and the middle of
+    /// that area, worked out from its outline: how a region is recognized
+    /// on the next drawing after it has moved.
+    double faceArea(int face) const;
+    Point faceCentroid(int face) const;
+
+    /// A point inside a face. False when there is none.
+    bool faceInterior(int face, Point& point) const;
+
     /// The shape's contents with \a strokeIndex along the pick: round a fill's
     /// outline, or along the picked strokes. -1 removes the stroke. A new
     /// shape the caller owns.

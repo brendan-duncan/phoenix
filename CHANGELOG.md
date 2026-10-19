@@ -22,6 +22,12 @@ What changed in each release of Phoenix, newest first.
 - Simple workspace: just the stage, timeline, common tools, Properties, Library and Color, one click from the full layout on the edit bar or the start screen
 - First-use hints: a short tip on what to try next the first time you draw, add a keyframe, make a symbol or make a tween (Help > Show Hints, Reset Hints)
 - Starter templates on the start screen: a bouncing ball, a rigged walk cycle, a lip-sync head and a title card, each opened as a new document
+- Paint Bucket Scribble: drag across a drawing and every area you pass over fills, with a preview while you drag
+- Paint Bucket Lasso: draw a loop and every area inside it fills; Only empty regions keeps lines and earlier colors safe
+- Fill on: one Paint Bucket click fills the same area on every drawing in the selected frames, the onion skin range or the rest of the layer
+- Follow moving regions finds the area on each drawing as it moves, and the status bar lists frames where nothing matched
+- File > Import > Import Paper Drawings: scanned or photographed pencil drawings cleaned up and traced into vector lines, one to a keyframe
+- Paper cleanup evens out shadows and paper tint, finds the lines by darkness, removes specks, closes small gaps and smooths, with a live preview
 
 ## 0.20.0
 

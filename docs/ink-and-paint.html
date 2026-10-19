@@ -17,7 +17,7 @@
 <meta property="og:image:alt" content="The Phoenix window with three flower characters on the stage, the timeline below and the Properties panel on the right">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:image" content="https://phoenixanimate.com/assets/shots/hero.webp">
-<meta name="keywords" content="line art color art ink paint bucket palette linked colors day night recolor tone highlight glow shadow effect layer composite">
+<meta name="keywords" content="line art color art ink paint bucket scribble lasso fill across frames palette linked colors day night recolor tone highlight glow shadow effect layer composite">
 <link rel="icon" href="assets/img/logo.png">
 <link rel="stylesheet" href="assets/site.css">
 <script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
@@ -38,6 +38,47 @@
 <p>On the color art layer, the <b>Paint Bucket</b> fills the regions the line layer's strokes close around where you click, even where the color layer has nothing yet, so you can ink first and paint after. The paint lands on the color layer and the lines stay untouched above it. Both are ordinary layers in the saved file.</p>
 
 <p>Two more ways to paint quickly: the Paint Bucket's <strong>Fill all regions</strong> fills, with one click, every enclosed area of a shape that has the same fill as the one you click, and a brush in <strong>Repaint</strong> mode recolors the fills it passes over without painting anything new on empty areas. See <a href="drawing-tools.html#paint-bucket-and-ink-bottle">Paint Bucket and Ink Bottle</a> and <a href="drawing-tools.html#brush-modes">Brush modes</a>.</p>
+
+<h2 id="coloring-many-regions">Coloring many regions at once</h2>
+
+<p>Clicking every little area of every drawing one by one takes a long time. The Paint Bucket has two ways to color faster, both on its Tool tab: <strong>Fill by</strong> colors many areas of one drawing with one stroke of the pen, and <strong>Fill on</strong> colors the same area on many drawings with one click. Each is a single step to undo, and both close small gaps in the lines as the <strong>Gap size</strong> setting says.</p>
+
+<div class="split">
+  <figure style="margin:0"><img src="assets/shots/tool-paint-bucket.webp" alt="The Paint Bucket's Tool tab: Gap size Close Small Gaps, Fill all regions, Fill by Click, Only empty regions (on), Fill on From here to the end, Follow moving regions (on) and Lock fill" width="391" height="420"></figure>
+  <div>
+    <h3 id="scribble-and-lasso">Scribble and lasso</h3>
+    <p>Set <strong>Fill by</strong> to <strong>Scribble</strong>, then drag across your drawing: every area the pointer passes over fills with the fill color. While you drag, the areas about to fill show in a lighter shade, so you can see what you will get before you let go.</p>
+    <p>Set <strong>Fill by</strong> to <strong>Lasso</strong> and draw a loop around part of a drawing instead: every area inside the loop fills. A dashed line shows the loop as you draw it.</p>
+    <p>With <strong>Only empty regions</strong> on (the usual setting), a scribble or a loop fills only areas that have no color yet. Lines drawn with a brush, or traced from paper, are filled shapes too, and this keeps them, and the colors you have already put down, safe from a careless stroke. Turn it off to recolor painted areas as well. A plain click, with no drag, fills the one area as always.</p>
+  </div>
+</div>
+
+<figure>
+  <img src="assets/shots/bucket-scribble-lasso.webp" alt="Three views of a ball drawing: a zigzag scribble over both halves of the ball with both halves showing light blue; the ball after letting go, both halves filled blue; a dashed loop drawn round the next drawing's ball, both halves showing light blue inside it" width="990" height="250">
+  <figcaption>Scribbling over both halves of the ball, the result, and a loop round the next drawing</figcaption>
+</figure>
+
+<p>A quick way to color a character is one scribble per color: pick the skin color and scribble across the face and hands, pick the shirt color and scribble across the shirt, and so on. It works on <a href="#line-and-color-art">color art layers</a> too, where the paint goes under the lines.</p>
+
+<h3 id="fill-across-frames">Fill across frames</h3>
+
+<p>Set <strong>Fill on</strong> to choose which drawings of the current layer one click colors:</p>
+
+<dl class="defs">
+  <dt>This drawing</dt><dd>Only the drawing you click, as usual.</dd>
+  <dt>Selected frames</dt><dd>Every drawing in the frames selected in the timeline. Select the frames first, then click on the stage.</dd>
+  <dt>Onion skin range</dt><dd>Every drawing the onion skin reaches before and after the playhead, as set with its markers.</dd>
+  <dt>From here to the end</dt><dd>The drawing you click and every drawing after it on the layer.</dd>
+</dl>
+
+<p>On each drawing, Phoenix fills the area under the spot you clicked. That suits a character who stays in place. When the area moves from drawing to drawing, as a bouncing ball does, turn on <strong>Follow moving regions</strong>: Phoenix then looks on each drawing for the area most like the one it filled on the drawing before, by where it is and how big it is, and fills that. It only follows into areas painted as the first one was, so it never jumps onto the lines.</p>
+
+<figure>
+  <img src="assets/shots/fill-across-frames.webp" alt="Four drawings of a ball bouncing to the right and squashing on the ground, with the top half of the ball filled blue on every one from a single click on the first" width="1320" height="250">
+  <figcaption>One click on the first drawing, with From here to the end and Follow moving regions, fills the ball's top half on all four</figcaption>
+</figure>
+
+<p>The status bar says how many drawings were filled and lists the frames where no matching area was found, so you can fill those few by hand. The whole fill is one step to undo.</p>
 
 <h2>Linked palettes</h2>
 

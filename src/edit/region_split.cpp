@@ -533,6 +533,135 @@ Shape* RegionSplitter::withFaceFill(int face, int fillIndex) const
     return result;
 }
 
+Shape* RegionSplitter::withFacesFill(const std::vector<int>& faces, int fillIndex) const
+{
+    if (!valid() || faces.empty())
+        return nullptr;
+
+    PlanarMap painted = _map;
+    for (const int face : faces)
+    {
+        if (face >= 0 && face < static_cast<int>(_map.faces().size()) && !_map.faces()[face].unbounded)
+            painted.setFaceFill(face, fillIndex);
+    }
+
+    Shape* result = cloneShape(_shape, nullptr);
+    rebuildShapeEdges(*result, painted, _curves);
+    return result;
+}
+
+std::vector<int> RegionSplitter::boundedFaces() const
+{
+    std::vector<int> faces;
+    if (!valid())
+        return faces;
+    for (size_t face = 0; face < _map.faces().size(); ++face)
+    {
+        if (!_map.faces()[face].unbounded)
+            faces.push_back(static_cast<int>(face));
+    }
+    return faces;
+}
+
+std::vector<std::vector<Point>> RegionSplitter::faceOutline(int face) const
+{
+    std::vector<std::vector<Point>> rings;
+    if (!valid() || face < 0 || face >= static_cast<int>(_map.faces().size()) || _map.faces()[face].unbounded)
+        return rings;
+
+    const auto ringFrom = [&](int start) {
+        std::vector<Point> ring;
+        for (const int index : _map.cycleFrom(start))
+        {
+            const Curve& curve = _map.halfEdges()[index].curve;
+            if (ring.empty())
+                ring.push_back(curve.start());
+            if (curve.isLine())
+            {
+                ring.push_back(curve.end());
+                continue;
+            }
+            constexpr int kSamples = 8;
+            for (int i = 1; i <= kSamples; ++i)
+                ring.push_back(curve.pointAt(static_cast<double>(i) / kSamples));
+        }
+        return ring;
+    };
+
+    const MapFace& mapFace = _map.faces()[face];
+    rings.push_back(ringFrom(mapFace.halfEdge));
+    for (const int hole : mapFace.holes)
+        rings.push_back(ringFrom(hole));
+    return rings;
+}
+
+namespace {
+
+/// A ring's area, unsigned, and the sums its centroid is made from.
+void ringMoments(const std::vector<Point>& ring, double& area, double& mx, double& my)
+{
+    double twice = 0.0;
+    double sx = 0.0;
+    double sy = 0.0;
+    for (size_t i = 0; i < ring.size(); ++i)
+    {
+        const Point& a = ring[i];
+        const Point& b = ring[(i + 1) % ring.size()];
+        const double cross = a.x * b.y - b.x * a.y;
+        twice += cross;
+        sx += (a.x + b.x) * cross;
+        sy += (a.y + b.y) * cross;
+    }
+    // Moments with the ring's own sign, turned positive with its area.
+    const double sign = twice < 0.0 ? -1.0 : 1.0;
+    area = std::fabs(twice) / 2.0;
+    mx = sign * sx / 6.0;
+    my = sign * sy / 6.0;
+}
+
+} // namespace
+
+double RegionSplitter::faceArea(int face) const
+{
+    double total = 0.0;
+    const std::vector<std::vector<Point>> rings = faceOutline(face);
+    for (size_t i = 0; i < rings.size(); ++i)
+    {
+        double area = 0.0, mx = 0.0, my = 0.0;
+        ringMoments(rings[i], area, mx, my);
+        total += i == 0 ? area : -area;
+    }
+    return std::max(0.0, total);
+}
+
+Point RegionSplitter::faceCentroid(int face) const
+{
+    double total = 0.0, sumX = 0.0, sumY = 0.0;
+    const std::vector<std::vector<Point>> rings = faceOutline(face);
+    for (size_t i = 0; i < rings.size(); ++i)
+    {
+        double area = 0.0, mx = 0.0, my = 0.0;
+        ringMoments(rings[i], area, mx, my);
+        const double sign = i == 0 ? 1.0 : -1.0;
+        total += sign * area;
+        sumX += sign * mx;
+        sumY += sign * my;
+    }
+    if (total <= 1.0e-12)
+    {
+        Point inside;
+        return faceInterior(face, inside) ? inside : Point();
+    }
+    return Point(sumX / total, sumY / total);
+}
+
+bool RegionSplitter::faceInterior(int face, Point& point) const
+{
+    if (!valid() || face < 0 || face >= static_cast<int>(_map.faces().size()))
+        return false;
+    return _map.interiorPoint(face, point);
+}
+
 Shape* RegionSplitter::withStroke(const RegionPick& pick, int strokeIndex) const
 {
     if (!valid() || pick.isEmpty())

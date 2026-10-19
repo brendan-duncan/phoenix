@@ -401,6 +401,9 @@ public:
     /// its keyframe; a movie clip or a button at its first frame.
     int symbolFrameShown(const fla::SymbolInstance& instance, const fla::Frame& frame);
     bool onionSkin() const { return _onionSkin; }
+    /// How many frames the onion skin reaches before and after the playhead.
+    int onionBefore() const { return _onionBefore; }
+    int onionAfter() const { return _onionAfter; }
 
     /// Shift and Trace: while on, dragging on the stage moves the onion skin
     /// ghost under the pointer (the nearest earlier one elsewhere), Shift+drag

@@ -1226,6 +1226,35 @@ void PropertiesPanel::buildToolTab()
     fillAll->setToolTip("A click paints every enclosed region of the shape that has the clicked region's fill");
     connect(fillAll, &QCheckBox::toggled, this, [this](bool on) { _links.style->fillAllRegions = on; });
     addOption(QString(), fillAll, {IconTool::PaintBucket});
+    QComboBox* bucketMode = new QComboBox(this);
+    bucketMode->addItems({"Click", "Scribble", "Lasso"});
+    bucketMode->setObjectName("bucketMode");
+    bucketMode->setCurrentIndex(static_cast<int>(style.bucketMode));
+    bucketMode->setToolTip("Click fills one region; Scribble fills every region a drag passes over; "
+                           "Lasso fills every region inside a loop you draw");
+    connect(bucketMode, &QComboBox::currentIndexChanged, this, [this](int index) {
+        _links.style->bucketMode = static_cast<fla::DrawingStyle::BucketMode>(index);
+    });
+    addOption("Fill by", bucketMode, {IconTool::PaintBucket});
+    QCheckBox* onlyEmpty = new QCheckBox("Only empty regions", this);
+    onlyEmpty->setChecked(style.bucketOnlyEmpty);
+    onlyEmpty->setToolTip("A scribble or lasso fills only regions with no paint yet, leaving lines and colors already down alone");
+    connect(onlyEmpty, &QCheckBox::toggled, this, [this](bool on) { _links.style->bucketOnlyEmpty = on; });
+    addOption(QString(), onlyEmpty, {IconTool::PaintBucket});
+    QComboBox* fillAcross = new QComboBox(this);
+    fillAcross->addItems({"This drawing", "Selected frames", "Onion skin range", "From here to the end"});
+    fillAcross->setObjectName("fillAcross");
+    fillAcross->setCurrentIndex(static_cast<int>(style.fillAcross));
+    fillAcross->setToolTip("A click fills the same region on every drawing of the current layer in these frames");
+    connect(fillAcross, &QComboBox::currentIndexChanged, this, [this](int index) {
+        _links.style->fillAcross = static_cast<fla::DrawingStyle::FillAcross>(index);
+    });
+    addOption("Fill on", fillAcross, {IconTool::PaintBucket});
+    QCheckBox* follow = new QCheckBox("Follow moving regions", this);
+    follow->setChecked(style.fillAcrossFollow);
+    follow->setToolTip("Find the region on each drawing by where it was on the one before, for a region that moves");
+    connect(follow, &QCheckBox::toggled, this, [this](bool on) { _links.style->fillAcrossFollow = on; });
+    addOption(QString(), follow, {IconTool::PaintBucket});
     QCheckBox* lockFill = new QCheckBox("Lock fill", this);
     lockFill->setChecked(style.lockFill);
     lockFill->setToolTip("A gradient or bitmap spans the whole stage, so separate areas read as one sweep; drag with the bucket to lay a gradient along the drag");
