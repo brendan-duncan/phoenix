@@ -1,4 +1,5 @@
 #include "script_runner.h"
+#include "modal.h"
 
 #include "autosave.h"
 #include "media_import.h"
@@ -163,7 +164,7 @@ public:
             trace(message);
             return;
         }
-        QMessageBox::information(&_window, "Phoenix", qtext(message));
+        modal::information(&_window, "Phoenix", qtext(message));
     }
     bool confirm(const std::string& message) override
     {
@@ -1019,8 +1020,10 @@ void ScriptRunner::dispatchEvent(const char* type)
 {
     if (_engine)
         _engine->dispatch(type);
+#ifdef PHOENIX_PYTHON
     if (_python)
         _python->dispatch(type);
+#endif
     emit eventDispatched(QString::fromLatin1(type));
 }
 
@@ -1359,13 +1362,13 @@ void ScriptRunner::manageCommands()
             return;
         if (name.contains('/') || name.contains('\\'))
         {
-            QMessageBox::warning(&dialog, "Rename Command", "A command's name cannot hold a slash.");
+            modal::warning(&dialog, "Rename Command", "A command's name cannot hold a slash.");
             return;
         }
         const QString from = item->data(Qt::UserRole).toString();
         const QString to = QDir(commandsFolder()).filePath(name + "." + QFileInfo(from).suffix());
         if (QFileInfo::exists(to) || !QFile::rename(from, to))
-            QMessageBox::warning(&dialog, "Rename Command", QString("%1 could not be renamed to %2.").arg(item->text(), name));
+            modal::warning(&dialog, "Rename Command", QString("%1 could not be renamed to %2.").arg(item->text(), name));
         fill();
     });
     connect(remove, &QPushButton::clicked, &dialog, [&dialog, list, fill]() {
@@ -1409,7 +1412,7 @@ bool ScriptRunner::installExtension(const QString& path, QWidget* parent)
             extensionsFolder().toStdString(), installed, notes, error))
     {
         if (parent)
-            QMessageBox::warning(parent, "Install Extension", QString::fromStdString(error));
+            modal::warning(parent, "Install Extension", QString::fromStdString(error));
         else
             std::fprintf(stderr, "%s\n", error.c_str());
         return false;
@@ -1425,7 +1428,7 @@ bool ScriptRunner::installExtension(const QString& path, QWidget* parent)
     for (const std::string& note : notes)
         message += "\n\n" + QString::fromStdString(note);
     if (parent)
-        QMessageBox::information(parent, "Install Extension", message);
+        modal::information(parent, "Install Extension", message);
     else
         std::printf("%s\n", message.toStdString().c_str());
     return true;
@@ -1532,7 +1535,7 @@ void ScriptRunner::manageExtensions()
             return;
         std::string error;
         if (!extensions::remove(each, configFolder().toStdString(), error))
-            QMessageBox::warning(&dialog, "Remove Extension", QString::fromStdString(error));
+            modal::warning(&dialog, "Remove Extension", QString::fromStdString(error));
         fill();
     });
     connect(openFolder, &QPushButton::clicked, &dialog,

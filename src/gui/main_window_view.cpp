@@ -3,6 +3,7 @@
 // touch gestures on the stage.
 
 #include "main_window.h"
+#include "modal.h"
 
 #include "canvas_only.h"
 #include "stage_controls.h"
@@ -202,7 +203,7 @@ void MainWindow::addReferenceImages()
     const size_t before = _referenceBoard->board().images.size();
     const QStringList failed = _referenceBoard->addFiles(paths, nullptr);
     if (!failed.isEmpty())
-        QMessageBox::warning(this, "Add Reference Image", "These could not be read as pictures:\n" + failed.join("\n"));
+        modal::warning(this, "Add Reference Image", "These could not be read as pictures:\n" + failed.join("\n"));
     // Out of sight beside the stage, the view draws back to show it too.
     const refs::Board board = _referenceBoard->board();
     if (board.images.size() > before)
@@ -231,18 +232,18 @@ bool MainWindow::showReferenceMenu(const QPoint& globalPos)
         return false;
     const QPointF local = _phoenixView->mapFromGlobal(globalPos);
     const int index = _referenceBoard->imageAt(_phoenixView->widgetToStage(local));
-    QMenu menu(this);
+    QMenu* menu = new QMenu(this);
     if (index >= 0)
     {
         _referenceBoard->select(index);
-        _referenceBoard->fillMenu(&menu, index);
-        menu.addSeparator();
+        _referenceBoard->fillMenu(menu, index);
+        menu->addSeparator();
     }
-    menu.addAction("Add Reference Image...", this, &MainWindow::addReferenceImages);
-    menu.addAction("Done Arranging", this, [this]() {
+    menu->addAction("Add Reference Image...", this, &MainWindow::addReferenceImages);
+    menu->addAction("Done Arranging", this, [this]() {
         chooseTool(_toolBeforeReferences ? _toolBeforeReferences : _selectionTool.get());
     });
-    menu.exec(globalPos);
+    modal::popup(menu, globalPos);
     return true;
 }
 
@@ -265,6 +266,6 @@ bool MainWindow::dropReferenceImages(const QStringList& paths, const QPoint& win
     const QPointF at = _phoenixView->widgetToStage(QPointF(local));
     const QStringList failed = _referenceBoard->addFiles(images, &at);
     if (!failed.isEmpty())
-        QMessageBox::warning(this, "Add Reference Image", "These could not be read as pictures:\n" + failed.join("\n"));
+        modal::warning(this, "Add Reference Image", "These could not be read as pictures:\n" + failed.join("\n"));
     return true;
 }

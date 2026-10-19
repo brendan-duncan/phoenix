@@ -1,4 +1,5 @@
 #include "claude_code.h"
+#include "modal.h"
 
 #include "mcp_server.h"
 
@@ -95,7 +96,7 @@ bool prepare(McpServer& server, QWidget* parent, QString& claude, QString& confi
     config = port > 0 ? writeConfig(port, token) : QString();
     if (config.isEmpty())
     {
-        QMessageBox::warning(parent, "Open Claude Code", "Phoenix could not get ready for Claude Code to connect.");
+        modal::warning(parent, "Open Claude Code", "Phoenix could not get ready for Claude Code to connect.");
         return false;
     }
     return true;

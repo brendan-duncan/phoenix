@@ -1,4 +1,5 @@
 #include "paper_import_dialog.h"
+#include "modal.h"
 
 #include "hot_text.h"
 #include "media_import.h"
@@ -509,7 +510,7 @@ void open(QWidget* parent, fla::FLADocument* document, PhoenixView* view, Timeli
     if (status)
         status(message);
     if (!problems.isEmpty())
-        QMessageBox::warning(parent, "Import Paper Drawings", problems.join("\n"));
+        modal::warning(parent, "Import Paper Drawings", problems.join("\n"));
 }
 
 } // namespace PaperImport

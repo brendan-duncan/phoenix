@@ -1,4 +1,5 @@
 #include "theme_editor.h"
+#include "modal.h"
 
 #include <QColorDialog>
 #include <QComboBox>
@@ -144,7 +145,7 @@ ThemeEditor::ThemeEditor(QWidget* parent)
             ? theme::Theme::fromJson(QJsonDocument::fromJson(file.readAll()).object(), &ok) : theme::Theme();
         if (!ok)
         {
-            QMessageBox::warning(this, "Import Theme", "That file is not a Phoenix theme.");
+            modal::warning(this, "Import Theme", "That file is not a Phoenix theme.");
             return;
         }
         if (imported.name.isEmpty())
@@ -154,7 +155,7 @@ ThemeEditor::ThemeEditor(QWidget* parent)
             imported.name = QString("%1 %2").arg(base).arg(n);
         if (!theme::save(imported))
         {
-            QMessageBox::warning(this, "Import Theme", "The theme could not be saved.");
+            modal::warning(this, "Import Theme", "The theme could not be saved.");
             return;
         }
         _start->blockSignals(true);
@@ -171,13 +172,13 @@ ThemeEditor::ThemeEditor(QWidget* parent)
             return;
         QFile file(path);
         if (!file.open(QIODevice::WriteOnly) || file.write(QJsonDocument(_theme.toJson()).toJson()) < 0)
-            QMessageBox::warning(this, "Export Theme", QString("Could not write %1.").arg(path));
+            modal::warning(this, "Export Theme", QString("Could not write %1.").arg(path));
     });
     connect(remove, &QPushButton::clicked, this, [this]() {
         const QString name = _start->currentText();
         if (theme::builtInNames().contains(name))
         {
-            QMessageBox::information(this, "Delete Theme", "The built-in themes stay.");
+            modal::information(this, "Delete Theme", "The built-in themes stay.");
             return;
         }
         if (QMessageBox::question(this, "Delete Theme", QString("Delete the theme %1?").arg(name)) != QMessageBox::Yes)
@@ -271,7 +272,7 @@ bool ThemeEditor::saveAs()
         return false;
     if (theme::builtInNames().contains(name))
     {
-        QMessageBox::information(this, "Save Theme", "Pick a name other than the built-in themes'.");
+        modal::information(this, "Save Theme", "Pick a name other than the built-in themes'.");
         return false;
     }
     if (theme::names().contains(name) && name != _theme.name &&
@@ -280,7 +281,7 @@ bool ThemeEditor::saveAs()
     _theme.name = name;
     if (!theme::save(_theme))
     {
-        QMessageBox::warning(this, "Save Theme", "The theme could not be saved.");
+        modal::warning(this, "Save Theme", "The theme could not be saved.");
         return false;
     }
     // The onion skin takes the theme's colors from now on.
@@ -290,7 +291,7 @@ bool ThemeEditor::saveAs()
     _saved = true;
     theme::use(name);
     if (_theme.uiScale != 1.0)
-        QMessageBox::information(this, "Save Theme", "The UI scale is used from the next start.");
+        modal::information(this, "Save Theme", "The UI scale is used from the next start.");
     return true;
 }
 

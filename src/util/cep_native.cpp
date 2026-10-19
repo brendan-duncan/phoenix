@@ -35,7 +35,7 @@
 #include <unistd.h>
 #if defined(__APPLE__)
 #include <sys/sysctl.h>
-#else
+#elif !defined(__EMSCRIPTEN__)
 #include <sys/sysinfo.h>
 #endif
 extern char** environ;
@@ -1190,7 +1190,7 @@ json::Value NativeHost::systemInfo() const
     const long pages = sysconf(_SC_PHYS_PAGES), pageSize = sysconf(_SC_PAGESIZE);
     if (pages > 0 && pageSize > 0)
         info.set("totalmem", static_cast<double>(pages) * static_cast<double>(pageSize));
-#if !defined(__APPLE__)
+#if !defined(__APPLE__) && !defined(__EMSCRIPTEN__)
     struct sysinfo system
     {
     };

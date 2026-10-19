@@ -1,4 +1,5 @@
 #include "behaviors_panel.h"
+#include "modal.h"
 
 #include "behavior_library.h"
 #include "hot_text.h"
@@ -1357,7 +1358,7 @@ void BehaviorsPanel::newBehavior()
         QFile out(path);
         if (!out.open(QIODevice::WriteOnly | QIODevice::Truncate))
         {
-            QMessageBox::warning(this, "New Behavior", QString("Could not write %1.").arg(QDir::toNativeSeparators(path)));
+            modal::warning(this, "New Behavior", QString("Could not write %1.").arg(QDir::toNativeSeparators(path)));
             return;
         }
         out.write(source.toUtf8());

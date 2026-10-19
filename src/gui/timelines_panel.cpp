@@ -1,4 +1,5 @@
 #include "timelines_panel.h"
+#include "modal.h"
 #include <QTimer>
 #include <QDragEnterEvent>
 #include <QMimeData>
@@ -267,10 +268,10 @@ TimelinesPanel::TimelinesPanel(Player* player, QWidget *parent)
     viewButton->setToolTip("Frame view: frame size, row height, thumbnails, time in seconds (Ctrl+wheel zooms)");
     viewButton->setStyleSheet(styleTransport);
     connect(viewButton, &QPushButton::clicked, this, [this, viewButton]() {
-        QMenu menu(this);
+        QMenu* menu = new QMenu(this);
         const TimelineGrid::View now = _gridContainer->view();
         const auto choose = [&](const QString& label, bool checked, std::function<void(TimelineGrid::View&)> change) {
-            QAction* action = menu.addAction(label);
+            QAction* action = menu->addAction(label);
             action->setCheckable(true);
             action->setChecked(checked);
             connect(action, &QAction::triggered, this, [this, change]() {
@@ -283,11 +284,11 @@ TimelinesPanel::TimelinesPanel(Player* player, QWidget *parent)
         const std::pair<const char*, int> widths[] = {{"Tiny", 5}, {"Small", 10}, {"Normal", 20}, {"Medium", 30}, {"Large", 44}};
         for (const auto& [label, width] : widths)
             choose(label, now.frameWidth == width, [width = width](TimelineGrid::View& view) { view.frameWidth = width; });
-        menu.addSeparator();
+        menu->addSeparator();
         const std::pair<const char*, int> heights[] = {{"Short Rows", 15}, {"Normal Rows", 22}, {"Tall Rows", 44}};
         for (const auto& [label, height] : heights)
             choose(label, now.rowHeight == height, [height = height](TimelineGrid::View& view) { view.rowHeight = height; });
-        menu.addSeparator();
+        menu->addSeparator();
         choose("Preview", now.preview == 1, [](TimelineGrid::View& view) {
             view.preview = view.preview == 1 ? 0 : 1;
             if (view.preview)
@@ -298,10 +299,10 @@ TimelinesPanel::TimelinesPanel(Player* player, QWidget *parent)
             if (view.preview)
                 view.rowHeight = std::max(view.rowHeight, 44);
         });
-        menu.addSeparator();
+        menu->addSeparator();
         choose("Time in Seconds", now.seconds, [](TimelineGrid::View& view) { view.seconds = !view.seconds; });
         choose("Span Based Selection", now.spanSelection, [](TimelineGrid::View& view) { view.spanSelection = !view.spanSelection; });
-        menu.exec(viewButton->mapToGlobal(QPoint(0, viewButton->height())));
+        modal::popup(menu, viewButton->mapToGlobal(QPoint(0, viewButton->height())));
     });
     headerLayout->addWidget(viewButton);
 

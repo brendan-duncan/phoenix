@@ -3,6 +3,7 @@
 // and the starter templates.
 
 #include "main_window.h"
+#include "modal.h"
 
 #include "color_panel.h"
 #include "color_picker_widgets.h"
@@ -313,7 +314,7 @@ void MainWindow::openStarterTemplate(const QString& id)
     const QString path = startertemplates::copyToWork(id, error);
     if (path.isEmpty())
     {
-        QMessageBox::warning(this, "Starter Templates", error);
+        modal::warning(this, "Starter Templates", error);
         return;
     }
     openLessonDocument(path);

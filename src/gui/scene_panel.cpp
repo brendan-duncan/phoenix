@@ -1,4 +1,5 @@
 #include "scene_panel.h"
+#include "modal.h"
 
 #include "../data/document.h"
 #include "../data/timeline.h"
@@ -132,7 +133,7 @@ void ScenePanel::deleteScene()
         return;
     if (document->timelines.size() <= 1)
     {
-        QMessageBox::information(this, "Scene", "A document keeps at least one scene.");
+        modal::information(this, "Scene", "A document keeps at least one scene.");
         return;
     }
     const int current = document->currentSceneIndex();

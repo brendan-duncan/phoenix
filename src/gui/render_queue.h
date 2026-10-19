@@ -1,7 +1,7 @@
 #pragma once
 
 #include <QDialog>
-#include <QProcess>
+#include "process.h"
 #include <QString>
 #include <QStringList>
 
@@ -78,7 +78,7 @@ private:
     QPushButton* _start = nullptr;
     QPushButton* _stop = nullptr;
     QLabel* _status = nullptr;
-    QProcess* _process = nullptr;
+    Process* _process = nullptr;
     int _running = -1;
     bool _stopping = false;
 };

@@ -1,4 +1,5 @@
 #include "cep_panel.h"
+#include "modal.h"
 
 #include "output_panel.h"
 #include "script_runner.h"
@@ -864,32 +865,32 @@ void CepPanel::setFlyoutMenu(const QString& xml)
 
 void CepPanel::showFlyoutMenu()
 {
-    QMenu menu(this);
+    QMenu* menu = new QMenu(this);
     QPointer<CepPanel> self(this);
-    fillXmlMenu(&menu, _flyoutXml, [self](const QString& id, const QString& label) {
+    fillXmlMenu(menu, _flyoutXml, [self](const QString& id, const QString& label) {
         if (!self)
             return;
         QJsonObject event{{"type", "com.adobe.csxs.events.flyoutMenuClicked"}, {"scope", "APPLICATION"},
             {"appId", kHostId}, {"extensionId", self->_id}, {"data", QJsonObject{{"menuId", id}, {"menuName", label}}}};
         self->deliver(event);
     });
-    menu.exec(_flyoutButton->mapToGlobal(QPoint(0, _flyoutButton->height())));
+    modal::popup(menu, _flyoutButton->mapToGlobal(QPoint(0, _flyoutButton->height())));
 }
 
 void CepPanel::showContextMenu(const QString& kind, const QString& spec)
 {
-    QMenu menu(this);
+    QMenu* menu = new QMenu(this);
     QPointer<CepPanel> self(this);
     const auto chosen = [self](const QString& id, const QString&) {
         if (self)
             self->_view->runScript("window.__phoenixCep && window.__phoenixCep.contextMenuClicked(" + jsonText(id) + ");");
     };
     if (kind == "json")
-        fillJsonMenu(&menu, QJsonDocument::fromJson(spec.toUtf8()).object().value("menu").toArray(), chosen);
+        fillJsonMenu(menu, QJsonDocument::fromJson(spec.toUtf8()).object().value("menu").toArray(), chosen);
     else
-        fillXmlMenu(&menu, spec, chosen);
-    if (!menu.isEmpty())
-        menu.exec(QCursor::pos());
+        fillXmlMenu(menu, spec, chosen);
+    if (!menu->isEmpty())
+        modal::popup(menu, QCursor::pos());
 }
 
 QJsonObject CepPanel::hostEnvironment() const

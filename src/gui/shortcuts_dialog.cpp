@@ -1,4 +1,5 @@
 #include "shortcuts_dialog.h"
+#include "modal.h"
 
 #include <QAction>
 #include <QComboBox>
@@ -301,7 +302,7 @@ ShortcutsDialog::ShortcutsDialog(const std::vector<ShortcutEntry>& entries, QWid
             bindings.emplace_back(binding.command, binding.key);
         if (bindings.empty())
         {
-            QMessageBox::information(this, "Import Shortcuts", "No shortcuts were found in that file.");
+            modal::information(this, "Import Shortcuts", "No shortcuts were found in that file.");
             return;
         }
         _keys.clear();
@@ -349,7 +350,7 @@ void ShortcutsDialog::takeBindings(const std::vector<std::pair<std::string, std:
                        .arg(names.join("\n"))
                        .arg(unmatched.size() > 12 ? QString("\n...") : QString());
     }
-    QMessageBox::information(this, "Import Shortcuts", message);
+    modal::information(this, "Import Shortcuts", message);
 }
 
 void ShortcutsDialog::refreshSets()

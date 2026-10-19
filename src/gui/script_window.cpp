@@ -1,4 +1,5 @@
 #include "script_window.h"
+#include "modal.h"
 
 #include "../play/movie_runtime.h"
 
@@ -180,7 +181,7 @@ bool ScriptWindow::openFile(const QString& path)
     QFile file(path);
     if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
     {
-        QMessageBox::warning(this, "Open Script", QString("%1 could not be read.").arg(QDir::toNativeSeparators(path)));
+        modal::warning(this, "Open Script", QString("%1 could not be read.").arg(QDir::toNativeSeparators(path)));
         return false;
     }
     const QString text = QString::fromUtf8(file.readAll());
@@ -219,13 +220,13 @@ bool ScriptWindow::save(int tab, bool askForName)
     QSaveFile file(path);
     if (!file.open(QIODevice::WriteOnly | QIODevice::Text))
     {
-        QMessageBox::warning(this, "Save Script", QString("%1 could not be written.").arg(QDir::toNativeSeparators(path)));
+        modal::warning(this, "Save Script", QString("%1 could not be written.").arg(QDir::toNativeSeparators(path)));
         return false;
     }
     file.write(view->editor()->toPlainText().toUtf8());
     if (!file.commit())
     {
-        QMessageBox::warning(this, "Save Script", QString("%1 could not be written.").arg(QDir::toNativeSeparators(path)));
+        modal::warning(this, "Save Script", QString("%1 could not be written.").arg(QDir::toNativeSeparators(path)));
         return false;
     }
     view->editor()->document()->setModified(false);

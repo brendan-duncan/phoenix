@@ -1,4 +1,5 @@
 #include "render_queue.h"
+#include "modal.h"
 
 #include <QCheckBox>
 #include <QComboBox>
@@ -116,7 +117,7 @@ RenderQueue::RenderQueue(std::function<QString()> current, QWidget* parent)
         const QString document = _current ? _current() : QString();
         if (document.isEmpty())
         {
-            QMessageBox::information(this, "Render Queue", "Save the document first: the queue renders the saved file.");
+            modal::information(this, "Render Queue", "Save the document first: the queue renders the saved file.");
             return;
         }
         addJob(document);
@@ -125,7 +126,7 @@ RenderQueue::RenderQueue(std::function<QString()> current, QWidget* parent)
         const QString document = _current ? _current() : QString();
         if (document.isEmpty())
         {
-            QMessageBox::information(this, "Render Queue", "Save the document first: the queue renders the saved file.");
+            modal::information(this, "Render Queue", "Save the document first: the queue renders the saved file.");
             return;
         }
         const QString data = QFileDialog::getOpenFileName(this, "Rows to Render", QFileInfo(document).absolutePath(),
@@ -193,7 +194,7 @@ RenderQueue::RenderQueue(std::function<QString()> current, QWidget* parent)
 
 RenderQueue::~RenderQueue()
 {
-    if (_process && _process->state() != QProcess::NotRunning)
+    if (_process && _process->state() != Process::NotRunning)
     {
         _stopping = true;
         _process->kill();
@@ -431,22 +432,22 @@ void RenderQueue::runNext()
     fill();
     _status->setText(QString("Rendering %1...").arg(QFileInfo(job.document).fileName()));
     // A Phoenix of its own, with no window.
-    _process = new QProcess(this);
+    _process = new Process(this);
     QProcessEnvironment environment = QProcessEnvironment::systemEnvironment();
     // The offscreen platform where it was installed, the usual one where
     // not: a render makes no windows either way.
     environment.insert("QT_QPA_PLATFORM", "offscreen;windows");
     _process->setProcessEnvironment(environment);
-    _process->setProcessChannelMode(QProcess::MergedChannels);
-    connect(_process, &QProcess::finished, this, [this](int code, QProcess::ExitStatus status) {
-        QProcess* finished = _process;
+    _process->setProcessChannelMode(Process::MergedChannels);
+    connect(_process, &Process::finished, this, [this](int code, Process::ExitStatus status) {
+        Process* finished = _process;
         _process = nullptr;
         const QString log = QString::fromLocal8Bit(finished->readAll()).trimmed();
         finished->deleteLater();
         if (_running >= 0 && _running < static_cast<int>(_jobs.size()))
         {
             RenderJob& done = _jobs[static_cast<size_t>(_running)];
-            const bool ok = status == QProcess::NormalExit && code == 0;
+            const bool ok = status == Process::NormalExit && code == 0;
             done.state = ok ? RenderJob::State::Done : (_stopping ? RenderJob::State::Waiting : RenderJob::State::Failed);
             done.message = log;
         }

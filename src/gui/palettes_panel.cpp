@@ -1,4 +1,5 @@
 #include "palettes_panel.h"
+#include "modal.h"
 
 #include "../data/document.h"
 #include "../edit/command_stack.h"
@@ -285,7 +286,7 @@ void PalettesPanel::savePaletteFile()
     fla::palettes::Palette* active = state.palettes.activePalette();
     if (!active)
     {
-        QMessageBox::information(this, "Save Palette to File", "There is no palette yet: Add... a color to make one.");
+        modal::information(this, "Save Palette to File", "There is no palette yet: Add... a color to make one.");
         return;
     }
     const QString folder = _links.folder ? _links.folder() : QString();
@@ -301,7 +302,7 @@ void PalettesPanel::savePaletteFile()
     if (!out.open(QIODevice::WriteOnly | QIODevice::Truncate) ||
         out.write(text.data(), static_cast<qint64>(text.size())) != static_cast<qint64>(text.size()))
     {
-        QMessageBox::warning(this, "Save Palette to File",
+        modal::warning(this, "Save Palette to File",
             QString("Could not write %1.").arg(QDir::toNativeSeparators(path)));
         return;
     }
@@ -328,7 +329,7 @@ void PalettesPanel::linkPaletteFile()
     fla::palettes::Palette read;
     if (!fla::palettes::fromText(text, read))
     {
-        QMessageBox::warning(this, "Link Palette File",
+        modal::warning(this, "Link Palette File",
             QString("%1 is not a Phoenix palette.").arg(QDir::toNativeSeparators(path)));
         return;
     }
@@ -404,7 +405,7 @@ void PalettesPanel::newPalette()
     for (const fla::palettes::Palette& palette : state.palettes.list)
         if (palette.name == name.toStdString())
         {
-            QMessageBox::information(this, "New Palette", "There is a palette of that name already.");
+            modal::information(this, "New Palette", "There is a palette of that name already.");
             return;
         }
     fla::palettes::Palette palette;

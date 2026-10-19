@@ -1,4 +1,5 @@
 #include "publish_dialog.h"
+#include "modal.h"
 
 #include <QCheckBox>
 #include <QComboBox>
@@ -320,7 +321,7 @@ void PublishSettingsDialog::newProfile()
         return;
     if (_profile->findText(name) >= 0)
     {
-        QMessageBox::information(this, "New Configuration", QString("There is a configuration named %1.").arg(name));
+        modal::information(this, "New Configuration", QString("There is a configuration named %1.").arg(name));
         return;
     }
     _xml = fla::publish::write(_xml, settings(), _name.toStdString());
@@ -338,7 +339,7 @@ void PublishSettingsDialog::renameProfile()
         return;
     if (_profile->findText(name) >= 0)
     {
-        QMessageBox::information(this, "Rename Configuration", QString("There is a configuration named %1.").arg(name));
+        modal::information(this, "Rename Configuration", QString("There is a configuration named %1.").arg(name));
         return;
     }
     // A document with no settings yet has its one configuration written

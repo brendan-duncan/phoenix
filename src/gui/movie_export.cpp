@@ -28,7 +28,7 @@
 #include <QPainter>
 #include <QLabel>
 #include <QLineEdit>
-#include <QProcess>
+#include "process.h"
 #include <QProgressDialog>
 #include <QPushButton>
 #include <QSettings>
@@ -394,7 +394,7 @@ bool canEncodeMp3()
     {
         known = 0;
         const QString ffmpeg = ffmpegPath();
-        QProcess process;
+        Process process;
         if (!ffmpeg.isEmpty())
         {
             process.start(ffmpeg, {"-hide_banner", "-encoders"});
@@ -426,10 +426,10 @@ static bool encodeSound(const std::vector<float>& samples, const QStringList& ar
     }
     wav.close();
     out.close();
-    QProcess process;
+    Process process;
     process.start(ffmpeg, QStringList{"-y", "-hide_banner", "-loglevel", "error", "-i", wav.fileName()} + arguments +
                               QStringList{out.fileName()});
-    if (!process.waitForFinished(600000) || process.exitStatus() != QProcess::NormalExit || process.exitCode() != 0)
+    if (!process.waitForFinished(600000) || process.exitStatus() != Process::NormalExit || process.exitCode() != 0)
     {
         const QString said = QString::fromLocal8Bit(process.readAllStandardError()).trimmed();
         error = said.isEmpty() ? QString("ffmpeg could not encode %1.").arg(what) : said;
@@ -1039,8 +1039,8 @@ bool runOne(const MovieExportSettings& settings, PhoenixView& view, TimelineAudi
                       << "-movflags" << "+faststart" << settings.path;
     }
 
-    QProcess process;
-    process.setProcessChannelMode(QProcess::SeparateChannels);
+    Process process;
+    process.setProcessChannelMode(Process::SeparateChannels);
     process.start(ffmpeg, arguments);
     if (!process.waitForStarted(10000))
     {
@@ -1051,7 +1051,7 @@ bool runOne(const MovieExportSettings& settings, PhoenixView& view, TimelineAudi
     for (int i = 0; i < count; ++i)
     {
         progress.setValue(i);
-        if (progress.wasCanceled() || process.state() != QProcess::Running)
+        if (progress.wasCanceled() || process.state() != Process::Running)
             break;
         QImage image = render(i, even, alpha).convertToFormat(QImage::Format_ARGB32);
         if (image.isNull())
@@ -1067,7 +1067,7 @@ bool runOne(const MovieExportSettings& settings, PhoenixView& view, TimelineAudi
             image = image.copy(0, 0, even.width(), even.height());
         for (int y = 0; y < image.height(); ++y)
             process.write(reinterpret_cast<const char*>(image.constScanLine(y)), image.width() * 4);
-        while (process.bytesToWrite() > 0 && process.state() == QProcess::Running)
+        while (process.bytesToWrite() > 0 && process.state() == Process::Running)
         {
             process.waitForBytesWritten(100);
             QApplication::processEvents();
@@ -1077,7 +1077,7 @@ bool runOne(const MovieExportSettings& settings, PhoenixView& view, TimelineAudi
     process.closeWriteChannel();
     while (!process.waitForFinished(100))
     {
-        if (process.state() == QProcess::NotRunning)
+        if (process.state() == Process::NotRunning)
             break;
         QApplication::processEvents();
     }
@@ -1087,7 +1087,7 @@ bool runOne(const MovieExportSettings& settings, PhoenixView& view, TimelineAudi
         QFile::remove(settings.path);
         return false;
     }
-    if (process.exitStatus() != QProcess::NormalExit || process.exitCode() != 0)
+    if (process.exitStatus() != Process::NormalExit || process.exitCode() != 0)
     {
         error = QString("ffmpeg could not write the video.\n\n%1")
                     .arg(QString::fromLocal8Bit(process.readAllStandardError()).trimmed());

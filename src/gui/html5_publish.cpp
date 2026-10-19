@@ -29,7 +29,7 @@
 #include <QFontInfo>
 #include <QPainter>
 #include <QPainterPathStroker>
-#include <QProcess>
+#include "process.h"
 #include <QTemporaryDir>
 
 #include <algorithm>
@@ -438,10 +438,10 @@ private:
         if (!file.open(QIODevice::WriteOnly) || file.write(png) != png.size())
             return png;
         file.close();
-        QProcess process;
+        Process process;
         process.start(ffmpeg, {"-y", "-hide_banner", "-loglevel", "error", "-i", in, "-c:v", "libwebp", "-quality", "90",
                                   "-pix_fmt", image.hasAlphaChannel() ? "yuva420p" : "yuv420p", out});
-        if (!process.waitForFinished(120000) || process.exitStatus() != QProcess::NormalExit || process.exitCode() != 0)
+        if (!process.waitForFinished(120000) || process.exitStatus() != Process::NormalExit || process.exitCode() != 0)
             return png;
         QFile webp(out);
         if (!webp.open(QIODevice::ReadOnly))

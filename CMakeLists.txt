@@ -34,6 +34,28 @@ target_link_libraries(libas3 INTERFACE as3_parser)
 
 project(Phoenix VERSION 0.21.2 LANGUAGES C CXX)
 
+# The web build: Qt for WebAssembly's toolchain (tools/web/build_web.py,
+# docs/web.md). What a browser cannot do (other programs, Python, sockets,
+# the updater, native web views) is left out with PHOENIX_WEB.
+if(EMSCRIPTEN)
+    set(PHOENIX_WEB ON)
+    set(PHOENIX_PYTHON OFF CACHE BOOL "" FORCE)
+    set(PHOENIX_UPDATER OFF CACHE BOOL "" FORCE)
+    set(PHOENIX_WEBVIEW OFF CACHE BOOL "" FORCE)
+    # Emscripten leaves C++ exceptions uncaught unless asked; Phoenix's
+    # readers and libas3 catch them. Qt's prebuilt kits use the JavaScript
+    # ones (-fexceptions), so everything linked with it does too.
+    # Threads share the page's memory, so every object linked in has to be
+    # compiled for it (-pthread), not only those that link Qt.
+    add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-fexceptions> -pthread)
+    add_link_options(-fexceptions -pthread)
+    if(TARGET as3_parser)
+        target_compile_options(as3_parser PRIVATE -fexceptions -pthread)
+    endif()
+else()
+    set(PHOENIX_WEB OFF)
+endif()
+
 # libas3 copies as3_parser.pdb from beside the library after a Debug build,
 # but a single-configuration generator (Ninja) has MSVC write a static
 # library's compile PDB in its object folder; put it where the copy looks.
@@ -130,7 +152,9 @@ set(tinyxml2_SHARED_LIBS OFF CACHE BOOL "Don't build tinyxml2 as a shared librar
 set(tinyxml2_BUILD_TESTING OFF CACHE BOOL "Don't build tinyxml2 tests")
 add_subdirectory(src/third_party/tinyxml2)
 add_subdirectory(src/third_party/zstd)
-add_subdirectory(src/third_party/libvterm)
+if(NOT PHOENIX_WEB)
+    add_subdirectory(src/third_party/libvterm)
+endif()
 
 set(HEADERS
     src/gui/main_window.h
@@ -156,6 +180,10 @@ set(HEADERS
     src/gui/node_search.h
     src/gui/claude_code_panel.h
     src/gui/pty_process.h
+    src/gui/process.h
+    src/gui/modal.h
+    src/gui/web_files.h
+    src/gui/file_pick.h
     src/gui/terminal_view.h
     src/gui/html_view.h
     src/gui/trace_bitmap_dialog.h
@@ -612,6 +640,9 @@ set(SOURCES
     src/gui/layers_panel.cpp
     src/gui/timelines_panel.cpp
     src/gui/player.cpp
+    src/gui/modal.cpp
+    src/gui/web_files.cpp
+    src/gui/file_pick.cpp
 )
 
 # Python scripts (src/python) run with the person's own Python, loaded when
@@ -646,6 +677,12 @@ if(WIN32)
     list(APPEND SOURCES ${CMAKE_CURRENT_BINARY_DIR}/phoenix.rc)
 endif()
 
+# The web build's stand-ins for what a browser cannot do.
+if(PHOENIX_WEB)
+    list(REMOVE_ITEM SOURCES src/gui/terminal_view.cpp)
+    list(APPEND SOURCES src/gui/terminal_view_web.cpp)
+endif()
+
 qt6_add_executable(Phoenix MANUAL_FINALIZATION ${SOURCES} ${HEADERS})
 
 # On macOS, Phoenix.app with its icon. The bundle identifier is how macOS
@@ -664,7 +701,10 @@ if(APPLE)
         MACOSX_BUNDLE_INFO_PLIST ${CMAKE_CURRENT_SOURCE_DIR}/cmake/Info.plist.in)
 endif()
 
-target_link_libraries(Phoenix PRIVATE phoenix_core Qt6::Widgets Qt6::Svg zlibstatic tinyxml2 libas3 vterm)
+target_link_libraries(Phoenix PRIVATE phoenix_core Qt6::Widgets Qt6::Svg zlibstatic tinyxml2 libas3)
+if(NOT PHOENIX_WEB)
+    target_link_libraries(Phoenix PRIVATE vterm)
+endif()
 # The web for the movies Test Movie plays (URLLoader, Loader), when the Qt
 # found has its network module.
 find_package(Qt6 QUIET OPTIONAL_COMPONENTS Network)
@@ -739,12 +779,28 @@ elseif(UNIX)
 endif()
 
 # The Claude Code panel's terminal: forkpty is in libutil on Linux.
-if(UNIX AND NOT APPLE)
+if(UNIX AND NOT APPLE AND NOT PHOENIX_WEB)
     target_link_libraries(Phoenix PRIVATE util)
 endif()
 
-if(TRUE)
-    qt_finalize_executable(Phoenix)
+if(PHOENIX_WEB)
+    target_compile_definitions(Phoenix PRIVATE PHOENIX_WEB)
+    target_compile_definitions(phoenix_core PUBLIC PHOENIX_WEB)
+    # Threads are web workers made when the page loads: a thread asked for
+    # beyond these waits for the browser to make one, which the page's own
+    # thread has to be free for (util/parallel.cpp sizes its pool to fit).
+    # Memory grows as documents need it, up to what the build allows (4 GB
+    # for wasm32; Qt's default, larger, for wasm64).
+    set_target_properties(Phoenix PROPERTIES
+        QT_WASM_PTHREAD_POOL_SIZE 8
+        QT_WASM_INITIAL_MEMORY "256MB")
+endif()
+
+qt_finalize_executable(Phoenix)
+
+if(PHOENIX_WEB)
+    # Nothing to install or deploy, and no tests: the build folder is the site.
+    return()
 endif()
 
 # What a release ships: `cmake --install build --config Release --component

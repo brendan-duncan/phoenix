@@ -4,6 +4,8 @@
 #include "fill_offset.h"
 #include "new_document_dialog.h"
 #include "start_dialog.h"
+#include "modal.h"
+#include "web_files.h"
 #include "stage_controls.h"
 #include "canvas_only.h"
 #include "safe_zones_dialog.h"
@@ -199,7 +201,7 @@
 #include <QTreeWidget>
 #include <QScrollArea>
 #include <QPlainTextEdit>
-#include <QProcess>
+#include "process.h"
 #include <QDesktopServices>
 #include <QFileSystemWatcher>
 #include <QJsonObject>
@@ -1353,9 +1355,9 @@ void MainWindow::revealInFileManager(const QString& path)
         return;
     const QFileInfo info(path);
 #if defined(Q_OS_WIN)
-    QProcess::startDetached("explorer.exe", {"/select,", QDir::toNativeSeparators(info.absoluteFilePath())});
+    Process::startDetached("explorer.exe", {"/select,", QDir::toNativeSeparators(info.absoluteFilePath())});
 #elif defined(Q_OS_MACOS)
-    QProcess::startDetached("open", {"-R", info.absoluteFilePath()});
+    Process::startDetached("open", {"-R", info.absoluteFilePath()});
 #else
     QDesktopServices::openUrl(QUrl::fromLocalFile(info.absolutePath()));
 #endif
@@ -1374,13 +1376,13 @@ void MainWindow::showTabMenu(int index, const QPoint& globalPos)
         return -1;
     };
     const QString path = tabPath(*tab);
-    QMenu menu(this);
-    menu.addAction("&Close", this, [this, indexOf]() { closeTab(indexOf()); });
-    QAction* others = menu.addAction("Close &Others", this, [this, indexOf]() { closeOtherTabs(indexOf()); });
+    QMenu* menu = new QMenu(this);
+    menu->addAction("&Close", this, [this, indexOf]() { closeTab(indexOf()); });
+    QAction* others = menu->addAction("Close &Others", this, [this, indexOf]() { closeOtherTabs(indexOf()); });
     others->setEnabled(_tabs.size() > 1);
-    menu.addAction("Close &All", this, [this]() { closeAllTabs(); });
-    menu.addSeparator();
-    QAction* copyPath = menu.addAction("Copy &Path", this, [path]() {
+    menu->addAction("Close &All", this, [this]() { closeAllTabs(); });
+    menu->addSeparator();
+    QAction* copyPath = menu->addAction("Copy &Path", this, [path]() {
         QApplication::clipboard()->setText(QDir::toNativeSeparators(path));
     });
     copyPath->setEnabled(!path.isEmpty());
@@ -1391,14 +1393,14 @@ void MainWindow::showTabMenu(int index, const QPoint& globalPos)
 #else
     const QString reveal = "Show in &Folder";
 #endif
-    QAction* show = menu.addAction(reveal, this, [path]() { revealInFileManager(path); });
+    QAction* show = menu->addAction(reveal, this, [path]() { revealInFileManager(path); });
     show->setEnabled(!path.isEmpty() && QFileInfo::exists(path));
-    menu.addSeparator();
-    QAction* newWindow = menu.addAction("Move to &New Window", this, [this, indexOf]() {
+    menu->addSeparator();
+    QAction* newWindow = menu->addAction("Move to &New Window", this, [this, indexOf]() {
         moveTabToNewWindow(indexOf());
     });
     newWindow->setEnabled(_tabs.size() > 1);
-    QMenu* toWindow = menu.addMenu("Move to &Window");
+    QMenu* toWindow = menu->addMenu("Move to &Window");
     for (MainWindow* window : s_windows)
     {
         if (window == this || !window->isVisible())
@@ -1409,7 +1411,7 @@ void MainWindow::showTabMenu(int index, const QPoint& globalPos)
         });
     }
     toWindow->setEnabled(!toWindow->isEmpty());
-    menu.exec(globalPos);
+    modal::popup(menu, globalPos);
 }
 
 std::unique_ptr<MainWindow::DocumentTab> MainWindow::detachTab(int index)
@@ -1695,7 +1697,7 @@ void MainWindow::saveAsTemplate()
     if (AutoSave* autoSave = activeAutoSave())
         autoSave->waitForWrite();
     if (!phx::save(*_flaDocument->document, path.toStdString(), options, error))
-        QMessageBox::warning(this, "Save as Template", QString::fromStdString(error));
+        modal::warning(this, "Save as Template", QString::fromStdString(error));
     else
         statusBar()->showMessage(QString("Saved the template %1.").arg(name), 3000);
 }
@@ -1859,7 +1861,7 @@ void MainWindow::showTutorials()
         {
             QString error;
             if (!tutorials::showFinal(*this, lesson, error))
-                QMessageBox::warning(this, "Tutorials", QString("The final could not be shown: %1").arg(error));
+                modal::warning(this, "Tutorials", QString("The final could not be shown: %1").arg(error));
             return;
         }
 }
@@ -1874,10 +1876,10 @@ void MainWindow::startTutorial(const QString& id)
             _tutorial = new TutorialRunner(this);
         QString error;
         if (!_tutorial->start(lesson, error))
-            QMessageBox::warning(this, "Tutorials", QString("The lesson could not start: %1").arg(error));
+            modal::warning(this, "Tutorials", QString("The lesson could not start: %1").arg(error));
         return;
     }
-    QMessageBox::warning(this, "Tutorials", QString("There is no lesson called %1.").arg(id));
+    modal::warning(this, "Tutorials", QString("There is no lesson called %1.").arg(id));
 }
 
 void MainWindow::newFromTemplate()
@@ -1888,7 +1890,7 @@ void MainWindow::newFromTemplate()
         names << file.completeBaseName();
     if (names.isEmpty())
     {
-        QMessageBox::information(this, "New from Template",
+        modal::information(this, "New from Template",
             "There are no templates yet. Open or make a document and choose File > Save as Template.");
         return;
     }
@@ -2882,12 +2884,14 @@ void MainWindow::togglePanels()
 void MainWindow::newFile()
 {
     // The New Document dialog: a preset, or a size and frame rate.
-    NewDocumentDialog dialog(this);
-    if (dialog.exec() != QDialog::Accepted)
-        return;
-    makeRoomForDocument();
-    createNewDocument(dialog.documentWidth(), dialog.documentHeight(), dialog.frameRate(), dialog.stageColor(),
-        dialog.canvas());
+    NewDocumentDialog* dialog = new NewDocumentDialog(this);
+    modal::open(dialog, [this, dialog](int result) {
+        if (result != QDialog::Accepted)
+            return;
+        makeRoomForDocument();
+        createNewDocument(dialog->documentWidth(), dialog->documentHeight(), dialog->frameRate(), dialog->stageColor(),
+            dialog->canvas());
+    });
 }
 
 bool MainWindow::offerRecovery()
@@ -2989,7 +2993,7 @@ bool MainWindow::offerRecovery()
         fla::FLADocument* document = phx::load(orphan.file.toStdString(), error, warning, readOnly);
         if (!document)
         {
-            QMessageBox::warning(this, "Recover Unsaved Work",
+            modal::warning(this, "Recover Unsaved Work",
                 QString("The copy of %1 could not be read: %2").arg(name, QString::fromStdString(error)));
             continue;
         }
@@ -3010,46 +3014,47 @@ bool MainWindow::offerRecovery()
 
 void MainWindow::showStartDialog()
 {
-    StartDialog dialog(_recentFiles, this);
-    prepareStartDialog(dialog);
+    StartDialog* dialog = new StartDialog(_recentFiles, this);
+    prepareStartDialog(*dialog);
     // An update offer already up goes over the dialog rather than under it.
-    QTimer::singleShot(0, &dialog, [this, &dialog]() {
+    QTimer::singleShot(0, dialog, [this, dialog]() {
         if (_updater)
-            _updater->placeOffer(&dialog);
+            _updater->placeOffer(dialog);
     });
-    const int result = dialog.exec();
-    QSettings().setValue("showStartDialog", dialog.showAtStartup());
-    if (result != QDialog::Accepted)
-        return;
-    switch (dialog.choice())
-    {
-    case StartDialog::Choice::NewPreset:
-    {
-        const auto& presets = NewDocumentDialog::presets();
-        if (dialog.preset() < 0 || dialog.preset() >= static_cast<int>(presets.size()) || !confirmDiscardChanges())
+    modal::open(dialog, [this, dialog](int result) {
+        QSettings().setValue("showStartDialog", dialog->showAtStartup());
+        if (result != QDialog::Accepted)
             return;
-        const NewDocumentDialog::Preset& preset = presets[static_cast<size_t>(dialog.preset())];
-        createNewDocument(preset.width, preset.height, preset.frameRate, Qt::white);
-        break;
-    }
-    case StartDialog::Choice::NewCustom:
-        newFile();
-        break;
-    case StartDialog::Choice::Browse:
-        openFile();
-        break;
-    case StartDialog::Choice::OpenRecent:
-        openInTab(dialog.path());
-        break;
-    case StartDialog::Choice::Tutorials:
-        showTutorials();
-        break;
-    case StartDialog::Choice::StarterTemplate:
-        openStarterTemplate(dialog.starterTemplate());
-        break;
-    case StartDialog::Choice::None:
-        break;
-    }
+        switch (dialog->choice())
+        {
+        case StartDialog::Choice::NewPreset:
+        {
+            const auto& presets = NewDocumentDialog::presets();
+            if (dialog->preset() < 0 || dialog->preset() >= static_cast<int>(presets.size()) || !confirmDiscardChanges())
+                return;
+            const NewDocumentDialog::Preset& preset = presets[static_cast<size_t>(dialog->preset())];
+            createNewDocument(preset.width, preset.height, preset.frameRate, Qt::white);
+            break;
+        }
+        case StartDialog::Choice::NewCustom:
+            newFile();
+            break;
+        case StartDialog::Choice::Browse:
+            openFile();
+            break;
+        case StartDialog::Choice::OpenRecent:
+            openInTab(dialog->path());
+            break;
+        case StartDialog::Choice::Tutorials:
+            showTutorials();
+            break;
+        case StartDialog::Choice::StarterTemplate:
+            openStarterTemplate(dialog->starterTemplate());
+            break;
+        case StartDialog::Choice::None:
+            break;
+        }
+    });
 }
 
 void MainWindow::createNewDocument(int width, int height, double frameRate, const QColor& stage, bool canvas)
@@ -3116,7 +3121,7 @@ void MainWindow::loadFLAFile(const QString& filePath)
         if (!document)
         {
             adoptDocument(nullptr, QString(), QString());
-            QMessageBox::warning(this, "Cannot Open Document",
+            modal::warning(this, "Cannot Open Document",
                 QString("%1\n\n%2").arg(QFileInfo(filePath).fileName(), QString::fromStdString(error)));
             return;
         }
@@ -3132,7 +3137,7 @@ void MainWindow::loadFLAFile(const QString& filePath)
         }
         if (!warning.empty())
         {
-            QMessageBox::information(this, "Open Document",
+            modal::information(this, "Open Document",
                 QString("%1\n\n%2").arg(QFileInfo(filePath).fileName(),
                     QString::fromStdString(warning).trimmed()));
         }
@@ -3163,7 +3168,7 @@ void MainWindow::loadFLAFile(const QString& filePath)
             adoptDocument(document, QString(), fileInfo.completeBaseName() + ".fla");
             addToRecentFiles(filePath);
             if (isVisible())
-                QMessageBox::information(this, "Open SWF Movie",
+                modal::information(this, "Open SWF Movie",
                     QString("%1\n\n%2").arg(fileInfo.fileName(), QString::fromStdString(parser.warningString()).trimmed()));
             else
                 std::fprintf(stderr, "%s\n", parser.warningString().c_str());
@@ -3179,7 +3184,7 @@ void MainWindow::loadFLAFile(const QString& filePath)
         }
         else if (!parser.warningString().empty())
         {
-            QMessageBox::information(this, "Open Document",
+            modal::information(this, "Open Document",
                 QString("%1\n\n%2").arg(fileInfo.fileName(),
                     QString::fromStdString(parser.warningString()).trimmed()));
         }
@@ -3193,7 +3198,7 @@ void MainWindow::loadFLAFile(const QString& filePath)
     else
     {
         adoptDocument(nullptr, QString(), QString());
-        QMessageBox::warning(this, "Cannot Open Document",
+        modal::warning(this, "Cannot Open Document",
                            QString("%1\n\n%2")
                            .arg(QFileInfo(filePath).fileName())
                            .arg(parser.errorString().empty() ? QString("The file could not be read.")
@@ -4221,7 +4226,7 @@ void MainWindow::importAnimatic()
     }
     if (shots.empty() && sounds.empty())
     {
-        QMessageBox::warning(this, "Import Animatic", QString("Nothing to import from %1.\n\n%2")
+        modal::warning(this, "Import Animatic", QString("Nothing to import from %1.\n\n%2")
                                                          .arg(QFileInfo(path).fileName(), QString::fromStdString(error)));
         return;
     }
@@ -4373,7 +4378,7 @@ void MainWindow::importAnimatic()
     if (!missing.isEmpty())
         report += "\n\nNot found:\n" + missing.mid(0, 12).join("\n") + (missing.size() > 12 ? "\n..." : "");
     report += "\n\nFile > Export > Export Shots, by frame labels, splits it into shot files.";
-    QMessageBox::information(this, "Import Animatic", report);
+    modal::information(this, "Import Animatic", report);
 }
 
 void MainWindow::deformSelection(int what)
@@ -4421,7 +4426,7 @@ void MainWindow::deformSelection(int what)
     if (instances.empty() || !_phoenixView)
     {
         stack.endMacro();
-        QMessageBox::information(this, "Deformer", what == 4 ? "Select something to pin." : "Select one or more symbol instances.");
+        modal::information(this, "Deformer", what == 4 ? "Select something to pin." : "Select one or more symbol instances.");
         return;
     }
     for (fla::SymbolInstance* instance : instances)
@@ -4469,7 +4474,7 @@ void MainWindow::lipSync()
     auto* layer = frame ? dynamic_cast<fla::Layer*>(frame->parent) : nullptr;
     if (!mouth || !layer || !_flaDocument || !_flaDocument->document)
     {
-        QMessageBox::information(this, "Lip Sync",
+        modal::information(this, "Lip Sync",
             "Select the mouth: a graphic symbol whose frames are the mouth shapes, on a layer of its own.");
         return;
     }
@@ -5165,8 +5170,8 @@ void MainWindow::showBoneMenu(const QPoint& globalPos, const PhoenixView::IKBone
         return QString::fromStdString(armature.nodeName(each));
     };
 
-    QMenu menu(this);
-    QAction* lock = menu.addAction("Lock Bone");
+    QMenu* menu = new QMenu(this);
+    QAction* lock = menu->addAction("Lock Bone");
     lock->setCheckable(true);
     lock->setChecked(armature.locked(joint, into));
     lock->setStatusTip("Keep this bone where it is on the stage from this frame on as the other bones move");
@@ -5175,7 +5180,7 @@ void MainWindow::showBoneMenu(const QPoint& globalPos, const PhoenixView::IKBone
     });
 
     // What its tail reaches for, from this frame on.
-    QMenu* reach = menu.addMenu("Reach For");
+    QMenu* reach = menu->addMenu("Reach For");
     const fla::BoneTarget aim = armature.target(joint, into);
     QActionGroup* aims = new QActionGroup(reach);
     const auto aimAction = [&](const QString& text, bool checked, const fla::BoneTarget& target) {
@@ -5206,7 +5211,7 @@ void MainWindow::showBoneMenu(const QPoint& globalPos, const PhoenixView::IKBone
         aimAction(boneName(static_cast<int>(other)), aim.joint == static_cast<int>(other), target);
     }
 
-    menu.addSeparator();
+    menu->addSeparator();
     const fla::BoneOptions options = armature.options(joint);
     const auto setOptions = [=](const fla::BoneOptions& chosen, const std::string& name) {
         change([=](fla::IKArmature& edited) {
@@ -5215,7 +5220,7 @@ void MainWindow::showBoneMenu(const QPoint& globalPos, const PhoenixView::IKBone
             return edited.xml() != before;
         }, name);
     };
-    QAction* independent = menu.addAction("Independent Angle");
+    QAction* independent = menu->addAction("Independent Angle");
     independent->setCheckable(true);
     independent->setChecked(options.independent);
     independent->setStatusTip("Keep this bone's angle on the stage as the bones above it turn");
@@ -5224,7 +5229,7 @@ void MainWindow::showBoneMenu(const QPoint& globalPos, const PhoenixView::IKBone
         chosen.independent = on;
         setOptions(chosen, "Independent Angle");
     });
-    QMenu* squash = menu.addMenu("Squash and Stretch");
+    QMenu* squash = menu->addMenu("Squash and Stretch");
     QActionGroup* squashes = new QActionGroup(squash);
     const std::vector<std::pair<QString, int>> squashChoices = {{"Off", 0}, {"Stretch", 1}, {"Stretch, Keep Volume", 2}};
     for (const auto& [text, kind] : squashChoices)
@@ -5243,7 +5248,7 @@ void MainWindow::showBoneMenu(const QPoint& globalPos, const PhoenixView::IKBone
     }
     squash->addSeparator();
     squash->addAction("Alt-drag the bone to stretch it")->setEnabled(false);
-    QMenu* stretch = menu.addMenu("IK Stretch");
+    QMenu* stretch = menu->addMenu("IK Stretch");
     QActionGroup* stretches = new QActionGroup(stretch);
     for (double most : {1.0, 1.25, 1.5, 2.0, 3.0})
     {
@@ -5257,10 +5262,10 @@ void MainWindow::showBoneMenu(const QPoint& globalPos, const PhoenixView::IKBone
             setOptions(chosen, "IK Stretch");
         });
     }
-    menu.addSeparator();
+    menu->addSeparator();
     const int head = shown[static_cast<size_t>(joint)].parent;
-    menu.addAction("Joint Rotation and Spring...", this, [=]() { editJointLimits(frame, child, head); });
-    menu.exec(globalPos);
+    menu->addAction("Joint Rotation and Spring...", this, [=]() { editJointLimits(frame, child, head); });
+    modal::popup(menu, globalPos);
 }
 
 void MainWindow::editBoneForces()
@@ -6048,7 +6053,7 @@ void MainWindow::exportBakedDocument()
     int bakedLayers = 0;
     const bool written = writeForOtherApps(path, error, &bakedLayers);
     if (!written)
-        QMessageBox::warning(this, "Export FLA for Other Apps", QString("The copy could not be written: %1").arg(error));
+        modal::warning(this, "Export FLA for Other Apps", QString("The copy could not be written: %1").arg(error));
     else
         statusBar()->showMessage(QString("Exported %1%2").arg(QFileInfo(path).fileName(),
                                      bakedLayers == 0 ? QString(" (no behaviors to bake)") : QString(" with behaviors baked")),
@@ -6993,7 +6998,7 @@ void MainWindow::setupMenus()
             statusBar()->showMessage(QString("Exported %1").arg(QDir::toNativeSeparators(path)), 5000);
         }
         else if (!error.isEmpty())
-            QMessageBox::warning(this, "Export Failed", error);
+            modal::warning(this, "Export Failed", error);
     });
     exportMenu->addAction(exportSwfAction);
 
@@ -8412,6 +8417,11 @@ void MainWindow::setupMenus()
 
 void MainWindow::openFile()
 {
+#ifdef PHOENIX_WEB
+    // The browser's picker, which hands over one file: XFL folders stay out.
+    web_files::open(this, tr("Documents (*.phx *.fla *.swf)"), [this](const QString& path) { openInTab(path); });
+    return;
+#endif
     QString fileName = QFileDialog::getOpenFileName(this, tr("Open"), _lastDirectory,
         tr("Documents (*.phx *.fla *.xfl DOMDocument.xml *.swf);;Phoenix Documents (*.phx);;FLA Files (*.fla);;"
            "XFL Documents (*.xfl DOMDocument.xml);;SWF Movies (*.swf);;All Files (*)"));
@@ -8542,7 +8552,7 @@ bool MainWindow::saveToPath(const QString& filePath)
 {
     if (!_flaDocument || !_flaDocument->document)
     {
-        QMessageBox::information(this, "No Document", "No FLA document is currently loaded.");
+        modal::information(this, "No Document", "No FLA document is currently loaded.");
         return false;
     }
 
@@ -8567,7 +8577,7 @@ bool MainWindow::saveToPath(const QString& filePath)
 
     if (!error.isEmpty())
     {
-        QMessageBox::warning(this, "Save Failed",
+        modal::warning(this, "Save Failed",
             QString("Failed to save:\n%1\n\n%2").arg(filePath).arg(error));
         return false;
     }
@@ -8581,6 +8591,10 @@ bool MainWindow::saveToPath(const QString& filePath)
     updateEditState();
     addToRecentFiles(filePath);
     statusBar()->showMessage(QString("Saved %1").arg(filePath), 5000);
+#ifdef PHOENIX_WEB
+    // Written to the page's own file system; the browser keeps it as a download.
+    web_files::download(filePath);
+#endif
     scriptEvent("documentSaved");
     return true;
 }
@@ -8597,22 +8611,21 @@ void MainWindow::saveFile()
     // open, so an old binary document is not replaced without asking.
     if (_flaDocument && _flaDocument->fromBinary && !isPhxPath(_documentPath))
     {
-        QMessageBox box(QMessageBox::Question, "Save",
+        QMessageBox* box = new QMessageBox(QMessageBox::Question, "Save",
             "This document was opened from the Flash CS4 (or earlier) format. Phoenix saves the current "
             "format, which Flash CS4 and earlier cannot open.",
             QMessageBox::NoButton, this);
-        QPushButton* saveAs = box.addButton("Save As...", QMessageBox::AcceptRole);
-        QPushButton* replace = box.addButton("Replace", QMessageBox::DestructiveRole);
-        box.addButton(QMessageBox::Cancel);
-        box.setDefaultButton(saveAs);
-        box.exec();
-        if (box.clickedButton() == saveAs)
-        {
-            saveFileAs();
-            return;
-        }
-        if (box.clickedButton() != replace)
-            return;
+        QPushButton* saveAs = box->addButton("Save As...", QMessageBox::AcceptRole);
+        QPushButton* replace = box->addButton("Replace", QMessageBox::DestructiveRole);
+        box->addButton(QMessageBox::Cancel);
+        box->setDefaultButton(saveAs);
+        modal::open(box, [this, box, saveAs, replace](QMessageBox::StandardButton) {
+            if (box->clickedButton() == saveAs)
+                saveFileAs();
+            else if (box->clickedButton() == replace)
+                saveToPath(_documentPath);
+        });
+        return;
     }
 
     saveToPath(_documentPath);
@@ -8622,7 +8635,7 @@ void MainWindow::saveFileAs()
 {
     if (!_flaDocument || !_flaDocument->document)
     {
-        QMessageBox::information(this, "No Document", "No FLA document is currently loaded.");
+        modal::information(this, "No Document", "No FLA document is currently loaded.");
         return;
     }
 
@@ -8630,6 +8643,18 @@ void MainWindow::saveFileAs()
     // Format: a Phoenix document unless a studio asks for FLA or XFL
     // folders); one opened from a file is offered in its own format.
     const QString format = QSettings().value("save/defaultFormat", "phx").toString();
+#ifdef PHOENIX_WEB
+    // No save dialog in a browser: the document is written under its own
+    // name and downloaded, where the browser asks or names it. An XFL
+    // folder cannot be downloaded, so it goes as a Phoenix document.
+    {
+        QString name = _documentPath.isEmpty() ? QString("untitled") : QFileInfo(_documentPath).completeBaseName();
+        const bool fla = _documentPath.isEmpty() ? format == "fla" : _documentPath.endsWith(".fla", Qt::CaseInsensitive);
+        name += fla ? ".fla" : ".phx";
+        saveToPath(QDir(web_files::folder()).filePath(name));
+        return;
+    }
+#endif
     const QString untitled = format == "fla" ? QString("untitled.fla") : format == "xfl" ? QString("untitled") : QString("untitled.phx");
     const QString suggested = _documentPath.isEmpty()
         ? (_lastDirectory.isEmpty() ? untitled : QDir(_lastDirectory).filePath(untitled))
@@ -8662,7 +8687,7 @@ void MainWindow::exportSvg()
 {
     if (!_flaDocument || !_flaDocument->document)
     {
-        QMessageBox::information(this, "No Document", "No FLA document is currently loaded.");
+        modal::information(this, "No Document", "No FLA document is currently loaded.");
         return;
     }
 
@@ -8687,7 +8712,7 @@ void MainWindow::exportSvg()
     }
     else
     {
-        QMessageBox::warning(this, "Export Failed",
+        modal::warning(this, "Export Failed",
             QString("Failed to export SVG to:\n%1").arg(fileName));
     }
 }
@@ -8866,7 +8891,7 @@ void MainWindow::linkToMaster(const QString& name)
     std::unique_ptr<fla::FLADocument> master = commands::load(QFileInfo(path).suffix() == "xfl" ? QFileInfo(path).absolutePath().toStdString() : path.toStdString(), error);
     if (!master || !master->document->symbolList)
     {
-        QMessageBox::warning(this, "Link to Master File", QString("Could not read %1.\n\n%2").arg(path, QString::fromStdString(error)));
+        modal::warning(this, "Link to Master File", QString("Could not read %1.\n\n%2").arg(path, QString::fromStdString(error)));
         return;
     }
     // Which of the master's symbols: the one of the same name, by default.
@@ -8957,14 +8982,14 @@ void MainWindow::updateLinked(const QStringList& requested)
         _phoenixView->update();
     }
     updateEditState();
-    QMessageBox::information(this, "Update from Master", report.join("\n"));
+    modal::information(this, "Update from Master", report.join("\n"));
 }
 
 void MainWindow::exportShots()
 {
     if (!_flaDocument || _documentPath.isEmpty() || !QFileInfo::exists(_documentPath))
     {
-        QMessageBox::information(this, "Export Shots", "Save the episode first; the shots are cut from its file.");
+        modal::information(this, "Export Shots", "Save the episode first; the shots are cut from its file.");
         return;
     }
     if (_editContext.isModified() &&
@@ -9005,7 +9030,7 @@ void MainWindow::exportShots()
     if (dialog.exec() != QDialog::Accepted)
         return;
 
-    QProcess process;
+    Process process;
     QApplication::setOverrideCursor(Qt::WaitCursor);
     process.start(QCoreApplication::applicationFilePath(), {"shots", _documentPath, "--by", by->currentData().toString(),
         "--format", format->currentData().toString(), "--out", folder->text()});
@@ -9014,16 +9039,16 @@ void MainWindow::exportShots()
     const QString output = QString::fromLocal8Bit(process.readAllStandardOutput()) +
                            QString::fromLocal8Bit(process.readAllStandardError());
     if (process.exitCode() != 0)
-        QMessageBox::warning(this, "Export Shots", output);
+        modal::warning(this, "Export Shots", output);
     else
-        QMessageBox::information(this, "Export Shots", output);
+        modal::information(this, "Export Shots", output);
 }
 
 void MainWindow::compareWith()
 {
     if (!_flaDocument || _documentPath.isEmpty() || !QFileInfo::exists(_documentPath))
     {
-        QMessageBox::information(this, "Compare With", "Save the document first; its file is what is compared.");
+        modal::information(this, "Compare With", "Save the document first; its file is what is compared.");
         return;
     }
     if (_editContext.isModified() &&
@@ -9037,7 +9062,7 @@ void MainWindow::compareWith()
 
     // The diff command, run apart so neither document disturbs the open one.
     QTemporaryDir folder;
-    QProcess process;
+    Process process;
     QApplication::setOverrideCursor(Qt::WaitCursor);
     process.start(QCoreApplication::applicationFilePath(), {"diff", other, _documentPath, "--out", folder.path()});
     process.waitForFinished(-1);
@@ -9407,7 +9432,7 @@ int MainWindow::viewFromCommandLine(const QString& path)
     const QFileInfo info(path);
     if (!info.exists())
     {
-        QMessageBox::warning(nullptr, "Phoenix Viewer", QString("There is no file at %1.").arg(QDir::toNativeSeparators(path)));
+        modal::warning(nullptr, "Phoenix Viewer", QString("There is no file at %1.").arg(QDir::toNativeSeparators(path)));
         return 1;
     }
     const QString suffix = info.suffix().toLower();
@@ -9420,7 +9445,7 @@ int MainWindow::viewFromCommandLine(const QString& path)
         QStringList problems;
         if (!openArtwork(info.absoluteFilePath(), problems))
         {
-            QMessageBox::warning(nullptr, "Phoenix Viewer",
+            modal::warning(nullptr, "Phoenix Viewer",
                 problems.isEmpty() ? QString("%1 has nothing Phoenix can show.").arg(info.fileName())
                                    : problems.join("\n"));
             return 1;
@@ -9428,7 +9453,7 @@ int MainWindow::viewFromCommandLine(const QString& path)
     }
     else
     {
-        QMessageBox::warning(nullptr, "Phoenix Viewer",
+        modal::warning(nullptr, "Phoenix Viewer",
             QString("%1 is not a file Phoenix shows: documents (PHX, FLA, XFL, SWF), artwork (SVG, AI, EPS, PDF, PSD) "
                     "and images open in the viewer.")
                 .arg(info.fileName()));
@@ -9537,7 +9562,7 @@ void MainWindow::exportImage()
     _phoenixView->update();
     if (!written)
     {
-        QMessageBox::warning(this, "Export Image", QString("Could not write %1:\n\n%2").arg(settings.path, error));
+        modal::warning(this, "Export Image", QString("Could not write %1:\n\n%2").arg(settings.path, error));
         return;
     }
     _lastDirectory = QFileInfo(settings.path).absolutePath();
@@ -9549,7 +9574,7 @@ void MainWindow::exportMovie()
 {
     if (!_flaDocument || !_flaDocument->document || !_phoenixView)
     {
-        QMessageBox::information(this, "No Document", "No FLA document is currently loaded.");
+        modal::information(this, "No Document", "No FLA document is currently loaded.");
         return;
     }
     const fla::Document* document = _flaDocument->document;
@@ -9591,7 +9616,7 @@ void MainWindow::exportMovie()
     }
     else if (!error.isEmpty())
     {
-        QMessageBox::warning(this, "Export Failed", error);
+        modal::warning(this, "Export Failed", error);
     }
 }
 
@@ -10189,7 +10214,7 @@ void MainWindow::exportSpriteSheet(const QString& symbolName)
 {
     if (!_flaDocument || !_flaDocument->document || !_phoenixView)
     {
-        QMessageBox::information(this, "No Document", "No FLA document is currently loaded.");
+        modal::information(this, "No Document", "No FLA document is currently loaded.");
         return;
     }
     const fla::Document* document = _flaDocument->document;
@@ -10255,7 +10280,7 @@ void MainWindow::exportSpriteSheet(const QString& symbolName)
     QString error;
     if (!dialog.write(error))
     {
-        QMessageBox::warning(this, "Export Failed", error);
+        modal::warning(this, "Export Failed", error);
         return;
     }
     statusBar()->showMessage(QString("Exported the sprite sheet of %1").arg(source), 5000);
@@ -10270,7 +10295,7 @@ void MainWindow::quit()
 
 void MainWindow::showAbout()
 {
-    QMessageBox::about(this, "About Phoenix",
+    modal::about(this, "About Phoenix",
         QString("<b>Phoenix</b> %1<br><br>Vector Animation Production Software.<br><br>"
                 "<a href=\"https://github.com/brendan-duncan/phoenix\">github.com/brendan-duncan/phoenix</a>")
             .arg(Updater::currentVersion()));
@@ -10669,7 +10694,7 @@ void MainWindow::fillWorkspaceMenu(QMenu* menu)
                 return;
             if (savedWorkspaces().contains(to))
             {
-                QMessageBox::information(this, "Rename Workspace", QString("There is already a workspace called %1.").arg(to));
+                modal::information(this, "Rename Workspace", QString("There is already a workspace called %1.").arg(to));
                 return;
             }
             QSettings settings;
@@ -10699,7 +10724,7 @@ void MainWindow::fillWorkspaceMenu(QMenu* menu)
             file.open(QIODevice::ReadOnly) ? QJsonDocument::fromJson(file.readAll()).object() : QJsonObject();
         if (!workspace.contains("phoenixWorkspace"))
         {
-            QMessageBox::warning(this, "Import Workspace", "That file is not a Phoenix workspace.");
+            modal::warning(this, "Import Workspace", "That file is not a Phoenix workspace.");
             return;
         }
         QString name = workspace["name"].toString().trimmed();
@@ -10722,7 +10747,7 @@ void MainWindow::fillWorkspaceMenu(QMenu* menu)
         workspace["name"] = current;
         QFile file(path);
         if (!file.open(QIODevice::WriteOnly) || file.write(QJsonDocument(workspace).toJson()) < 0)
-            QMessageBox::warning(this, "Export Workspace", QString("Could not write %1.").arg(path));
+            modal::warning(this, "Export Workspace", QString("Could not write %1.").arg(path));
     });
 }
 
@@ -11829,7 +11854,7 @@ void MainWindow::setupPropertiesPanel()
         for (const fla::palettes::Color& color : active->colors)
             if (color.name == name.toStdString())
             {
-                QMessageBox::information(this, "Convert to Tagged Swatch", "The palette has a color of that name already.");
+                modal::information(this, "Convert to Tagged Swatch", "The palette has a color of that name already.");
                 return;
             }
         fla::palettes::Color color;
@@ -11910,7 +11935,7 @@ void MainWindow::setupPropertiesPanel()
             lines << QString("Phoenix keeps the video and its placements as they are, and shows each placement as "
                              "a frame; it does not play the video. To animate over footage, use File &gt; Import &gt; "
                              "Import Video.");
-            QMessageBox::information(this, "Video Properties", lines.join("<br>"));
+            modal::information(this, "Video Properties", lines.join("<br>"));
             return;
         }
     });
@@ -12113,7 +12138,7 @@ void MainWindow::setupPropertiesPanel()
             if (symbols.empty() && bitmaps.empty())
             {
                 if (!kept.isEmpty())
-                    QMessageBox::information(this, "Delete",
+                    modal::information(this, "Delete",
                         QString("%1 is in use, so it cannot be deleted.").arg(kept.join(", ")));
                 return;
             }
@@ -12521,7 +12546,7 @@ QString MainWindow::findFfmpeg(const QString& title)
 {
     const QString found = MovieExport::ffmpegPath();
     if (found.isEmpty())
-        QMessageBox::warning(this, title, MovieExport::missingFfmpeg());
+        modal::warning(this, title, MovieExport::missingFfmpeg());
     return found;
 }
 
@@ -12569,7 +12594,7 @@ void MainWindow::importVideo()
     QTemporaryDir folder;
     if (!folder.isValid())
     {
-        QMessageBox::warning(this, "Import Video", "There is no room for the video's frames in the temporary folder.");
+        modal::warning(this, "Import Video", "There is no room for the video's frames in the temporary folder.");
         return;
     }
     VideoImport::Result extracted;
@@ -12579,7 +12604,7 @@ void MainWindow::importVideo()
             sound->isChecked(), this, extracted, error))
     {
         if (!error.isEmpty())
-            QMessageBox::warning(this, "Import Video", error);
+            modal::warning(this, "Import Video", error);
         return;
     }
 
@@ -12604,7 +12629,7 @@ void MainWindow::importVideo()
     }
     if (bitmaps.empty())
     {
-        QMessageBox::warning(this, "Import Video", problems.join("\n"));
+        modal::warning(this, "Import Video", problems.join("\n"));
         return;
     }
 
@@ -12674,7 +12699,7 @@ void MainWindow::importVideo()
     _phoenixView->update();
     statusBar()->showMessage(QString("Imported %1 frames of %2.").arg(bitmaps.size()).arg(QFileInfo(video).fileName()), 5000);
     if (!problems.isEmpty())
-        QMessageBox::warning(this, "Import Video", problems.join("\n"));
+        modal::warning(this, "Import Video", problems.join("\n"));
 }
 
 void MainWindow::importMedia(const QStringList& paths, bool toStage, const QPointF* at, QStringList* problemsOut)
@@ -12790,7 +12815,7 @@ void MainWindow::importMedia(const QStringList& paths, bool toStage, const QPoin
     if (problemsOut)
         *problemsOut << problems;
     else if (!problems.isEmpty())
-        QMessageBox::warning(this, name, problems.join("\n"));
+        modal::warning(this, name, problems.join("\n"));
 }
 
 void MainWindow::importArtwork(const QString& path, bool toStage, const QPointF* at, fla::Frame* frame,
@@ -13290,7 +13315,7 @@ void MainWindow::importSequence(const QStringList& paths)
     }
     if (bitmaps.empty())
     {
-        QMessageBox::warning(this, "Import to Stage", problems.join("\n"));
+        modal::warning(this, "Import to Stage", problems.join("\n"));
         return;
     }
 
@@ -13328,7 +13353,7 @@ void MainWindow::importSequence(const QStringList& paths)
     _phoenixView->clearCaches();
     _phoenixView->update();
     if (!problems.isEmpty())
-        QMessageBox::warning(this, name, problems.join("\n"));
+        modal::warning(this, name, problems.join("\n"));
 }
 
 void MainWindow::attachSound(const QString& name)
@@ -14324,12 +14349,12 @@ void MainWindow::convertToSymbol()
         symbolName = dialog.symbolName().toStdString();
         if (symbolName.empty())
         {
-            QMessageBox::warning(this, "Convert to Symbol", "Please enter a name for the symbol.");
+            modal::warning(this, "Convert to Symbol", "Please enter a name for the symbol.");
             continue;
         }
         if (document->symbolList && document->symbolList->symbolMap.count(symbolName) != 0)
         {
-            QMessageBox::warning(this, "Convert to Symbol",
+            modal::warning(this, "Convert to Symbol",
                 QString("A symbol named \"%1\" already exists in the library.")
                     .arg(QString::fromStdString(symbolName)));
             continue;
@@ -14626,7 +14651,7 @@ void MainWindow::fontMappingDialog(bool onlyMissing)
     if (faces.isEmpty())
     {
         if (!onlyMissing)
-            QMessageBox::information(this, "Font Mapping", "This document's fonts are all installed, and no fonts are mapped.");
+            modal::information(this, "Font Mapping", "This document's fonts are all installed, and no fonts are mapped.");
         return;
     }
     QDialog dialog(this);
@@ -14926,7 +14951,7 @@ bool MainWindow::reimportBitmap(fla::Bitmap* bitmap, const QString& path, const 
     QImage image(path);
     if (image.isNull())
     {
-        QMessageBox::warning(this, name, QString("%1 could not be read as an image.").arg(QFileInfo(path).fileName()));
+        modal::warning(this, name, QString("%1 could not be read as an image.").arg(QFileInfo(path).fileName()));
         return false;
     }
     _editContext.commandStack().push(fla::CommandPtr(new fla::SetBitmapPixelsCommand(
@@ -14962,7 +14987,7 @@ void MainWindow::updateBitmaps(const QStringList& names)
             ++updated;
     }
     if (!missing.isEmpty())
-        QMessageBox::information(this, "Update",
+        modal::information(this, "Update",
             QString("The file these came from could not be found:\n\n%1\n\nChoose a new one with Import in the "
                     "bitmap's Properties.").arg(missing.join("\n")));
     else if (updated)
@@ -15093,7 +15118,7 @@ void MainWindow::editBitmapWith(const QString& name)
     const QString file = QDir(folder).filePath(leaf + ".png");
     if (!_phoenixView->libraryBitmap(name).save(file, "PNG"))
     {
-        QMessageBox::warning(this, "Edit With", "The bitmap could not be written out for editing.");
+        modal::warning(this, "Edit With", "The bitmap could not be written out for editing.");
         return;
     }
     if (!_editedBitmaps)
@@ -15130,9 +15155,9 @@ void MainWindow::editBitmapWith(const QString& name)
     _editedBitmapFiles[name] = EditedBitmap{file, _flaDocument ? _flaDocument->document : nullptr};
     _editedBitmaps->addPath(file);
     const bool started = program.isEmpty() ? QDesktopServices::openUrl(QUrl::fromLocalFile(file))
-                                           : QProcess::startDetached(program, {QDir::toNativeSeparators(file)});
+                                           : Process::startDetached(program, {QDir::toNativeSeparators(file)});
     if (!started)
-        QMessageBox::warning(this, "Edit With", "The program could not be started.");
+        modal::warning(this, "Edit With", "The program could not be started.");
     else
         statusBar()->showMessage("Save the image in the other program and Phoenix takes the change.", 6000);
 }
@@ -15280,7 +15305,7 @@ void MainWindow::openExternalLibrary()
         QFileInfo(path).suffix() == "xfl" ? QFileInfo(path).absolutePath().toStdString() : path.toStdString(), error);
     if (!loaded || !loaded->document)
     {
-        QMessageBox::warning(this, "Open External Library",
+        modal::warning(this, "Open External Library",
             QString("%1 could not be opened.\n\n%2").arg(QFileInfo(path).fileName(), QString::fromStdString(error)));
         return;
     }
@@ -15583,7 +15608,7 @@ void MainWindow::editEnvelope(fla::Frame* frame)
     std::shared_ptr<const PcmBuffer> sound = _timelineAudio ? _timelineAudio->librarySound(settings.name) : nullptr;
     if (!sound)
     {
-        QMessageBox::information(this, "Edit Envelope", "The sound could not be read.");
+        modal::information(this, "Edit Envelope", "The sound could not be read.");
         return;
     }
     size_t in = 0, out = 0;
@@ -15651,7 +15676,7 @@ void MainWindow::checkSpelling()
     SpellChecker checker;
     if (!checker.available())
     {
-        QMessageBox::information(this, "Check Spelling", "No spell checker is available on this computer.");
+        modal::information(this, "Check Spelling", "No spell checker is available on this computer.");
         return;
     }
     if (_textTool && _textTool->isEditing() && _phoenixView)
@@ -15817,7 +15842,7 @@ void MainWindow::checkSpelling()
         _phoenixView->update();
     }
     if (field >= texts.size())
-        QMessageBox::information(this, "Check Spelling",
+        modal::information(this, "Check Spelling",
             changes > 0 ? QString("Spelling checked; %1 change%2 made.").arg(changes).arg(changes == 1 ? "" : "s")
                         : QString("Spelling checked; nothing to change."));
 }
@@ -15929,7 +15954,7 @@ void MainWindow::fontItemDialog(const QString& name)
     }) || (newName != item.name && !fla::library::nameIsFree(*document, newName));
     if (newName.empty() || nameTaken)
     {
-        QMessageBox::information(this, dialog.windowTitle(), "Choose a name no other library item has.");
+        modal::information(this, dialog.windowTitle(), "Choose a name no other library item has.");
         return;
     }
     // The font as text names it: the family run together, then its style.
@@ -16059,7 +16084,7 @@ void MainWindow::editTemplateFields()
     const std::vector<fla::templates::Field> fields = fla::templates::fieldsOf(*symbol);
     if (fields.empty())
     {
-        QMessageBox::information(this, "Template Fields",
+        modal::information(this, "Template Fields",
             QString("%1 has no template fields.\n\nGive a dynamic text field inside it an instance name to make "
                     "its words a field, or a movie clip inside it an instance name to make its color one.")
                 .arg(QString::fromStdString(symbol->name)));
@@ -16245,13 +16270,13 @@ void MainWindow::renderFromData()
     QFile file(csv);
     if (!file.open(QIODevice::ReadOnly))
     {
-        QMessageBox::warning(this, "Render from Data", QString("Could not read %1.").arg(csv));
+        modal::warning(this, "Render from Data", QString("Could not read %1.").arg(csv));
         return;
     }
     const std::vector<fla::templates::Values> rows = rowsOfData(file);
     if (rows.empty())
     {
-        QMessageBox::information(this, "Render from Data",
+        modal::information(this, "Render from Data",
             "The file has no rows to render: the first row names the template fields, and each row after it is a movie.");
         return;
     }
@@ -16275,7 +16300,7 @@ void MainWindow::renderFromData()
     });
     progress.setValue(static_cast<int>(rows.size()));
     if (!ok)
-        QMessageBox::warning(this, "Render from Data", error);
+        modal::warning(this, "Render from Data", error);
     else
         statusBar()->showMessage(QString("Rendered %1 movies into %2").arg(rows.size()).arg(folder), 5000);
 }
@@ -16320,7 +16345,7 @@ void MainWindow::swapSymbol()
                 return QString();
             if (!fla::library::nameIsFree(*document, copyName.toStdString()))
             {
-                QMessageBox::information(this, "Duplicate Symbol",
+                modal::information(this, "Duplicate Symbol",
                     QString("The library already has an item named %1.").arg(copyName));
                 return QString();
             }
@@ -16340,7 +16365,7 @@ void MainWindow::swapSymbol()
     fla::Symbol* symbol = found->second;
     if (_phoenixView && fla::symbolContains(symbol, _phoenixView->scopeSymbol()))
     {
-        QMessageBox::information(this, "Swap Symbol",
+        modal::information(this, "Swap Symbol",
             QString("%1 contains the symbol being edited, which cannot go inside itself.")
                 .arg(QString::fromStdString(chosen)));
         return;
@@ -16515,7 +16540,7 @@ void MainWindow::newSymbol()
         name = folder.toStdString() + "/" + name;
     if (name.empty() || !fla::library::nameIsFree(*document, name))
     {
-        QMessageBox::information(this, "Create New Symbol",
+        modal::information(this, "Create New Symbol",
             QString("The library already has an item named %1.").arg(QString::fromStdString(name)));
         return;
     }
@@ -16632,9 +16657,9 @@ void MainWindow::applyOnion()
 
 void MainWindow::showOnionMenu(const QPoint& globalPos)
 {
-    QMenu menu(this);
-    fillOnionMenu(&menu);
-    menu.exec(globalPos);
+    QMenu* menu = new QMenu(this);
+    fillOnionMenu(menu);
+    modal::popup(menu, globalPos);
 }
 
 void MainWindow::fillOnionMenu(QMenu* menu)
@@ -16905,63 +16930,63 @@ void MainWindow::showStageMenu(const QPoint& globalPos, const QPointF& documentP
         _selection.clear();
     updateSelectionState();
 
-    QMenu menu(this);
+    QMenu* menu = new QMenu(this);
     const bool selected = !_selection.isEmpty();
     for (QAction* action : {_cutAction, _copyAction, _pasteAction, _pasteInPlaceAction})
     {
         if (action)
-            menu.addAction(action);
+            menu->addAction(action);
     }
-    menu.addSeparator();
+    menu->addSeparator();
     if (selected)
     {
-        QMenu* arrange = menu.addMenu("Arrange");
+        QMenu* arrange = menu->addMenu("Arrange");
         for (QAction* action : _arrangeActions)
         {
             if (action)
                 arrange->addAction(action);
         }
         if (_transformMenu)
-            menu.addMenu(_transformMenu);
+            menu->addMenu(_transformMenu);
         if (_distributeAction)
-            menu.addAction(_distributeAction);
-        menu.addSeparator();
+            menu->addAction(_distributeAction);
+        menu->addSeparator();
         if (_convertToSymbolAction)
-            menu.addAction(_convertToSymbolAction);
+            menu->addAction(_convertToSymbolAction);
         auto* instance = dynamic_cast<fla::SymbolInstance*>(_selection.single());
         if (instance && instance->symbol)
         {
-            menu.addAction("Edit Symbol", this, [this, instance]() { _phoenixView->editSymbol(instance->symbol); });
-            menu.addAction("Edit in Place", this, [this, instance]() { _phoenixView->enterSymbol(instance); });
+            menu->addAction("Edit Symbol", this, [this, instance]() { _phoenixView->editSymbol(instance->symbol); });
+            menu->addAction("Edit in Place", this, [this, instance]() { _phoenixView->enterSymbol(instance); });
             if (_swapSymbolAction)
-                menu.addAction(_swapSymbolAction);
+                menu->addAction(_swapSymbolAction);
             if (_templateFieldsAction && !fla::templates::fieldsOf(*instance->symbol).empty())
-                menu.addAction(_templateFieldsAction);
-            menu.addAction("Pin to Text...", this, [this, instance]() { pinToText(instance); })
+                menu->addAction(_templateFieldsAction);
+            menu->addAction("Pin to Text...", this, [this, instance]() { pinToText(instance); })
                 ->setStatusTip("Move or stretch this instance with a text field beside it as a template's words change");
         }
         if (auto* group = dynamic_cast<fla::Group*>(_selection.single()))
-            menu.addAction("Edit in Place", this, [this, group]() { _phoenixView->enterGroup(group); });
+            menu->addAction("Edit in Place", this, [this, group]() { _phoenixView->enterGroup(group); });
         const auto& chosen = _selection.elements();
         if (std::any_of(chosen.begin(), chosen.end(), [](const fla::DOMElement* e) { return dynamic_cast<const fla::BitmapInstance*>(e); }))
         {
             for (QAction* action : {_traceBitmapAction, _swapBitmapAction})
             {
                 if (action)
-                    menu.addAction(action);
+                    menu->addAction(action);
             }
         }
         for (QAction* action : {_breakApartAction, _groupAction, _ungroupAction})
         {
             if (action && action->isEnabled())
-                menu.addAction(action);
+                menu->addAction(action);
         }
     }
     else if (_selectAllAction)
     {
-        menu.addAction(_selectAllAction);
+        menu->addAction(_selectAllAction);
     }
-    menu.exec(globalPos);
+    modal::popup(menu, globalPos);
 }
 
 void MainWindow::pinToText(fla::SymbolInstance* instance)
@@ -16982,7 +17007,7 @@ void MainWindow::pinToText(fla::SymbolInstance* instance)
     const fla::templates::Pin was = fla::templates::pinOf(*instance);
     if (names.isEmpty() && !was.any())
     {
-        QMessageBox::information(this, "Pin to Text",
+        modal::information(this, "Pin to Text",
             "There is no text field to pin to here.\n\nGive a dynamic text field beside this instance an instance name: "
             "then this instance can move or stretch with it as a template gives it other words.");
         return;

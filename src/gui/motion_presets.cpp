@@ -1,4 +1,5 @@
 #include "motion_presets.h"
+#include "modal.h"
 
 #include "../edit/motion_object.h"
 
@@ -106,7 +107,7 @@ void MotionPresetsDialog::saveCurrent()
     const std::string motion = _current ? _current() : std::string();
     if (motion.empty())
     {
-        QMessageBox::information(this, "Motion Presets", "Select an object with a motion tween to save its motion.");
+        modal::information(this, "Motion Presets", "Select an object with a motion tween to save its motion.");
         return;
     }
     bool ok = false;
@@ -132,7 +133,7 @@ void MotionPresetsDialog::applySelected()
         settings.value(QString::fromUtf8(QUrl::toPercentEncoding(item->text()))).toString().toStdString();
     settings.endGroup();
     if (!_apply(motion))
-        QMessageBox::information(this, "Motion Presets",
+        modal::information(this, "Motion Presets",
             "A motion preset moves one symbol instance or text block. Select one alone on its frame.");
 }
 
@@ -162,7 +163,7 @@ void MotionPresetsDialog::importFiles()
     }
     reload();
     if (!failed.isEmpty())
-        QMessageBox::warning(this, "Motion Presets", "These hold no motion:\n" + failed.join("\n"));
+        modal::warning(this, "Motion Presets", "These hold no motion:\n" + failed.join("\n"));
 }
 
 void MotionPresetsDialog::importFolder()
@@ -180,7 +181,7 @@ void MotionPresetsDialog::importFolder()
             ++count;
     }
     reload();
-    QMessageBox::information(this, "Motion Presets", QString("Imported %1 presets.").arg(count));
+    modal::information(this, "Motion Presets", QString("Imported %1 presets.").arg(count));
 }
 
 void MotionPresetsDialog::exportSelected()
@@ -204,5 +205,5 @@ void MotionPresetsDialog::exportSelected()
         core = core.mid(from, to - from);
     QFile file(path);
     if (!file.open(QIODevice::WriteOnly) || file.write(core.toUtf8()) < 0)
-        QMessageBox::warning(this, "Motion Presets", "Could not write " + QDir::toNativeSeparators(path) + ".");
+        modal::warning(this, "Motion Presets", "Could not write " + QDir::toNativeSeparators(path) + ".");
 }

@@ -1,4 +1,5 @@
 #include "main_window.h"
+#include "modal.h"
 
 #include "phoenix_view.h"
 #include "share_dialog.h"
@@ -16,7 +17,7 @@ void MainWindow::shareMovie()
 {
     if (!_flaDocument || !_flaDocument->document || !_phoenixView)
     {
-        QMessageBox::information(this, "No Document", "No FLA document is currently loaded.");
+        modal::information(this, "No Document", "No FLA document is currently loaded.");
         return;
     }
     const fla::Document* document = _flaDocument->document;

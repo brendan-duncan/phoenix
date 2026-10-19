@@ -33,7 +33,7 @@
 #include <QMessageBox>
 #include <QMouseEvent>
 #include <QPixmap>
-#include <QProcess>
+#include "process.h"
 #include <QSpinBox>
 #include <QTextStream>
 #include <QTimer>
@@ -296,7 +296,7 @@ bool runCaptureSteps(MainWindow& window, const QString& path, QString& error)
         const QString line = lines.at(number).trimmed();
         if (line.isEmpty() || line.startsWith('#'))
             continue;
-        const QStringList words = QProcess::splitCommand(line);
+        const QStringList words = Process::splitCommand(line);
         if (words.isEmpty())
             continue;
         const QString step = words.at(0).toLower();

@@ -1,4 +1,5 @@
 #include "controllers_panel.h"
+#include "modal.h"
 
 #include "../data/document.h"
 #include "../data/layer.h"
@@ -204,12 +205,12 @@ void ControllersPanel::bind()
     fla::Layer* layer = _links.currentLayer ? _links.currentLayer(timeline) : nullptr;
     if (!document || !commands || index < 0)
     {
-        QMessageBox::information(this, "Bind", "Make or pick a controller first.");
+        modal::information(this, "Bind", "Make or pick a controller first.");
         return;
     }
     if (!layer || !timeline)
     {
-        QMessageBox::information(this, "Bind", "Pick the layer to drive in the timeline first.");
+        modal::information(this, "Bind", "Pick the layer to drive in the timeline first.");
         return;
     }
     const int frame = _links.currentFrame ? _links.currentFrame() : 0;

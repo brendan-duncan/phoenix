@@ -1,4 +1,5 @@
 #include "tutorial_runner.h"
+#include "modal.h"
 
 #include "behavior_library.h"
 
@@ -1025,7 +1026,7 @@ void TutorialRunner::finish()
     tutorials::recordProgress(_lesson.id, static_cast<int>(_lesson.steps.size()) - 1, true);
     const QString title = _lesson.title;
     stop();
-    QMessageBox::information(_window, "Tutorials",
+    modal::information(_window, "Tutorials",
         QString("You finished <b>%1</b>.<br><br>Help &gt; Tutorials has more lessons. The document you made "
                 "stays open; save it if you want to keep it.")
             .arg(title.toHtmlEscaped()));

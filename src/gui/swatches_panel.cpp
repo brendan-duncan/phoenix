@@ -1,4 +1,5 @@
 #include "swatches_panel.h"
+#include "modal.h"
 
 #include "swatch_popup.h"
 
@@ -420,7 +421,7 @@ void SwatchesPanel::importColors(bool replace)
         : fla::swatches::readAct(std::vector<uint8_t>(bytes.begin(), bytes.end()));
     if (read.empty())
     {
-        QMessageBox::information(this, "Swatches", "No colors could be read from that file.");
+        modal::information(this, "Swatches", "No colors could be read from that file.");
         return;
     }
     std::vector<fla::swatches::Color> colors = replace ? std::vector<fla::swatches::Color>() : _shown;
@@ -444,6 +445,6 @@ void SwatchesPanel::exportColors()
         const std::vector<uint8_t> bytes = fla::swatches::writeAct(_shown);
         file.write(reinterpret_cast<const char*>(bytes.data()), static_cast<qint64>(bytes.size()));
         if (_shown.size() > 256)
-            QMessageBox::information(this, "Save Colors", "A color table holds 256 colors; the first 256 were saved.");
+            modal::information(this, "Save Colors", "A color table holds 256 colors; the first 256 were saved.");
     }
 }

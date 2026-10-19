@@ -1,4 +1,5 @@
 #include "safe_zones_dialog.h"
+#include "modal.h"
 
 #include "hot_text.h"
 #include "swatch_popup.h"
@@ -181,7 +182,7 @@ SafeZonesDialog::SafeZonesDialog(const sz::Settings& settings, std::function<voi
         sz::AspectFrame frame;
         if (!sz::parseRatio(text.toStdString(), frame.width, frame.height))
         {
-            QMessageBox::warning(this, "Add Frame", QString("\"%1\" is not an aspect ratio, such as 3:2 or 1.66:1.").arg(text));
+            modal::warning(this, "Add Frame", QString("\"%1\" is not an aspect ratio, such as 3:2 or 1.66:1.").arg(text));
             return;
         }
         frame.on = true;
@@ -233,7 +234,7 @@ SafeZonesDialog::SafeZonesDialog(const sz::Settings& settings, std::function<voi
         {
             if (name.compare(QString::fromStdString(builtIn), Qt::CaseInsensitive) == 0)
             {
-                QMessageBox::warning(this, "Save Preset", QString("\"%1\" is a built-in preset; choose another name.").arg(name));
+                modal::warning(this, "Save Preset", QString("\"%1\" is a built-in preset; choose another name.").arg(name));
                 return;
             }
         }
@@ -248,7 +249,7 @@ SafeZonesDialog::SafeZonesDialog(const sz::Settings& settings, std::function<voi
         QVariantMap mine = userPresets();
         if (!mine.contains(name))
         {
-            QMessageBox::information(this, "Delete Preset", "Only presets of your own can be deleted.");
+            modal::information(this, "Delete Preset", "Only presets of your own can be deleted.");
             return;
         }
         mine.remove(name);
@@ -257,7 +258,7 @@ SafeZonesDialog::SafeZonesDialog(const sz::Settings& settings, std::function<voi
     });
     connect(makeDefault, &QPushButton::clicked, this, [this]() {
         QSettings().setValue(kDefaultKey, QString::fromStdString(sz::toText(_settings)));
-        QMessageBox::information(this, "Safe Zone Settings", "New documents will start with these settings.");
+        modal::information(this, "Safe Zone Settings", "New documents will start with these settings.");
     });
 
     fillPresets();

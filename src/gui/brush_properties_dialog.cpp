@@ -1,4 +1,5 @@
 #include "brush_properties_dialog.h"
+#include "modal.h"
 
 #include "../edit/brush_texture.h"
 #include "../edit/drawing_style.h"
@@ -309,7 +310,7 @@ BrushPropertiesDialog::BrushPropertiesDialog(fla::DrawingStyle& style, const std
         const QStringList names = _library.bitmapNames ? _library.bitmapNames() : QStringList();
         if (names.isEmpty())
         {
-            QMessageBox::information(this, "Tip from Library Bitmap", "The library has no bitmaps.");
+            modal::information(this, "Tip from Library Bitmap", "The library has no bitmaps.");
             return;
         }
         bool ok = false;
@@ -337,7 +338,7 @@ BrushPropertiesDialog::BrushPropertiesDialog(fla::DrawingStyle& style, const std
         std::vector<fla::Point> outline = fla::traceTip(alpha, small.width(), small.height());
         if (outline.size() < 3)
         {
-            QMessageBox::information(this, "Tip from Library Bitmap", "Nothing in that bitmap makes an outline.");
+            modal::information(this, "Tip from Library Bitmap", "Nothing in that bitmap makes an outline.");
             return;
         }
         brush().customTip = outline;
@@ -546,7 +547,7 @@ BrushPropertiesDialog::BrushPropertiesDialog(fla::DrawingStyle& style, const std
         QFile file(path);
         const std::string text = fla::brushpresets::toSetText(loadList());
         if (!file.open(QIODevice::WriteOnly) || file.write(text.data(), static_cast<qint64>(text.size())) < 0)
-            QMessageBox::warning(this, "Export Brush Presets", "The presets could not be written.");
+            modal::warning(this, "Export Brush Presets", "The presets could not be written.");
     });
     connect(importSet, &QPushButton::clicked, this, [this]() {
         const QString path = QFileDialog::getOpenFileName(this, "Import Brush Presets", QString(),
@@ -560,7 +561,7 @@ BrushPropertiesDialog::BrushPropertiesDialog(fla::DrawingStyle& style, const std
             fla::brushpresets::fromSetText(file.readAll().toStdString());
         if (incoming.empty())
         {
-            QMessageBox::information(this, "Import Brush Presets", "That file holds no brush presets.");
+            modal::information(this, "Import Brush Presets", "That file holds no brush presets.");
             return;
         }
         std::vector<fla::brushpresets::Preset> presets = loadList();
