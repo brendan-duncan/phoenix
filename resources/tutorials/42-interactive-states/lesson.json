@@ -1,0 +1,92 @@
+{
+  "title": "A pet that answers clicks",
+  "summary": "Make a little pet interactive without writing code: its poses become states, a click on Feed sends it to eat, and a Nap button and any key put it to sleep and wake it, with the States panel.",
+  "minutes": 10,
+  "order": 42,
+  "guide": "interactivity.html",
+  "tags": ["Interactivity"],
+  "start": {
+    "document": "start"
+  },
+  "final": "final",
+  "steps": [
+    {
+      "title": "Welcome",
+      "text": "<p>This pet has three poses, each on frames with a <b>label</b> on the <i>Labels</i> layer: <b>idle</b> (frames 1 to 12, bobbing), <b>eat</b> (13 to 24, chewing) and <b>sleep</b> (25 to 36, eyes closed).</p><p>Under it are two buttons, named <b>feedBtn</b> and <b>napBtn</b> in the Properties panel. You will make the pet answer them, without typing any code.</p>"
+    },
+    {
+      "title": "Open the States panel",
+      "text": "<p>Choose <b>Window &gt; States</b>. The panel opens beside the Timeline. It is empty: no states yet.</p>",
+      "target": "menu:Window/States",
+      "wait": {"action": "Window/States"}
+    },
+    {
+      "title": "The first state",
+      "text": "<p>Click <b>Add State...</b>. The <b>Label</b> list offers the labels that are not states yet. Leave it on <b>idle</b>, leave <b>It</b> on <b>loops</b>, and click <b>OK</b>.</p><p>A box called <i>idle</i> appears, with a green arrow into it: the movie starts in this state, playing frames 1 to 12 over and over.</p>",
+      "target": "widget:statesAddState",
+      "wait": {"command": "Add State"}
+    },
+    {
+      "title": "Eat and sleep",
+      "text": "<p>Click <b>Add State...</b> again and pick <b>eat</b>, with <b>It</b> set to <b>plays once</b>. Then add <b>sleep</b>, set to <b>holds its first frame</b>.</p><p>Eating plays its frames once and stops; sleeping stays still on frame 25.</p>",
+      "target": "widget:statesAddState",
+      "wait": {"command": "Add State"}
+    },
+    {
+      "title": "Feed it",
+      "text": "<p>Each box has a small dot on its right edge. Drag from <b>idle</b>'s dot and let go on the <b>eat</b> box. An arrow appears: a <b>transition</b>, from idle to eat.</p><p>The arrow says <b>feedBtn is clicked</b>, and the <b>Picked</b> column shows it: <b>When</b> something is clicked, <b>What</b> feedBtn. That is just what we want.</p>",
+      "target": "widget:statesGraph",
+      "wait": {"command": "Add Transition"}
+    },
+    {
+      "title": "Back to idle",
+      "text": "<p>Drag from <b>eat</b>'s dot onto <b>idle</b>. In the Picked column, set <b>When</b> to <b>Its animation finishes</b>.</p><p>Now when the pet has eaten, it goes back to bobbing.</p>",
+      "target": "widget:statesGraph",
+      "wait": {"command": "Change Transition"}
+    },
+    {
+      "title": "Try it",
+      "text": "<p>Click <b>Test</b> at the top of the States panel. The movie plays in Test Movie: click <b>Feed</b> and the pet chews, then goes back to idle. Close the Test Movie window when you have seen it.</p>",
+      "target": "widget:statesTest"
+    },
+    {
+      "title": "An input",
+      "text": "<p>An <b>input</b> is a value the states can go by. Click <b>Add Input</b> under <b>Inputs</b>. In the Picked column, type <b>sleepy</b> as its <b>Name</b> and press <kbd>Enter</kbd>. It is an <b>On/off switch</b>, and it starts off.</p>",
+      "target": "widget:statesAddInput",
+      "wait": {"command": "Change Input"}
+    },
+    {
+      "title": "The Nap button turns it on",
+      "text": "<p>A <b>listener</b> changes an input when something is clicked or a key is pressed, whatever state is playing. Click <b>Add Listener</b>. In the Picked column, set <b>What</b> to <b>napBtn</b> and <b>Then</b> to <b>turn on</b>.</p><p>The list reads <i>When napBtn is clicked: turn on sleepy</i>.</p>",
+      "target": "widget:statesAddListener",
+      "wait": {"command": "Change Listener"}
+    },
+    {
+      "title": "Any key turns it off",
+      "text": "<p>Click <b>Add Listener</b> again. Set <b>When</b> to <b>A key is pressed</b>, leave <b>Key</b> on <b>Any key</b>, and set <b>Then</b> to <b>turn off</b>.</p>",
+      "target": "widget:statesAddListener",
+      "wait": {"command": "Change Listener"}
+    },
+    {
+      "title": "Fall asleep",
+      "text": "<p>Drag from <b>idle</b>'s dot onto <b>sleep</b>. Set <b>When</b> to <b>Only when an input is set</b>, then <b>Only if</b> to <b>sleepy</b>, <b>is on</b>. Tick <b>Wait for its animation to finish first</b>, so the pet finishes its bob before it nods off.</p>",
+      "target": "widget:statesGraph",
+      "wait": {"command": "Change Transition"}
+    },
+    {
+      "title": "Wake up",
+      "text": "<p>Drag from <b>sleep</b>'s dot onto <b>idle</b>. Set <b>When</b> to <b>Only when an input is set</b> and <b>Only if</b> to <b>sleepy</b>, <b>is off</b>.</p>",
+      "target": "widget:statesGraph",
+      "wait": {"command": "Change Transition"}
+    },
+    {
+      "title": "Play with it",
+      "text": "<p>Click <b>Test</b>. Click <b>Nap</b>: at the end of its bob the pet closes its eyes. Press any key and it wakes. Click <b>Feed</b> and it eats.</p>",
+      "target": "widget:statesTest"
+    },
+    {
+      "title": "What you did",
+      "text": "<p>You made the pet interactive with no code: its frame labels became <b>states</b>, the arrows between them <b>transitions</b>, and the Nap button and the keyboard set an <b>input</b> through <b>listeners</b>.</p><p>Phoenix wrote the ActionScript for you, on the first frame of a new <i>States</i> layer, between two marked comment lines. That is what plays in Test Movie, in a published SWF or HTML5 page, and in any other app that opens the file. Each change in the panel writes it again, and is one step that <b>Edit &gt; Undo</b> takes back.</p>"
+    }
+  ]
+}
