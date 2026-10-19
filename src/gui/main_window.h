@@ -1361,12 +1361,11 @@ private:
     void showFirstUseHint(int event, const std::string& tween = std::string());
     /// The Simple workspace's docks and tools, over Phoenix's own layout.
     void applySimpleWorkspace();
-    void updateWorkspaceSwitch();
+    void rememberFullWorkspace();
     void prepareStartDialog(StartDialog& dialog);
     void openStarterTemplate(const QString& id);
     PopupPalette* _popupPalette = nullptr;
     HintBubble* _hintBubble = nullptr;
-    QToolButton* _workspaceSwitch = nullptr;
     fla::FirstUseHints _hints;
     const fla::Command* _friendlyTop = nullptr;
     size_t _friendlyIndex = 0;

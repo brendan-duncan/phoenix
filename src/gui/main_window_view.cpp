@@ -55,6 +55,24 @@ QIcon mirrorIcon(const QColor& color)
     return QIcon(pixmap);
 }
 
+/// Grayscale's icon: a circle half filled, light and dark.
+QIcon grayscaleIcon(const QColor& color)
+{
+    QPixmap pixmap(32, 32);
+    pixmap.setDevicePixelRatio(2.0);
+    pixmap.fill(Qt::transparent);
+    QPainter painter(&pixmap);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    const QRectF circle(2.5, 2.5, 11.0, 11.0);
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(color);
+    painter.drawPie(circle, 90 * 16, 180 * 16);
+    painter.setBrush(Qt::NoBrush);
+    painter.setPen(QPen(color, 1.0));
+    painter.drawEllipse(circle);
+    return QIcon(pixmap);
+}
+
 } // namespace
 
 void MainWindow::createViewExtras(QMenu* viewMenu, QAction* after, StageControls* controls, int layoutVersion)
@@ -81,8 +99,11 @@ void MainWindow::createViewExtras(QMenu* viewMenu, QAction* after, StageControls
     grayscale->setObjectName("viewGrayscale");
     grayscale->setCheckable(true);
     grayscale->setStatusTip("Show the stage in shades of gray to check its light and dark values; the colors are not changed");
+    grayscale->setToolTip("Grayscale: show the stage in shades of gray to check its values");
     connect(grayscale, &QAction::toggled, _phoenixView, &PhoenixView::setGrayscale);
     put(grayscale);
+    if (controls)
+        controls->addToggle(grayscale, "stageGrayscale", grayscaleIcon);
 
     _canvasOnly = new CanvasOnly(this, {_breadcrumbRow}, layoutVersion);
     put(_canvasOnly->action());

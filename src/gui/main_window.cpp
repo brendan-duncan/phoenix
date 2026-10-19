@@ -10546,7 +10546,7 @@ void MainWindow::useWorkspace(const QString& name)
     else
         return;
     QSettings().setValue("workspace/current", name);
-    updateWorkspaceSwitch();
+    rememberFullWorkspace();
 }
 
 void MainWindow::saveWorkspaceAs(const QString& name)

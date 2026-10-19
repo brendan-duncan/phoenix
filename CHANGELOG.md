@@ -4,6 +4,7 @@ What changed in each release of Phoenix, newest first.
 
 ## Unreleased
 
+- Grayscale has a button beside Mirror View on the edit bar; the Simple workspace is chosen from Window > Workspaces instead of the edit bar
 - View > View Document... is gone from the View menu
 - Insert Inbetween (Modify > Timeline, or right-click the frames) draws a new keyframe between two drawings: halfway, a third, two thirds, or favoring either key
 - Fill Inbetweens draws every empty frame between two drawings, spaced evenly, easing in or easing out

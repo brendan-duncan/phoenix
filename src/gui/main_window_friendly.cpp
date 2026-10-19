@@ -115,24 +115,6 @@ void MainWindow::setupFriendly()
             menu->menu()->insertAction(after, show);
             menu->menu()->insertAction(after, reset);
         }
-
-    // Simple and the full workspace, a click apart on the edit bar.
-    if (_breadcrumbRow && _breadcrumbRow->layout())
-    {
-        _workspaceSwitch = new QToolButton(_breadcrumbRow);
-        _workspaceSwitch->setObjectName("workspaceSwitch");
-        _workspaceSwitch->setText("Simple");
-        _workspaceSwitch->setCheckable(true);
-        _workspaceSwitch->setAutoRaise(true);
-        _workspaceSwitch->setToolTip("Simple: just the stage, the timeline, the common tools, Properties and "
-                                     "Color. Click again for every panel.");
-        connect(_workspaceSwitch, &QToolButton::clicked, this, [this](bool on) {
-            useWorkspace(on ? QString(simpleworkspace::name())
-                            : QSettings().value("workspace/lastFull", simpleworkspace::fullName()).toString());
-        });
-        _breadcrumbRow->layout()->addWidget(_workspaceSwitch);
-        updateWorkspaceSwitch();
-    }
 }
 
 bool MainWindow::popupPaletteOnRightClick() const
@@ -304,13 +286,11 @@ void MainWindow::applySimpleWorkspace()
     _toolbox->setLayout(tools);
 }
 
-void MainWindow::updateWorkspaceSwitch()
+void MainWindow::rememberFullWorkspace()
 {
     const QString current = QSettings().value("workspace/current", simpleworkspace::fullName()).toString();
     if (current != simpleworkspace::name())
         QSettings().setValue("workspace/lastFull", current);
-    if (_workspaceSwitch)
-        _workspaceSwitch->setChecked(current == simpleworkspace::name());
 }
 
 void MainWindow::prepareStartDialog(StartDialog& dialog)
