@@ -4,6 +4,7 @@
 
 #include <cmath>
 #include <algorithm>
+#include <map>
 
 namespace fla {
 
@@ -112,6 +113,59 @@ std::vector<ShapeCurve> shapeCurves(const Shape& shape)
     return curves;
 }
 
+namespace {
+
+/// What the sources in [first, last) record on a face's side of the
+/// half-edges bordering it. They all agree when the arrangement matches the
+/// file it came from; where rounding has left one that does not -- an edge
+/// with the face on both sides of it, whose sides cannot say which is which,
+/// or a sliver of a piece welded across a neighbor -- the rest outvote it,
+/// each counted by its length. False when no half-edge of those sources
+/// borders the face.
+bool readFaceFill(const PlanarMap& map, int face, const std::vector<ShapeCurve>& sources,
+    size_t first, size_t last, int& fill)
+{
+    std::map<int, double> votes;
+    int fallback = 0;
+    bool any = false;
+    const std::vector<HalfEdge>& halves = map.halfEdges();
+    for (const int half : map.faceHalfEdges(face))
+    {
+        const HalfEdge& edge = halves[half];
+        if (edge.source < 0)
+            continue;
+        const size_t source = static_cast<size_t>(edge.source);
+        if (source < first || source >= last || source >= sources.size())
+            continue;
+        const ShapeCurve& shapeCurve = sources[source];
+        const int read = edge.forward ? shapeCurve.fillStyle1 : shapeCurve.fillStyle0;
+        if (!any)
+            fallback = read;
+        any = true;
+
+        const bool sameFaceBothSides = edge.twin >= 0 && edge.twin < static_cast<int>(halves.size()) &&
+            halves[edge.twin].face == face;
+        if (!sameFaceBothSides)
+            votes[read] += edge.curve.chordLength() + edge.curve.controlPolygonLength();
+    }
+    if (!any)
+        return false;
+
+    fill = fallback;
+    double best = -1.0;
+    for (const auto& [candidate, weight] : votes)
+    {
+        if (weight > best)
+        {
+            best = weight;
+            fill = candidate;
+        }
+    }
+    return true;
+}
+
+} // namespace
+
 void attributeFillsFromSource(PlanarMap& map, const std::vector<ShapeCurve>& sources)
 {
     for (size_t face = 0; face < map.faces().size(); ++face)
@@ -124,20 +178,8 @@ void attributeFillsFromSource(PlanarMap& map, const std::vector<ShapeCurve>& sou
             continue;
         }
 
-        // Any half-edge bordering the face answers the question; they all agree
-        // when the arrangement matches the file it came from.
         int fill = -1;
-        for (const int half : map.faceHalfEdges(index))
-        {
-            const HalfEdge& edge = map.halfEdges()[half];
-            if (edge.source < 0 || edge.source >= static_cast<int>(sources.size()))
-                continue;
-
-            const ShapeCurve& source = sources[edge.source];
-            fill = edge.forward ? source.fillStyle1 : source.fillStyle0;
-            break;
-        }
-
+        readFaceFill(map, index, sources, 0, sources.size(), fill);
         map.setFaceFill(index, fill);
     }
 }
@@ -145,19 +187,7 @@ void attributeFillsFromSource(PlanarMap& map, const std::vector<ShapeCurve>& sou
 bool faceFillFromSources(const PlanarMap& map, int face, const std::vector<ShapeCurve>& sources,
     size_t first, size_t last, int& fill)
 {
-    for (const int half : map.faceHalfEdges(face))
-    {
-        const HalfEdge& edge = map.halfEdges()[half];
-        if (edge.source < 0)
-            continue;
-        const size_t source = static_cast<size_t>(edge.source);
-        if (source < first || source >= last || source >= sources.size())
-            continue;
-        const ShapeCurve& shapeCurve = sources[source];
-        fill = edge.forward ? shapeCurve.fillStyle1 : shapeCurve.fillStyle0;
-        return true;
-    }
-    return false;
+    return readFaceFill(map, face, sources, first, last, fill);
 }
 
 namespace {
