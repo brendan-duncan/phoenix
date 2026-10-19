@@ -198,6 +198,7 @@ set(HEADERS
     src/gui/ik_poser.h
     src/gui/bone_corrector.h
     src/gui/movie_export.h
+    src/gui/share_dialog.h
     src/gui/sprite_sheet_dialog.h
     src/gui/brush_properties_dialog.h
     src/gui/publish_dialog.h
@@ -412,7 +413,9 @@ set(HEADERS
     src/util/zip_archive.h
     src/util/exr_writer.h
     src/util/zip_writer.h
+    src/util/apng_writer.h
     src/util/gif_writer.h
+    src/util/share_formats.h
     src/util/png_writer.h
     src/util/sprite_sheet.h
     src/util/swf_writer.h
@@ -518,6 +521,8 @@ set(SOURCES
     src/gui/script_api.cpp
     src/gui/script_runner.cpp
     src/gui/main_window_inbetween.cpp
+    src/gui/main_window_share.cpp
+    src/gui/share_dialog.cpp
     src/gui/output_panel.cpp
     src/gui/xul_dialog.cpp
     src/gui/mcp_server.cpp

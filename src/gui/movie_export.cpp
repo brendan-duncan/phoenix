@@ -5,7 +5,9 @@
 #include "../data/layer.h"
 #include "../data/document.h"
 #include "../data/fla_document.h"
+#include "../util/apng_writer.h"
 #include "../util/gif_writer.h"
+#include "../util/share_formats.h"
 
 #include "phoenix_view.h"
 #include "timeline_audio.h"
@@ -23,6 +25,7 @@
 #include <QFormLayout>
 #include <QHBoxLayout>
 #include <QImage>
+#include <QPainter>
 #include <QLabel>
 #include <QLineEdit>
 #include <QProcess>
@@ -535,6 +538,16 @@ bool runOne(const MovieExportSettings& settings, PhoenixView& view, TimelineAudi
     int count = 0;
     for (const Segment& segment : segments)
         count += segment.last - segment.first + 1;
+    // At another frame rate, frame i of the movie shows the document's frame
+    // that far into it.
+    const int sourceCount = count;
+    double stride = 1.0;
+    if (settings.outputRate > 0.0 && frameRate > 0.0 && std::fabs(settings.outputRate - frameRate) > 1.0e-6)
+    {
+        stride = frameRate / settings.outputRate;
+        count = std::max(1, static_cast<int>(std::floor(sourceCount / stride + 1.0e-9)));
+        frameRate = settings.outputRate;
+    }
     int shownScene = segments.front().scene;
     // Frame \a i of the export: its scene shown, then its frame.
     const auto locate = [&](int i, int& frame) {
@@ -590,8 +603,26 @@ bool runOne(const MovieExportSettings& settings, PhoenixView& view, TimelineAudi
                                  .arg(size.height());
     const auto render = [&](int i, const QSize& at, bool transparent) {
         int frame = 0;
-        locate(i, frame);
-        return view.renderFrame(frame, at, transparent, area);
+        locate(std::min(sourceCount - 1, static_cast<int>(std::floor(i * stride + 1.0e-9))), frame);
+        const fla::Document* doc = view.flaDocument() ? view.flaDocument()->document : nullptr;
+        if (!settings.letterbox || !doc || doc->width <= 0 || doc->height <= 0 || area.isValid())
+            return view.renderFrame(frame, at, transparent, area);
+        // The stage fitted inside, the rest the background (or clear).
+        const double scale = std::min(at.width() / doc->width, at.height() / doc->height);
+        const QSize fit(std::clamp(static_cast<int>(std::lround(doc->width * scale)), 1, at.width()),
+            std::clamp(static_cast<int>(std::lround(doc->height * scale)), 1, at.height()));
+        if (std::abs(fit.width() - at.width()) <= 1 && std::abs(fit.height() - at.height()) <= 1)
+            return view.renderFrame(frame, at, transparent, area);
+        const QImage stage = view.renderFrame(frame, fit, transparent, area);
+        QImage framed(at, QImage::Format_ARGB32_Premultiplied);
+        if (stage.isNull() || framed.isNull())
+            return QImage();
+        framed.fill(transparent ? QColor(Qt::transparent)
+                                : QColor(doc->backgroundColor[0], doc->backgroundColor[1], doc->backgroundColor[2]));
+        QPainter painter(&framed);
+        painter.drawImage((at.width() - fit.width()) / 2, (at.height() - fit.height()) / 2, stage);
+        painter.end();
+        return framed;
     };
     const auto mixdown = [&]() {
         std::vector<float> samples;
@@ -678,6 +709,42 @@ bool runOne(const MovieExportSettings& settings, PhoenixView& view, TimelineAudi
         const std::vector<uint8_t> bytes = writer.finish();
         QFile file(settings.path);
         if (!file.open(QIODevice::WriteOnly) ||
+            file.write(reinterpret_cast<const char*>(bytes.data()), static_cast<qint64>(bytes.size())) !=
+                static_cast<qint64>(bytes.size()))
+        {
+            error = QString("Could not write %1.").arg(QDir::toNativeSeparators(settings.path));
+            return false;
+        }
+        progress.setValue(count);
+        return true;
+    }
+
+    if (settings.format == MovieExportSettings::Format::Apng)
+    {
+        // Written here, so it needs nothing of ffmpeg.
+        const bool loops = settings.loop;
+        apng::AnimationWriter writer(size.width(), size.height(), frameRate,
+            loops ? (settings.gifRepeat > 0 ? settings.gifRepeat + 1 : 0) : 1);
+        for (int i = 0; i < count; ++i)
+        {
+            progress.setValue(i);
+            if (progress.wasCanceled())
+                return false;
+            const QImage image = render(i, size, settings.transparent).convertToFormat(QImage::Format_RGBA8888);
+            if (image.isNull())
+            {
+                error = tooLarge;
+                return false;
+            }
+            std::vector<uint8_t> rgba(static_cast<size_t>(image.width()) * image.height() * 4);
+            for (int y = 0; y < image.height(); ++y)
+                std::memcpy(rgba.data() + static_cast<size_t>(y) * image.width() * 4, image.constScanLine(y),
+                    static_cast<size_t>(image.width()) * 4);
+            writer.addFrame(rgba);
+        }
+        const std::vector<uint8_t> bytes = writer.finish();
+        QFile file(settings.path);
+        if (bytes.empty() || !file.open(QIODevice::WriteOnly) ||
             file.write(reinterpret_cast<const char*>(bytes.data()), static_cast<qint64>(bytes.size())) !=
                 static_cast<qint64>(bytes.size()))
         {
@@ -906,13 +973,30 @@ bool runOne(const MovieExportSettings& settings, PhoenixView& view, TimelineAudi
         error = missingFfmpeg();
         return false;
     }
+    // File > Share's WebP, WebM and MP4, encoded as share::encoderArguments
+    // says.
+    const bool shared = settings.format == MovieExportSettings::Format::WebP ||
+                        settings.format == MovieExportSettings::Format::WebM ||
+                        (settings.format == MovieExportSettings::Format::Video && settings.quality >= 0 &&
+                            settings.codec == MovieExportSettings::Codec::H264);
+    const share::Format sharedFormat = settings.format == MovieExportSettings::Format::WebP ? share::Format::WebP
+                                       : settings.format == MovieExportSettings::Format::WebM ? share::Format::WebM
+                                                                                              : share::Format::Mp4;
     // H.264 in 4:2:0, and ProRes, want even sides.
-    const QSize even(std::max(2, size.width() & ~1), std::max(2, size.height() & ~1));
-    const bool alpha = settings.codec == MovieExportSettings::Codec::ProRes4444 && settings.transparent;
+    QSize even(std::max(2, size.width() & ~1), std::max(2, size.height() & ~1));
+    if (shared)
+    {
+        int width = size.width();
+        int height = size.height();
+        share::frameSize(sharedFormat, width, height);
+        even = QSize(width, height);
+    }
+    const bool alpha = settings.transparent && (settings.codec == MovieExportSettings::Codec::ProRes4444 ||
+                                                   (shared && share::canBeTransparent(sharedFormat)));
 
     QTemporaryFile wav(QDir::temp().filePath("phoenix_soundXXXXXX.wav"));
     bool withAudio = false;
-    if (settings.audio && audio)
+    if (settings.audio && audio && settings.format != MovieExportSettings::Format::WebP)
     {
         const std::vector<float> samples = mixdown();
         bool audible = false;
@@ -930,20 +1014,30 @@ bool runOne(const MovieExportSettings& settings, PhoenixView& view, TimelineAudi
         "-i", "-"};
     if (withAudio)
         arguments << "-i" << wav.fileName();
-    arguments << "-map" << "0:v";
-    const bool prores = settings.codec != MovieExportSettings::Codec::H264;
-    if (withAudio)
-        arguments << "-map" << "1:a" << "-c:a" << (prores ? "pcm_s16le" : "aac") << "-shortest";
-    if (withAudio && !prores)
-        arguments << "-b:a" << "192k";
-    if (settings.codec == MovieExportSettings::Codec::ProRes422)
-        arguments << "-c:v" << "prores_ks" << "-profile:v" << "3" << "-pix_fmt" << "yuv422p10le" << settings.path;
-    else if (settings.codec == MovieExportSettings::Codec::ProRes4444)
-        arguments << "-c:v" << "prores_ks" << "-profile:v" << "4" << "-pix_fmt" << (alpha ? "yuva444p10le" : "yuv444p10le")
-                  << settings.path;
+    if (shared)
+    {
+        const int plays = settings.loop ? (settings.gifRepeat > 0 ? settings.gifRepeat + 1 : 0) : 1;
+        for (const std::string& argument : share::encoderArguments(sharedFormat, settings.quality > 0 ? settings.quality : 80, alpha,
+                 plays, withAudio, settings.path.toStdString()))
+            arguments << QString::fromStdString(argument);
+    }
     else
-        arguments << "-c:v" << "libx264" << "-preset" << "medium" << "-crf" << "18" << "-pix_fmt" << "yuv420p"
-                  << "-movflags" << "+faststart" << settings.path;
+    {
+        arguments << "-map" << "0:v";
+        const bool prores = settings.codec != MovieExportSettings::Codec::H264;
+        if (withAudio)
+            arguments << "-map" << "1:a" << "-c:a" << (prores ? "pcm_s16le" : "aac") << "-shortest";
+        if (withAudio && !prores)
+            arguments << "-b:a" << "192k";
+        if (settings.codec == MovieExportSettings::Codec::ProRes422)
+            arguments << "-c:v" << "prores_ks" << "-profile:v" << "3" << "-pix_fmt" << "yuv422p10le" << settings.path;
+        else if (settings.codec == MovieExportSettings::Codec::ProRes4444)
+            arguments << "-c:v" << "prores_ks" << "-profile:v" << "4" << "-pix_fmt"
+                      << (alpha ? "yuva444p10le" : "yuv444p10le") << settings.path;
+        else
+            arguments << "-c:v" << "libx264" << "-preset" << "medium" << "-crf" << "18" << "-pix_fmt" << "yuv420p"
+                      << "-movflags" << "+faststart" << settings.path;
+    }
 
     QProcess process;
     process.setProcessChannelMode(QProcess::SeparateChannels);

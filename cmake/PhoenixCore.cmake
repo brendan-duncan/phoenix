@@ -132,7 +132,9 @@ set(PHOENIX_CORE_SOURCES
     gui/audio_engine.cpp
     gui/miniaudio_impl.c
     parser/path_parser.cpp
+    util/apng_writer.cpp
     util/gif_writer.cpp
+    util/share_formats.cpp
     util/parallel.cpp
     util/sprite_sheet.cpp
     writer/edge_writer.cpp

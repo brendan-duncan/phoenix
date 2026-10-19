@@ -6861,6 +6861,9 @@ void MainWindow::setupMenus()
     connect(importVideoAction, &QAction::triggered, this, &MainWindow::importVideo);
     importMenu->addAction(importVideoAction);
 
+    QAction* shareAction = fileMenu->addAction("S&hare...");
+    shareAction->setStatusTip("Save the animation as a GIF, WebP, animated PNG, MP4 or WebM, sized for the web and social sites");
+    connect(shareAction, &QAction::triggered, this, &MainWindow::shareMovie);
     QMenu* exportMenu = fileMenu->addMenu("Export");
 
     QAction* exportBakedAction = new QAction("Export FLA for Other &Apps...", this);
@@ -9126,6 +9129,18 @@ int MainWindow::renderCommand(const QString& source, const QStringList& options)
             settings.gifColors = std::clamp(value.toInt(), 2, 256);
             ++i;
         }
+        else if (name == "--quality" && !value.isEmpty())
+        {
+            settings.quality = std::clamp(value.toInt(), 1, 100);
+            ++i;
+        }
+        else if (name == "--fps" && !value.isEmpty())
+        {
+            settings.outputRate = std::clamp(value.toDouble(), 1.0, 120.0);
+            ++i;
+        }
+        else if (name == "--fit")
+            settings.letterbox = true;
         else if (name == "--layers" && !value.isEmpty())
         {
             settings.layers = value.split(',', Qt::SkipEmptyParts);
@@ -9147,6 +9162,14 @@ int MainWindow::renderCommand(const QString& source, const QStringList& options)
     else if (suffix == "mp4" || suffix == "mov" || suffix == "gif")
     {
         settings.format = suffix == "gif" ? MovieExportSettings::Format::Gif : MovieExportSettings::Format::Video;
+        QDir().mkpath(QFileInfo(out).absolutePath());
+    }
+    else if (suffix == "webp" || suffix == "webm" || suffix == "apng")
+    {
+        // The Share formats: an animated WebP or PNG, a WebM video.
+        settings.format = suffix == "webp"   ? MovieExportSettings::Format::WebP
+                          : suffix == "webm" ? MovieExportSettings::Format::WebM
+                                             : MovieExportSettings::Format::Apng;
         QDir().mkpath(QFileInfo(out).absolutePath());
     }
     else if (suffix == "svg")

@@ -196,6 +196,9 @@ private slots:
 
     void exportSvg();
     void exportMovie();
+    /// File > Share: the movie for the web and social sites
+    /// (main_window_share.cpp).
+    void shareMovie();
     /// The frames of the scene, or of the library symbol \a symbol, on one
     /// image with a description beside it.
     void exportSpriteSheet(const QString& symbol = QString());
