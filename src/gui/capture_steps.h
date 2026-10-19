@@ -16,6 +16,9 @@ namespace commands {
 ///   tool <name>                    the toolbox's tool
 ///   click <x,y> [shift] [ctrl] [alt]
 ///   drag <x,y> <x,y> [shift] [ctrl] [alt]
+///   stroke <x,y> <x,y>... [hold]    a drag through each point; with hold
+///                                  the button stays down until release
+///   release                        lets go of a held stroke
 ///   key <keys>                     "F", "Delete", "Ctrl+E", to the stage
 ///   menu <Modify>Deformer>...>     a menu command
 ///   target <spec>                  clicks a lesson target (frame:Arm:12,

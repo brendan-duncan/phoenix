@@ -93,6 +93,7 @@ set(PHOENIX_CORE_SOURCES
     edit/pegs.cpp
     edit/phoenix_features.cpp
     edit/region_split.cpp
+    edit/region_fill.cpp
     edit/review_notes.cpp
     edit/onion_shift.cpp
     edit/safe_zones.cpp

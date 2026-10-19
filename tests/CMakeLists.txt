@@ -33,6 +33,7 @@ set(TEST_SOURCES
     test_planar_map.cpp
     test_selection.cpp
     test_region_split.cpp
+    test_region_fill.cpp
     test_shape_merge.cpp
     test_shape_transform.cpp
     test_shape_tween.cpp

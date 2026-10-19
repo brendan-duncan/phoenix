@@ -4,6 +4,7 @@
 
 #include <functional>
 #include <memory>
+#include <vector>
 
 #include <QPointF>
 #include <QTransform>
@@ -22,15 +23,27 @@ class Shape;
 /// strokes but holding no fill takes paint too -- the classic use. Painting a
 /// face the same color as its neighbor removes the seam between them, as
 /// the merge model always does.
+///
+/// In Scribble mode a drag paints every region it passes over, and in Lasso
+/// mode every region inside the loop it draws, each drag one step to undo.
+/// With Fill Across set, a click paints the region on several drawings.
 class PaintBucketTool : public Tool
 {
 public:
-    PaintBucketTool(fla::CommandStack& commandStack, const fla::DrawingStyle& style)
-        : _commandStack(commandStack)
-        , _style(style)
-    {}
+    PaintBucketTool(fla::CommandStack& commandStack, const fla::DrawingStyle& style);
+    ~PaintBucketTool() override;
 
     QString name() const override { return "Paint Bucket"; }
+
+    /// Where Fill Across asks for the frames selected in the timeline:
+    /// false when there are none.
+    void setSelectedFrames(std::function<bool(int& first, int& last)> selectedFrames)
+    {
+        _selectedFrames = std::move(selectedFrames);
+    }
+    /// Where the bucket tells what a scribble or Fill Across did, for the
+    /// status bar.
+    void setReporter(std::function<void(const QString&)> report) { _report = std::move(report); }
 
     QCursor cursor() const override;
 
@@ -46,12 +59,49 @@ private:
     /// or fitted to its art, then commits.
     void place(PhoenixView& view, const QPointF* dragEnd);
 
+    /// A click's paint, held for the release: the region under \a documentPos.
+    void pressRegion(PhoenixView& view, const QPointF& documentPos);
+
+    /// One shape a scribble or a loop paints, divided into its regions.
+    struct Target;
+    /// The shape's target, made the first time it is met. Null for a
+    /// shape with nothing to divide.
+    Target* targetFor(PhoenixView& view, fla::Shape* shape);
+    /// The scribble reaches \a documentPos, taking the regions on its way.
+    void scribbleTo(PhoenixView& view, const QPointF& documentPos);
+    /// The loop reaches \a documentPos; the regions inside are taken anew.
+    void lassoTo(PhoenixView& view, const QPointF& documentPos);
+    /// Paints what the scribble or the loop took, as one step.
+    void finishScribble(PhoenixView& view);
+    void clearScribble();
+
+    /// Fill Across: the region under \a documentPos on each drawing of the
+    /// range, as one step. False when the bucket should paint as usual.
+    bool fillAcrossFrames(PhoenixView& view, const QPointF& documentPos);
+
+    void report(const QString& text) const
+    {
+        if (_report)
+            _report(text);
+    }
+
 public:
     void deactivate(PhoenixView& view) override;
 
 private:
     fla::CommandStack& _commandStack;
     const fla::DrawingStyle& _style;
+    std::function<bool(int&, int&)> _selectedFrames;
+    std::function<void(const QString&)> _report;
+
+    /// A scribble or loop in progress: its points on the stage, and the
+    /// shapes it reaches.
+    bool _scribbling = false;
+    std::vector<QPointF> _scribble;
+    std::vector<std::unique_ptr<Target>> _targets;
+    /// On a color art layer, the one target: the paint under the lines.
+    bool _colorArt = false;
+    double _gap = 0.0;
     /// The paint waiting for the release, for a gradient to be dragged.
     std::unique_ptr<fla::Shape> _pending;
     fla::Shape* _pendingTarget = nullptr;

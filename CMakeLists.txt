@@ -319,6 +319,7 @@ set(HEADERS
     src/edit/shape_merge.h
     src/edit/snapping.h
     src/edit/region_split.h
+    src/edit/region_fill.h
     src/edit/drawing_style.h
     src/edit/brush_stroke.h
     src/edit/brush_presets.h
