@@ -2,7 +2,7 @@
 
 What changed in each release of Phoenix, newest first.
 
-## Unreleased
+## 0.20.0
 
 - A boned shape whose last points are bound to no bone keeps the binding of its other points when posed or rebound
 - Gravity and wind for springy bones (Pose > Gravity and Wind): hair, tails and plants hang and sway with no poses, gusting the same way every time
