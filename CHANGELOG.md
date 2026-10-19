@@ -2,6 +2,14 @@
 
 What changed in each release of Phoenix, newest first.
 
+## Unreleased
+
+- Pop-up palette: press ` over the stage for your favorite tools, recent colors and a color wheel at the pointer (works with a pen; can open on right-click too)
+- Color panel: a color wheel for the fill or stroke, and a row of the colors you drew with lately, remembered between sessions
+- Simple workspace: just the stage, timeline, common tools, Properties, Library and Color, one click from the full layout on the edit bar or the start screen
+- First-use hints: a short tip on what to try next the first time you draw, add a keyframe, make a symbol or make a tween (Help > Show Hints, Reset Hints)
+- Starter templates on the start screen: a bouncing ball, a rigged walk cycle, a lip-sync head and a title card, each opened as a new document
+
 ## 0.20.0
 
 - A boned shape whose last points are bound to no bone keeps the binding of its other points when posed or rebound

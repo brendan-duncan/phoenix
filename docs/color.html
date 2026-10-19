@@ -17,7 +17,7 @@
 <meta property="og:image:alt" content="The Phoenix window with three flower characters on the stage, the timeline below and the Properties panel on the right">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:image" content="https://phoenixanimate.com/assets/shots/hero.webp">
-<meta name="keywords" content="color panel fill stroke solid linear radial gradient stops add move remove flow overflow extend reflect repeat linear rgb bitmap fill tiled clipped gradient transform tool handles focal point skew rotate lock fill swatches default palette web 216 sort import export act gpl alpha transparency hex hsb rgb channels black and white swap colors no color stroke style dashed dotted ragged stipple hatched hairline cap join miter limit scale hinting width profile taper swell pinch eyedropper ink bottle paint bucket gap size tagged swatch find replace color">
+<meta name="keywords" content="color panel fill stroke solid linear radial gradient stops add move remove flow overflow extend reflect repeat linear rgb bitmap fill tiled clipped gradient transform tool handles focal point skew rotate lock fill swatches default palette web 216 sort import export act gpl alpha transparency hex hsb rgb channels black and white swap colors no color stroke style dashed dotted ragged stipple hatched hairline cap join miter limit scale hinting width profile taper swell pinch eyedropper ink bottle paint bucket gap size tagged swatch find replace color color wheel hsv triangle hue recent colors color history pop-up palette popup favorite tools">
 <link rel="icon" href="assets/img/logo.png">
 <link rel="stylesheet" href="assets/site.css">
 <script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
@@ -47,6 +47,8 @@
 
 <p>Picking a color with the toolbox swatches or the Swatches panel also recolors the selected shapes: a fill color fills them, a stroke color recolors their strokes.</p>
 
+<p>For the quickest pick of all, press <kbd>`</kbd> (the key left of <kbd>1</kbd>) over the stage to open the <a href="#the-pop-up-palette">pop-up palette</a> at your pen or mouse.</p>
+
 <p>To change one color everywhere it is used in the document, in fills, strokes, gradients and text, use <a href="workspace.html#find-and-replace">Find and Replace</a> with <strong>Color</strong>.</p>
 
 <p>To take a color from existing artwork, use the <a href="#the-eyedropper">Eyedropper</a>.</p>
@@ -67,7 +69,7 @@
   <dt>Bitmap Fill</dt><dd>An image from the library, tiled across the shape.</dd>
 </dl>
 
-<p>What you set in the panel is the fill for the next thing you draw with the shape tools, the Pen, the brushes and the Paint Bucket. To apply it to artwork that is already drawn, select it and click <strong>Apply to Selection</strong>. <strong>Apply to Strokes</strong> draws the selected shapes' strokes with it instead: a gradient or bitmap along a line, fitted to the lines it strokes. The panel has no stroke mode of its own; the stroke color comes from the toolbox and the Tool tab.</p>
+<p>What you set in the panel is the fill for the next thing you draw with the shape tools, the Pen, the brushes and the Paint Bucket. To apply it to artwork that is already drawn, select it and click <strong>Apply to Selection</strong>. <strong>Apply to Strokes</strong> draws the selected shapes' strokes with it instead: a gradient or bitmap along a line, fitted to the lines it strokes. The panel's fill types are for the fill only; the stroke is always a solid color, which you can set with the <a href="#color-wheel-and-recent-colors">color wheel</a> under them, the toolbox or the Tool tab.</p>
 
 <h3>Solid colors</h3>
 
@@ -112,6 +114,42 @@
 <p>Choose <strong>Bitmap Fill</strong>, then pick an image from the list of library bitmaps, or click <strong>Import...</strong> to bring one in. New shapes are filled with the image, tiled: it is placed at its own size from the top-left corner of the shape and repeats across it. Use the Gradient Transform tool to scale, turn, skew or move it.</p>
 
 <p>Breaking apart a bitmap on the stage (<span class="menu-path">Modify &rsaquo; Break Apart</span>, <kbd>Ctrl</kbd>+<kbd>B</kbd>) also gives a bitmap fill: a shape of the image's size, filled with the image once rather than tiled, which you can then cut, erase and reshape like any other shape.</p>
+
+<h3 id="color-wheel-and-recent-colors">The color wheel and recent colors</h3>
+
+<p>Under the fill settings is a color wheel, for picking a color by eye rather than by numbers.</p>
+
+<figure class="narrow">
+  <img src="assets/shots/color-panel-wheel.webp" alt="The Color panel with the Fill and Stroke buttons, the color wheel (a ring of hues around a triangle) and a row of recent colors" width="391" height="450">
+</figure>
+
+<ol>
+  <li>Click <strong>Fill</strong> or <strong>Stroke</strong> above the wheel to choose which color it sets. Each button shows that color now.</li>
+  <li>Drag around the <strong>ring</strong> to choose the hue: red, orange, yellow, green, blue, purple.</li>
+  <li>Drag inside the <strong>triangle</strong> to choose how strong and how light the color is. Its point is the pure hue, one corner is white and the other black.</li>
+</ol>
+
+<p>The color changes as you drag, so you can watch the swatches. When you let go, the selected shapes take it, as they do from a swatch. With a gradient chosen, the wheel sets the color of the picked gradient pointer instead.</p>
+
+<p><strong>Recent colors</strong>, under the wheel, are the colors you have drawn with lately, newest first. Click one to use it again, for the fill or the stroke as the buttons above say. The list keeps the last sixteen and is remembered the next time you start Phoenix. The same colors are in the pop-up palette.</p>
+
+<h2 id="the-pop-up-palette">The pop-up palette</h2>
+
+<p>The pop-up palette puts your favorite tools and colors right where you are drawing, so you do not have to reach for the panels.</p>
+
+<figure class="narrow">
+  <img src="assets/shots/popup-palette.webp" alt="The pop-up palette: a round panel with tool buttons around the edge, recent colors as dots inside them, a color wheel in the middle, and Fill, Stroke and Edit buttons in the corners" width="300" height="300">
+</figure>
+
+<ul>
+  <li><strong>To open it</strong>, press <kbd>`</kbd> (the key left of <kbd>1</kbd>) with the pointer over the stage, or choose <span class="menu-path">Window &rsaquo; Pop-up Palette</span>. It opens centered on the pointer, and works with a pen as well as a mouse.</li>
+  <li><strong>Tools</strong> sit around the edge. Click one to switch to it.</li>
+  <li><strong>Recent colors</strong> are the dots inside the tools. Click one to draw with it.</li>
+  <li><strong>The wheel</strong> in the middle works like the <a href="#color-wheel-and-recent-colors">Color panel's</a>. It sets the color the tool in use draws with: the stroke for the Pencil, Line, Pen and Ink Bottle, otherwise the fill. Click <strong>Fill</strong> or <strong>Stroke</strong> in the bottom corners, or press <kbd>X</kbd>, to switch.</li>
+  <li><strong>Edit</strong> lists every tool: check the ones you want around the edge, up to ten. <strong>Reset Favorites</strong> puts back the Brush, Pencil, Eraser, Paint Bucket, Eyedropper, Selection, Line, Rectangle and Oval.</li>
+</ul>
+
+<p>It closes when you pick a tool or a recent color, click outside it, or press <kbd>Esc</kbd> or <kbd>`</kbd> again. Right-clicking the stage normally opens the stage menu. If you would rather it opened the pop-up palette while you draw, turn on <strong>Right-click with a drawing tool opens it</strong> in <a href="preferences.html">Preferences</a>. To give the palette a different key, use <a href="shortcuts.html">Keyboard Shortcuts</a>.</p>
 
 <h2>The Gradient Transform tool</h2>
 
