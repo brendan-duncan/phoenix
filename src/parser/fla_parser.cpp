@@ -7,6 +7,7 @@
 #include "zip_reader.h"
 #include "../data/bitmap.h"
 #include "../data/document.h"
+#include "../edit/reference_board.h"
 #include <algorithm>
 #include <set>
 #include <fstream>
@@ -187,5 +188,14 @@ void FLAParser::keepUnreadFiles(const ZipReader& zipReader, fla::Document& docum
         if (name.rfind("bin/phoenix_texture_", 0) == 0)
             continue;
         document.extraFiles.emplace_back(name, zipReader.lazyFile(name));
+        read.insert(name);
     }
+    // A document folder lists only its top level: the reference board's
+    // pictures (fla::references) are found by the names the board gives.
+    for (const fla::references::Image& image : fla::references::of(document).images)
+        if (!read.count(image.path) && zipReader.containsFile(image.path))
+        {
+            document.extraFiles.emplace_back(image.path, zipReader.lazyFile(image.path));
+            read.insert(image.path);
+        }
 }

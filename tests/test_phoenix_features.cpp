@@ -33,6 +33,7 @@ void writeSample(const fs::path& folder)
         "<DOMDocument xmlns=\"http://ns.adobe.com/xfl/2008/\" width=\"550\" height=\"400\" "
         "phoenixPalettes=\"Day~skin=FFCC99\" phoenixStageAlpha=\"0.5\" phoenixControllers=\"Smile\" "
         "phoenixPerspectiveAngle=\"60\" phoenixLight=\"-45,45,0.3,1,#FFFFFF\" phoenixDepthOfField=\"0,4\" phoenixSafeZones=\"title=1,90;frames=4:3,1,00BEFFFF,c,0\" "
+        "phoenixReferences=\"hide=0;images=bin/phoenix_reference_1.png,0,0,1,0,1,,sheet\" "
         "phoenixFutureThing=\"1\">"
         "<symbols><Include href=\"Peg.xml\"/></symbols>"
         "<timelines><DOMTimeline name=\"Scene 1\" phoenixNodeGraph=\"&lt;graph/&gt;\"><layers>"

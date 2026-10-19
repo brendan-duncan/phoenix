@@ -96,6 +96,8 @@ set(PHOENIX_CORE_SOURCES
     edit/review_notes.cpp
     edit/onion_shift.cpp
     edit/safe_zones.cpp
+    edit/reference_board.cpp
+    edit/stage_view.cpp
     edit/scene_commands.cpp
     edit/script_edit.cpp
     edit/selection.cpp
