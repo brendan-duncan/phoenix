@@ -6,6 +6,7 @@
 #include "start_dialog.h"
 #include "modal.h"
 #include "web_files.h"
+#include "web_page.h"
 #include "file_pick.h"
 #include "stage_controls.h"
 #include "canvas_only.h"
@@ -1426,6 +1427,7 @@ void MainWindow::showTabMenu(int index, const QPoint& globalPos)
     const QString reveal = "Show in &Folder";
 #endif
     QAction* show = menu->addAction(reveal, this, [path]() { revealInFileManager(path); });
+    web_page::desktopOnly(show);
     show->setEnabled(!path.isEmpty() && QFileInfo::exists(path));
     menu->addSeparator();
     QAction* newWindow = menu->addAction("Move to &New Window", this, [this, indexOf]() {
@@ -2834,6 +2836,7 @@ void MainWindow::setupWindowMenu()
     brushesAction->setStatusTip("The paint brushes and symbols the document's strokes are drawn with");
     connect(brushesAction, &QAction::triggered, this, &MainWindow::manageBrushes);
     QAction* renderQueueAction = windowMenu->addAction("&Render Queue…");
+    web_page::desktopOnly(renderQueueAction);
     renderQueueAction->setStatusTip("Renders lined up and run one after another while you work");
     connect(renderQueueAction, &QAction::triggered, this, [this]() {
         if (!_renderQueue)
@@ -2868,6 +2871,7 @@ void MainWindow::setupWindowMenu()
         _renderQueue->activateWindow();
     });
     QMenu* extensionsMenu = windowMenu->addMenu("E&xtensions");
+    web_page::desktopOnly(extensionsMenu);
     connect(extensionsMenu, &QMenu::aboutToShow, this, [this, extensionsMenu]() { _cepPanels->fillMenu(extensionsMenu); });
     windowMenu->addSeparator();
 
@@ -7012,6 +7016,8 @@ void MainWindow::setupMenus()
 
     // Add Open Recent submenu
     _recentFilesMenu = fileMenu->addMenu("Open &Recent");
+    // A browser keeps no files between visits to open again.
+    web_page::desktopOnly(_recentFilesMenu);
     updateRecentFilesMenu();
 
     fileMenu->addSeparator();
@@ -7081,6 +7087,7 @@ void MainWindow::setupMenus()
     importAnimaticAction->setStatusTip("An animatic's cut from Storyboard Pro or an editor (EDL, Final Cut XML): its shots as labels, boards and audio");
     connect(importAnimaticAction, &QAction::triggered, this, &MainWindow::importAnimatic);
     QAction* importVideoAction = new QAction("Import &Video...", this);
+    web_page::desktopOnly(importVideoAction);
     importVideoAction->setStatusTip("Bring in a video to animate over, on a guide layer");
     connect(importVideoAction, &QAction::triggered, this, &MainWindow::importVideo);
     importMenu->addAction(importVideoAction);
@@ -7092,6 +7099,7 @@ void MainWindow::setupMenus()
     });
 
     QAction* shareAction = fileMenu->addAction("S&hare...");
+    web_page::desktopOnly(shareAction);
     shareAction->setStatusTip("Save the animation as a GIF, WebP, animated PNG, MP4 or WebM, sized for the web and social sites");
     connect(shareAction, &QAction::triggered, this, &MainWindow::shareMovie);
     QMenu* exportMenu = fileMenu->addMenu("Export");
@@ -7101,6 +7109,7 @@ void MainWindow::setupMenus()
     connect(exportBakedAction, &QAction::triggered, this, &MainWindow::exportBakedDocument);
     exportMenu->addAction(exportBakedAction);
     QAction* renderDataAction = new QAction("Render from &Data...", this);
+    web_page::desktopOnly(renderDataAction);
     renderDataAction->setStatusTip("Render the movie once for each row of a CSV file, its template fields filled from the row");
     connect(renderDataAction, &QAction::triggered, this, &MainWindow::renderFromData);
     exportMenu->addAction(renderDataAction);
@@ -7124,6 +7133,7 @@ void MainWindow::setupMenus()
     connect(exportSpritesAction, &QAction::triggered, this, [this]() { exportSpriteSheet(); });
     exportMenu->addAction(exportSpritesAction);
     QAction* exportShotsAction = new QAction("Export S&hots...", this);
+    web_page::desktopOnly(exportShotsAction);
     exportShotsAction->setStatusTip("Split the episode into shot files, by scene, frame label or camera cut");
     connect(exportShotsAction, &QAction::triggered, this, &MainWindow::exportShots);
     exportMenu->addAction(exportShotsAction);
@@ -7155,6 +7165,7 @@ void MainWindow::setupMenus()
     // Publish: Publish Settings, then the document's publish configurations,
     // the current one first (Shift+F12), each publishing as it says.
     QMenu* publishMenu = fileMenu->addMenu("Publish");
+    web_page::desktopOnly(publishMenu);
     QAction* publishSettingsAction = publishMenu->addAction("Publish Settings...");
     publishSettingsAction->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_F12));
     publishSettingsAction->setStatusTip("The publish configurations: which formats each writes, where, and their options");
@@ -7207,6 +7218,7 @@ void MainWindow::setupMenus()
 
     // How often unsaved work is copied aside for after a crash.
     QMenu* autoSaveMenu = fileMenu->addMenu("A&uto-Save");
+    web_page::desktopOnly(autoSaveMenu);
     QActionGroup* autoSaveGroup = new QActionGroup(this);
     for (const int minutes : {0, 1, 2, 5, 10})
     {
@@ -7229,6 +7241,7 @@ void MainWindow::setupMenus()
     fileMenu->addSeparator();
 
     QAction* exitAction = new QAction("&Exit", this);
+    web_page::desktopOnly(exitAction);
     exitAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Q));
     connect(exitAction, &QAction::triggered, this, &MainWindow::quit);
     fileMenu->addAction(exitAction);
@@ -8544,7 +8557,11 @@ void MainWindow::setupMenus()
     QAction* scriptEditorAction = new QAction("&Script Editor...", this);
     scriptEditorAction->setStatusTip("Write, open and run JSFL and Python scripts, and edit ActionScript files");
     connect(scriptEditorAction, &QAction::triggered, this, [this]() { openScriptEditor(); });
-    _scripts->fillCommandsMenu(menuBar->addMenu("&Commands"), {claudeAction, scriptEditorAction});
+    QMenu* commandsMenu = menuBar->addMenu("&Commands");
+    _scripts->fillCommandsMenu(commandsMenu, {claudeAction, scriptEditorAction});
+    web_page::desktopOnly(commandsMenu);
+    web_page::desktopOnly(claudeAction);
+    web_page::desktopOnly(scriptEditorAction);
 
     QMenu* helpMenu = menuBar->addMenu("&Help");
     QAction* guideAction = helpMenu->addAction("Phoenix &Help");
@@ -8565,6 +8582,7 @@ void MainWindow::setupMenus()
     helpMenu->addAction(tutorialsAction);
 
     QAction* checkForUpdatesAction = new QAction("Check for &Updates...", this);
+    web_page::desktopOnly(checkForUpdatesAction);
     checkForUpdatesAction->setStatusTip("Look for a newer version of Phoenix");
     connect(checkForUpdatesAction, &QAction::triggered, this, [this]() { _updater->checkForUpdates(true); });
     helpMenu->addAction(checkForUpdatesAction);

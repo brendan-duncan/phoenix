@@ -101,6 +101,20 @@ QT_QPA_PLATFORM=offscreen build/Release/Phoenix --export-image my.fla frame1.png
 
 `capture-window` and `capture-dialog` draw the window, a panel, a menu or a dialog to a picture, which is how the guide's screenshots are made (run them without `offscreen`, which loses the theme). See the [command line guide](https://phoenixanimate.com/command-line.html) for every command.
 
+## The web editor
+
+Phoenix also builds for browsers with Qt for WebAssembly, as the web editor at [phoenixanimate.com/webeditor](https://phoenixanimate.com/webeditor/). It needs Emscripten and Qt's WebAssembly kit as well as the desktop Qt above (for its code generators); `tools/web/setup_web.py` installs the first two into `third_party/`.
+
+```sh
+python tools/web/setup_web.py            # once: Emscripten 4.0.7 and Qt 6.11.2 for WebAssembly
+python tools/web/build_web.py            # builds into build-wasm32/
+python tools/web/serve.py --open         # tries it at http://localhost:8000/
+python tools/web/build_web.py --package  # gathers the site into build-wasm32/webeditor/
+python tools/web/deploy_web.py           # uploads that to phoenixanimate.com/webeditor
+```
+
+Serve it with `serve.py`, not a plain file server: the page needs the `Cross-Origin-Opener-Policy` and `Cross-Origin-Embedder-Policy` headers for threads. `--arch wasm64` builds a 64-bit version into `build-wasm64/`, given a Qt kit built for it. [web-editor.md](web-editor.md) covers how the web editor differs from the desktop app and what to keep in mind when changing code that it shares.
+
 ## Releases
 
 Releases are built by the Release workflow (`.github/workflows/release.yml`) when a `v*` tag is pushed. It builds on each platform with `-DPHOENIX_FFMPEG_REQUIRED=ON`, runs the tests, and packs installers with Velopack's `vpk` tool, which must be the version pinned in `cmake/PhoenixVelopack.cmake`. The version comes from `project(Phoenix VERSION ...)` in `CMakeLists.txt`; `tools/sync_docs_version.py` copies it into the guide.

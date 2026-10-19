@@ -35,7 +35,7 @@ target_link_libraries(libas3 INTERFACE as3_parser)
 project(Phoenix VERSION 0.21.2 LANGUAGES C CXX)
 
 # The web build: Qt for WebAssembly's toolchain (tools/web/build_web.py,
-# docs/web.md). What a browser cannot do (other programs, Python, sockets,
+# docs/web-editor.md). What a browser cannot do (other programs, Python, sockets,
 # the updater, native web views) is left out with PHOENIX_WEB.
 if(EMSCRIPTEN)
     set(PHOENIX_WEB ON)
@@ -184,6 +184,7 @@ set(HEADERS
     src/gui/modal.h
     src/gui/web_files.h
     src/gui/file_pick.h
+    src/gui/web_page.h
     src/gui/terminal_view.h
     src/gui/html_view.h
     src/gui/trace_bitmap_dialog.h
@@ -641,7 +642,6 @@ set(SOURCES
     src/gui/timelines_panel.cpp
     src/gui/player.cpp
     src/gui/modal.cpp
-    src/gui/web_files.cpp
     src/gui/file_pick.cpp
 )
 
@@ -680,7 +680,8 @@ endif()
 # The web build's stand-ins for what a browser cannot do.
 if(PHOENIX_WEB)
     list(REMOVE_ITEM SOURCES src/gui/terminal_view.cpp)
-    list(APPEND SOURCES src/gui/terminal_view_web.cpp src/gui/web_drag.cpp src/gui/web_exec.cpp)
+    list(APPEND SOURCES src/gui/terminal_view_web.cpp src/gui/web_files.cpp
+        src/gui/web_drag.cpp src/gui/web_exec.cpp src/gui/web_page.cpp)
 endif()
 
 qt6_add_executable(Phoenix MANUAL_FINALIZATION ${SOURCES} ${HEADERS})

@@ -2,6 +2,10 @@
 
 What changed in each release of Phoenix, newest first.
 
+## Unreleased
+
+- Phoenix runs in a browser: the web editor at phoenixanimate.com/webeditor opens, draws, animates, plays and saves documents, with files opened from the browser and saved as downloads
+
 ## 0.21.2
 
 - Inserting a keyframe inside a classic or shape tween puts the in-between pose on it and keeps both halves tweened with the same ease

@@ -1,4 +1,5 @@
 #include "theme.h"
+#include "web_page.h"
 
 #include <QAbstractButton>
 #include <QAction>
@@ -239,6 +240,9 @@ void apply(const Theme& theme)
     if (theme.colors.contains("hotText"))
         palette.setColor(QPalette::Link, theme.colors.value("hotText"));
     qApp->setPalette(palette);
+#ifdef PHOENIX_WEB
+    web_page::setWindowColors(palette);
+#endif
 
     QFont font = qApp->font();
     static const int systemSize = font.pointSize();

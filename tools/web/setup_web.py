@@ -12,7 +12,7 @@ build takes its code generators from, is the one the desktop build uses.
 The versions go together: each Qt release is built with one Emscripten
 (see Qt's "Qt for WebAssembly" page), and code built with another may not
 link. Qt publishes no wasm64 kit; a wasm64 build needs Qt built from source
-with -feature-wasm64 (docs/web.md).
+with -feature-wasm64 (docs/web-editor.md).
 """
 
 import argparse

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Builds Phoenix for the web with Qt for WebAssembly.
+"""Builds Phoenix's web editor with Qt for WebAssembly.
 
   python tools/web/build_web.py [--arch wasm32|wasm64] [--config Release|Debug]
                                 [--emsdk DIR] [--qt DIR] [--qt-host DIR]
-                                [--configure-only] [--clean]
+                                [--package] [--configure-only] [--clean]
 
 It needs three things, each found from its option, then its environment
 variable, then the default folders tools/web/setup_web.py installs into:
@@ -13,11 +13,15 @@ variable, then the default folders tools/web/setup_web.py installs into:
   desktop Qt  --qt-host  PHOENIX_QT_HOST, Qt6_ROOT     third_party/qt/<this machine>,
                                                        C:/Qt/<version>/msvc*_64
 
-The Emscripten and both Qts must be the versions cmake/QtArchives.cmake
-and tools/web/setup_web.py name. Each architecture builds into its own
-folder, build-wasm32 or build-wasm64, so both can be kept side by side;
-which one a build is comes only from the Qt kit it is given. The folder is
-the site: serve it with tools/web/serve.py.
+The Emscripten and both Qts must be the versions tools/web/setup_web.py
+names. Each architecture builds into its own folder, build-wasm32 or
+build-wasm64, so both can be kept side by side; which one a build is comes
+only from the Qt kit it is given. The build folder can be served as it is
+with tools/web/serve.py.
+
+--package also gathers what the site needs into <build>/webeditor: the page,
+the program, Qt's loader, the icon and an .htaccess that has Apache send the
+headers Phoenix's threads need. tools/web/deploy_web.py uploads that folder.
 """
 
 import argparse
@@ -29,6 +33,28 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent.parent
+
+# What the page loads, from the build folder; Qt's own page (Phoenix.html)
+# and its logo stay behind.
+PACKAGE_FILES = ["index.html", "Phoenix.js", "Phoenix.wasm", "qtloader.js", "phoenix.png"]
+PACKAGE_FOLDER = "webeditor"
+
+# Apache: the headers that let the page use threads, the wasm type, and the
+# program compressed on the way (it shrinks to about a quarter). Revalidated
+# on every visit, so a new build is picked up at once.
+HTACCESS = """\
+# Phoenix's web editor (tools/web/build_web.py --package).
+AddType application/wasm .wasm
+<IfModule mod_headers.c>
+    Header always set Cross-Origin-Opener-Policy "same-origin"
+    Header always set Cross-Origin-Embedder-Policy "require-corp"
+    Header always set Cross-Origin-Resource-Policy "same-origin"
+    Header set Cache-Control "no-cache"
+</IfModule>
+<IfModule mod_deflate.c>
+    AddOutputFilterByType DEFLATE application/wasm text/javascript application/javascript text/html
+</IfModule>
+"""
 
 
 def first_existing(*candidates):
@@ -70,6 +96,23 @@ def emsdk_environment(emsdk):
     return env
 
 
+def package(build):
+    """Gathers the site into <build>/webeditor and returns that folder."""
+    out = build / PACKAGE_FOLDER
+    if out.exists():
+        shutil.rmtree(out)
+    out.mkdir()
+    for name in PACKAGE_FILES:
+        source = build / name
+        if not source.is_file():
+            sys.exit("%s is missing: build first" % source)
+        shutil.copy2(source, out / name)
+    (out / ".htaccess").write_text(HTACCESS, encoding="utf-8", newline="\n")
+    size = sum(path.stat().st_size for path in out.iterdir())
+    print("Packaged %s (%.1f MB)" % (out, size / 1e6))
+    return out
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--arch", choices=["wasm32", "wasm64"], default="wasm32")
@@ -78,6 +121,7 @@ def main():
     parser.add_argument("--qt", help="the Qt for WebAssembly kit for --arch")
     parser.add_argument("--qt-host", help="the desktop Qt of the same version, for its code generators")
     parser.add_argument("--build-dir", help="where to build (default build-<arch>)")
+    parser.add_argument("--package", action="store_true", help="gather the site into <build>/webeditor")
     parser.add_argument("--configure-only", action="store_true")
     parser.add_argument("--clean", action="store_true", help="start the build folder over")
     parser.add_argument("cmake_args", nargs="*", help="more arguments for CMake's configure step")
@@ -114,7 +158,9 @@ def main():
     if args.configure_only:
         return 0
     subprocess.run(["cmake", "--build", str(build), "--target", "Phoenix"], env=env, check=True)
-    print("\nBuilt %s. Serve it with:\n  python tools/web/serve.py %s" % (build / "Phoenix.html", build))
+    if args.package:
+        package(build)
+    print("\nBuilt %s. Try it with:\n  python tools/web/serve.py %s --open" % (build / "Phoenix.wasm", build))
     return 0
 
 

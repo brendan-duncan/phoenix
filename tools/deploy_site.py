@@ -16,8 +16,8 @@ writes a template there to fill in:
 The site goes up as one archive over scp and is unpacked over ssh, using the
 OpenSSH programs Windows, macOS and Linux all ship. Files on the server are
 added and overwritten; --mirror also removes those no longer in website/. Either
-way the folders the server keeps for itself (updates/, download/) are left
-alone.
+way the folders the server keeps for itself (updates/, download/) and the
+web editor (webeditor/, from tools/web/deploy_web.py) are left alone.
 
 First the guide is brought up to date: the version CMakeLists.txt sets goes
 wherever the pages show it (tools/sync_docs_version.py), and the What's New
@@ -43,9 +43,10 @@ ROOT = Path(__file__).resolve().parents[1]
 SITE = ROOT / "website"
 CONFIG = Path(__file__).resolve().with_name("deploy_site.ini")
 
-# On the server but not from website/: the updater's feed and packages, and the
-# installers the download links point at.
-KEEP = ("updates", "download")
+# On the server but not from website/: the updater's feed and packages, the
+# installers the download links point at, and the web editor
+# (tools/web/deploy_web.py).
+KEEP = ("updates", "download", "webeditor")
 
 # In website/ but not for the site.
 SKIP_NAMES = {".DS_Store", "Thumbs.db", "desktop.ini"}

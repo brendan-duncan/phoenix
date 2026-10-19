@@ -1,6 +1,7 @@
 #include "gui/crash_dump.h"
 #include "gui/app_identity.h"
 #include "gui/command_line.h"
+#include "gui/web_page.h"
 #include "gui/mcp_server.h"
 #include "gui/script_runner.h"
 #include "gui/main_window.h"
@@ -443,6 +444,9 @@ int main(int argc, char *argv[])
     }
 
     // The theme last chosen, before any window is made.
+#ifdef PHOENIX_WEB
+    web_page::install();
+#endif
     app_identity::apply();
     theme::applySaved();
     releaseOwnConsole();
