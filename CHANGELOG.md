@@ -2,6 +2,13 @@
 
 What changed in each release of Phoenix, newest first.
 
+## Unreleased
+
+- Symmetry drawing (View > Symmetry, or the toolbox button): Pencil, Paint Brush, Brush, Nib Brush, Ink Brush and Eraser strokes are copied across a mirror axis, four ways, or round a center with as many copies as you like, optionally mirrored
+- The Drawing Guides tool places rulers, parallel rulers, ellipses, concentric ellipses and 1-, 2- and 3-point perspective that freehand strokes snap to, with a magnetism setting; guides are saved with the document and never exported
+- A Stabilizer for the Pencil, Paint Brush, Brush, Nib Brush and Eraser, as the Ink Brush has: the line trails the pen on a string, shown as a circle round the line's end, and catches up when you lift
+- The status bar shows what the tool does and what Shift, Alt and Ctrl add, changing as you hold the keys; View > Tool Hints turns it off
+
 ## 0.20.0
 
 - A boned shape whose last points are bound to no bone keeps the binding of its other points when posed or rebound
