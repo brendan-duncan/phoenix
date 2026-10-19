@@ -147,7 +147,7 @@ PreferencesDialog::PreferencesDialog(QWidget* parent)
     QHBoxLayout* hintsLayout = new QHBoxLayout(hintsRow);
     hintsLayout->setContentsMargins(0, 0, 0, 0);
     _hints = new QCheckBox("Show first-use hints", hintsRow);
-    _hints->setChecked(QSettings().value("hints/enabled", true).toBool());
+    _hints->setChecked(QSettings().value("hints/enabled", false).toBool());
     _hints->setToolTip("A short tip on what to try next, the first time you draw, add a keyframe, make a symbol "
                        "or make a tween");
     QPushButton* resetHints = new QPushButton("Reset Hints", hintsRow);

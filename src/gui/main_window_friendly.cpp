@@ -43,7 +43,7 @@ const std::set<std::string> kBothEdits = {"Rectangle", "Oval", "PolyStar", "Pen"
 
 bool hintsWanted()
 {
-    return QSettings().value("hints/enabled", true).toBool();
+    return QSettings().value("hints/enabled", false).toBool();
 }
 
 } // namespace
