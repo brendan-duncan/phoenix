@@ -24,6 +24,7 @@
 #include "../edit/deformers.h"
 #include "../edit/frame_actions.h"
 #include "../edit/onion_shift.h"
+#include "draw_placement.h"
 
 #include <deque>
 #include <memory>
@@ -548,7 +549,13 @@ public:
 
     /// Remembers a drawing that has been placed but not yet merged into the
     /// artwork under it. Deselecting it is what commits it.
-    void setPendingMerge(fla::Shape* shape, fla::Frame* frame, bool keepStrokes = false);
+    ///
+    /// A drawing tool passes the edit that placed the drawing and cut its
+    /// hole, \a placed, and the shapes it cut as they were before: let go
+    /// while that edit is still the last on the history, the drawing merges
+    /// into those instead.
+    void setPendingMerge(fla::Shape* shape, fla::Frame* frame, bool keepStrokes = false,
+        const fla::Command* placed = nullptr, const std::vector<UncutShape>& uncut = {});
     /// What a drawing tool has just drawn, selected only for that: the
     /// Selection tool still bends its outline rather than moving it. Only
     /// compared, never followed.
@@ -1362,7 +1369,15 @@ private:
         /// Whether the drop paints under the artwork's strokes (the brush's
         /// fills-only modes) rather than burying them.
         bool keepStrokes = false;
+        /// The edit that placed it and cut its hole, and what it cut as it
+        /// was before. Only compared, never followed.
+        const fla::Command* placed = nullptr;
+        std::vector<UncutShape> uncut;
     };
+
+    /// Commits one waiting drop, merging into what it cut as it was before
+    /// when nothing has been done since it was placed.
+    void commitDrop(const PendingDrop& pending);
 
     /// Everything waiting. A drag can move several things at once, and each is
     /// dropped where it now sits.

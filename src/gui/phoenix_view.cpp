@@ -9788,7 +9788,8 @@ void PhoenixView::setSelection(fla::Selection* selection)
     update();
 }
 
-void PhoenixView::setPendingMerge(fla::Shape* shape, fla::Frame* frame, bool keepStrokes)
+void PhoenixView::setPendingMerge(fla::Shape* shape, fla::Frame* frame, bool keepStrokes,
+    const fla::Command* placed, const std::vector<UncutShape>& uncut)
 {
     if (!shape || !frame)
         return;
@@ -9799,7 +9800,17 @@ void PhoenixView::setPendingMerge(fla::Shape* shape, fla::Frame* frame, bool kee
             return;
     }
 
-    _pending.push_back({shape, frame, keepStrokes});
+    _pending.push_back({shape, frame, keepStrokes, placed, uncut});
+}
+
+void PhoenixView::commitDrop(const PendingDrop& pending)
+{
+    // Untouched: the placing edit is still the last, so the drawing is where
+    // it was drawn and what it cut is as it left it.
+    const bool untouched = pending.placed && _commandStack->topCommand() == pending.placed &&
+        !_commandStack->isInMacro() && !_commandStack->canRedo();
+    commitPendingMerge(*this, *_commandStack, *_selection, pending.shape, pending.frame,
+        pending.keepStrokes, untouched ? &pending.uncut : nullptr);
 }
 
 void PhoenixView::markShapeEdited(fla::Shape* shape)
@@ -10160,8 +10171,7 @@ void PhoenixView::flushPendingMerge()
     // would come straight back round through selectionChanged().
     _committingMerge = true;
     for (const PendingDrop& pending : dropping)
-        commitPendingMerge(*this, *_commandStack, *_selection, pending.shape, pending.frame,
-            pending.keepStrokes);
+        commitDrop(pending);
     _committingMerge = false;
 }
 
@@ -10199,8 +10209,7 @@ void PhoenixView::selectionChanged()
 
     _committingMerge = true;
     for (const PendingDrop& pending : dropping)
-        commitPendingMerge(*this, *_commandStack, *_selection, pending.shape, pending.frame,
-            pending.keepStrokes);
+        commitDrop(pending);
     _committingMerge = false;
 }
 

@@ -163,7 +163,7 @@ bool SetEdgeGeometryCommand::mergeWith(const Command* other)
 }
 
 MergeShapeCommand::MergeShapeCommand(Shape* target, const Shape& addition,
-    const std::string& name, const MergeOptions& options)
+    const std::string& name, const MergeOptions& options, const Shape* base)
     : _target(target)
     , _name(name)
 {
@@ -171,6 +171,8 @@ MergeShapeCommand::MergeShapeCommand(Shape* target, const Shape& addition,
         return;
 
     _before = cloneShape(*_target, nullptr);
+    if (base)
+        setShapeContents(*_target, *base);
 
     // The merge runs once, here. redo() and undo() only ever swap a snapshot
     // back in, so repeating either is cheap and cannot drift.

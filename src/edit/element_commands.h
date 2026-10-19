@@ -120,8 +120,13 @@ class MergeShapeCommand : public Command
 public:
     /// Merges \a addition into \a target straight away, keeping snapshots of
     /// both sides of the edit. The addition is left untouched.
+    ///
+    /// With \a base the merge starts from it instead of from what the target
+    /// holds now, which is still what undo puts back: a drawing let go where
+    /// it was drawn merges into the artwork as it was before the drawing cut
+    /// its hole.
     MergeShapeCommand(Shape* target, const Shape& addition, const std::string& name,
-        const MergeOptions& options = MergeOptions());
+        const MergeOptions& options = MergeOptions(), const Shape* base = nullptr);
 
     ~MergeShapeCommand() override;
 

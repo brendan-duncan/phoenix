@@ -2,6 +2,9 @@
 
 #include <QString>
 
+#include <memory>
+#include <vector>
+
 namespace fla {
 class CommandStack;
 class Element;
@@ -11,6 +14,13 @@ class Shape;
 }
 
 class PhoenixView;
+
+/// A shape a waiting drawing cut its hole in, as it was before the cut.
+struct UncutShape
+{
+    fla::Shape* shape = nullptr;
+    std::shared_ptr<const fla::Shape> before;
+};
 
 /// Puts a freshly drawn element into the document.
 ///
@@ -43,6 +53,12 @@ void placeDrawnElement(PhoenixView& view, fla::CommandStack& commandStack,
 /// Returns false, leaving everything alone, when there is nothing underneath to
 /// merge with or the drawing is no longer in the frame -- which is what an undo
 /// while it was still waiting looks like.
+///
+/// \a uncut, given when nothing has been done since the drawing was placed,
+/// holds the shapes it cut as they were before: the drawing is merged into
+/// those instead. Merging covers whatever it lands on, so the result is the
+/// same, but the hole's outline is a welded, refitted copy of the drawing's
+/// own, and the two together are too nearly one curve to cut cleanly.
 bool commitPendingMerge(PhoenixView& view, fla::CommandStack& commandStack,
     fla::Selection& selection, fla::Shape* addition, fla::Frame* frame,
-    bool keepStrokes = false);
+    bool keepStrokes = false, const std::vector<UncutShape>* uncut = nullptr);

@@ -8,6 +8,7 @@
 #include "../edit/drawing_style.h"
 #include "../edit/element_commands.h"
 #include "../edit/selection.h"
+#include "../edit/shape_merge.h"
 #include "../edit/shape_transform.h"
 
 #include <memory>
@@ -113,9 +114,11 @@ void placeDrawnElement(PhoenixView& view, fla::CommandStack& commandStack,
     // landed on.
     view.clearCaches();
 
+    fla::Shape* addition = nullptr;
+    std::vector<UncutShape> uncut;
     if (!objectDrawing && element->elementType() == fla::Element::Type::Shape)
     {
-        fla::Shape* addition = static_cast<fla::Shape*>(element);
+        addition = static_cast<fla::Shape*>(element);
 
         // Drawing over artwork destroys what was under it, there and then. The
         // drawing sits exactly over the hole it just made, so nothing looks
@@ -127,18 +130,23 @@ void placeDrawnElement(PhoenixView& view, fla::CommandStack& commandStack,
             // position in a transform has to be brought down into its geometry.
             fla::bakeTransform(*target);
 
+            // Kept for letting go of the drawing where it was drawn.
+            uncut.push_back({target, std::shared_ptr<const fla::Shape>(fla::cloneShape(*target, nullptr))});
+
             commandStack.push(fla::CommandPtr(new fla::SubtractShapeCommand(
                 target, *addition, name, options)));
         }
-
-        // It is still its own object, selected and draggable as one piece, until
-        // it is let go. Letting go drops it back into the artwork wherever it
-        // now sits.
-        view.setPendingMerge(addition, frame, keepStrokes);
     }
 
     commandStack.endMacro();
     commandStack.breakMergeChain();
+
+    // It is still its own object, selected and draggable as one piece, until
+    // it is let go. Letting go drops it back into the artwork wherever it now
+    // sits. While this edit is still the last on the history, it sits where it
+    // was drawn and what it cut is as it left it.
+    if (addition)
+        view.setPendingMerge(addition, frame, keepStrokes, commandStack.topCommand(), uncut);
 
     view.clearCaches();
     selection.select(element);
@@ -148,7 +156,7 @@ void placeDrawnElement(PhoenixView& view, fla::CommandStack& commandStack,
 
 bool commitPendingMerge(PhoenixView& view, fla::CommandStack& commandStack,
     fla::Selection& selection, fla::Shape* addition, fla::Frame* frame,
-    bool keepStrokes)
+    bool keepStrokes, const std::vector<UncutShape>* uncut)
 {
     if (!addition || !frame || addition->isDrawingObject)
         return false;
@@ -179,14 +187,30 @@ bool commitPendingMerge(PhoenixView& view, fla::CommandStack& commandStack,
     // One undo step for the whole drop.
     commandStack.beginMacro("Merge Shape");
 
+    // What a shape was before the drawing cut it, when the drawing is being
+    // let go where it was drawn.
+    const auto uncutOf = [uncut](const fla::Shape* target) -> const fla::Shape* {
+        if (!uncut)
+            return nullptr;
+        for (const UncutShape& entry : *uncut)
+        {
+            if (entry.shape == target)
+                return entry.before.get();
+        }
+        return nullptr;
+    };
+
     // It joins the nearest thing below it, and destroys what it covers of
     // everything further down. Merging already replaces what it lands on, so
-    // only the rest need cutting.
+    // only the rest need cutting -- and not even those when it is let go
+    // where it was drawn, since the hole it cut is already in them.
     commandStack.push(fla::CommandPtr(new fla::MergeShapeCommand(
-        below.front(), *addition, "Merge Shape", options)));
+        below.front(), *addition, "Merge Shape", options, uncutOf(below.front()))));
 
     for (size_t i = 1; i < below.size(); ++i)
     {
+        if (uncutOf(below[i]))
+            continue;
         commandStack.push(fla::CommandPtr(new fla::SubtractShapeCommand(
             below[i], *addition, "Merge Shape", options)));
     }
