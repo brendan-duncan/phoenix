@@ -17,6 +17,8 @@
 #include <QDialog>
 #include <QMenu>
 
+#include <QtWidgets/private/qmenu_p.h>
+
 class QAction;
 
 // QMenu::exec(const QPoint&, QAction*) and QMenu::exec().
@@ -29,6 +31,15 @@ extern "C" QAction* __wrap__ZN5QMenu4execERK6QPointP7QAction(QMenu* menu, const 
 extern "C" QAction* __wrap__ZN5QMenu4execEv(QMenu* menu)
 {
     menu->popup(menu->pos());
+    return nullptr;
+}
+
+// QMenuPrivate::exec(), which tool buttons and push buttons open their
+// menus with rather than QMenu::exec().
+extern "C" QAction* __wrap__ZN12QMenuPrivate4execERK6QPointP7QActionNSt3__28functionIFS0_RK5QSizeEEE(
+    QMenuPrivate* menu, const QPoint& at, QAction* action, QMenuPrivate::PositionFunction position)
+{
+    menu->popup(at, action, std::move(position));
     return nullptr;
 }
 

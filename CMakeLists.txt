@@ -799,9 +799,10 @@ if(PHOENIX_WEB)
         "-Wl,--wrap=_ZN5QDrag4execE6QFlagsIN2Qt10DropActionEES2_"
         "-Wl,--wrap=_ZN5QMenu4execERK6QPointP7QAction"
         "-Wl,--wrap=_ZN5QMenu4execEv"
+        "-Wl,--wrap=_ZN12QMenuPrivate4execERK6QPointP7QActionNSt3__28functionIFS0_RK5QSizeEEE"
         "-Wl,--wrap=_ZN7QDialog4execEv")
-    find_package(Qt6 REQUIRED COMPONENTS GuiPrivate)
-    target_link_libraries(Phoenix PRIVATE Qt6::GuiPrivate)
+    find_package(Qt6 REQUIRED COMPONENTS GuiPrivate WidgetsPrivate)
+    target_link_libraries(Phoenix PRIVATE Qt6::GuiPrivate Qt6::WidgetsPrivate)
     set_target_properties(Phoenix PROPERTIES
         QT_WASM_PTHREAD_POOL_SIZE 8
         QT_WASM_INITIAL_MEMORY "256MB")
