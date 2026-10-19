@@ -1,4 +1,5 @@
 #include "publish_settings.h"
+#include "../data/document.h"
 
 #include "tinyxml2.h"
 
@@ -253,6 +254,7 @@ Settings read(const std::string& xml, const std::string& name, const std::string
     settings.gifColors = numberOf(gif, "MaxColors", 255);
     const XMLElement* flash = profile->FirstChildElement("PublishFlashProperties");
     settings.overrideSounds = flagOf(flash, "OverrideSounds", false);
+    settings.swfHiddenLayers = flagOf(flash, "InvisibleLayer", true);
     // The file's own codes, for a profile Phoenix has not set its own in.
     const bool own = flash && flash->FirstChildElement("PhoenixSoundCompression");
     if (!own && flash && flash->FirstChildElement("StreamCompress"))
@@ -398,6 +400,7 @@ std::string write(const std::string& xml, const Settings& settings, const std::s
     XMLElement* flash = child(document, profile, "PublishFlashProperties");
     if (!flash->Attribute("enabled"))
         flash->SetAttribute("enabled", "true");
+    setNumber(document, flash, "InvisibleLayer", settings.swfHiddenLayers ? 1 : 0);
     setText(document, flash, "PhoenixSoundCompression", settings.soundCompression);
     setNumber(document, flash, "PhoenixSoundBitRate", settings.soundBitRate);
     setNumber(document, flash, "PhoenixSoundAdpcmBits", settings.soundAdpcmBits);
@@ -593,6 +596,17 @@ std::string removeProfile(const std::string& xml, const std::string& profile)
             return printed(document);
         }
     return xml;
+}
+
+std::string xmlOf(const Document& document)
+{
+    for (const auto& [path, bytes] : document.extraFiles)
+        if (path == "PublishSettings.xml")
+        {
+            const std::vector<uint8_t>& data = bytes.get();
+            return std::string(data.begin(), data.end());
+        }
+    return std::string();
 }
 
 } // namespace fla::publish

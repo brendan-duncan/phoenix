@@ -6,6 +6,7 @@
 
 #include "../src/data/document.h"
 #include "../src/data/fla_document.h"
+#include "../src/data/symbol_instance.h"
 #include "../src/edit/command_stack.h"
 #include "../src/edit/drawing_style.h"
 #include "../src/edit/library_media.h"
@@ -65,6 +66,24 @@ public:
     }
     double zoom(fla::FLADocument*) override { return zoomFactor; }
     void setZoom(fla::FLADocument*, double zoom) override { zoomFactor = zoom; }
+    /// Reloading finds a JSFL tool put in the Tools folder since, which the
+    /// toolbox names without its " Tool".
+    void reloadTools() override
+    {
+        if (std::find(toolbox.begin(), toolbox.end(), "Rig") == toolbox.end())
+            toolbox.push_back("Rig");
+    }
+    /// The instance edited in place, whose matrix is the view's.
+    fla::SymbolInstance* inPlace = nullptr;
+    void editInPlace(fla::FLADocument* document, fla::SymbolInstance* instance) override
+    {
+        inPlace = instance;
+        jsfl::Host::editInPlace(document, instance);
+    }
+    fla::Transform viewMatrix(fla::FLADocument*) override
+    {
+        return inPlace ? inPlace->transform : fla::Transform();
+    }
 
     fla::FLADocument* add(fla::FLADocument* document, const std::string& path = std::string())
     {

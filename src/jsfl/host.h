@@ -1,5 +1,7 @@
 #pragma once
 
+#include "../data/transform.h"
+
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -10,6 +12,7 @@ class DrawingStyle;
 class Element;
 class FLADocument;
 class Selection;
+class SymbolInstance;
 class Timeline;
 } // namespace fla
 
@@ -123,6 +126,16 @@ public:
     // playhead (from 0) and the current layer (from 0 at the top).
     virtual fla::Timeline* editedTimeline(fla::FLADocument* document) = 0;
     virtual void editTimeline(fla::FLADocument* document, fla::Timeline* timeline) = 0;
+    /// Edits \a instance's symbol inside the instance, where it stands on
+    /// the stage, as double-clicking it does.
+    virtual void editInPlace(fla::FLADocument* document, fla::SymbolInstance* instance);
+    /// From the space of what is being edited to the document's: through
+    /// every instance entered in place. Identity at a scene.
+    virtual fla::Transform viewMatrix(fla::FLADocument* document)
+    {
+        (void)document;
+        return fla::Transform();
+    }
     virtual int currentFrame(fla::FLADocument* document) = 0;
     virtual void setCurrentFrame(fla::FLADocument* document, int frame) = 0;
     virtual int currentLayer(fla::FLADocument* document) = 0;
@@ -154,9 +167,18 @@ public:
         (void)name;
         return false;
     }
-    /// Runs one of Phoenix's own commands on \a document: "testMovie" (once
-    /// the script has ended), or "convertLinesToFills" and
-    /// "convertSelectionToBitmap" (on the selection). False with \a error
+    /// Reads the Tools folder again, adding the tools put there since.
+    virtual void reloadTools() {}
+    /// Whether Test Movie can play \a document now.
+    virtual bool canTestMovie(fla::FLADocument* document)
+    {
+        (void)document;
+        return false;
+    }
+    /// Runs one of Phoenix's own commands on \a document: "testMovie" (on
+    /// the document as it is, the script waiting until its window closes),
+    /// or "convertLinesToFills" and "convertSelectionToBitmap" (on the
+    /// selection). False with \a error
     /// when this host cannot.
     virtual bool runCommand(fla::FLADocument* document, const std::string& name, std::string& error)
     {

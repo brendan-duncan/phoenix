@@ -458,6 +458,23 @@ public:
         }
         _window.refreshAfterScript();
     }
+    void editInPlace(fla::FLADocument* document, fla::SymbolInstance* instance) override
+    {
+        if (document != _window._flaDocument || !_window._phoenixView)
+        {
+            jsfl::Host::editInPlace(document, instance);
+            return;
+        }
+        _window._phoenixView->enterSymbol(instance);
+        _window.refreshAfterScript();
+    }
+    fla::Transform viewMatrix(fla::FLADocument* document) override
+    {
+        if (document != _window._flaDocument || !_window._phoenixView)
+            return fla::Transform();
+        const QTransform t = _window._phoenixView->scopeToStage();
+        return fla::Transform(t.m11(), t.m12(), t.m21(), t.m22(), t.dx(), t.dy());
+    }
     int currentFrame(fla::FLADocument* document) override
     {
         if (document == _window._flaDocument && _window._player)
@@ -541,6 +558,11 @@ public:
         action->trigger();
         return true;
     }
+    void reloadTools() override { _window.reloadScriptTools(); }
+    bool canTestMovie(fla::FLADocument* document) override
+    {
+        return document == _window._flaDocument && _window._phoenixView && !noOneToAsk(_window);
+    }
     bool runCommand(fla::FLADocument* document, const std::string& name, std::string& error) override
     {
         if (document != _window._flaDocument || !_window._phoenixView)
@@ -550,12 +572,20 @@ public:
         }
         if (name == "testMovie")
         {
-            // Once the script is done: Test Movie holds the document still.
-            QPointer<MainWindow> window(&_window);
-            QTimer::singleShot(0, &_window, [window]() {
-                if (window)
-                    window->testMovie();
-            });
+            if (noOneToAsk(_window))
+            {
+                error = "Test Movie needs the Phoenix window.";
+                return false;
+            }
+            // The document as the script has it now, as a script that
+            // changes it for the test and puts it back after expects. Its
+            // window is a dialog of the script's while it is open.
+            ++dialogsOpen;
+            QApplication::setOverrideCursor(Qt::ArrowCursor);
+            _window.testMovie();
+            QApplication::restoreOverrideCursor();
+            --dialogsOpen;
+            ++dialogsShown;
             return true;
         }
         if (name == "convertLinesToFills")

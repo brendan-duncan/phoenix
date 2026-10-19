@@ -540,6 +540,35 @@ TEST(swf_movie_moves_a_tweened_clip_a_frame_at_a_time)
     CHECK(moves == 3);
 }
 
+TEST(swf_movie_takes_hidden_layers_as_the_settings_say)
+{
+    std::map<std::string, std::vector<uint8_t>> files;
+    files["DOMDocument.xml"] = bytesOf(
+        "<DOMDocument xmlns=\"http://ns.adobe.com/xfl/2008/\" width=\"100\" height=\"100\" frameRate=\"12\">"
+        "<timelines><DOMTimeline name=\"Scene 1\"><layers>"
+        "<DOMLayer name=\"shown\"><frames><DOMFrame index=\"0\"><Actionscript><script><![CDATA[stop();]]></script>"
+        "</Actionscript><elements/></DOMFrame></frames></DOMLayer>"
+        "<DOMLayer name=\"hidden\" visible=\"false\"><frames><DOMFrame index=\"0\"><Actionscript><script>"
+        "<![CDATA[play();]]></script></Actionscript><elements/></DOMFrame></frames></DOMLayer>"
+        "</layers></DOMTimeline></timelines></DOMDocument>");
+    Parsed movie = parse(files);
+    CHECK(movie.document != nullptr);
+    if (!movie.document)
+        return;
+    const auto actions = [&movie](bool hiddenLayers) {
+        fla::swfmovie::Options options;
+        options.hiddenLayers = hiddenLayers;
+        std::string all;
+        for (const Tag& tag : tagsOf(movieOf(*movie.document, nullptr, options)))
+            if (tag.code == 12)
+                all += as3::avm1::disassemble(tag.body);
+        return all;
+    };
+    CHECK(actions(true).find("Play") != std::string::npos);
+    CHECK(actions(false).find("Play") == std::string::npos);
+    CHECK(actions(false).find("Stop") != std::string::npos);
+}
+
 TEST(swf_movie_plays_scenes_one_after_another)
 {
     std::map<std::string, std::vector<uint8_t>> files;

@@ -130,6 +130,9 @@ struct Options
     /// scaled by it.
     double scaleX = 1.0;
     double scaleY = 1.0;
+    /// The main timeline's hidden layers go in, as the publish settings'
+    /// Include hidden layers has them; otherwise their eyes leave them out.
+    bool hiddenLayers = true;
     /// An ActionScript 3 movie (its publish settings say version 3) has its
     /// scripts written by this, as DoABC and SymbolClass tags (see
     /// swf::Writer::doABC), once the movie clips with frame scripts, a

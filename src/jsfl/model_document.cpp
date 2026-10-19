@@ -556,12 +556,17 @@ const ClassInfo& Document::classInfo() const
             d.session.host().editTimeline(d.document, d.data().currentScene());
             return Value();
         });
-        def.method("enterEditMode", 1, [](Document& d, const Args&) {
+        def.method("enterEditMode", 1, [](Document& d, const Args& args) {
             const std::vector<fla::Element*> elements = needSelection(d.session, d.document);
             auto* instance = dynamic_cast<fla::SymbolInstance*>(elements.front());
             if (!instance || !instance->symbol || instance->symbol->timelines.empty())
                 throw Error("Select a symbol instance to edit its symbol.");
-            d.session.host().editTimeline(d.document, instance->symbol->timelines.front());
+            // "inPlace" edits it inside the instance, the rest of the stage
+            // around it; otherwise the symbol is edited on its own.
+            if (arg(args, 0).toString() == "inPlace")
+                d.session.host().editInPlace(d.document, instance);
+            else
+                d.session.host().editTimeline(d.document, instance->symbol->timelines.front());
             return Value();
         });
 

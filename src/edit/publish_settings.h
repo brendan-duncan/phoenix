@@ -5,6 +5,8 @@
 
 namespace fla {
 
+class Document;
+
 /// The FLA's publish settings (PublishSettings.xml in the package): which
 /// formats File > Publish writes, their file names and their options.
 /// The file keeps them as profiles (publish configurations), one of them
@@ -65,6 +67,8 @@ struct Settings
     /// it.
     bool svgHiddenLayers = true;
     bool svgEmbed = false;
+    /// SWF and Test Movie: hidden layers play (InvisibleLayer).
+    bool swfHiddenLayers = true;
 
     /// HTML5: a page that plays the movie with Phoenix's JavaScript runtime
     /// (resources/html5), its file name, whether the page fits the stage to
@@ -117,6 +121,9 @@ Settings::SoundFormat soundFormat(int format, int compress);
 /// (or none of that name) the current one; the defaults for a document
 /// named \a name when \a xml is empty or not one.
 Settings read(const std::string& xml, const std::string& name, const std::string& profile = std::string());
+
+/// \a document's PublishSettings.xml as text, empty when it has none.
+std::string xmlOf(const Document& document);
 
 /// \a xml with the settings of the profile \a settings names (or else the
 /// current one) set to \a settings and all else kept; a new file of the

@@ -227,6 +227,10 @@ PublishSettingsDialog::PublishSettingsDialog(const std::string& xml, const QStri
     html5Row->addWidget(_html5Loop);
     html5Row->addStretch(1);
     form->addRow("HTML5", html5Row);
+    _swfHidden = new QCheckBox("Include hidden layers", options);
+    _swfHidden->setChecked(settings.swfHiddenLayers);
+    _swfHidden->setToolTip("Hidden layers play in the SWF and in Test Movie");
+    form->addRow("SWF", _swfHidden);
 
     // The SWF's soundtrack: compression, then its bit rate or bits.
     _soundCompression = new QComboBox(options);
@@ -403,6 +407,7 @@ void PublishSettingsDialog::load(const fla::publish::Settings& settings)
     _gifColors->setValue(settings.gifColors);
     _svgHidden->setChecked(settings.svgHiddenLayers);
     _svgEmbed->setChecked(settings.svgEmbed);
+    _swfHidden->setChecked(settings.swfHiddenLayers);
     _html5Fit->setChecked(settings.html5Fit);
     _html5Loop->setChecked(settings.html5Loop);
     _soundRate->setCurrentIndex(std::max(0, _soundRate->findData(settings.soundRate)));
@@ -544,6 +549,7 @@ fla::publish::Settings PublishSettingsDialog::settings() const
     out.gifColors = _gifColors->value();
     out.svgHiddenLayers = _svgHidden->isChecked();
     out.svgEmbed = _svgEmbed->isChecked();
+    out.swfHiddenLayers = _swfHidden->isChecked();
     out.soundCompression = _soundCompression->currentData().toString().toStdString();
     if (out.soundCompression == "mp3" && _soundQuality->count() > 0)
         out.soundBitRate = _soundQuality->currentData().toInt();

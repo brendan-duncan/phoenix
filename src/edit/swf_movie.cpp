@@ -1564,11 +1564,12 @@ struct Movie::State
         return shown.character > 0;
     }
 
-    /// Whether a layer goes in: guides and folders do not, nor hidden ones.
+    /// Whether a layer goes in: guides and folders do not, nor hidden ones
+    /// unless the settings include them.
     bool usable(const Timeline& timeline, const Layer& layer) const
     {
         return layer.layerType != Layer::Type::Guide && layer.layerType != Layer::Type::Folder &&
-            drawer.shows(timeline, layer);
+            (options.hiddenLayers || drawer.shows(timeline, layer));
     }
 
     /// The depths of \a timeline's layers, bottom first: a band for each
@@ -1735,9 +1736,11 @@ struct Movie::State
             return;
         for (const Layer* layer : timeline.layers)
         {
-            // Hidden layers are silent, as playback has them.
-            if (!layer || !layer->visible || layer->layerType == Layer::Type::Guide ||
-                layer->layerType == Layer::Type::Folder)
+            // Hidden layers are silent, as playback has them, but for the
+            // main timeline's when the settings include hidden layers.
+            const bool scene = dynamic_cast<const Document*>(timeline.parent) != nullptr;
+            const bool heard = layer && (layer->visible || (options.hiddenLayers && scene));
+            if (!heard || layer->layerType == Layer::Type::Guide || layer->layerType == Layer::Type::Folder)
                 continue;
             const Frame* key = keyframeAt(*layer, frame);
             int id = 0;
@@ -1836,7 +1839,10 @@ struct Movie::State
                 // Its scripts, the top layer's first.
                 for (const Layer* layer : timeline->layers)
                 {
-                    if (!layer || layer->layerType == Layer::Type::Folder)
+                    // A hidden layer left out of the movie takes its scripts
+                    // with it.
+                    if (!layer || layer->layerType == Layer::Type::Folder ||
+                        (!options.hiddenLayers && !drawer.shows(*timeline, *layer)))
                         continue;
                     const Frame* key = keyframeAt(*layer, frame);
                     if (!key || key->index != frame || !key->actionScript || key->actionScript->code.empty())

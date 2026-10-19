@@ -71,10 +71,15 @@ void runCommand(Document& d, const char* name, bool quiet)
 
 void describeDocumentCommands(ClassDef<Document>& def)
 {
-    // Test Movie opens once the script has ended.
+    // Test Movie plays the document as it is now; the script goes on once
+    // its window is closed.
     def.method("testMovie", 0, [](Document& d, const Args&) {
         runCommand(d, "testMovie", true);
         return Value();
+    });
+    def.method("canTestMovie", 0, [](Document& d, const Args&) {
+        d.data();
+        return Value(d.session.host().canTestMovie(d.document));
     });
     def.method("testScene", 0, [](Document& d, const Args&) {
         runCommand(d, "testMovie", true);

@@ -67,6 +67,7 @@
 #include <QSettings>
 #include <QStringList>
 
+class QActionGroup;
 class QDockWidget;
 class HotDoubleSpinBox;
 class BoneCorrector;
@@ -820,8 +821,11 @@ private:
     /// tool: the toolbox is made before the tools, so _toolActions is filled
     /// from these once they exist.
     std::vector<std::pair<std::function<Tool*()>, QAction*>> _toolActionList;
-    /// JSFL tools from the Tools folder.
+    /// JSFL tools from the Tools folder, and the files they came from.
     std::vector<std::unique_ptr<class ScriptTool>> _scriptTools;
+    QSet<QString> _scriptToolFiles;
+    /// The toolbox's tools, one checked at a time.
+    QActionGroup* _toolGroup = nullptr;
     /// Every command with a key, with Phoenix's own keys, for Edit >
     /// Keyboard Shortcuts.
     std::vector<ShortcutEntry> _shortcuts;
@@ -861,6 +865,12 @@ private:
     /// Paste and Paste in Place from the copies Phoenix holds.
     void pasteElements(const char* name, bool centerInView, bool acrossFrames = false);
     void chooseTool(Tool* tool);
+    /// The JSFL tools in the Tools folder not loaded yet, made and added to
+    /// the toolbox; their actions, in folder order.
+    std::vector<QAction*> loadScriptTools();
+    /// Reads the Tools folder again (fl.reloadTools): the tools put there
+    /// since join the toolbox's JSFL tools.
+    void reloadScriptTools();
     /// The tool to go back to when the pen is turned back from its eraser
     /// end.
     Tool* _toolBeforeEraserPen = nullptr;

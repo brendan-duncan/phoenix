@@ -71,6 +71,39 @@ TEST(insert_keyframe_copies_and_blank_keyframe_does_not)
     CHECK(layer->frames.size() == 4);
 }
 
+TEST(insert_keyframe_in_a_classic_tween_keeps_it_tweening)
+{
+    // A shape moved 0 to 100 over frames 0 to 10, eased.
+    std::unique_ptr<fla::Layer> layer = twoSpans();
+    fla::Frame* start = layer->frames[0];
+    fla::Frame* end = layer->frames[1];
+    start->duration = 10;
+    end->index = 10;
+    end->duration = 1;
+    end->elements.push_back(new fla::Shape(end));
+    end->elements[0]->transform.tx = 100.0;
+    start->tweenType = fla::TweenType::Motion;
+    start->motionTweenRotate = "none";
+    start->hasCustomEase = true;
+    start->customEase = {{0, 0}, {0.25, 0.25}, {0.75, 0.75}, {1, 1}};
+
+    fla::Frame* key = fla::timeline::insertKeyframe(*layer, 4, false);
+    CHECK(spans(*layer, {{0, 4}, {4, 6}, {10, 1}}));
+    // The pose the tween showed there, and the tween going on from it.
+    CHECK(key && key->elements.size() == 1);
+    CHECK_NEAR(key->elements[0]->transform.tx, 40.0);
+    CHECK(key->tweenType == fla::TweenType::Motion);
+    CHECK(key->hasCustomEase && key->customEase.size() == 4);
+    CHECK(key->motionTweenRotate == "none");
+    CHECK(start->tweenType == fla::TweenType::Motion);
+
+    // Outside a tween a keyframe copies the span's start, as before.
+    start->tweenType = fla::TweenType::None;
+    fla::Frame* still = fla::timeline::insertKeyframe(*layer, 2, false);
+    CHECK(still && still->elements.size() == 1 && still->elements[0]->transform.tx == 0.0);
+    CHECK(still->tweenType == fla::TweenType::None);
+}
+
 TEST(remove_frames_shortens_spans_and_drops_empty_ones)
 {
     std::unique_ptr<fla::Layer> layer = twoSpans();

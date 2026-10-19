@@ -101,6 +101,7 @@ private:
     HotSpinBox* _gifColors = nullptr;
     QCheckBox* _svgHidden = nullptr;
     QCheckBox* _svgEmbed = nullptr;
+    QCheckBox* _swfHidden = nullptr;
     QCheckBox* _html5 = nullptr;
     QLineEdit* _html5File = nullptr;
     QCheckBox* _html5Fit = nullptr;

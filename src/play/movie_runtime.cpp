@@ -1945,7 +1945,7 @@ void MovieRuntime::runFrameScripts(Clip& clip)
     {
         for (const Layer* layer : clip.timeline->layers)
         {
-            const Frame* frame = layer && plays(*layer) ? keyframeAt(*layer, clip.frame) : nullptr;
+            const Frame* frame = layer && playing(*clip.timeline, *layer) ? keyframeAt(*layer, clip.frame) : nullptr;
             if (frame && frame->index == clip.frame && frameSound && !attributeOf(frame->extraAttributes, "soundName").empty())
                 frameSound(*frame);
         }
@@ -1962,7 +1962,7 @@ void MovieRuntime::runFrameScripts(Clip& clip)
     // the sounds of its keyframes.
     for (const Layer* layer : clip.timeline->layers)
     {
-        if (!layer || !plays(*layer))
+        if (!layer || !playing(*clip.timeline, *layer))
             continue;
         const Frame* frame = keyframeAt(*layer, clip.frame);
         if (frame && frame->index == clip.frame && frameSound && !attributeOf(frame->extraAttributes, "soundName").empty())
@@ -1991,7 +1991,7 @@ void MovieRuntime::runFrameActions(Clip& clip, int index)
         return;
     for (const Layer* layer : clip.timeline->layers)
     {
-        const Frame* frame = layer && plays(*layer) ? keyframeAt(*layer, index) : nullptr;
+        const Frame* frame = layer && playing(*clip.timeline, *layer) ? keyframeAt(*layer, index) : nullptr;
         if (!frame || frame->index != index)
             continue;
         const std::string where = (clip.symbol ? clip.symbol->name : clip.timeline->name) + ", frame " +
@@ -2024,7 +2024,7 @@ void MovieRuntime::runInitActions(Clip& clip)
 {
     for (const Layer* layer : clip.timeline->layers)
     {
-        const Frame* frame = layer && plays(*layer) ? keyframeAt(*layer, clip.frame) : nullptr;
+        const Frame* frame = layer && playing(*clip.timeline, *layer) ? keyframeAt(*layer, clip.frame) : nullptr;
         if (!frame || frame->index != clip.frame || frame->extraChildren.empty())
             continue;
         if (std::find(_initsRun.begin(), _initsRun.end(), frame) != _initsRun.end())
@@ -2083,7 +2083,7 @@ void MovieRuntime::syncChildren(Clip& clip, std::vector<Clip*>& entered)
     std::vector<std::unique_ptr<Clip>> kept;
     for (const Layer* layer : clip.timeline->layers)
     {
-        if (!layer || !plays(*layer))
+        if (!layer || !playing(*clip.timeline, *layer))
             continue;
         const Frame* frame = keyframeAt(*layer, clip.frame);
         if (!frame)
@@ -2194,7 +2194,7 @@ Clip* MovieRuntime::canvasInstance(Clip& clip, const std::string& name)
     // Its first keyframe: made from it now, kept until a frame places it.
     for (const Layer* layer : clip.timeline->layers)
     {
-        if (!layer || !plays(*layer))
+        if (!layer || !playing(*clip.timeline, *layer))
             continue;
         for (const Frame* frame : layer->frames)
             for (const Element* element : frame ? frame->elements : std::vector<Element*>())
@@ -2223,6 +2223,15 @@ Clip* MovieRuntime::canvasInstance(Clip& clip, const std::string& name)
             }
     }
     return nullptr;
+}
+
+bool MovieRuntime::playing(const Timeline& timeline, const Layer& layer) const
+{
+    if (!plays(layer))
+        return false;
+    // The main timeline's eye leaves a layer out when the movie is made
+    // without hidden layers; a symbol's layers play where it is placed.
+    return _hiddenLayers || layer.visible || dynamic_cast<const Document*>(timeline.parent) == nullptr;
 }
 
 void MovieRuntime::attachDisplay(Clip& clip)
@@ -2274,7 +2283,7 @@ void MovieRuntime::syncDisplay(Clip& clip)
     // they place, but for the children clips made since.
     std::vector<const Frame*> frames;
     for (const Layer* layer : clip.timeline->layers)
-        frames.push_back(layer && plays(*layer) ? keyframeAt(*layer, clip.frame) : nullptr);
+        frames.push_back(layer && playing(*clip.timeline, *layer) ? keyframeAt(*layer, clip.frame) : nullptr);
     bool same = frames == clip.timelineFrames;
     if (same)
         for (const auto& child : clip.children)

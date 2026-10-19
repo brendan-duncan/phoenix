@@ -2,6 +2,15 @@
 
 What changed in each release of Phoenix, newest first.
 
+## Unreleased
+
+- Inserting a keyframe inside a classic or shape tween puts the in-between pose on it and keeps both halves tweened with the same ease
+- Publish Settings has Include hidden layers for the SWF movie and Test Movie, on unless a file's settings turn it off
+- JSFL: `document.viewMatrix`, `document.canTestMovie()`, `fl.reloadTools()` and `enterEditMode('inPlace')`
+- JSFL: `fl.selectTool` says whether the tool was there, and finds a script tool by its full name, such as "Rig Tool"
+- JSFL: `testMovie()` plays the document as the script has it then, and the script goes on once Test Movie is closed
+- JSFL: `setSelectedFrames` moves the playhead to the frames and selects what is on them, as clicking them does
+
 ## 0.21.1
 
 - Clicking a fill or stroke swatch (toolbox or Properties) opens a swatch pop-up: the document's colors, a row of gradients, recent colors, hex and alpha fields, No Color and the full color picker

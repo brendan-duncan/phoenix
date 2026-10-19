@@ -3,6 +3,7 @@
 #include "motion_object.h"
 
 #include "element_clone.h"
+#include "frame_bake.h"
 #include "shape_tween.h"
 
 #include "../data/action_script.h"
@@ -455,6 +456,7 @@ Frame* insertKeyframe(Layer& layer, int index, bool blank)
     }
 
     Frame* span = spanAt(layer, index);
+    const bool inside = span != nullptr;
     if (span)
     {
         if (std::string* motionXml = motionOf(*span))
@@ -487,8 +489,33 @@ Frame* insertKeyframe(Layer& layer, int index, bool blank)
     {
         const int spanEnd = span->index + std::max(span->duration, 1);
         frame->duration = std::max(1, spanEnd - index);
-        span->duration = index - span->index;
-        if (!blank)
+        if (!blank && inside && span->tweenType != TweenType::None)
+        {
+            // A keyframe in a classic or shape tween takes the pose the tween
+            // shows there, and the tween goes on from it with the same
+            // settings, so both halves play as the whole did.
+            const Frame* next = nullptr;
+            for (const Frame* other : layer.frames)
+            {
+                if (other && other->index == spanEnd)
+                    next = other;
+            }
+            for (Element* element : frames::elementsAt(*span, next, index - span->index, 0.0, frame))
+                frame->elements.push_back(element);
+            frame->tweenType = span->tweenType;
+            frame->motionTWeenSnap = span->motionTWeenSnap;
+            frame->motionTweenSync = span->motionTweenSync;
+            frame->acceleration = span->acceleration;
+            frame->hasCustomEase = span->hasCustomEase;
+            frame->customEase = span->customEase;
+            frame->customEaseName = span->customEaseName;
+            frame->hasEase = span->hasEase;
+            frame->easeMethod = span->easeMethod;
+            frame->otherEases = span->otherEases;
+            frame->motionTweenRotate = span->motionTweenRotate;
+            frame->motionTweenRotateTimes = span->motionTweenRotateTimes;
+        }
+        else if (!blank)
         {
             for (const Element* element : span->elements)
             {
@@ -496,6 +523,7 @@ Frame* insertKeyframe(Layer& layer, int index, bool blank)
                     frame->elements.push_back(cloneElement(*element, frame));
             }
         }
+        span->duration = index - span->index;
     }
     else
     {

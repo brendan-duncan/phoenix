@@ -778,6 +778,29 @@ const ClassInfo& Timeline::classInfo() const
                 if (std::find(layers.begin(), layers.end(), range.layer) == layers.end())
                     layers.push_back(range.layer);
             }
+            // As clicking them does: the playhead goes to the first frame,
+            // and what is there on the frames' layers is selected.
+            Host& host = t.session.host();
+            if (!selected.empty() && host.editedTimeline(t.document) == &timeline)
+            {
+                const int frame = selected.front().first;
+                host.setCurrentFrame(t.document, frame);
+                host.setCurrentLayer(t.document, selected.front().layer);
+                std::vector<fla::DOMElement*> chosen;
+                for (const FrameRange& range : selected)
+                {
+                    fla::Layer* layer = range.layer >= 0 && range.layer < static_cast<int>(timeline.layers.size())
+                        ? timeline.layers[static_cast<size_t>(range.layer)] : nullptr;
+                    if (!layer || frame < range.first || frame > range.last || layer->isLocked() || !layer->visible ||
+                        layer->layerType == fla::Layer::Type::Folder)
+                        continue;
+                    if (fla::Frame* key = fla::timeline::spanAt(*layer, frame))
+                        for (fla::Element* element : key->elements)
+                            if (element && std::find(chosen.begin(), chosen.end(), element) == chosen.end())
+                                chosen.push_back(element);
+                }
+                host.selection(t.document).select(chosen);
+            }
             return Value();
         });
         def.method("getSelectedFrames", 0, [](Timeline& t, const Args&) {

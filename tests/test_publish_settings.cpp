@@ -72,6 +72,13 @@ TEST(publish_settings_are_written_back_keeping_the_rest)
     CHECK(back.jpeg && back.jpegQuality == 55 && back.svgEmbed && back.png && back.gifColors == 64);
     CHECK(back.pngFile == "poster.png");
 
+    // Include hidden layers: on unless the profile says not (InvisibleLayer).
+    CHECK(back.swfHiddenLayers);
+    settings.swfHiddenLayers = false;
+    const std::string hidden = fla::publish::write(kAnimate, settings, "shot");
+    CHECK(hidden.find("<InvisibleLayer>0</InvisibleLayer>") != std::string::npos);
+    CHECK(!fla::publish::read(hidden, "shot").swfHiddenLayers);
+
     // A new file has the format's usual form.
     const std::string made = fla::publish::write("", settings, "shot");
     CHECK(made.find("<flash_profiles>") != std::string::npos && made.find("current=\"true\"") != std::string::npos);

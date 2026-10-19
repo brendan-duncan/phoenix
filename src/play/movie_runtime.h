@@ -192,6 +192,10 @@ public:
     MovieRuntime(const MovieRuntime&) = delete;
     MovieRuntime& operator=(const MovieRuntime&) = delete;
 
+    /// Whether the scenes' hidden layers play, as the publish settings'
+    /// Include hidden layers says (they do unless told); set before start.
+    void setHiddenLayers(bool play) { _hiddenLayers = play; }
+
     /// Starts again from the first frame: its scripts run.
     void start();
     /// One frame on: every clip that plays moves on (round to its first
@@ -570,6 +574,10 @@ private:
     std::unique_ptr<as3::VM> _vm;
     std::shared_ptr<display::Stage> _stage;
     uint64_t _scriptRuns = 0;
+    bool _hiddenLayers = true;
+    /// Whether \a layer of \a timeline plays: not a guide or a folder, nor
+    /// a hidden layer of a scene when hidden layers are left out.
+    bool playing(const Timeline& timeline, const Layer& layer) const;
     std::unique_ptr<Clip> _root;
     /// The clip whose script runs: what a bare stop() or gotoAndPlay()
     /// moves (tellTarget changes it).

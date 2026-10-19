@@ -106,7 +106,7 @@ TEST(jsfl_tools_and_zoom)
     CHECK(f.run("fl.selectTool('oval');\n"
                 "fl.trace(fl.tools.toolObjs.length + ' ' + (fl.tools.activeTool !== null) + ' ' + fl.tools.activeTool.position);\n"
                 "fl.selectTool('Paint Bucket');\n"
-                "try { fl.selectTool('teleporter'); } catch (e) { fl.trace('no teleporter'); }\n"
+                "if (!fl.selectTool('teleporter')) fl.trace('no teleporter');\n"
                 "var p = fl.tools.constrainPoint({x: 0, y: 0}, {x: 10, y: 1}); fl.trace(p.x + ',' + p.y);\n"
                 "var d = fl.getDocumentDOM(); fl.trace(d.zoomFactor); d.zoomFactor = 2; fl.trace(d.zoomFactor);\n"
                 "try { d.zoomFactor = 0; } catch (e) { fl.trace('no zero'); }\n")
@@ -114,6 +114,45 @@ TEST(jsfl_tools_and_zoom)
     expectOutput(f, "6 true 3\nno teleporter\n10,0\n1\n2\nno zero\n");
     CHECK(f.host.tool == "Paint Bucket");
     CHECK(f.host.zoomFactor == 2.0);
+}
+
+TEST(jsfl_selecting_frames_goes_to_them_and_selects_what_is_there)
+{
+    Fixture f;
+    CHECK(f.run("var d = fl.getDocumentDOM(); var tl = d.getTimeline();\n"
+                "d.addNewRectangle({left: 0, top: 0, right: 20, bottom: 20}, 0);\n"
+                "tl.insertFrames(19); tl.convertToKeyframes(10);\n"
+                "d.selectNone(); tl.currentFrame = 0;\n"
+                "tl.setSelectedFrames([0, 10, 11], true);\n"
+                "fl.trace(tl.currentFrame + ' ' + d.selection.length);\n"
+                "tl.addNewLayer('empty');\n"
+                "tl.setSelectedFrames([0, 3, 4], true);\n"
+                "fl.trace(tl.currentFrame + ' ' + d.selection.length);\n")
+              .ok);
+    expectOutput(f, "10 1\n3 0\n");
+}
+
+TEST(jsfl_reload_tools_view_matrix_and_test_movie)
+{
+    Fixture f;
+    // A tool put in the Tools folder is there once the tools are read
+    // again, by the name its script gives it.
+    CHECK(f.run("fl.trace(fl.selectTool('Rig Tool'));\n"
+                "fl.reloadTools();\n"
+                "fl.trace(fl.selectTool('Rig Tool'));\n"
+                "var d = fl.getDocumentDOM();\n"
+                "var m = d.viewMatrix; fl.trace([m.a, m.d, m.tx, m.ty].join(','));\n"
+                "d.addNewRectangle({left: 0, top: 0, right: 20, bottom: 20}, 0);\n"
+                "d.selectAll(); d.convertToSymbol('graphic', 'Box', 'top left');\n"
+                "d.moveSelectionBy({x: 30, y: 40});\n"
+                "d.enterEditMode('inPlace');\n"
+                "m = d.viewMatrix; fl.trace([m.a, m.d, m.tx, m.ty].join(','));\n"
+                "fl.trace(d.getTimeline().name);\n"
+                "fl.trace(d.canTestMovie());\n")
+              .ok);
+    expectOutput(f, "false\ntrue\n1,1,0,0\n1,1,30,40\nBox\nfalse\n");
+    CHECK(f.host.tool == "Rig");
+    CHECK(f.host.inPlace != nullptr);
 }
 
 TEST(jsfl_document_import_documents_and_movies)

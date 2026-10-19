@@ -10086,6 +10086,7 @@ bool MainWindow::exportSwf(const QString& path, const QSize& size, QString& erro
     {
         SwfViewDrawer drawer(*_phoenixView, art);
         fla::swfmovie::Options options;
+        options.hiddenLayers = publish.swfHiddenLayers;
         // The classes as Test Movie finds them: ActionScript 2's on the
         // class path, ActionScript 3's there and then among Phoenix's own.
         const fla::play::ClassPath classPath = movieClassPath(*document, _documentPath);
@@ -11242,34 +11243,9 @@ void MainWindow::setupToolBar()
 
     // The tools are all known: the default layout, then the one kept.
     // JSFL tools from the Tools folder, in a slot of their own at the end.
+    _toolGroup = toolGroup;
     {
-        std::vector<QAction*> scriptActions;
-        const QDir folder(QDir(ScriptRunner::configFolder()).filePath("Tools"));
-        for (const QFileInfo& file : folder.entryInfoList({"*.jsfl"}, QDir::Files, QDir::Name | QDir::IgnoreCase))
-        {
-            auto script = std::make_unique<jsfl::ToolScript>(_scripts->jsflHost(), file.absoluteFilePath().toStdString());
-            std::string error;
-            if (!script->load(error))
-            {
-                _scripts->jsflHost().trace(error);
-                continue;
-            }
-            ScriptTool* tool = _scriptTools.emplace_back(std::make_unique<ScriptTool>(_scripts->jsflHost(), std::move(script))).get();
-            QAction* action = new QAction(tool->name(), this);
-            action->setIcon(tool->icon());
-            action->setCheckable(true);
-            action->setToolTip(tool->toolTip().isEmpty() ? tool->name() : tool->toolTip());
-            action->setStatusTip(QString("A tool from %1").arg(file.fileName()));
-            connect(action, &QAction::triggered, this, [this, tool]() {
-                tool->activate();
-                _phoenixView->setActiveTool(tool);
-            });
-            _toolActionList.emplace_back([tool]() -> Tool* { return tool; }, action);
-            toolGroup->addAction(action);
-            addAction(action);
-            _toolbox->addTool(action->text(), action);
-            scriptActions.push_back(action);
-        }
+        const std::vector<QAction*> scriptActions = loadScriptTools();
         if (!scriptActions.empty())
         {
             addLine();
@@ -13405,6 +13381,71 @@ void MainWindow::attachSoundTo(fla::Layer* layer, int at, const QString& name)
         _timelineView->refreshFrames();
     if (_propertiesPanel)
         _propertiesPanel->refresh();
+}
+
+std::vector<QAction*> MainWindow::loadScriptTools()
+{
+    std::vector<QAction*> actions;
+    const QDir folder(QDir(ScriptRunner::configFolder()).filePath("Tools"));
+    for (const QFileInfo& file : folder.entryInfoList({"*.jsfl"}, QDir::Files, QDir::Name | QDir::IgnoreCase))
+    {
+        if (_scriptToolFiles.contains(file.absoluteFilePath()))
+            continue;
+        auto script = std::make_unique<jsfl::ToolScript>(_scripts->jsflHost(), file.absoluteFilePath().toStdString());
+        std::string error;
+        if (!script->load(error))
+        {
+            _scripts->jsflHost().trace(error);
+            continue;
+        }
+        _scriptToolFiles.insert(file.absoluteFilePath());
+        ScriptTool* tool = _scriptTools.emplace_back(std::make_unique<ScriptTool>(_scripts->jsflHost(), std::move(script))).get();
+        QAction* action = new QAction(tool->name(), this);
+        action->setIcon(tool->icon());
+        action->setCheckable(true);
+        action->setToolTip(tool->toolTip().isEmpty() ? tool->name() : tool->toolTip());
+        action->setStatusTip(QString("A tool from %1").arg(file.fileName()));
+        connect(action, &QAction::triggered, this, [this, tool]() {
+            tool->activate();
+            _phoenixView->setActiveTool(tool);
+        });
+        _toolActionList.emplace_back([tool]() -> Tool* { return tool; }, action);
+        // Once the tools are matched to their actions, this one is too.
+        if (!_toolActions.empty())
+            _toolActions[tool] = action;
+        _toolGroup->addAction(action);
+        addAction(action);
+        _toolbox->addTool(action->text(), action);
+        actions.push_back(action);
+    }
+    return actions;
+}
+
+void MainWindow::reloadScriptTools()
+{
+    std::vector<QString> before;
+    for (const auto& tool : _scriptTools)
+        before.push_back(tool->name());
+    const std::vector<QAction*> added = loadScriptTools();
+    if (added.empty())
+        return;
+    // The new tools join the JSFL tools' slot in the default layout, or
+    // start one at the end; the layout in use takes them where it puts them.
+    Toolbox::Layout layout = _toolbox->defaultLayout();
+    Toolbox::Slot* scripts = nullptr;
+    for (Toolbox::Slot& slot : layout.entries)
+        for (const QString& name : before)
+            if (slot.contains(name))
+                scripts = &slot;
+    if (!scripts)
+    {
+        layout.entries.push_back(Toolbox::Slot{"|"});
+        scripts = &layout.entries.emplace_back();
+    }
+    for (QAction* action : added)
+        *scripts << action->text();
+    _toolbox->setDefaultLayout(layout);
+    _toolbox->setLayout(_toolbox->layout());
 }
 
 void MainWindow::chooseTool(Tool* tool)

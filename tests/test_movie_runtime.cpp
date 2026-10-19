@@ -14,6 +14,7 @@
 #include "../src/play/display/stage.h"
 #include "../src/play/movie_runtime.h"
 
+#include <algorithm>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
@@ -285,6 +286,29 @@ TEST(movie_runtime_scripts_find_clips_by_path_and_dot)
     CHECK(errors.empty());
     for (const std::string& error : errors)
         std::printf("    %s\n", error.c_str());
+}
+
+TEST(movie_runtime_leaves_hidden_scene_layers_out_when_told)
+{
+    Movie movie;
+    fla::Document document(nullptr);
+    fla::Timeline scene(&document);
+    scene.name = "Scene 1";
+    movie.frame(*movie.layer(scene, "shown"), 0, 1, "trace('shown'); stop();");
+    fla::Layer* hidden = movie.layer(scene, "hidden");
+    hidden->visible = false;
+    movie.frame(*hidden, 0, 1, "trace('hidden');");
+    // Hidden layers play unless the settings leave them out.
+    for (const bool play : {true, false})
+    {
+        fla::play::MovieRuntime runtime(scene, 24.0);
+        runtime.setHiddenLayers(play);
+        std::vector<std::string> traced;
+        runtime.trace = [&traced](const std::string& line) { traced.push_back(line); };
+        runtime.start();
+        CHECK(traced.size() == (play ? 2u : 1u));
+        CHECK((std::find(traced.begin(), traced.end(), "hidden") != traced.end()) == play);
+    }
 }
 
 TEST(movie_runtime_plays_scenes_in_turn_and_goes_to_them)

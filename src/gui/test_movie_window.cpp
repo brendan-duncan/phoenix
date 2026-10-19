@@ -13,6 +13,7 @@
 #include "../data/symbol_list.h"
 #include "../data/timeline.h"
 #include "../edit/frame_sound.h"
+#include "../edit/publish_settings.h"
 #include "../play/movie_runtime.h"
 #include "../play/display/backend.h"
 #include "../third_party/tinyxml2/tinyxml2.h"
@@ -261,6 +262,7 @@ TestMovieWindow::TestMovieWindow(const fla::FLADocument& document, const QString
     if (!scenes.empty())
     {
         _movie = std::make_unique<fla::play::MovieRuntime>(scenes, data.frameRate);
+        _movie->setHiddenLayers(fla::publish::read(fla::publish::xmlOf(data), std::string()).swfHiddenLayers);
         _movie->trace = [print](const std::string& line) {
             if (print)
                 print(QString::fromStdString(line));
