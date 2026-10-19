@@ -334,6 +334,94 @@ std::vector<PlanarMap::Input> PlanarMap::splitAtCrossings(double tolerance) cons
         }
     }
 
+    // Every cut becomes a vertex on the twip grid, which can move it most of
+    // a twip off the curves that met there. A curve passing through that
+    // grid cell without being cut there stays where it is while the pieces
+    // meeting at the vertex are welded onto it, which can land them on its
+    // far side: two edges that never crossed now do, the faces either side
+    // of them run together, and a whole region can lose its fill. Outlines
+    // that nearly coincide, as a drawing does with the hole it cut on the
+    // way in, meet that way all along. So, as snap rounding does, a curve
+    // passing through another's cut's cell is cut there too and runs through
+    // the same vertex. Only curves that come near each other can pass
+    // through each other's cells, and the cuts added here are at vertices
+    // that already exist, so one pass over the pairs is enough.
+    using Cell = std::pair<int64_t, int64_t>;
+    const auto cellOf = [](const Point& point) {
+        return Cell(toTwips(point.x), toTwips(point.y));
+    };
+    std::vector<std::vector<Cell>> cells(count);
+    std::vector<double> flatness(count, 0.0);
+    for (size_t i = 0; i < count; ++i)
+    {
+        flatness[i] = _inputs[i].curve.flatness();
+        for (const Cut& cut : cuts[i])
+        {
+            if (cut.hasPoint)
+                cells[i].push_back(cellOf(cut.point));
+        }
+    }
+
+    const auto passThrough = [&](size_t onto, const Cell& key) {
+        const Point cell(key.first * kTwip, key.second * kTwip);
+        const Curve& curve = _inputs[onto].curve;
+        const Box& box = boxes[onto];
+        if (cell.x < box.left - kTwip || cell.x > box.right + kTwip ||
+            cell.y < box.top - kTwip || cell.y > box.bottom + kTwip)
+        {
+            return;
+        }
+
+        // The curve keeps within its flatness of its chord, so a cell further
+        // than that and a twip from the chord is clear of it.
+        {
+            const Point& a = curve.start();
+            const Point& b = curve.end();
+            const double dx = b.x - a.x;
+            const double dy = b.y - a.y;
+            const double lengthSquared = dx * dx + dy * dy;
+            double u = 0.0;
+            if (lengthSquared > 1.0e-18)
+                u = std::max(0.0, std::min(1.0, ((cell.x - a.x) * dx + (cell.y - a.y) * dy) / lengthSquared));
+            if (std::hypot(a.x + dx * u - cell.x, a.y + dy * u - cell.y) > flatness[onto] + kTwip)
+                return;
+        }
+
+        // Already a vertex of this curve, at an end or at a cut.
+        for (const Point& end : {curve.start(), curve.end()})
+        {
+            if (cellOf(end) == key || std::hypot(end.x - cell.x, end.y - cell.y) <= touch)
+                return;
+        }
+        for (const Cut& cut : cuts[onto])
+        {
+            if (cut.hasPoint && cellOf(cut.point) == key)
+                return;
+        }
+
+        // Through the cell: within half a twip of its center either way.
+        double distance = 0.0;
+        const double t = nearestParameter(curve, cell, distance);
+        if (distance > kTwip || t <= 1.0e-6 || t >= 1.0 - 1.0e-6)
+            return;
+        const Point nearest = curve.pointAt(t);
+        if (std::fabs(nearest.x - cell.x) > kTwip * 0.5 || std::fabs(nearest.y - cell.y) > kTwip * 0.5)
+            return;
+
+        cuts[onto].push_back({t, true, cell});
+    };
+
+    for (size_t i = 0; i < count; ++i)
+    {
+        for (const size_t j : partners[i])
+        {
+            for (const Cell& cell : cells[j])
+                passThrough(i, cell);
+            for (const Cell& cell : cells[i])
+                passThrough(j, cell);
+        }
+    }
+
     std::vector<Input> pieces;
 
     for (size_t i = 0; i < _inputs.size(); ++i)
@@ -415,9 +503,24 @@ void PlanarMap::buildHalfEdges(const std::vector<Input>& pieces)
 
         // Welding collapsed the piece to a point, so there is no edge here.
         // A loop back to its own start is not collapsed, which only the
-        // control polygon tells: its chord is zero too.
-        if (from == to && piece.curve.controlPolygonLength() < kMinimumPieceLength)
-            continue;
+        // control polygon tells: its chord is zero too. Two cuts close
+        // together can land most of a twip apart and still weld to one
+        // vertex, so a piece is collapsed when nothing of it reaches further
+        // than a twip from the vertex, however long its control polygon.
+        // Kept, it would be an edge with the same face on both sides, and
+        // reading a face's fill off it would take the wrong side half the
+        // time.
+        if (from == to)
+        {
+            double reach = 0.0;
+            for (int i = 0; i < 4; ++i)
+            {
+                const Point& point = piece.curve.controlPoint(i);
+                reach = std::max(reach, std::hypot(point.x - start.x, point.y - start.y));
+            }
+            if (reach <= kTwip || piece.curve.controlPolygonLength() < kMinimumPieceLength)
+                continue;
+        }
 
         const Point middle = piece.curve.pointAt(0.5);
         std::vector<Seen>& middles = seen[{std::min(from, to), std::max(from, to)}];
