@@ -2,6 +2,16 @@
 
 What changed in each release of Phoenix, newest first.
 
+## Unreleased
+
+- Insert Inbetween (Modify > Timeline, or right-click the frames) draws a new keyframe between two drawings: halfway, a third, two thirds, or favoring either key
+- Fill Inbetweens draws every empty frame between two drawings, spaced evenly, easing in or easing out
+- Inbetweens follow shape hints, move symbols part way, and are ordinary keyframes you can touch up
+- File > Share saves an animated GIF, animated WebP, animated PNG, MP4 or WebM for the web and social sites
+- Share offers each social site's size, frame rate, how many times it plays, quality, a transparent background, and a guess at the file size before you save
+- After sharing, Show in Folder opens the folder with the file selected
+- The render command writes .webp, .apng and .webm too, with --quality, --fps and --fit
+
 ## 0.20.0
 
 - A boned shape whose last points are bound to no bone keeps the binding of its other points when posed or rebound
