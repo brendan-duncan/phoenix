@@ -246,6 +246,9 @@ set(HEADERS
     src/gui/script_tool.h
     src/gui/pen_tool.h
     src/gui/pencil_tool.h
+    src/gui/drawing_aids_view.h
+    src/gui/drawing_guides_tool.h
+    src/gui/tool_hint_label.h
     src/gui/text_tool.h
     src/gui/text_layout.h
     src/gui/subselection_tool.h
@@ -348,6 +351,8 @@ set(HEADERS
     src/edit/linked_assets.h
     src/edit/review_notes.h
     src/edit/safe_zones.h
+    src/edit/drawing_aids.h
+    src/edit/tool_hints.h
     src/edit/pegs.h
     src/edit/controllers.h
     src/edit/bone_corrections.h
@@ -538,6 +543,11 @@ set(SOURCES
     src/gui/script_tool.cpp
     src/gui/pen_tool.cpp
     src/gui/pencil_tool.cpp
+    src/gui/drawing_aids_view.cpp
+    src/gui/drawing_guides_tool.cpp
+    src/gui/tool_hint_label.cpp
+    src/gui/main_window_drawing_aids.cpp
+    src/gui/properties_panel_drawing_aids.cpp
     src/gui/text_tool.cpp
     src/gui/text_layout.cpp
     src/gui/subselection_tool.cpp

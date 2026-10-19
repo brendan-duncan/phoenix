@@ -51,10 +51,13 @@ public:
         Translate3D,
         Width,
         PaintBrush,
+        DrawingGuides,
         /// A JSFL tool without an icon of its own.
         Script,
         /// Not a tool: the toggle that keeps a drawing its own object.
-        ObjectDrawing
+        ObjectDrawing,
+        /// Not a tool: the toggle that copies strokes across the symmetry axis.
+        Symmetry
     };
 
     /// The icon for a tool, at the sizes a toolbar is likely to ask for.

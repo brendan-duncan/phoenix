@@ -128,6 +128,10 @@ public:
     /// so they cannot drift apart.
     QTransform documentToWidget() const;
 
+    /// Maps the space the tools draw in (an open symbol's) to the stage's,
+    /// where the drawing guides and the symmetry axis are.
+    QTransform scopeToStage() const { return scopeToDocument(); }
+
     QPointF mapToDocument(const QPointF& widgetPos) const;
 
     /// The stage in the space of the timeline being edited: the document's

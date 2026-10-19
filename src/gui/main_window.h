@@ -26,6 +26,7 @@
 #include "paint_tools.h"
 #include "pen_tool.h"
 #include "pencil_tool.h"
+#include "drawing_guides_tool.h"
 #include "primitive_tool.h"
 #include "subselection_tool.h"
 #include "text_tool.h"
@@ -710,6 +711,7 @@ private:
     std::unique_ptr<ThreeDTool> _translate3DTool;
     std::unique_ptr<WidthTool> _widthTool;
     std::unique_ptr<PencilTool> _paintBrushTool;
+    std::unique_ptr<DrawingGuidesTool> _drawingGuidesTool;
     /// The Brush (Shift+B), the Nib Brush and the Ink Brush,
     /// sharing the toolbox slot.
     std::unique_ptr<BrushTool> _brushTool;
@@ -1157,6 +1159,20 @@ private:
     /// Which toolbox icon stands for \a tool, for the Properties panel's
     /// Tool tab.
     ToolIcons::Tool iconForTool(const Tool* tool) const;
+
+    /// Symmetry, the drawing guides and the tool hints
+    /// (main_window_drawing_aids.cpp): View > Symmetry and View > Drawing
+    /// Guides in \a viewMenu, the stage's layer that shows them, and the
+    /// status bar's hint.
+    void createDrawingAids(QMenu* viewMenu);
+    /// The toggle for symmetry drawing, for the menu and the toolbox.
+    QAction* symmetryAction();
+    /// Brings the toggles and the stage in line with the document's aids.
+    void refreshDrawingAids();
+    /// Hears the Properties panel's symmetry, guide and faucet options.
+    void connectDrawingAidsPanel();
+    QAction* _symmetryAction = nullptr;
+    class ToolHintLabel* _toolHintLabel = nullptr;
 
     /// True while one of the tree and the stage is being brought in line
     /// with the other, so the change does not bounce back.

@@ -156,6 +156,13 @@ public:
     /// zoomed out.
     int pencilSmoothing = 50;
 
+    /// The Pencil's and Paint Brush's stabilizer, in screen pixels: the line
+    /// trails the pen on a string this long, which takes out shake. 0 is off.
+    double pencilStabilizer = 0.0;
+
+    /// The kind of guide the Drawing Guides tool adds, as fla::aids::GuideKind.
+    int drawingGuideKind = 0;
+
     /// The eraser's width, in pixels.
     double eraserSize = 12.0;
     /// The eraser's nib, pressure and tilt, as a brush's (its size is

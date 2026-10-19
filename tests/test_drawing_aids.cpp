@@ -1,5 +1,6 @@
 #include "test_util.h"
 
+#include "../src/edit/brush_stroke.h"
 #include "../src/edit/drawing_aids.h"
 
 #include <cmath>
@@ -274,6 +275,32 @@ TEST(a_nearby_ruler_wins_over_perspective)
     const std::vector<fla::Point> snapped = aids::snapStroke(guides, stroke, 1.0);
     for (const fla::Point& p : snapped)
         CHECK(near(p.y, 200));
+}
+
+TEST(the_stabilizer_trails_the_pen_and_catches_up_on_release)
+{
+    // The pen shakes inside a 10 pixel circle, then moves off to the right.
+    std::vector<fla::BrushSample> pen;
+    for (const auto& [x, y] : {std::pair(0.0, 0.0), std::pair(3.0, 4.0), std::pair(-4.0, 2.0), std::pair(5.0, -5.0),
+             std::pair(30.0, 0.0), std::pair(60.0, 0.0)})
+    {
+        fla::BrushSample sample;
+        sample.x = x;
+        sample.y = y;
+        pen.push_back(sample);
+    }
+    // The shake inside the string's length leaves the line where it was.
+    std::vector<fla::BrushSample> line = fla::BrushStroke::stabilized(pen, 10.0, false);
+    CHECK(line.size() == 3);
+    CHECK(nearPoint(fla::Point(line[0].x, line[0].y), 0, 0));
+    // Further out, the line follows 10 pixels behind the pen.
+    CHECK(near(std::hypot(30.0 - line[1].x, 0.0 - line[1].y), 10.0));
+    CHECK(near(line[2].x, 50.0) && near(line[2].y, 0.0));
+    // With the pen lifted, the line runs on to where it lifted.
+    line = fla::BrushStroke::stabilized(pen, 10.0, true);
+    CHECK(line.size() == 4 && near(line.back().x, 60.0));
+    // A string of no length leaves the stroke as drawn.
+    CHECK(fla::BrushStroke::stabilized(pen, 0.0, true).size() == pen.size());
 }
 
 TEST(perspective_grid_fans_out_from_the_point)

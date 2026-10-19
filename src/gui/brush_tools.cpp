@@ -11,6 +11,7 @@
 
 #include "cursors.h"
 #include "draw_placement.h"
+#include "drawing_aids_view.h"
 #include "phoenix_view.h"
 
 #include "../data/frame.h"
@@ -38,6 +39,43 @@
 namespace {
 
 constexpr int kStyleIndex = 1;
+
+/// \a dabs and their copies across the symmetry axis, each moved, turned
+/// and sized as its copy is.
+std::vector<fla::BrushDab> withCopies(const std::vector<fla::BrushDab>& dabs, const std::vector<QTransform>& copies)
+{
+    std::vector<fla::BrushDab> all = dabs;
+    for (const QTransform& copy : copies)
+    {
+        const double scale = std::sqrt(std::fabs(copy.determinant()));
+        for (const fla::BrushDab& dab : dabs)
+        {
+            fla::BrushDab moved = dab;
+            const QPointF center = copy.map(QPointF(dab.x, dab.y));
+            moved.x = center.x();
+            moved.y = center.y();
+            const QPointF turned = copy.map(QPointF(std::cos(dab.angle), std::sin(dab.angle))) - copy.map(QPointF(0, 0));
+            moved.angle = std::atan2(turned.y(), turned.x());
+            moved.width *= scale;
+            moved.height *= scale;
+            all.push_back(moved);
+        }
+    }
+    return all;
+}
+
+/// Where the line is while a stabilizer trails the pen: the dead zone round
+/// it and the string to the pen, drawn over the stroke under way.
+void paintTrail(PhoenixView& view, QPainter& painter, const std::vector<fla::BrushSample>& samples,
+    double stabilizer, double scale)
+{
+    if (stabilizer <= 0.0 || samples.empty())
+        return;
+    const double zoom = std::max(view.zoom(), 1.0e-6);
+    const std::vector<fla::BrushSample> line = fla::BrushStroke::stabilized(samples, stabilizer / zoom, false);
+    drawaids::paintStabilizer(painter, QPointF(samples.back().x, samples.back().y),
+        QPointF(line.back().x, line.back().y), stabilizer * scale, scale);
+}
 
 /// The centerline of a drag as a path: the raw samples joined up, or a smooth
 /// fit through them as the pencil would make.
@@ -632,6 +670,11 @@ void BrushTool::finish(PhoenixView& view)
         return;
     }
 
+    // A stroke begun on a drawing guide keeps to it, and the symmetry axis
+    // copies it.
+    _samples = drawaids::snapped(view, _samples);
+    const std::vector<QTransform> copies = drawaids::copiesInScope(view);
+
     // Precision sets how closely the curves fitted to the outline follow
     // it, from a sixth of a screen pixel at 100 to a pixel and a half at 0.
     const double zoom = std::max(view.zoom(), 1.0e-6);
@@ -652,7 +695,7 @@ void BrushTool::finish(PhoenixView& view)
     if (_style.bitmapBrush)
     {
         _samples.clear();
-        paintBitmap(view, frame, dabs);
+        paintBitmap(view, frame, withCopies(dabs, copies));
         return;
     }
     QPainterPath swept = sweptOutline(dabs, zoom, false);
@@ -666,6 +709,7 @@ void BrushTool::finish(PhoenixView& view)
         swept.addPolygon(ring);
         swept.closeSubpath();
     }
+    swept = drawaids::withCopies(swept, copies);
     fla::Shape* shape = outlineShape(swept.simplified(), tolerance, frame, _style, true);
     _samples.clear();
     // Lock Fill: a gradient or bitmap over the whole stage, not the stroke.
@@ -1104,7 +1148,10 @@ void BrushTool::paintOverlay(PhoenixView& view, QPainter& painter, double scale)
         // The stroke as it will land: the same sweep, in the fill color.
         painter.setBrush(QColor(_style.fillColor[0], _style.fillColor[1],
             _style.fillColor[2], _style.fillColor[3]));
-        painter.drawPath(sweptOutline(fla::BrushStroke::dabs(_samples, brush, zoom, false), zoom, false));
+        const std::vector<fla::BrushSample> samples = drawaids::snapped(view, _samples);
+        painter.drawPath(drawaids::withCopies(sweptOutline(fla::BrushStroke::dabs(samples, brush, zoom, false), zoom, false),
+            drawaids::copiesInScope(view)));
+        paintTrail(view, painter, samples, brush.stabilizer, scale);
     }
 
     if (_hoverValid)
@@ -1186,7 +1233,12 @@ bool EraserTool::mousePress(PhoenixView& view, QMouseEvent* event, const QPointF
 fla::BrushSettings EraserTool::nib() const
 {
     if (_style.eraserSyncWithBrush)
-        return _style.classicBrush;
+    {
+        // The eraser's stabilizer is its own, whichever nib it uses.
+        fla::BrushSettings synced = _style.classicBrush;
+        synced.stabilizer = _style.eraserBrush.stabilizer;
+        return synced;
+    }
     fla::BrushSettings nib = _style.eraserBrush;
     nib.size = _style.eraserSize;
     return nib;
@@ -1260,12 +1312,17 @@ void EraserTool::finish(PhoenixView& view)
     }
 
     // The pass swept by the eraser's nib, at the pen's pressure and tilt
-    // when it uses them.
+    // when it uses them, kept to a drawing guide and copied across the
+    // symmetry axis as a stroke is.
+    _samples = drawaids::snapped(view, _samples);
+    _points = drawaids::snapped(view, _points);
+    const std::vector<QTransform> copies = drawaids::copiesInScope(view);
     const double zoom = std::max(view.zoom(), 1.0e-6);
     const std::vector<fla::BrushDab> dabs = fla::BrushStroke::dabs(_samples, nib(), zoom, true);
     std::unique_ptr<fla::Shape> cutter(dabs.empty()
             ? brushOutlineShape(_points, _style.eraserSize, false, nullptr, _style, false)
-            : outlineShape(sweptOutline(dabs, zoom, true), 0.3 / zoom, nullptr, _style, false));
+            : outlineShape(drawaids::withCopies(sweptOutline(dabs, zoom, false), copies).simplified(), 0.3 / zoom,
+                  nullptr, _style, false));
     _points.clear();
     _samples.clear();
     if (!cutter)
@@ -1392,7 +1449,10 @@ void EraserTool::paintOverlay(PhoenixView& view, QPainter& painter, double scale
         // already gone.
         painter.setBrush(QColor(255, 255, 255, 200));
         const double zoom = std::max(view.zoom(), 1.0e-6);
-        painter.drawPath(sweptOutline(fla::BrushStroke::dabs(_samples, eraser, zoom, false), zoom, false));
+        const std::vector<fla::BrushSample> samples = drawaids::snapped(view, _samples);
+        painter.drawPath(drawaids::withCopies(sweptOutline(fla::BrushStroke::dabs(samples, eraser, zoom, false), zoom, false),
+            drawaids::copiesInScope(view)));
+        paintTrail(view, painter, samples, eraser.stabilizer, scale);
     }
 
     if (_hoverValid && !_style.faucet)

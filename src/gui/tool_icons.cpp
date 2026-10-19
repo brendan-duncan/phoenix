@@ -608,6 +608,40 @@ void drawObjectDrawing(QPainter& painter)
     painter.drawEllipse(QRectF(7.0, 8.0, 10.0, 8.0));
 }
 
+void drawDrawingGuides(QPainter& painter)
+{
+    // Lines running to a vanishing point on the horizon, with a ruler's
+    // edge across them.
+    painter.setBrush(Qt::NoBrush);
+    painter.setPen(QPen(strokeColor(), 1.0));
+    painter.drawLine(QPointF(2.5, 8.0), QPointF(21.5, 8.0));
+    for (double x : {3.0, 9.0, 15.0, 21.0})
+        painter.drawLine(QPointF(12.0, 8.0), QPointF(x, 21.0));
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(strokeColor());
+    painter.drawEllipse(QPointF(12.0, 8.0), 1.8, 1.8);
+    painter.setPen(QPen(strokeColor(), 1.4));
+    painter.drawLine(QPointF(3.0, 15.0), QPointF(21.0, 15.0));
+}
+
+void drawSymmetry(QPainter& painter)
+{
+    // A dashed axis with a stroke drawn on one side and its mirror on the
+    // other.
+    painter.setBrush(Qt::NoBrush);
+    painter.setPen(QPen(strokeColor(), 1.0, Qt::DashLine));
+    painter.drawLine(QPointF(12.0, 2.5), QPointF(12.0, 21.5));
+    painter.setPen(QPen(strokeColor(), 1.6, Qt::SolidLine, Qt::RoundCap));
+    QPainterPath left;
+    left.moveTo(10.0, 5.0);
+    left.cubicTo(3.0, 7.0, 3.0, 15.0, 10.0, 19.0);
+    painter.drawPath(left);
+    QPainterPath right;
+    right.moveTo(14.0, 5.0);
+    right.cubicTo(21.0, 7.0, 21.0, 15.0, 14.0, 19.0);
+    painter.drawPath(right);
+}
+
 QPixmap render(ToolIcons::Tool tool, int size)
 {
     QPixmap pixmap(size, size);
@@ -661,6 +695,8 @@ QPixmap render(ToolIcons::Tool tool, int size)
     case ToolIcons::Tool::PaintBrush:    drawPaintBrush(painter); break;
     case ToolIcons::Tool::Script:        drawScript(painter); break;
     case ToolIcons::Tool::ObjectDrawing: drawObjectDrawing(painter); break;
+    case ToolIcons::Tool::DrawingGuides: drawDrawingGuides(painter); break;
+    case ToolIcons::Tool::Symmetry:      drawSymmetry(painter); break;
     }
 
     return pixmap;

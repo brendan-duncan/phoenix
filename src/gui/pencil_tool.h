@@ -70,10 +70,16 @@ private:
     /// The fitted stroke as it stands, for the live preview and the finish.
     fla::EditablePath fitted(PhoenixView& view) const;
 
+    /// The stroke's points kept to a drawing guide and stabilized: the line
+    /// as drawn so far, or with \a finished, run on to where the pen lifted.
+    std::vector<fla::Point> steadied(PhoenixView& view, bool finished) const;
+
     /// Builds the shape for a fitted stroke. The caller owns the result.
     /// A Paint Brush stroke draws with the document's brush \a paintBrush
     /// (0 for the style's), its width varying as \a profile says.
-    fla::Element* createShape(fla::Frame* frame, const fla::EditablePath& path, int paintBrush = 0,
+    /// Each of \a paths is an edge of the shape: the stroke and its copies
+    /// across the symmetry axis.
+    fla::Element* createShape(fla::Frame* frame, const std::vector<fla::EditablePath>& paths, int paintBrush = 0,
         const std::vector<fla::StrokeStyle::WidthMarker>& profile = {}) const;
 
     /// For the Paint Brush, the document's index of the brush to draw

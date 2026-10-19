@@ -183,6 +183,10 @@ private:
 
     void buildTabBar();
     void buildToolTab();
+    /// The Tool tab's symmetry and drawing guide options, added through
+    /// \a addOption (properties_panel_drawing_aids.cpp).
+    void addDrawingAidOptions(
+        const std::function<void(const QString&, QWidget*, const std::vector<ToolIcons::Tool>&)>& addOption);
     void applyToolVisibility();
     void rebuildObjectTab();
     void rebuildFrameTab();

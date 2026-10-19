@@ -4,6 +4,7 @@
 
 #include "brush_library_store.h"
 #include "draw_placement.h"
+#include "drawing_aids_view.h"
 #include "phoenix_view.h"
 
 #include "../data/fla_document.h"
@@ -30,6 +31,15 @@ namespace {
 /// Index used for the single stroke on a generated shape; the format numbers
 /// styles from one.
 constexpr int kStyleIndex = 1;
+
+/// \a path's copies across the symmetry axis.
+std::vector<fla::EditablePath> copiesOf(const fla::EditablePath& path, const std::vector<QTransform>& copies)
+{
+    std::vector<fla::EditablePath> paths;
+    for (const QTransform& copy : copies)
+        paths.push_back(path.transformed(fla::Transform(copy.m11(), copy.m12(), copy.m21(), copy.m22(), copy.dx(), copy.dy())));
+    return paths;
+}
 
 } // namespace
 
@@ -187,7 +197,28 @@ fla::CurveFit::Options PencilTool::fitOptions(PhoenixView& view) const
 
 fla::EditablePath PencilTool::fitted(PhoenixView& view) const
 {
-    return fla::CurveFit::fit(_points, fitOptions(view));
+    return fla::CurveFit::fit(steadied(view, false), fitOptions(view));
+}
+
+std::vector<fla::Point> PencilTool::steadied(PhoenixView& view, bool finished) const
+{
+    std::vector<fla::Point> points = drawaids::snapped(view, _points);
+    if (_style.pencilStabilizer <= 0.0 || points.size() < 2)
+        return points;
+    std::vector<fla::BrushSample> samples;
+    samples.reserve(points.size());
+    for (const fla::Point& point : points)
+    {
+        fla::BrushSample sample;
+        sample.x = point.x;
+        sample.y = point.y;
+        samples.push_back(sample);
+    }
+    const double zoom = qMax(view.zoom(), 1.0e-6);
+    points.clear();
+    for (const fla::BrushSample& sample : fla::BrushStroke::stabilized(samples, _style.pencilStabilizer / zoom, finished))
+        points.emplace_back(sample.x, sample.y);
+    return points;
 }
 
 void PencilTool::finish(PhoenixView& view)
@@ -195,6 +226,10 @@ void PencilTool::finish(PhoenixView& view)
     const fla::CurveFit::Options options = fitOptions(view);
     const double zoom = qMax(view.zoom(), 1.0e-6);
 
+    // Kept to a drawing guide, stabilized, and copied across the symmetry
+    // axis.
+    _points = steadied(view, true);
+    const std::vector<QTransform> copies = drawaids::copiesInScope(view);
     fla::EditablePath path = fla::CurveFit::fit(_points, options);
 
     // Straighten mode tidies what it drew: ends that nearly meet are joined,
@@ -246,11 +281,24 @@ void PencilTool::finish(PhoenixView& view)
                 toShape.m22(), toShape.dx(), toShape.dy());
             const fla::EditablePath after = joined.transformed(back);
 
+            // The copies are new lines, drawn as one step with the extension.
+            if (!copies.empty())
+                _commandStack.beginMacro("Pencil");
             _commandStack.push(fla::CommandPtr(new fla::SetEdgeGeometryCommand(
                 _extendEdge, _extendBefore, after, "Pencil", _extendPathIndex)));
             _commandStack.breakMergeChain();
             view.markShapeEdited(_extendShape);
             view.clearCaches();
+            fla::Frame* frame = view.activeFrame();
+            if (!copies.empty())
+            {
+                if (frame)
+                {
+                    placeDrawnElement(view, _commandStack, _selection, frame, createShape(frame, copiesOf(path, copies)),
+                        "Pencil", _style.objectDrawing);
+                }
+                _commandStack.endMacro();
+            }
         }
         _extending = false;
         _extendShape = nullptr;
@@ -288,7 +336,10 @@ void PencilTool::finish(PhoenixView& view)
     }
     _pen.clear();
 
-    fla::Element* shape = createShape(frame, path, brush, profile);
+    std::vector<fla::EditablePath> paths = {path};
+    for (fla::EditablePath& copy : copiesOf(path, copies))
+        paths.push_back(std::move(copy));
+    fla::Element* shape = createShape(frame, paths, brush, profile);
     if (shape)
         placeDrawnElement(view, _commandStack, _selection, frame, shape, "Pencil", _style.objectDrawing);
     else
@@ -306,7 +357,7 @@ int PencilTool::paintBrushIndex(PhoenixView& view)
     return paintBrushIndexFor(*document, _commandStack, guid);
 }
 
-fla::Element* PencilTool::createShape(fla::Frame* frame, const fla::EditablePath& path, int paintBrush,
+fla::Element* PencilTool::createShape(fla::Frame* frame, const std::vector<fla::EditablePath>& paths, int paintBrush,
     const std::vector<fla::StrokeStyle::WidthMarker>& profile) const
 {
     fla::Shape* shape = new fla::Shape(frame);
@@ -338,21 +389,23 @@ fla::Element* PencilTool::createShape(fla::Frame* frame, const fla::EditablePath
     shape->strokes.push_back(stroke);
     shape->strokesMap[kStyleIndex] = stroke;
 
-    fla::Edge* edge = new fla::Edge(shape);
-    edge->strokeStyle = kStyleIndex;
-    path.applyTo(*edge);
-    shape->edges.push_back(edge);
-
-    double left = path.anchors[0].position.x;
-    double top = path.anchors[0].position.y;
+    double left = paths.front().anchors[0].position.x;
+    double top = paths.front().anchors[0].position.y;
     double right = left;
     double bottom = top;
-    for (const fla::Anchor& anchor : path.anchors)
+    for (const fla::EditablePath& path : paths)
     {
-        left = qMin(left, anchor.position.x);
-        top = qMin(top, anchor.position.y);
-        right = qMax(right, anchor.position.x);
-        bottom = qMax(bottom, anchor.position.y);
+        fla::Edge* edge = new fla::Edge(shape);
+        edge->strokeStyle = kStyleIndex;
+        path.applyTo(*edge);
+        shape->edges.push_back(edge);
+        for (const fla::Anchor& anchor : path.anchors)
+        {
+            left = qMin(left, anchor.position.x);
+            top = qMin(top, anchor.position.y);
+            right = qMax(right, anchor.position.x);
+            bottom = qMax(bottom, anchor.position.y);
+        }
     }
 
     shape->localBounds = fla::Rect(fla::Point(left, top), fla::Point(right, bottom));
@@ -378,6 +431,14 @@ void PencilTool::paintOverlay(PhoenixView& view, QPainter& painter, double scale
     painter.setPen(QPen(QColor(0, 170, 255, 90), 1.0 * scale));
     painter.drawPath(preview);
 
+    // Where the line is while the stabilizer trails the pen.
+    if (_style.pencilStabilizer > 0.0)
+    {
+        const std::vector<fla::Point> line = steadied(view, false);
+        drawaids::paintStabilizer(painter, QPointF(_points.back().x, _points.back().y),
+            QPointF(line.back().x, line.back().y), _style.pencilStabilizer * scale, scale);
+    }
+
     const fla::EditablePath fit = fitted(view);
     if (fit.anchors.size() < 2)
         return;
@@ -395,7 +456,7 @@ void PencilTool::paintOverlay(PhoenixView& view, QPainter& painter, double scale
                 to.position.x, to.position.y);
     }
     painter.setPen(QPen(QColor(0, 170, 255), 1.0 * scale));
-    painter.drawPath(fitPath);
+    painter.drawPath(drawaids::withCopies(fitPath, drawaids::copiesInScope(view)));
 }
 
 void PencilTool::deactivate(PhoenixView& view)
