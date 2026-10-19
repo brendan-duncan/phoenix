@@ -1,6 +1,9 @@
 #include "swatches.h"
 
 #include "../data/document.h"
+#include "../data/shape.h"
+#include "../data/solid_color.h"
+#include "../data/stroke_style.h"
 #include "../data/swatch.h"
 #include "../data/swatch_list.h"
 
@@ -280,6 +283,195 @@ std::string writeGpl(const std::vector<Color>& colors, const std::string& name)
         text += buffer;
     }
     return text;
+}
+
+namespace {
+
+DrawingStyle::Stop stopOf(double ratio, uint32_t rgb)
+{
+    DrawingStyle::Stop stop;
+    stop.ratio = ratio;
+    stop.color[0] = static_cast<uint8_t>(rgb >> 16);
+    stop.color[1] = static_cast<uint8_t>(rgb >> 8);
+    stop.color[2] = static_cast<uint8_t>(rgb);
+    stop.color[3] = 255;
+    return stop;
+}
+
+Gradient gradientOf(bool radial, std::vector<DrawingStyle::Stop> stops)
+{
+    Gradient gradient;
+    gradient.radial = radial;
+    gradient.stops = std::move(stops);
+    return gradient;
+}
+
+} // namespace
+
+std::vector<Gradient> defaultGradients()
+{
+    // Ratios in 255ths, as the file keeps them.
+    const auto at = [](int step) { return step / 255.0; };
+    return {
+        gradientOf(false, {stopOf(0.0, 0xFFFFFF), stopOf(1.0, 0x000000)}),
+        gradientOf(true, {stopOf(0.0, 0xFFFFFF), stopOf(1.0, 0x000000)}),
+        gradientOf(true, {stopOf(0.0, 0xFF0000), stopOf(1.0, 0x000000)}),
+        gradientOf(true, {stopOf(0.0, 0x00FF00), stopOf(1.0, 0x000000)}),
+        gradientOf(true, {stopOf(0.0, 0x0000FF), stopOf(1.0, 0x000000)}),
+        gradientOf(false, {stopOf(0.0, 0x0066FD), stopOf(at(96), 0xFFFFFF), stopOf(at(122), 0xFFFFFF),
+                              stopOf(at(128), 0x996600), stopOf(at(170), 0xFFCC00), stopOf(1.0, 0xFFFFFF)}),
+        gradientOf(false, {stopOf(0.0, 0xFF0000), stopOf(at(42), 0xFFFF00), stopOf(at(93), 0x00FF00),
+                              stopOf(at(127), 0x00FFFF), stopOf(at(170), 0x0000FF), stopOf(at(212), 0xFF00FF),
+                              stopOf(1.0, 0xFF0000)}),
+        gradientOf(true, {stopOf(0.0, 0xEBEBEB), stopOf(at(244), 0xB2B2B2)}),
+    };
+}
+
+std::vector<Gradient> gradientsIn(const std::string& xml)
+{
+    std::vector<Gradient> gradients;
+    size_t at = 0;
+    while (true)
+    {
+        const size_t linear = xml.find("<LinearGradientSwatchItem", at);
+        const size_t radial = xml.find("<RadialGradientSwatchItem", at);
+        const size_t start = std::min(linear, radial);
+        if (start == std::string::npos)
+            break;
+        const bool isRadial = start == radial;
+        const size_t open = xml.find('>', start);
+        if (open == std::string::npos)
+            break;
+        const std::string head = xml.substr(start, open + 1 - start);
+        // Its stops run to the closing tag; <...SwatchItem/> has none.
+        size_t end = open + 1;
+        if (xml[open - 1] != '/')
+        {
+            const char* close = isRadial ? "</RadialGradientSwatchItem>" : "</LinearGradientSwatchItem>";
+            const size_t closing = xml.find(close, open);
+            end = closing == std::string::npos ? xml.size() : closing;
+        }
+        Gradient gradient;
+        gradient.radial = isRadial;
+        gradient.spread = attributeOf(head, "spreadMethod");
+        if (gradient.spread == "pad")
+            gradient.spread.clear();
+        gradient.linearRGB = attributeOf(head, "interpolationMethod") == "linearRGB";
+        size_t entry = open + 1;
+        while ((entry = xml.find("<GradientEntry", entry)) != std::string::npos && entry < end)
+        {
+            const size_t tagEnd = xml.find('>', entry);
+            if (tagEnd == std::string::npos)
+                break;
+            const std::string tag = xml.substr(entry, tagEnd + 1 - entry);
+            DrawingStyle::Stop stop;
+            const Color color = colorOf(tag);
+            std::copy(color.begin(), color.end(), stop.color);
+            stop.ratio = std::max(0.0, std::min(1.0, std::atof(attributeOf(tag, "ratio").c_str())));
+            gradient.stops.push_back(stop);
+            entry = tagEnd + 1;
+        }
+        if (gradient.stops.size() >= 2)
+            gradients.push_back(gradient);
+        at = end;
+    }
+    return gradients;
+}
+
+std::vector<Gradient> gradientsOf(const Document& document)
+{
+    std::vector<Gradient> gradients;
+    if (!document.swatchLists.empty() && document.swatchLists.front())
+        gradients = gradientsIn(document.swatchLists.front()->xml);
+    for (const Document::RawSection& section : document.extraSections)
+    {
+        const size_t first = section.xml.find_first_not_of(" \t\r\n");
+        if (first == std::string::npos || section.xml.compare(first, 20, "<extendedSwatchLists") != 0)
+            continue;
+        for (const Gradient& gradient : gradientsIn(section.xml))
+            gradients.push_back(gradient);
+    }
+    return gradients;
+}
+
+void useGradient(DrawingStyle& style, const Gradient& gradient)
+{
+    style.hasFill = true;
+    style.fillKind = gradient.radial ? DrawingStyle::FillKind::Radial : DrawingStyle::FillKind::Linear;
+    style.gradient = gradient.stops;
+    style.gradientSpread = gradient.spread;
+    style.gradientLinearRGB = gradient.linearRGB;
+}
+
+FillStyle* gradientFill(const Gradient& gradient, DOMElement* parent)
+{
+    DrawingStyle style;
+    useGradient(style, gradient);
+    return style.createFill(parent);
+}
+
+void paintFills(Shape& shape, const Gradient& gradient)
+{
+    // Each fill made anew, kept where the edges and the list find it, then
+    // fitted to the art it fills.
+    for (auto& entry : shape.fillsMap)
+    {
+        FillStyle* fill = gradientFill(gradient, &shape);
+        if (!fill)
+            continue;
+        std::replace(shape.fills.begin(), shape.fills.end(), entry.second, fill);
+        delete entry.second;
+        entry.second = fill;
+    }
+    DrawingStyle::fitFills(shape);
+}
+
+void paintFills(Shape& shape, const Color& color)
+{
+    for (auto& entry : shape.fillsMap)
+    {
+        SolidColor* solid = dynamic_cast<SolidColor*>(entry.second);
+        if (!solid)
+        {
+            solid = new SolidColor(&shape);
+            std::replace(shape.fills.begin(), shape.fills.end(), entry.second, static_cast<FillStyle*>(solid));
+            delete entry.second;
+            entry.second = solid;
+        }
+        std::copy(color.begin(), color.end(), solid->color);
+    }
+}
+
+void paintStrokes(Shape& shape, const Gradient& gradient)
+{
+    for (auto& entry : shape.strokesMap)
+    {
+        if (!entry.second)
+            continue;
+        FillStyle* fill = gradientFill(gradient, entry.second);
+        if (!fill)
+            continue;
+        delete entry.second->fill;
+        entry.second->fill = fill;
+    }
+    DrawingStyle::fitStrokes(shape);
+}
+
+void paintStrokes(Shape& shape, const Color& color)
+{
+    for (auto& entry : shape.strokesMap)
+    {
+        if (!entry.second)
+            continue;
+        SolidColor* solid = dynamic_cast<SolidColor*>(entry.second->fill);
+        if (!solid)
+        {
+            delete entry.second->fill;
+            solid = new SolidColor(entry.second);
+            entry.second->fill = solid;
+        }
+        std::copy(color.begin(), color.end(), solid->color);
+    }
 }
 
 } // namespace swatches

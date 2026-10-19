@@ -1,6 +1,7 @@
 #pragma once
 
 #include "command.h"
+#include "drawing_style.h"
 
 #include <array>
 #include <cstdint>
@@ -9,7 +10,10 @@
 
 namespace fla {
 
+class DOMElement;
 class Document;
+class FillStyle;
+class Shape;
 
 /// The Swatches panel's colors: the document's own swatch list, which
 /// the FLA saves in the file, and the default palette for a document
@@ -57,6 +61,46 @@ std::vector<Color> readAct(const std::vector<uint8_t>& bytes);
 std::vector<uint8_t> writeAct(const std::vector<Color>& colors);
 std::vector<Color> readGpl(const std::string& text);
 std::string writeGpl(const std::vector<Color>& colors, const std::string& name);
+
+/// A gradient swatch: linear or radial, its stops, and how it spreads and
+/// blends, as the drawing style keeps a gradient.
+struct Gradient
+{
+    bool radial = false;
+    std::vector<DrawingStyle::Stop> stops;
+    std::string spread;
+    bool linearRGB = false;
+};
+
+/// The gradients a document with none of its own shows, as the reference
+/// app's default swatches have them: white to black, linear and radial;
+/// white to red, green and blue, radial; two color ramps; and a soft gray.
+std::vector<Gradient> defaultGradients();
+
+/// The gradient swatches in swatch list text (LinearGradientSwatchItem and
+/// RadialGradientSwatchItem with their GradientEntry stops), in order.
+std::vector<Gradient> gradientsIn(const std::string& xml);
+
+/// The document's gradient swatches: those in its swatch list, then those
+/// in its extended swatch lists, where the reference app keeps them. Empty
+/// when it has none.
+std::vector<Gradient> gradientsOf(const Document& document);
+
+/// \a gradient as the fill new art is drawn with: the style's fill kind,
+/// stops, spread and blending, and its fill switched on.
+void useGradient(DrawingStyle& style, const Gradient& gradient);
+
+/// A new fill of \a gradient, unplaced: DrawingStyle::fitFill or fitFills
+/// puts it over the art. The caller owns it.
+FillStyle* gradientFill(const Gradient& gradient, DOMElement* parent);
+
+/// Paints every fill of \a shape with \a gradient, each fitted to the
+/// art it fills, or with \a color, replacing gradients and bitmaps too.
+void paintFills(Shape& shape, const Gradient& gradient);
+void paintFills(Shape& shape, const Color& color);
+/// The same for the strokes: a gradient fitted to each stroke's lines.
+void paintStrokes(Shape& shape, const Gradient& gradient);
+void paintStrokes(Shape& shape, const Color& color);
 
 } // namespace swatches
 
