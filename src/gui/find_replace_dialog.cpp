@@ -313,11 +313,13 @@ bool FindReplaceDialog::findNext()
 
 void FindReplaceDialog::pickColor(QPushButton* button, QColor& color)
 {
-    const QColor chosen = SwatchPopup::getColor(button, nullptr, color, "Color", false);
-    if (!chosen.isValid())
-        return;
-    color = chosen;
-    showColor(button, color);
+    // A member of this dialog, which outlives the button the answer is
+    // tied to.
+    QColor* target = &color;
+    SwatchPopup::getColor(button, nullptr, color, "Color", false, [this, button, target](const QColor& chosen) {
+        *target = chosen;
+        showColor(button, *target);
+    });
 }
 
 void FindReplaceDialog::showColor(QPushButton* button, const QColor& color)

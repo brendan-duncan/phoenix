@@ -6,6 +6,7 @@
 #include "start_dialog.h"
 #include "modal.h"
 #include "web_files.h"
+#include "file_pick.h"
 #include "stage_controls.h"
 #include "canvas_only.h"
 #include "safe_zones_dialog.h"
@@ -658,17 +659,25 @@ MainWindow::MainWindow(const QString& initialFile, QWidget* parent, bool startup
     if (first && !startFile.isEmpty())
     {
         QTimer::singleShot(0, this, [this, startFile, initialFile]() {
-            if (!initialFile.isEmpty() || !offerRecovery())
+            if (!initialFile.isEmpty())
+            {
                 loadFLAFile(startFile);
+                return;
+            }
+            offerRecovery([this, startFile](bool recovered) {
+                if (!recovered)
+                    loadFLAFile(startFile);
+            });
         });
     }
     else if (first)
     {
         QTimer::singleShot(0, this, [this, startScreen]() {
-            const bool recovered = offerRecovery();
-            const bool reopened = reopenSession();
-            if (!recovered && !reopened && startScreen)
-                showStartDialog();
+            offerRecovery([this, startScreen](bool recovered) {
+                const bool reopened = reopenSession();
+                if (!recovered && !reopened && startScreen)
+                    showStartDialog();
+            });
         });
     }
 
@@ -1252,8 +1261,22 @@ void MainWindow::openInTab(const QString& path)
 
 bool MainWindow::closeTab(int index, bool ask)
 {
+    // Asked about, the answer comes before closeTab() returns where a dialog
+    // is waited for; where it cannot be (the web build), a tab still being
+    // asked about counts as not closed, and closes later if the person says so.
+    const std::shared_ptr<bool> closed = std::make_shared<bool>(false);
+    closeTab(index, ask, [closed]() { *closed = true; });
+    return *closed;
+}
+
+void MainWindow::closeTab(int index, bool ask, std::function<void()> closed)
+{
     if (index < 0 || index >= static_cast<int>(_tabs.size()))
-        return true;
+    {
+        if (closed)
+            closed();
+        return;
+    }
     if (index != _activeTab && (!ask || !tabModified(*_tabs[static_cast<size_t>(index)])))
     {
         // Waiting and nothing to ask about: it goes without being shown.
@@ -1268,77 +1291,86 @@ bool MainWindow::closeTab(int index, bool ask)
         tab->history.clear();
         delete tab->document;
         refreshTabs();
-        return true;
+        if (closed)
+            closed();
+        return;
     }
     if (index != _activeTab)
         activateTab(index);
-    // Asking spins the event loop, where tabs can come and go: the one to
-    // close is found again after, and must still be the one shown.
+    // Tabs can come and go while the person is asked: the one to close is
+    // found again after, and must still be the one shown.
     const DocumentTab* closing = _tabs[static_cast<size_t>(index)].get();
-    if (ask && !confirmDiscardChanges())
-        return false;
-    const auto still = std::find_if(_tabs.begin(), _tabs.end(),
-        [closing](const std::unique_ptr<DocumentTab>& tab) { return tab.get() == closing; });
-    if (still == _tabs.end())
-        return true;
-    index = static_cast<int>(still - _tabs.begin());
-    if (index != _activeTab)
-        return false;
-    _switchingTabs = true;
-    releaseDocument();
-    _tabs.erase(_tabs.begin() + index);
-    _activeTab = -1;
-    _switchingTabs = false;
-    if (!_tabs.empty())
-        activateTab(std::min(index, static_cast<int>(_tabs.size()) - 1));
-    else
-    {
-        adoptDocument(nullptr, QString(), QString());
-        updateEditState();
-        // The last document gone from the window Phoenix started with: the
-        // start screen comes back rather than an empty editor (not while
-        // quitting, and not when it was turned off).
-        if (!_secondary && !s_quitting && _interactive && isVisible() &&
-            QSettings().value("showStartDialog", true).toBool())
+    const auto goAhead = [this, closing, closed]() {
+        const auto still = std::find_if(_tabs.begin(), _tabs.end(),
+            [closing](const std::unique_ptr<DocumentTab>& tab) { return tab.get() == closing; });
+        if (still == _tabs.end())
         {
-            QTimer::singleShot(0, this, [this]() {
-                if (_tabs.empty() && !s_quitting && isVisible())
-                    showStartDialog();
-            });
+            if (closed)
+                closed();
+            return;
         }
-    }
-    refreshTabs();
-    return true;
+        const int shown = static_cast<int>(still - _tabs.begin());
+        if (shown != _activeTab)
+            return;
+        _switchingTabs = true;
+        releaseDocument();
+        _tabs.erase(_tabs.begin() + shown);
+        _activeTab = -1;
+        _switchingTabs = false;
+        if (!_tabs.empty())
+            activateTab(std::min(shown, static_cast<int>(_tabs.size()) - 1));
+        else
+        {
+            adoptDocument(nullptr, QString(), QString());
+            updateEditState();
+            // The last document gone from the window Phoenix started with: the
+            // start screen comes back rather than an empty editor (not while
+            // quitting, and not when it was turned off).
+            if (!_secondary && !s_quitting && _interactive && isVisible() &&
+                QSettings().value("showStartDialog", true).toBool())
+            {
+                QTimer::singleShot(0, this, [this]() {
+                    if (_tabs.empty() && !s_quitting && isVisible())
+                        showStartDialog();
+                });
+            }
+        }
+        refreshTabs();
+        if (closed)
+            closed();
+    };
+    if (ask)
+        confirmDiscardChanges(goAhead);
+    else
+        goAhead();
 }
 
-bool MainWindow::closeOtherTabs(int keep)
+void MainWindow::closeOtherTabs(int keep)
 {
     if (keep < 0 || keep >= static_cast<int>(_tabs.size()))
-        return false;
+        return;
     const DocumentTab* kept = _tabs[static_cast<size_t>(keep)].get();
-    if (!settleUnsaved({this}, this, kept))
-        return false;
-    for (int i = static_cast<int>(_tabs.size()) - 1; i >= 0; --i)
-    {
-        if (_tabs[static_cast<size_t>(i)].get() != kept)
-            closeTab(i, false);
-    }
-    return true;
+    settleUnsaved({this}, this, kept, [this, kept]() {
+        for (int i = static_cast<int>(_tabs.size()) - 1; i >= 0; --i)
+        {
+            if (_tabs[static_cast<size_t>(i)].get() != kept)
+                closeTab(i, false);
+        }
+    });
 }
 
-bool MainWindow::closeAllTabs()
+void MainWindow::closeAllTabs()
 {
-    if (!settleUnsaved({this}, this))
-        return false;
-    // The waiting ones first, so none is shown on its way out.
-    for (int i = static_cast<int>(_tabs.size()) - 1; i >= 0; --i)
-    {
-        if (i != _activeTab)
-            closeTab(i, false);
-    }
-    if (!_tabs.empty())
-        closeTab(_activeTab, false);
-    return true;
+    settleUnsaved({this}, this, nullptr, [this]() {
+        // The waiting ones first, so none is shown on its way out.
+        for (int i = static_cast<int>(_tabs.size()) - 1; i >= 0; --i)
+        {
+            if (i != _activeTab)
+                closeTab(i, false);
+        }
+        if (!_tabs.empty())
+            closeTab(_activeTab, false);
+    });
 }
 
 void MainWindow::cycleTabs(int step)
@@ -1533,7 +1565,29 @@ void MainWindow::refreshTabs()
     _switchingTabs = false;
 }
 
-bool MainWindow::settleUnsaved(const QList<MainWindow*>& windows, QWidget* parent, const DocumentTab* except)
+namespace {
+
+/// Calls \a step with each of \a items from \a index on, the next once the
+/// step before calls the continuation it is given, and \a done after the
+/// last. A step that never goes on stops the rest.
+template <typename T>
+void eachInTurn(std::vector<T> items, size_t index, std::function<void(const T&, std::function<void()>)> step,
+    std::function<void()> done)
+{
+    if (index >= items.size())
+    {
+        if (done)
+            done();
+        return;
+    }
+    const T item = items[index];
+    step(item, [items, index, step, done]() { eachInTurn(items, index + 1, step, done); });
+}
+
+} // namespace
+
+void MainWindow::settleUnsaved(const QList<MainWindow*>& windows, QWidget* parent, const DocumentTab* except,
+    std::function<void()> settled)
 {
     struct Unsaved
     {
@@ -1551,7 +1605,10 @@ bool MainWindow::settleUnsaved(const QList<MainWindow*>& windows, QWidget* paren
                 unsaved.push_back({window, tab.get()});
     }
     if (unsaved.empty())
-        return true;
+    {
+        settled();
+        return;
+    }
     // Each is shown in turn to be asked about or saved.
     const auto show = [](const Unsaved& entry) {
         if (!entry.window)
@@ -1567,68 +1624,74 @@ bool MainWindow::settleUnsaved(const QList<MainWindow*>& windows, QWidget* paren
         }
         return false;
     };
-    const auto review = [&show](const Unsaved& entry) {
-        return !show(entry) || entry.window->confirmDiscardChanges();
-    };
+    const std::function<void(const Unsaved&, std::function<void()>)> review =
+        [show](const Unsaved& entry, std::function<void()> next) {
+            if (!show(entry))
+                next();
+            else
+                entry.window->confirmDiscardChanges(next);
+        };
     if (unsaved.size() == 1)
-        return review(unsaved.front());
+    {
+        review(unsaved.front(), settled);
+        return;
+    }
 
     QStringList names;
     for (const Unsaved& entry : unsaved)
         names << entry.window->tabName(*entry.tab);
-    QMessageBox box(parent);
-    box.setIcon(QMessageBox::Warning);
-    box.setWindowTitle("Unsaved Changes");
-    box.setText(QString("%1 documents have unsaved changes.").arg(unsaved.size()));
-    box.setInformativeText(names.join("\n"));
-    QPushButton* saveAll = box.addButton("Save All", QMessageBox::AcceptRole);
-    QPushButton* discardAll = box.addButton("Discard All", QMessageBox::DestructiveRole);
-    QPushButton* reviewEach = box.addButton("Review Each…", QMessageBox::ActionRole);
-    box.addButton(QMessageBox::Cancel);
-    box.setDefaultButton(saveAll);
-    box.exec();
-    const QAbstractButton* chosen = box.clickedButton();
-    if (chosen == discardAll)
-        return true;
-    if (chosen == saveAll)
-    {
-        for (const Unsaved& entry : unsaved)
+    QMessageBox* box = new QMessageBox(parent);
+    box->setIcon(QMessageBox::Warning);
+    box->setWindowTitle("Unsaved Changes");
+    box->setText(QString("%1 documents have unsaved changes.").arg(unsaved.size()));
+    box->setInformativeText(names.join("\n"));
+    QPushButton* saveAll = box->addButton("Save All", QMessageBox::AcceptRole);
+    QPushButton* discardAll = box->addButton("Discard All", QMessageBox::DestructiveRole);
+    QPushButton* reviewEach = box->addButton("Review Each…", QMessageBox::ActionRole);
+    box->addButton(QMessageBox::Cancel);
+    box->setDefaultButton(saveAll);
+    modal::open(box, [box, saveAll, discardAll, reviewEach, unsaved, show, review, settled](QMessageBox::StandardButton) {
+        const QAbstractButton* chosen = box->clickedButton();
+        if (chosen == discardAll)
+            settled();
+        else if (chosen == saveAll)
         {
-            if (!show(entry))
-                continue;
-            entry.window->saveFile();
             // Save As canceled, or a save that failed: the rest wait.
-            if (entry.window->_editContext.isModified())
-                return false;
+            eachInTurn<Unsaved>(unsaved, 0,
+                [show](const Unsaved& entry, std::function<void()> next) {
+                    if (!show(entry))
+                        next();
+                    else
+                        entry.window->saveFileThen(next);
+                },
+                settled);
         }
-        return true;
-    }
-    if (chosen == reviewEach)
-    {
-        for (const Unsaved& entry : unsaved)
-            if (!review(entry))
-                return false;
-        return true;
-    }
-    return false;
+        else if (chosen == reviewEach)
+            eachInTurn<Unsaved>(unsaved, 0, review, settled);
+    });
 }
 
 void MainWindow::quitAll()
 {
     // The window quitting from first: the document it shows comes back
     // shown next time.
-    QList<MainWindow*> all = s_windows;
-    all.removeAll(this);
-    all.prepend(this);
-    if (!settleUnsaved(all, this))
-        return;
-    saveSession(all);
-    s_quitting = true;
-    for (MainWindow* window : all)
-        if (window != this)
-            window->close();
-    close();
-    s_quitting = false;
+    const auto windows = [this]() {
+        QList<MainWindow*> all = s_windows;
+        all.removeAll(this);
+        all.prepend(this);
+        return all;
+    };
+    settleUnsaved(windows(), this, nullptr, [this, windows]() {
+        // Found again: in a browser, windows can close while the person is asked.
+        const QList<MainWindow*> all = windows();
+        saveSession(all);
+        s_quitting = true;
+        for (MainWindow* window : all)
+            if (window != this)
+                window->close();
+        close();
+        s_quitting = false;
+    });
 }
 
 void MainWindow::saveSession(const QList<MainWindow*>& windows)
@@ -1678,28 +1741,41 @@ void MainWindow::saveAsTemplate()
 {
     if (!_flaDocument || !_flaDocument->document)
         return;
-    bool ok = false;
     const QString suggested = QFileInfo(_documentName).completeBaseName();
-    const QString name = QInputDialog::getText(this, "Save as Template", "Template name:", QLineEdit::Normal,
-        suggested.isEmpty() ? QString("My Template") : suggested, &ok).trimmed();
-    if (!ok || name.isEmpty())
-        return;
-    QString safe = name;
-    safe.replace(QRegularExpression("[\\\\/:*?\"<>|]"), "_");
-    QDir().mkpath(templatesFolder());
-    const QString path = QDir(templatesFolder()).filePath(safe + ".phx");
-    if (QFileInfo::exists(path) &&
-        QMessageBox::question(this, "Save as Template", QString("Replace the template %1?").arg(name)) != QMessageBox::Yes)
-        return;
-    phx::SaveOptions options;
-    options.application = QString("Phoenix %1").arg(QCoreApplication::applicationVersion()).toStdString();
-    std::string error;
-    if (AutoSave* autoSave = activeAutoSave())
-        autoSave->waitForWrite();
-    if (!phx::save(*_flaDocument->document, path.toStdString(), options, error))
-        modal::warning(this, "Save as Template", QString::fromStdString(error));
-    else
-        statusBar()->showMessage(QString("Saved the template %1.").arg(name), 3000);
+    const fla::FLADocument* asked = _flaDocument;
+    modal::getText(this, "Save as Template", "Template name:", suggested.isEmpty() ? QString("My Template") : suggested,
+        [this, asked](const QString& entered) {
+            const QString name = entered.trimmed();
+            if (name.isEmpty() || _flaDocument != asked)
+                return;
+            QString safe = name;
+            safe.replace(QRegularExpression("[\\\\/:*?\"<>|]"), "_");
+            QDir().mkpath(templatesFolder());
+            const QString path = QDir(templatesFolder()).filePath(safe + ".phx");
+            const auto save = [this, asked, name, path]() {
+                if (_flaDocument != asked || !_flaDocument || !_flaDocument->document)
+                    return;
+                phx::SaveOptions options;
+                options.application = QString("Phoenix %1").arg(QCoreApplication::applicationVersion()).toStdString();
+                std::string error;
+                if (AutoSave* autoSave = activeAutoSave())
+                    autoSave->waitForWrite();
+                if (!phx::save(*_flaDocument->document, path.toStdString(), options, error))
+                    modal::warning(this, "Save as Template", QString::fromStdString(error));
+                else
+                    statusBar()->showMessage(QString("Saved the template %1.").arg(name), 3000);
+            };
+            if (!QFileInfo::exists(path))
+            {
+                save();
+                return;
+            }
+            modal::ask(this, QMessageBox::Question, "Save as Template", QString("Replace the template %1?").arg(name),
+                QMessageBox::Yes | QMessageBox::No, QMessageBox::NoButton, [save](QMessageBox::StandardButton answer) {
+                    if (answer == QMessageBox::Yes)
+                        save();
+                });
+        });
 }
 
 void MainWindow::serveMcpOnStdio()
@@ -1848,22 +1924,24 @@ void MainWindow::openLessonFinal(const QString& path, const QString& name)
 
 void MainWindow::showTutorials()
 {
-    TutorialsDialog dialog(this);
-    if (dialog.exec() != QDialog::Accepted || dialog.chosen().isEmpty())
-        return;
-    if (!dialog.finalChosen())
-    {
-        startTutorial(dialog.chosen());
-        return;
-    }
-    for (const TutorialLesson& lesson : tutorials::allLessons())
-        if (lesson.id == dialog.chosen())
+    TutorialsDialog* dialog = new TutorialsDialog(this);
+    modal::open(dialog, [this, dialog](int result) {
+        if (result != QDialog::Accepted || dialog->chosen().isEmpty())
+            return;
+        if (!dialog->finalChosen())
         {
-            QString error;
-            if (!tutorials::showFinal(*this, lesson, error))
-                modal::warning(this, "Tutorials", QString("The final could not be shown: %1").arg(error));
+            startTutorial(dialog->chosen());
             return;
         }
+        for (const TutorialLesson& lesson : tutorials::allLessons())
+            if (lesson.id == dialog->chosen())
+            {
+                QString error;
+                if (!tutorials::showFinal(*this, lesson, error))
+                    modal::warning(this, "Tutorials", QString("The final could not be shown: %1").arg(error));
+                return;
+            }
+    });
 }
 
 void MainWindow::startTutorial(const QString& id)
@@ -1894,45 +1972,56 @@ void MainWindow::newFromTemplate()
             "There are no templates yet. Open or make a document and choose File > Save as Template.");
         return;
     }
-    bool ok = false;
-    const QString chosen = QInputDialog::getItem(this, "New from Template", "Template:", names, 0, false, &ok);
-    const int index = static_cast<int>(names.indexOf(chosen));
-    if (!ok || index < 0)
-        return;
-    makeRoomForDocument();
-    // A copy of the template, not the template itself: an untitled document
-    // whose first Save asks where to put it.
-    loadFLAFile(files[index].absoluteFilePath());
-    // A template is not a recent file.
-    forgetRecentFile(files[index].absoluteFilePath());
-    if (_flaDocument)
-    {
-        _documentPath.clear();
-        _documentName = "Untitled";
-        _editContext.markUnsaved();
-        updateWindowTitle();
-        updateEditState();
-    }
+    modal::getItem(this, "New from Template", "Template:", names, 0, false, [this, names, files](const QString& chosen) {
+        const int index = static_cast<int>(names.indexOf(chosen));
+        if (index < 0)
+            return;
+        makeRoomForDocument();
+        // A copy of the template, not the template itself: an untitled document
+        // whose first Save asks where to put it.
+        loadFLAFile(files[index].absoluteFilePath());
+        // A template is not a recent file.
+        forgetRecentFile(files[index].absoluteFilePath());
+        if (_flaDocument)
+        {
+            _documentPath.clear();
+            _documentName = "Untitled";
+            _editContext.markUnsaved();
+            updateWindowTitle();
+            updateEditState();
+        }
+    });
 }
 
 void MainWindow::revertDocument()
 {
     if (_documentPath.isEmpty() || !_flaDocument)
         return;
-    if (_editContext.isModified() &&
-        QMessageBox::question(this, "Revert",
-            QString("Go back to the saved %1? The changes since it was saved will be lost.").arg(_documentName)) !=
-            QMessageBox::Yes)
+    const fla::FLADocument* asked = _flaDocument;
+    const auto revert = [this, asked]() {
+        if (_flaDocument != asked || _documentPath.isEmpty())
+            return;
+        const QString path = _documentPath;
+        const int frame = _player ? _player->currentFrame() : 0;
+        // In the same tab: the document reloads in place.
+        _switchingTabs = true;
+        loadFLAFile(path);
+        _switchingTabs = false;
+        if (_player && _flaDocument)
+            _player->setCurrentFrame(frame);
+        refreshTabs();
+    };
+    if (!_editContext.isModified())
+    {
+        revert();
         return;
-    const QString path = _documentPath;
-    const int frame = _player ? _player->currentFrame() : 0;
-    // In the same tab: the document reloads in place.
-    _switchingTabs = true;
-    loadFLAFile(path);
-    _switchingTabs = false;
-    if (_player && _flaDocument)
-        _player->setCurrentFrame(frame);
-    refreshTabs();
+    }
+    modal::ask(this, QMessageBox::Question, "Revert",
+        QString("Go back to the saved %1? The changes since it was saved will be lost.").arg(_documentName),
+        QMessageBox::Yes | QMessageBox::No, QMessageBox::NoButton, [revert](QMessageBox::StandardButton answer) {
+            if (answer == QMessageBox::Yes)
+                revert();
+        });
 }
 
 void MainWindow::createPanels()
@@ -2756,6 +2845,14 @@ void MainWindow::setupWindowMenu()
                     return QString();
                 if (_documentPath.isEmpty() || _editContext.isModified())
                 {
+                    // The queue wants its answer on the spot, which cannot
+                    // wait for a question (the web build): saved first, it
+                    // can be added then.
+                    if (modal::cannotWait())
+                    {
+                        modal::information(this, "Render Queue", "Save the document, then add it to the queue.");
+                        return QString();
+                    }
                     if (QMessageBox::question(this, "Render Queue", "Save the document before queueing it?") != QMessageBox::Yes)
                         return QString();
                     saveFile();
@@ -2835,9 +2932,11 @@ void MainWindow::setupWindowMenu()
 
 void MainWindow::editToolbar()
 {
-    ToolbarEditor editor(_toolbox, this);
-    if (editor.exec() == QDialog::Accepted)
-        _toolbox->setLayout(editor.layout());
+    ToolbarEditor* editor = new ToolbarEditor(_toolbox, this);
+    modal::open(editor, [this, editor](int result) {
+        if (result == QDialog::Accepted)
+            _toolbox->setLayout(editor->layout());
+    });
 }
 
 void MainWindow::fillThemeMenu(QMenu* menu)
@@ -2855,8 +2954,7 @@ void MainWindow::fillThemeMenu(QMenu* menu)
     }
     menu->addSeparator();
     menu->addAction("&Edit Theme\u2026", this, [this]() {
-        ThemeEditor editor(this);
-        editor.exec();
+        modal::open(new ThemeEditor(this));
     });
 }
 
@@ -2894,32 +2992,35 @@ void MainWindow::newFile()
     });
 }
 
-bool MainWindow::offerRecovery()
+void MainWindow::offerRecovery(std::function<void(bool recovered)> done)
 {
-    QList<AutoSave::Orphan> orphans = AutoSave::orphans();
-    if (orphans.isEmpty())
-        return false;
-    std::sort(orphans.begin(), orphans.end(),
+    const std::shared_ptr<QList<AutoSave::Orphan>> orphans = std::make_shared<QList<AutoSave::Orphan>>(AutoSave::orphans());
+    if (orphans->isEmpty())
+    {
+        done(false);
+        return;
+    }
+    std::sort(orphans->begin(), orphans->end(),
         [](const AutoSave::Orphan& a, const AutoSave::Orphan& b) { return a.saved > b.saved; });
 
     // One dialog for every copy left behind, newest first: recover any or
     // all, each in a tab of its own, discard any or all, or keep them for
     // next time.
-    QDialog dialog(this);
-    dialog.setWindowTitle("Recover Unsaved Work");
-    QVBoxLayout* layout = new QVBoxLayout(&dialog);
-    QLabel* intro = new QLabel(&dialog);
+    QDialog* dialog = new QDialog(this);
+    dialog->setWindowTitle("Recover Unsaved Work");
+    QVBoxLayout* layout = new QVBoxLayout(dialog);
+    QLabel* intro = new QLabel(dialog);
     intro->setWordWrap(true);
     layout->addWidget(intro);
-    QListWidget* list = new QListWidget(&dialog);
+    QListWidget* list = new QListWidget(dialog);
     list->setSelectionMode(QAbstractItemView::ExtendedSelection);
-    const auto fill = [list, intro, &orphans]() {
-        intro->setText(orphans.size() == 1
+    const auto fill = [list, intro, orphans]() {
+        intro->setText(orphans->size() == 1
                 ? QString("Phoenix closed unexpectedly while a document had unsaved changes. A copy was kept.")
                 : QString("Phoenix closed unexpectedly while documents had unsaved changes. %1 copies were kept.")
-                      .arg(orphans.size()));
+                      .arg(orphans->size()));
         list->clear();
-        for (const AutoSave::Orphan& orphan : orphans)
+        for (const AutoSave::Orphan& orphan : *orphans)
         {
             const QString name = orphan.name.isEmpty() ? QString("Untitled") : orphan.name;
             QListWidgetItem* item = new QListWidgetItem(
@@ -2933,83 +3034,93 @@ bool MainWindow::offerRecovery()
     fill();
     layout->addWidget(list, 1);
 
-    QDialogButtonBox* buttons = new QDialogButtonBox(&dialog);
+    QDialogButtonBox* buttons = new QDialogButtonBox(dialog);
     QPushButton* recover = buttons->addButton("Recover", QDialogButtonBox::AcceptRole);
     QPushButton* discard = buttons->addButton("Discard", QDialogButtonBox::DestructiveRole);
     QPushButton* discardAll = buttons->addButton("Discard All", QDialogButtonBox::DestructiveRole);
     buttons->addButton("Later", QDialogButtonBox::RejectRole);
     recover->setDefault(true);
     layout->addWidget(buttons);
-    const auto update = [&]() {
+    const auto update = [list, recover, discard]() {
         recover->setEnabled(!list->selectedItems().isEmpty());
         discard->setEnabled(!list->selectedItems().isEmpty());
     };
-    connect(list, &QListWidget::itemSelectionChanged, &dialog, update);
-    connect(list, &QListWidget::itemDoubleClicked, &dialog, [recover]() { recover->click(); });
-    connect(discard, &QPushButton::clicked, &dialog, [&]() {
+    connect(list, &QListWidget::itemSelectionChanged, dialog, update);
+    connect(list, &QListWidget::itemDoubleClicked, dialog, [recover]() { recover->click(); });
+    connect(discard, &QPushButton::clicked, dialog, [dialog, list, orphans, fill, update]() {
         QList<AutoSave::Orphan> kept;
-        for (int row = 0; row < orphans.size(); ++row)
+        for (int row = 0; row < orphans->size(); ++row)
         {
             if (list->item(row)->isSelected())
-                AutoSave::remove(orphans[row]);
+                AutoSave::remove((*orphans)[row]);
             else
-                kept.push_back(orphans[row]);
+                kept.push_back((*orphans)[row]);
         }
-        orphans = kept;
-        if (orphans.isEmpty())
-            dialog.reject();
+        *orphans = kept;
+        if (orphans->isEmpty())
+            dialog->reject();
         fill();
         update();
     });
-    connect(discardAll, &QPushButton::clicked, &dialog, [&]() {
-        const QMessageBox::StandardButton answer = QMessageBox::question(&dialog, "Discard All",
-            QString("Discard all %1 copies? They cannot be recovered afterward.").arg(orphans.size()));
-        if (answer != QMessageBox::Yes)
-            return;
-        for (const AutoSave::Orphan& orphan : orphans)
-            AutoSave::remove(orphan);
-        orphans.clear();
-        dialog.reject();
+    connect(discardAll, &QPushButton::clicked, dialog, [dialog, orphans]() {
+        modal::ask(dialog, QMessageBox::Question, "Discard All",
+            QString("Discard all %1 copies? They cannot be recovered afterward.").arg(orphans->size()),
+            QMessageBox::Yes | QMessageBox::No, QMessageBox::NoButton, [dialog, orphans](QMessageBox::StandardButton answer) {
+                if (answer != QMessageBox::Yes)
+                    return;
+                for (const AutoSave::Orphan& orphan : *orphans)
+                    AutoSave::remove(orphan);
+                orphans->clear();
+                dialog->reject();
+            });
     });
-    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
-    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    connect(buttons, &QDialogButtonBox::accepted, dialog, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, dialog, &QDialog::reject);
     update();
-    if (dialog.exec() != QDialog::Accepted)
-        return false;
-    QList<AutoSave::Orphan> chosen;
-    for (int row = 0; row < orphans.size() && row < list->count(); ++row)
-        if (list->item(row)->isSelected())
-            chosen.push_back(orphans[row]);
-
-    // The newest last, so it is the one shown.
-    std::reverse(chosen.begin(), chosen.end());
-    QStringList recovered;
-    for (const AutoSave::Orphan& orphan : chosen)
-    {
-        const QString name = orphan.name.isEmpty() ? QString("Untitled") : orphan.name;
-        std::string error;
-        std::string warning;
-        bool readOnly = false;
-        fla::FLADocument* document = phx::load(orphan.file.toStdString(), error, warning, readOnly);
-        if (!document)
+    modal::open(dialog, [this, dialog, list, orphans, done](int result) {
+        if (result != QDialog::Accepted)
         {
-            modal::warning(this, "Recover Unsaved Work",
-                QString("The copy of %1 could not be read: %2").arg(name, QString::fromStdString(error)));
-            continue;
+            done(false);
+            return;
         }
-        // Back where it came from, and unsaved until it is saved. The copies
-        // not chosen are offered again next time.
-        makeRoomForDocument();
-        adoptDocument(document, orphan.originalPath, name);
-        _editContext.markUnsaved();
-        updateEditState();
-        AutoSave::remove(orphan);
-        recovered << name;
-    }
-    if (recovered.isEmpty())
-        return false;
-    statusBar()->showMessage(QString("Recovered %1. Save to keep them.").arg(recovered.join(", ")), 8000);
-    return true;
+        QList<AutoSave::Orphan> chosen;
+        for (int row = 0; row < orphans->size() && row < list->count(); ++row)
+            if (list->item(row)->isSelected())
+                chosen.push_back((*orphans)[row]);
+
+        // The newest last, so it is the one shown.
+        std::reverse(chosen.begin(), chosen.end());
+        QStringList recovered;
+        for (const AutoSave::Orphan& orphan : chosen)
+        {
+            const QString name = orphan.name.isEmpty() ? QString("Untitled") : orphan.name;
+            std::string error;
+            std::string warning;
+            bool readOnly = false;
+            fla::FLADocument* document = phx::load(orphan.file.toStdString(), error, warning, readOnly);
+            if (!document)
+            {
+                modal::warning(this, "Recover Unsaved Work",
+                    QString("The copy of %1 could not be read: %2").arg(name, QString::fromStdString(error)));
+                continue;
+            }
+            // Back where it came from, and unsaved until it is saved. The copies
+            // not chosen are offered again next time.
+            makeRoomForDocument();
+            adoptDocument(document, orphan.originalPath, name);
+            _editContext.markUnsaved();
+            updateEditState();
+            AutoSave::remove(orphan);
+            recovered << name;
+        }
+        if (recovered.isEmpty())
+        {
+            done(false);
+            return;
+        }
+        statusBar()->showMessage(QString("Recovered %1. Save to keep them.").arg(recovered.join(", ")), 8000);
+        done(true);
+    });
 }
 
 void MainWindow::showStartDialog()
@@ -3030,10 +3141,12 @@ void MainWindow::showStartDialog()
         case StartDialog::Choice::NewPreset:
         {
             const auto& presets = NewDocumentDialog::presets();
-            if (dialog->preset() < 0 || dialog->preset() >= static_cast<int>(presets.size()) || !confirmDiscardChanges())
+            if (dialog->preset() < 0 || dialog->preset() >= static_cast<int>(presets.size()))
                 return;
-            const NewDocumentDialog::Preset& preset = presets[static_cast<size_t>(dialog->preset())];
-            createNewDocument(preset.width, preset.height, preset.frameRate, Qt::white);
+            const NewDocumentDialog::Preset preset = presets[static_cast<size_t>(dialog->preset())];
+            confirmDiscardChanges([this, preset]() {
+                createNewDocument(preset.width, preset.height, preset.frameRate, Qt::white);
+            });
             break;
         }
         case StartDialog::Choice::NewCustom:
@@ -3468,6 +3581,42 @@ void MainWindow::setupUI()
         if (!layer)
             return;
         using Attributes = std::vector<std::pair<std::string, std::string>>;
+        // The change made, as one step, once it is known: after a dialog
+        // for some.
+        const auto apply = [this, layer, what](const Attributes& after, const QString& name,
+                               const std::vector<std::pair<fla::Element*, Attributes>>& elementChanges) {
+            if (after == layer->extraAttributes && elementChanges.empty())
+                return;
+            fla::CommandStack& stack = _editContext.commandStack();
+            if (!elementChanges.empty())
+                stack.beginMacro(name.toStdString());
+            if (after != layer->extraAttributes)
+                stack.push(fla::CommandPtr(new fla::SetPropertyCommand<Attributes>(layer->extraAttributes,
+                    layer->extraAttributes, after, name.toStdString())));
+            for (const auto& [element, attributes] : elementChanges)
+                stack.push(fla::CommandPtr(new fla::SetPropertyCommand<Attributes>(element->extraAttributes,
+                    element->extraAttributes, attributes, name.toStdString())));
+            if (!elementChanges.empty())
+                stack.endMacro();
+            stack.breakMergeChain();
+            if (_phoenixView)
+            {
+                _phoenixView->clearCaches();
+                _phoenixView->update();
+            }
+            // The layer's icon says what it is now.
+            if (_timelineView)
+                _timelineView->refresh();
+            if (_behaviors && _behaviorsDock)
+            {
+                if (what == "adjustment:on")
+                {
+                    _behaviorsDock->show();
+                    _behaviorsDock->raise();
+                }
+                _behaviors->refresh();
+            }
+        };
         Attributes after;
         QString name;
         // Objects whose attributes change with the layer's: a feather of
@@ -3497,25 +3646,25 @@ void MainWindow::setupUI()
         else if (what == "time")
         {
             const fla::motionblur::LayerTime was = fla::motionblur::layerTimeOf(*layer);
-            QDialog dialog(this);
-            dialog.setWindowTitle("Echo and Posterize Time");
-            QFormLayout* form = new QFormLayout(&dialog);
-            HotSpinBox* echoes = new HotSpinBox(&dialog);
+            QDialog* dialog = new QDialog(this);
+            dialog->setWindowTitle("Echo and Posterize Time");
+            QFormLayout* form = new QFormLayout(dialog);
+            HotSpinBox* echoes = new HotSpinBox(dialog);
             echoes->setRange(0, 32);
             echoes->setValue(was.echoes);
             echoes->setSpecialValueText("None");
             echoes->setToolTip("How many earlier poses trail behind the layer");
-            HotSpinBox* interval = new HotSpinBox(&dialog);
+            HotSpinBox* interval = new HotSpinBox(dialog);
             interval->setRange(1, 240);
             interval->setValue(was.interval);
             interval->setSuffix(" frames");
             interval->setToolTip("How far back each echo is from the one before");
-            HotSpinBox* decay = new HotSpinBox(&dialog);
+            HotSpinBox* decay = new HotSpinBox(dialog);
             decay->setRange(0, 100);
             decay->setValue(static_cast<int>(std::lround(was.decay * 100.0)));
             decay->setSuffix("%");
             decay->setToolTip("How much of the one before each echo keeps: low fades fast");
-            HotSpinBox* hold = new HotSpinBox(&dialog);
+            HotSpinBox* hold = new HotSpinBox(dialog);
             hold->setRange(1, 240);
             hold->setValue(was.posterize);
             hold->setSpecialValueText("Every frame");
@@ -3525,39 +3674,42 @@ void MainWindow::setupUI()
             form->addRow("Each", interval);
             form->addRow("Keeps", decay);
             form->addRow("Posterize Time", hold);
-            QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
-            connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
-            connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+            QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, dialog);
+            connect(buttons, &QDialogButtonBox::accepted, dialog, &QDialog::accept);
+            connect(buttons, &QDialogButtonBox::rejected, dialog, &QDialog::reject);
             form->addRow(buttons);
-            if (dialog.exec() != QDialog::Accepted)
-                return;
-            fla::motionblur::LayerTime time;
-            time.echoes = echoes->value();
-            time.interval = interval->value();
-            time.decay = decay->value() / 100.0;
-            time.posterize = hold->value();
-            after = fla::motionblur::withLayerTime(*layer, time);
-            name = "Echo and Posterize Time";
+            const fla::FLADocument* asked = _flaDocument;
+            modal::open(dialog, [this, asked, layer, echoes, interval, decay, hold, apply](int result) {
+                if (result != QDialog::Accepted || _flaDocument != asked)
+                    return;
+                fla::motionblur::LayerTime time;
+                time.echoes = echoes->value();
+                time.interval = interval->value();
+                time.decay = decay->value() / 100.0;
+                time.posterize = hold->value();
+                apply(fla::motionblur::withLayerTime(*layer, time), "Echo and Posterize Time", {});
+            });
+            return;
         }
         else if (what == "maskedge")
         {
             const fla::compositing::MaskEdge was = fla::compositing::maskEdgeOf(*layer);
-            QDialog dialog(this);
-            dialog.setWindowTitle("Mask Edge");
-            QFormLayout* form = new QFormLayout(&dialog);
-            HotDoubleSpinBox* feather = new HotDoubleSpinBox(&dialog);
+            QDialog* dialog = new QDialog(this);
+            dialog->setWindowTitle("Mask Edge");
+            QFormLayout* form = new QFormLayout(dialog);
+            HotDoubleSpinBox* feather = new HotDoubleSpinBox(dialog);
             feather->setRange(0.0, 1000.0);
             feather->setDecimals(2);
             feather->setSuffix(" px");
             feather->setValue(was.feather);
             feather->setToolTip("How far the edge fades, softly, either side");
-            HotDoubleSpinBox* expand = new HotDoubleSpinBox(&dialog);
+            HotDoubleSpinBox* expand = new HotDoubleSpinBox(dialog);
             expand->setRange(-1000.0, 1000.0);
             expand->setDecimals(2);
             expand->setSuffix(" px");
             expand->setValue(was.expand);
             expand->setToolTip("Grows the mask out, or shrinks it in with less than 0");
-            QCheckBox* invert = new QCheckBox("Show what is outside the mask instead", &dialog);
+            QCheckBox* invert = new QCheckBox("Show what is outside the mask instead", dialog);
             invert->setChecked(was.invert);
             form->addRow("Feather", feather);
             form->addRow("Expand", expand);
@@ -3575,7 +3727,7 @@ void MainWindow::setupUI()
             if (!onMask.empty())
             {
                 const double first = fla::compositing::elementFeatherOf(*onMask.front(), -1.0);
-                own = new HotDoubleSpinBox(&dialog);
+                own = new HotDoubleSpinBox(dialog);
                 own->setRange(-1.0, 1000.0);
                 own->setDecimals(2);
                 own->setSuffix(" px");
@@ -3585,25 +3737,30 @@ void MainWindow::setupUI()
                                 "each keyframe keeps its own and a tween blends between them");
                 form->addRow(onMask.size() == 1 ? QString("Selected object") : QString("Selected objects"), own);
             }
-            QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
-            connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
-            connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+            QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, dialog);
+            connect(buttons, &QDialogButtonBox::accepted, dialog, &QDialog::accept);
+            connect(buttons, &QDialogButtonBox::rejected, dialog, &QDialog::reject);
             form->addRow(buttons);
-            if (dialog.exec() != QDialog::Accepted)
-                return;
-            fla::compositing::MaskEdge edge;
-            edge.feather = feather->value();
-            edge.expand = expand->value();
-            edge.invert = invert->isChecked();
-            after = fla::compositing::withMaskEdge(*layer, edge);
-            name = "Mask Edge";
-            if (own)
-                for (fla::Element* element : onMask)
-                {
-                    Attributes attributes = fla::compositing::withElementFeather(*element, own->value() < 0.0 ? -1.0 : own->value());
-                    if (attributes != element->extraAttributes)
-                        elementChanges.emplace_back(element, attributes);
-                }
+            const fla::FLADocument* asked = _flaDocument;
+            modal::open(dialog, [this, asked, layer, feather, expand, invert, own, onMask, apply](int result) {
+                if (result != QDialog::Accepted || _flaDocument != asked)
+                    return;
+                fla::compositing::MaskEdge edge;
+                edge.feather = feather->value();
+                edge.expand = expand->value();
+                edge.invert = invert->isChecked();
+                std::vector<std::pair<fla::Element*, Attributes>> changes;
+                if (own)
+                    for (fla::Element* element : onMask)
+                    {
+                        Attributes attributes =
+                            fla::compositing::withElementFeather(*element, own->value() < 0.0 ? -1.0 : own->value());
+                        if (attributes != element->extraAttributes)
+                            changes.emplace_back(element, attributes);
+                    }
+                apply(fla::compositing::withMaskEdge(*layer, edge), "Mask Edge", changes);
+            });
+            return;
         }
         else if (what.startsWith("maskwith:"))
         {
@@ -3647,37 +3804,7 @@ void MainWindow::setupUI()
             after = fla::compositing::withAdjustment(*layer, what == "adjustment:on");
             name = "Adjustment Layer";
         }
-        if (after == layer->extraAttributes && elementChanges.empty())
-            return;
-        fla::CommandStack& stack = _editContext.commandStack();
-        if (!elementChanges.empty())
-            stack.beginMacro(name.toStdString());
-        if (after != layer->extraAttributes)
-            stack.push(fla::CommandPtr(new fla::SetPropertyCommand<Attributes>(layer->extraAttributes,
-                layer->extraAttributes, after, name.toStdString())));
-        for (const auto& [element, attributes] : elementChanges)
-            stack.push(fla::CommandPtr(new fla::SetPropertyCommand<Attributes>(element->extraAttributes,
-                element->extraAttributes, attributes, name.toStdString())));
-        if (!elementChanges.empty())
-            stack.endMacro();
-        stack.breakMergeChain();
-        if (_phoenixView)
-        {
-            _phoenixView->clearCaches();
-            _phoenixView->update();
-        }
-        // The layer's icon says what it is now.
-        if (_timelineView)
-            _timelineView->refresh();
-        if (_behaviors && _behaviorsDock)
-        {
-            if (what == "adjustment:on")
-            {
-                _behaviorsDock->show();
-                _behaviorsDock->raise();
-            }
-            _behaviors->refresh();
-        }
+        apply(after, name, elementChanges);
     });
     connect(_timelineView, &TimelineView::layerClipboardRequested, this, &MainWindow::layerClipboard);
     // The frame view's thumbnails: a keyframe's art alone, cropped to it,
@@ -4131,66 +4258,67 @@ void MainWindow::editEffect(fla::Layer* layer)
     if (!layer || !fla::effects::isEffect(*layer))
         return;
     fla::effects::Effect effect = fla::effects::effectOf(*layer);
-    QDialog dialog(this);
-    dialog.setWindowTitle(QString("Effect: %1").arg(QString::fromStdString(layer->name)));
-    QFormLayout* form = new QFormLayout(&dialog);
-    QComboBox* kind = new QComboBox(&dialog);
+    QDialog* dialog = new QDialog(this);
+    dialog->setWindowTitle(QString("Effect: %1").arg(QString::fromStdString(layer->name)));
+    QFormLayout* form = new QFormLayout(dialog);
+    QComboBox* kind = new QComboBox(dialog);
     kind->addItems({"Tone (multiplied)", "Highlight (screened)", "Glow (added)"});
     kind->setCurrentIndex(static_cast<int>(effect.kind));
     form->addRow("Effect:", kind);
-    QPushButton* color = new QPushButton(&dialog);
-    QColor chosen(effect.color[0], effect.color[1], effect.color[2]);
-    const auto showColor = [color, &chosen]() {
+    QPushButton* color = new QPushButton(dialog);
+    const std::shared_ptr<QColor> chosen = std::make_shared<QColor>(effect.color[0], effect.color[1], effect.color[2]);
+    const auto showColor = [color, chosen]() {
         QPixmap swatch(28, 14);
-        swatch.fill(chosen);
+        swatch.fill(*chosen);
         color->setIcon(QIcon(swatch));
-        color->setText(chosen.name().toUpper());
+        color->setText(chosen->name().toUpper());
     };
     showColor();
-    connect(color, &QPushButton::clicked, &dialog, [this, color, &chosen, showColor]() {
-        const QColor picked =
-            SwatchPopup::getColor(color, _flaDocument ? _flaDocument->document : nullptr, chosen, "Effect Color", false);
-        if (picked.isValid())
-        {
-            chosen = picked;
-            showColor();
-        }
+    connect(color, &QPushButton::clicked, dialog, [this, color, chosen, showColor]() {
+        SwatchPopup::getColor(color, _flaDocument ? _flaDocument->document : nullptr, *chosen, "Effect Color", false,
+            [chosen, showColor](const QColor& picked) {
+                *chosen = picked;
+                showColor();
+            });
     });
     form->addRow("Color:", color);
-    HotDoubleSpinBox* blur = new HotDoubleSpinBox(&dialog);
+    HotDoubleSpinBox* blur = new HotDoubleSpinBox(dialog);
     blur->setRange(0.0, 200.0);
     blur->setSuffix(" px");
     blur->setValue(effect.blur);
     form->addRow("Softness:", blur);
-    HotSpinBox* opacity = new HotSpinBox(&dialog);
+    HotSpinBox* opacity = new HotSpinBox(dialog);
     opacity->setRange(0, 100);
     opacity->setSuffix(" %");
     opacity->setValue(static_cast<int>(std::lround(effect.opacity * 100.0)));
     form->addRow("Strength:", opacity);
-    QCheckBox* clip = new QCheckBox("Keep within the layer under it", &dialog);
+    QCheckBox* clip = new QCheckBox("Keep within the layer under it", dialog);
     clip->setChecked(effect.clip);
     form->addRow("", clip);
-    QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+    QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, dialog);
     form->addRow(buttons);
-    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
-    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
-    if (dialog.exec() != QDialog::Accepted)
-        return;
-    effect.kind = static_cast<fla::effects::Kind>(kind->currentIndex());
-    effect.color[0] = static_cast<uint8_t>(chosen.red());
-    effect.color[1] = static_cast<uint8_t>(chosen.green());
-    effect.color[2] = static_cast<uint8_t>(chosen.blue());
-    effect.blur = blur->value();
-    effect.opacity = opacity->value() / 100.0;
-    effect.clip = clip->isChecked();
-    using Attributes = std::vector<std::pair<std::string, std::string>>;
-    _editContext.commandStack().push(fla::CommandPtr(new fla::SetPropertyCommand<Attributes>(
-        layer->extraAttributes, layer->extraAttributes, fla::effects::withEffect(*layer, effect), "Effect Settings")));
-    if (_phoenixView)
-    {
-        _phoenixView->clearCaches();
-        _phoenixView->update();
-    }
+    connect(buttons, &QDialogButtonBox::accepted, dialog, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, dialog, &QDialog::reject);
+    const fla::FLADocument* asked = _flaDocument;
+    modal::open(dialog, [this, asked, layer, effect, kind, chosen, blur, opacity, clip](int result) mutable {
+        if (result != QDialog::Accepted || _flaDocument != asked)
+            return;
+        effect.kind = static_cast<fla::effects::Kind>(kind->currentIndex());
+        effect.color[0] = static_cast<uint8_t>(chosen->red());
+        effect.color[1] = static_cast<uint8_t>(chosen->green());
+        effect.color[2] = static_cast<uint8_t>(chosen->blue());
+        effect.blur = blur->value();
+        effect.opacity = opacity->value() / 100.0;
+        effect.clip = clip->isChecked();
+        using Attributes = std::vector<std::pair<std::string, std::string>>;
+        _editContext.commandStack().push(fla::CommandPtr(new fla::SetPropertyCommand<Attributes>(
+            layer->extraAttributes, layer->extraAttributes, fla::effects::withEffect(*layer, effect), "Effect Settings")));
+        if (_phoenixView)
+        {
+            _phoenixView->clearCaches();
+            _phoenixView->update();
+        }
+    });
 }
 
 void MainWindow::importAnimatic()
@@ -4200,185 +4328,187 @@ void MainWindow::importAnimatic()
                                                                            : document ? document->currentScene() : nullptr;
     if (!document || !timeline)
         return;
-    const QString path = QFileDialog::getOpenFileName(this, "Import Animatic", _lastDirectory,
-        "Edit lists (*.edl *.xml);;All files (*)");
-    if (path.isEmpty())
-        return;
-    QFile file(path);
-    if (!file.open(QIODevice::ReadOnly))
-        return;
-    const double fps = document->frameRate > 0.0 ? document->frameRate : 24.0;
-    std::string error;
-    fla::editlist::EditList list = fla::editlist::parse(file.readAll().toStdString(), fps, &error);
-    std::vector<fla::editlist::Event> shots;
-    std::vector<fla::editlist::Event> sounds;
-    // A list counted at another rate is brought to the document's.
-    const double scale = list.frameRate > 0.0 ? fps / list.frameRate : 1.0;
-    for (fla::editlist::Event event : list.events)
-    {
-        event.start = static_cast<int>(std::lround(event.start * scale));
-        event.end = std::max(event.start + 1, static_cast<int>(std::lround(event.end * scale)));
-        event.sourceIn = static_cast<int>(std::lround(event.sourceIn * scale));
-        if (event.audio)
-            sounds.push_back(event);
-        else if (event.track == 1)
-            shots.push_back(event);
-    }
-    if (shots.empty() && sounds.empty())
-    {
-        modal::warning(this, "Import Animatic", QString("Nothing to import from %1.\n\n%2")
-                                                         .arg(QFileInfo(path).fileName(), QString::fromStdString(error)));
-        return;
-    }
-    std::sort(shots.begin(), shots.end(), [](const auto& a, const auto& b) { return a.start < b.start; });
-    _lastDirectory = QFileInfo(path).absolutePath();
-
-    // A clip's file: as the list names it, or by its name beside the list.
-    const QDir beside = QFileInfo(path).absoluteDir();
-    const auto fileOf = [&beside](const fla::editlist::Event& event, const QStringList& extensions) {
-        QStringList tries;
-        if (!event.file.empty())
-            tries << QString::fromStdString(event.file) << beside.filePath(QFileInfo(QString::fromStdString(event.file)).fileName());
-        const QString name = QString::fromStdString(event.name);
-        tries << beside.filePath(name);
-        for (const QString& extension : extensions)
-            tries << beside.filePath(QString::fromStdString(fla::editlist::shotName(event)) + "." + extension);
-        for (const QString& candidate : tries)
-            if (!candidate.isEmpty() && QFileInfo(candidate).isFile())
-                return candidate;
-        return QString();
-    };
-
-    // Builds a layer of keyframes at the events, blank between them.
-    const auto spanned = [](const std::string& name, const std::vector<std::pair<int, int>>& spans,
-                             const std::function<void(fla::Frame*, size_t)>& fill) {
-        fla::Layer* layer = new fla::Layer(nullptr);
-        layer->name = name;
-        int at = 0;
-        for (size_t i = 0; i < spans.size(); ++i)
-        {
-            if (spans[i].first > at)
+    const fla::FLADocument* asked = _flaDocument;
+    file_pick::open(this, "Import Animatic", _lastDirectory, "Edit lists (*.edl *.xml);;All files (*)",
+        [this, asked, document, timeline](const QString& path) {
+            if (_flaDocument != asked)
+                return;
+            QFile file(path);
+            if (!file.open(QIODevice::ReadOnly))
+                return;
+            const double fps = document->frameRate > 0.0 ? document->frameRate : 24.0;
+            std::string error;
+            fla::editlist::EditList list = fla::editlist::parse(file.readAll().toStdString(), fps, &error);
+            std::vector<fla::editlist::Event> shots;
+            std::vector<fla::editlist::Event> sounds;
+            // A list counted at another rate is brought to the document's.
+            const double scale = list.frameRate > 0.0 ? fps / list.frameRate : 1.0;
+            for (fla::editlist::Event event : list.events)
             {
-                fla::Frame* gap = new fla::Frame(layer);
-                gap->index = at;
-                gap->duration = spans[i].first - at;
-                layer->frames.push_back(gap);
+                event.start = static_cast<int>(std::lround(event.start * scale));
+                event.end = std::max(event.start + 1, static_cast<int>(std::lround(event.end * scale)));
+                event.sourceIn = static_cast<int>(std::lround(event.sourceIn * scale));
+                if (event.audio)
+                    sounds.push_back(event);
+                else if (event.track == 1)
+                    shots.push_back(event);
             }
-            fla::Frame* frame = new fla::Frame(layer);
-            frame->index = std::max(at, spans[i].first);
-            frame->duration = std::max(1, spans[i].second - frame->index);
-            fill(frame, i);
-            layer->frames.push_back(frame);
-            at = frame->index + frame->duration;
-        }
-        return layer;
-    };
-
-    fla::CommandStack& stack = _editContext.commandStack();
-    QStringList missing;
-    int boards = 0;
-    int placed = 0;
-    stack.beginMacro("Import Animatic");
-
-    if (!shots.empty())
-    {
-        std::vector<std::pair<int, int>> spans;
-        for (const auto& shot : shots)
-            spans.emplace_back(shot.start, shot.end);
-        // The shots, labeled, for Export Shots by label.
-        fla::Layer* labels = spanned("Shots", spans, [&shots](fla::Frame* frame, size_t i) {
-            frame->name = fla::editlist::shotName(shots[i]);
-            frame->labelType = "name";
-        });
-        // The boards, fitted to the stage.
-        fla::Layer* board = spanned("Board", spans, [&](fla::Frame* frame, size_t i) {
-            const QString image = fileOf(shots[i], {"png", "jpg", "jpeg"});
-            if (image.isEmpty() || !MediaImport::isImage(image))
+            if (shots.empty() && sounds.empty())
             {
-                missing << QString("board for %1").arg(QString::fromStdString(fla::editlist::shotName(shots[i])));
+                modal::warning(this, "Import Animatic", QString("Nothing to import from %1.\n\n%2")
+                                                                 .arg(QFileInfo(path).fileName(), QString::fromStdString(error)));
                 return;
             }
-            QString imageError;
-            fla::Bitmap* bitmap = MediaImport::loadImage(*document, image, imageError);
-            if (!bitmap)
-            {
-                missing << imageError;
-                return;
-            }
-            stack.push(fla::CommandPtr(new fla::AddBitmapCommand(document, bitmap, "Import Animatic")));
-            fla::BitmapInstance* instance = new fla::BitmapInstance(frame);
-            instance->libraryItemName = bitmap->name;
-            const double fit = std::min(document->width / std::max(1, bitmap->frameRight / 20),
-                document->height / std::max(1, bitmap->frameBottom / 20));
-            instance->transform.m11 = instance->transform.m22 = fit;
-            instance->transform.tx = (document->width - bitmap->frameRight / 20.0 * fit) / 2.0;
-            instance->transform.ty = (document->height - bitmap->frameBottom / 20.0 * fit) / 2.0;
-            frame->elements.push_back(instance);
-            ++boards;
-        });
-        stack.push(fla::CommandPtr(new fla::AddLayerCommand(timeline, 0, labels, "Import Animatic")));
-        stack.push(fla::CommandPtr(new fla::AddLayerCommand(timeline, static_cast<int>(timeline->layers.size()), board,
-            "Import Animatic")));
-    }
+            std::sort(shots.begin(), shots.end(), [](const auto& a, const auto& b) { return a.start < b.start; });
+            _lastDirectory = QFileInfo(path).absolutePath();
 
-    // Each audio track's clips, where the cut has them, from where they
-    // start in their files.
-    std::map<int, std::vector<fla::editlist::Event>> tracks;
-    for (const auto& sound : sounds)
-        tracks[sound.track].push_back(sound);
-    for (auto& entry : tracks)
-    {
-        const int track = entry.first;
-        std::vector<fla::editlist::Event>& events = entry.second;
-        std::sort(events.begin(), events.end(), [](const auto& a, const auto& b) { return a.start < b.start; });
-        std::vector<std::pair<int, int>> spans;
-        for (const auto& event : events)
-            spans.emplace_back(event.start, event.end);
-        fla::Layer* audio = spanned("Audio " + std::to_string(track), spans, [&](fla::Frame* frame, size_t i) {
-            const QString sound = fileOf(events[i], {"wav", "mp3", "aif", "aiff", "ogg", "flac"});
-            fla::media::Sound data;
-            QString soundError;
-            if (sound.isEmpty() || !MediaImport::loadSound(sound, data, soundError))
+            // A clip's file: as the list names it, or by its name beside the list.
+            const QDir beside = QFileInfo(path).absoluteDir();
+            const auto fileOf = [&beside](const fla::editlist::Event& event, const QStringList& extensions) {
+                QStringList tries;
+                if (!event.file.empty())
+                    tries << QString::fromStdString(event.file) << beside.filePath(QFileInfo(QString::fromStdString(event.file)).fileName());
+                const QString name = QString::fromStdString(event.name);
+                tries << beside.filePath(name);
+                for (const QString& extension : extensions)
+                    tries << beside.filePath(QString::fromStdString(fla::editlist::shotName(event)) + "." + extension);
+                for (const QString& candidate : tries)
+                    if (!candidate.isEmpty() && QFileInfo(candidate).isFile())
+                        return candidate;
+                return QString();
+            };
+
+            // Builds a layer of keyframes at the events, blank between them.
+            const auto spanned = [](const std::string& name, const std::vector<std::pair<int, int>>& spans,
+                                     const std::function<void(fla::Frame*, size_t)>& fill) {
+                fla::Layer* layer = new fla::Layer(nullptr);
+                layer->name = name;
+                int at = 0;
+                for (size_t i = 0; i < spans.size(); ++i)
+                {
+                    if (spans[i].first > at)
+                    {
+                        fla::Frame* gap = new fla::Frame(layer);
+                        gap->index = at;
+                        gap->duration = spans[i].first - at;
+                        layer->frames.push_back(gap);
+                    }
+                    fla::Frame* frame = new fla::Frame(layer);
+                    frame->index = std::max(at, spans[i].first);
+                    frame->duration = std::max(1, spans[i].second - frame->index);
+                    fill(frame, i);
+                    layer->frames.push_back(frame);
+                    at = frame->index + frame->duration;
+                }
+                return layer;
+            };
+
+            fla::CommandStack& stack = _editContext.commandStack();
+            QStringList missing;
+            int boards = 0;
+            int placed = 0;
+            stack.beginMacro("Import Animatic");
+
+            if (!shots.empty())
             {
-                missing << QString("sound %1").arg(QString::fromStdString(events[i].name));
-                return;
+                std::vector<std::pair<int, int>> spans;
+                for (const auto& shot : shots)
+                    spans.emplace_back(shot.start, shot.end);
+                // The shots, labeled, for Export Shots by label.
+                fla::Layer* labels = spanned("Shots", spans, [&shots](fla::Frame* frame, size_t i) {
+                    frame->name = fla::editlist::shotName(shots[i]);
+                    frame->labelType = "name";
+                });
+                // The boards, fitted to the stage.
+                fla::Layer* board = spanned("Board", spans, [&](fla::Frame* frame, size_t i) {
+                    const QString image = fileOf(shots[i], {"png", "jpg", "jpeg"});
+                    if (image.isEmpty() || !MediaImport::isImage(image))
+                    {
+                        missing << QString("board for %1").arg(QString::fromStdString(fla::editlist::shotName(shots[i])));
+                        return;
+                    }
+                    QString imageError;
+                    fla::Bitmap* bitmap = MediaImport::loadImage(*document, image, imageError);
+                    if (!bitmap)
+                    {
+                        missing << imageError;
+                        return;
+                    }
+                    stack.push(fla::CommandPtr(new fla::AddBitmapCommand(document, bitmap, "Import Animatic")));
+                    fla::BitmapInstance* instance = new fla::BitmapInstance(frame);
+                    instance->libraryItemName = bitmap->name;
+                    const double fit = std::min(document->width / std::max(1, bitmap->frameRight / 20),
+                        document->height / std::max(1, bitmap->frameBottom / 20));
+                    instance->transform.m11 = instance->transform.m22 = fit;
+                    instance->transform.tx = (document->width - bitmap->frameRight / 20.0 * fit) / 2.0;
+                    instance->transform.ty = (document->height - bitmap->frameBottom / 20.0 * fit) / 2.0;
+                    frame->elements.push_back(instance);
+                    ++boards;
+                });
+                stack.push(fla::CommandPtr(new fla::AddLayerCommand(timeline, 0, labels, "Import Animatic")));
+                stack.push(fla::CommandPtr(new fla::AddLayerCommand(timeline, static_cast<int>(timeline->layers.size()), board,
+                    "Import Animatic")));
             }
-            data.name = QFileInfo(sound).fileName().toStdString();
-            data.sourcePath = sound.toStdString();
-            auto* add = new fla::AddSoundCommand(document, data, "Import Animatic");
-            const std::string name = add->soundName();
-            stack.push(fla::CommandPtr(add));
-            frame->extraAttributes.emplace_back("soundName", name);
-            frame->extraAttributes.emplace_back("soundSync", "stream");
-            if (events[i].sourceIn > 0)
-                frame->extraAttributes.emplace_back("inPoint44",
-                    std::to_string(static_cast<long long>(std::lround(events[i].sourceIn / fps * 44100.0))));
-            ++placed;
+
+            // Each audio track's clips, where the cut has them, from where they
+            // start in their files.
+            std::map<int, std::vector<fla::editlist::Event>> tracks;
+            for (const auto& sound : sounds)
+                tracks[sound.track].push_back(sound);
+            for (auto& entry : tracks)
+            {
+                const int track = entry.first;
+                std::vector<fla::editlist::Event>& events = entry.second;
+                std::sort(events.begin(), events.end(), [](const auto& a, const auto& b) { return a.start < b.start; });
+                std::vector<std::pair<int, int>> spans;
+                for (const auto& event : events)
+                    spans.emplace_back(event.start, event.end);
+                fla::Layer* audio = spanned("Audio " + std::to_string(track), spans, [&](fla::Frame* frame, size_t i) {
+                    const QString sound = fileOf(events[i], {"wav", "mp3", "aif", "aiff", "ogg", "flac"});
+                    fla::media::Sound data;
+                    QString soundError;
+                    if (sound.isEmpty() || !MediaImport::loadSound(sound, data, soundError))
+                    {
+                        missing << QString("sound %1").arg(QString::fromStdString(events[i].name));
+                        return;
+                    }
+                    data.name = QFileInfo(sound).fileName().toStdString();
+                    data.sourcePath = sound.toStdString();
+                    auto* add = new fla::AddSoundCommand(document, data, "Import Animatic");
+                    const std::string name = add->soundName();
+                    stack.push(fla::CommandPtr(add));
+                    frame->extraAttributes.emplace_back("soundName", name);
+                    frame->extraAttributes.emplace_back("soundSync", "stream");
+                    if (events[i].sourceIn > 0)
+                        frame->extraAttributes.emplace_back("inPoint44",
+                            std::to_string(static_cast<long long>(std::lround(events[i].sourceIn / fps * 44100.0))));
+                    ++placed;
+                });
+                stack.push(fla::CommandPtr(new fla::AddLayerCommand(timeline, static_cast<int>(timeline->layers.size()), audio,
+                    "Import Animatic")));
+            }
+            stack.endMacro();
+            stack.breakMergeChain();
+            if (_timelineView)
+                _timelineView->refresh();
+            if (_libraryPanel)
+                _libraryPanel->refreshIfStale();
+            if (_phoenixView)
+            {
+                _phoenixView->clearCaches();
+                _phoenixView->update();
+            }
+            const auto count = [](size_t n, const char* one, const char* many) { return QString("%1 %2").arg(n).arg(n == 1 ? one : many); };
+            QString report = QString("%1 labeled, %2 placed, %3 placed.")
+                                 .arg(count(shots.size(), "shot", "shots"), count(static_cast<size_t>(boards), "board", "boards"),
+                                     count(static_cast<size_t>(placed), "sound", "sounds"));
+            if (list.frameRate > 0.0 && std::abs(list.frameRate - fps) > 0.01)
+                report += QString("\n\nThe cut was at %1 fps and was brought to the document's %2.").arg(list.frameRate, 0, 'f', 3).arg(fps, 0, 'f', 3);
+            if (!missing.isEmpty())
+                report += "\n\nNot found:\n" + missing.mid(0, 12).join("\n") + (missing.size() > 12 ? "\n..." : "");
+            report += "\n\nFile > Export > Export Shots, by frame labels, splits it into shot files.";
+            modal::information(this, "Import Animatic", report);
         });
-        stack.push(fla::CommandPtr(new fla::AddLayerCommand(timeline, static_cast<int>(timeline->layers.size()), audio,
-            "Import Animatic")));
-    }
-    stack.endMacro();
-    stack.breakMergeChain();
-    if (_timelineView)
-        _timelineView->refresh();
-    if (_libraryPanel)
-        _libraryPanel->refreshIfStale();
-    if (_phoenixView)
-    {
-        _phoenixView->clearCaches();
-        _phoenixView->update();
-    }
-    const auto count = [](size_t n, const char* one, const char* many) { return QString("%1 %2").arg(n).arg(n == 1 ? one : many); };
-    QString report = QString("%1 labeled, %2 placed, %3 placed.")
-                         .arg(count(shots.size(), "shot", "shots"), count(static_cast<size_t>(boards), "board", "boards"),
-                             count(static_cast<size_t>(placed), "sound", "sounds"));
-    if (list.frameRate > 0.0 && std::abs(list.frameRate - fps) > 0.01)
-        report += QString("\n\nThe cut was at %1 fps and was brought to the document's %2.").arg(list.frameRate, 0, 'f', 3).arg(fps, 0, 'f', 3);
-    if (!missing.isEmpty())
-        report += "\n\nNot found:\n" + missing.mid(0, 12).join("\n") + (missing.size() > 12 ? "\n..." : "");
-    report += "\n\nFile > Export > Export Shots, by frame labels, splits it into shot files.";
-    modal::information(this, "Import Animatic", report);
 }
 
 void MainWindow::deformSelection(int what)
@@ -4501,37 +4631,40 @@ void MainWindow::lipSync()
     LipSyncDialog::SoundSource soundOf;
     if (_timelineAudio)
         soundOf = [this](const QString& name) { return _timelineAudio->librarySound(name.toStdString()); };
-    LipSyncDialog dialog(QString::fromStdString(mouth->libraryItemName), saved, fla::lipsync::labelsOf(*mouth), sounds,
-        voice, soundOf, _player ? _player->currentFrame() : 0, fps, this);
-    if (dialog.exec() != QDialog::Accepted || dialog.cues().empty())
-        return;
-    const std::map<std::string, int> chart = dialog.chart();
-    fla::CommandPtr keys = fla::lipsync::apply(*layer, *mouth, dialog.cues(), chart, dialog.startFrame(), fps);
-    if (!keys)
-        return;
-    _selection.clear();
-    fla::CommandStack& stack = _editContext.commandStack();
-    stack.beginMacro("Lip Sync");
-    if (fla::Symbol* symbol = mouth->symbol)
-    {
-        using Attributes = std::vector<std::pair<std::string, std::string>>;
-        Attributes after = symbol->extraAttributes;
-        after.erase(std::remove_if(after.begin(), after.end(), [](const auto& pair) { return pair.first == "phoenixMouthChart"; }),
-            after.end());
-        after.emplace_back("phoenixMouthChart", fla::lipsync::chartText(chart));
-        stack.push(fla::CommandPtr(new fla::SetPropertyCommand<Attributes>(symbol->extraAttributes, symbol->extraAttributes, after, "Lip Sync")));
-    }
-    stack.push(std::move(keys));
-    stack.endMacro();
-    stack.breakMergeChain();
-    if (_timelineView)
-        _timelineView->refreshFrames();
-    if (_phoenixView)
-    {
-        _phoenixView->clearCaches();
-        _phoenixView->update();
-    }
-    statusBar()->showMessage(QString("Keyed %1 mouth shapes.").arg(dialog.cues().size()), 4000);
+    LipSyncDialog* dialog = new LipSyncDialog(QString::fromStdString(mouth->libraryItemName), saved,
+        fla::lipsync::labelsOf(*mouth), sounds, voice, soundOf, _player ? _player->currentFrame() : 0, fps, this);
+    const fla::FLADocument* asked = _flaDocument;
+    modal::open(dialog, [this, asked, dialog, mouth, layer, fps](int result) {
+        if (result != QDialog::Accepted || dialog->cues().empty() || _flaDocument != asked)
+            return;
+        const std::map<std::string, int> chart = dialog->chart();
+        fla::CommandPtr keys = fla::lipsync::apply(*layer, *mouth, dialog->cues(), chart, dialog->startFrame(), fps);
+        if (!keys)
+            return;
+        _selection.clear();
+        fla::CommandStack& stack = _editContext.commandStack();
+        stack.beginMacro("Lip Sync");
+        if (fla::Symbol* symbol = mouth->symbol)
+        {
+            using Attributes = std::vector<std::pair<std::string, std::string>>;
+            Attributes after = symbol->extraAttributes;
+            after.erase(std::remove_if(after.begin(), after.end(), [](const auto& pair) { return pair.first == "phoenixMouthChart"; }),
+                after.end());
+            after.emplace_back("phoenixMouthChart", fla::lipsync::chartText(chart));
+            stack.push(fla::CommandPtr(new fla::SetPropertyCommand<Attributes>(symbol->extraAttributes, symbol->extraAttributes, after, "Lip Sync")));
+        }
+        stack.push(std::move(keys));
+        stack.endMacro();
+        stack.breakMergeChain();
+        if (_timelineView)
+            _timelineView->refreshFrames();
+        if (_phoenixView)
+        {
+            _phoenixView->clearCaches();
+            _phoenixView->update();
+        }
+        statusBar()->showMessage(QString("Keyed %1 mouth shapes.").arg(dialog->cues().size()), 4000);
+    });
 }
 
 void MainWindow::addPeg()
@@ -5044,13 +5177,13 @@ void MainWindow::editJointLimits(fla::Frame* frame, size_t child, int joint)
     constexpr double kDegrees = 180.0 / 3.14159265358979323846;
     const fla::JointLimit limit = limits[static_cast<size_t>(joint)];
 
-    QDialog dialog(this);
-    dialog.setWindowTitle("Joint Rotation and Spring");
-    QFormLayout* form = new QFormLayout(&dialog);
-    QCheckBox* constrain = new QCheckBox("Constrain", &dialog);
+    QDialog* dialog = new QDialog(this);
+    dialog->setWindowTitle("Joint Rotation and Spring");
+    QFormLayout* form = new QFormLayout(dialog);
+    QCheckBox* constrain = new QCheckBox("Constrain", dialog);
     constrain->setChecked(limit.constrained);
-    HotDoubleSpinBox* minimum = new HotDoubleSpinBox(&dialog);
-    HotDoubleSpinBox* maximum = new HotDoubleSpinBox(&dialog);
+    HotDoubleSpinBox* minimum = new HotDoubleSpinBox(dialog);
+    HotDoubleSpinBox* maximum = new HotDoubleSpinBox(dialog);
     for (HotDoubleSpinBox* box : {minimum, maximum})
     {
         box->setRange(-180.0, 180.0);
@@ -5064,72 +5197,78 @@ void MainWindow::editJointLimits(fla::Frame* frame, size_t child, int joint)
         maximum->setEnabled(on);
     };
     enable(limit.constrained);
-    connect(constrain, &QCheckBox::toggled, &dialog, enable);
+    connect(constrain, &QCheckBox::toggled, dialog, enable);
     form->addRow("Rotation", constrain);
     form->addRow("Min", minimum);
     form->addRow("Max", maximum);
     // The bone's spring: it trails the motion above it and of its own poses,
     // overshoots and settles.
     const fla::BoneSpring spring = armature.spring(joint);
-    HotSpinBox* strength = new HotSpinBox(&dialog);
+    HotSpinBox* strength = new HotSpinBox(dialog);
     strength->setRange(0, 100);
     strength->setValue(static_cast<int>(std::lround(spring.strength)));
     strength->setSpecialValueText("None");
     strength->setToolTip("How stiffly the bone springs back to its pose: low swings wide and slow, high quick and small; None for no spring");
-    HotSpinBox* damping = new HotSpinBox(&dialog);
+    HotSpinBox* damping = new HotSpinBox(dialog);
     damping->setRange(0, 100);
     damping->setValue(spring.present ? static_cast<int>(std::lround(spring.damping)) : 30);
     damping->setToolTip("How quickly its swinging dies away: 0 goes on bouncing, 100 settles at once");
     damping->setEnabled(strength->value() > 0);
-    connect(strength, &HotText::valueChanged, &dialog, [damping](double value) { damping->setEnabled(value > 0); });
+    connect(strength, &HotText::valueChanged, dialog, [damping](double value) { damping->setEnabled(value > 0); });
     form->addRow("Spring", strength);
     form->addRow("Damping", damping);
     // What the bone drives as it turns (bone_corrector.h), in a dialog of
     // its own.
-    bool corrections = false;
-    QPushButton* correctionsButton = new QPushButton("Corrections...", &dialog);
+    const std::shared_ptr<bool> corrections = std::make_shared<bool>(false);
+    QPushButton* correctionsButton = new QPushButton("Corrections...", dialog);
     correctionsButton->setAutoDefault(false);
     correctionsButton->setToolTip("Shape corrections, drawing swaps and fades this bone drives as it turns");
-    connect(correctionsButton, &QPushButton::clicked, &dialog, [&]() {
-        corrections = true;
-        dialog.reject();
+    connect(correctionsButton, &QPushButton::clicked, dialog, [dialog, corrections]() {
+        *corrections = true;
+        dialog->reject();
     });
     form->addRow("Drives", correctionsButton);
-    QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
-    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
-    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, dialog);
+    connect(buttons, &QDialogButtonBox::accepted, dialog, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, dialog, &QDialog::reject);
     form->addRow(buttons);
-    if (dialog.exec() != QDialog::Accepted)
-    {
-        if (corrections && boneCorrector())
-            boneCorrector()->open(frame, child, joint);
-        return;
-    }
+    const fla::FLADocument* asked = _flaDocument;
+    modal::open(dialog, [this, asked, frame, child, joint, constrain, minimum, maximum, strength, damping, spring,
+                            corrections](int result) {
+        if (_flaDocument != asked || child >= frame->extraChildren.size())
+            return;
+        if (result != QDialog::Accepted)
+        {
+            if (*corrections && boneCorrector())
+                boneCorrector()->open(frame, child, joint);
+            return;
+        }
 
-    fla::JointLimit chosen;
-    chosen.constrained = constrain->isChecked();
-    chosen.min = minimum->value() / kDegrees;
-    chosen.max = maximum->value() / kDegrees;
-    fla::BoneSpring springChosen;
-    springChosen.present = strength->value() > 0;
-    springChosen.strength = strength->value();
-    springChosen.damping = damping->value();
-    const bool springChanged =
-        springChosen.strength != spring.strength || (springChosen.present && springChosen.damping != spring.damping);
-    // A new spring works every frame's joints out again: the shapes the
-    // armature bends and the instances it carries follow, as posing does.
-    const std::string before = frame->extraChildren[child];
-    if (!_phoenixView)
-        return;
-    IKPoser poser;
-    poser.change(*_phoenixView, _editContext.commandStack(), frame, child,
-        [=](fla::IKArmature& edited) {
-            edited.setLimit(joint, chosen);
-            if (springChanged)
-                edited.setSpring(joint, springChosen);
-            return edited.xml() != before;
-        },
-        "Joint Rotation and Spring");
+        fla::JointLimit chosen;
+        chosen.constrained = constrain->isChecked();
+        chosen.min = minimum->value() / kDegrees;
+        chosen.max = maximum->value() / kDegrees;
+        fla::BoneSpring springChosen;
+        springChosen.present = strength->value() > 0;
+        springChosen.strength = strength->value();
+        springChosen.damping = damping->value();
+        const bool springChanged =
+            springChosen.strength != spring.strength || (springChosen.present && springChosen.damping != spring.damping);
+        // A new spring works every frame's joints out again: the shapes the
+        // armature bends and the instances it carries follow, as posing does.
+        const std::string before = frame->extraChildren[child];
+        if (!_phoenixView)
+            return;
+        IKPoser poser;
+        poser.change(*_phoenixView, _editContext.commandStack(), frame, child,
+            [=](fla::IKArmature& edited) {
+                edited.setLimit(joint, chosen);
+                if (springChanged)
+                    edited.setSpring(joint, springChosen);
+                return edited.xml() != before;
+            },
+            "Joint Rotation and Spring");
+    });
 }
 
 void MainWindow::showBoneMenu(const QPoint& globalPos, const PhoenixView::IKBoneHit& bone)
@@ -5281,19 +5420,19 @@ void MainWindow::editBoneForces()
     }
     const fla::BoneForces forces = armature.forces();
 
-    QDialog dialog(this);
-    dialog.setWindowTitle("Gravity and Wind");
-    QFormLayout* form = new QFormLayout(&dialog);
-    const auto percent = [&dialog](double value, const char* tip) {
-        HotSpinBox* box = new HotSpinBox(&dialog);
+    QDialog* dialog = new QDialog(this);
+    dialog->setWindowTitle("Gravity and Wind");
+    QFormLayout* form = new QFormLayout(dialog);
+    const auto percent = [dialog](double value, const char* tip) {
+        HotSpinBox* box = new HotSpinBox(dialog);
         box->setRange(0, 100);
         box->setValue(static_cast<int>(std::lround(value)));
         box->setSpecialValueText("None");
         box->setToolTip(tip);
         return box;
     };
-    const auto direction = [&dialog](double value, const char* tip) {
-        HotDoubleSpinBox* box = new HotDoubleSpinBox(&dialog);
+    const auto direction = [dialog](double value, const char* tip) {
+        HotDoubleSpinBox* box = new HotDoubleSpinBox(dialog);
         box->setRange(-180.0, 180.0);
         box->setDecimals(0);
         box->setSuffix(QString(QChar(0x00B0)));
@@ -5309,14 +5448,14 @@ void MainWindow::editBoneForces()
         direction(forces.windAngle, "Which way the wind blows: 0 is to the right, 180 to the left, 90 down");
     HotSpinBox* gusts = percent(forces.gusts, "How much the wind rises, falls and veers; None for a steady wind");
     gusts->setSpecialValueText("Steady");
-    HotDoubleSpinBox* gustRate = new HotDoubleSpinBox(&dialog);
+    HotDoubleSpinBox* gustRate = new HotDoubleSpinBox(dialog);
     gustRate->setRange(0.1, 5.0);
     gustRate->setDecimals(1);
     gustRate->setSingleStep(0.1);
     gustRate->setSuffix(" a second");
     gustRate->setValue(std::clamp(forces.gustRate, 0.1, 5.0));
     gustRate->setToolTip("About how many gusts come each second");
-    HotSpinBox* seed = new HotSpinBox(&dialog);
+    HotSpinBox* seed = new HotSpinBox(dialog);
     seed->setRange(1, 9999);
     seed->setValue(std::clamp(forces.seed, 1, 9999));
     seed->setToolTip("Another number gives other gusts; the same number always gives the same ones");
@@ -5329,7 +5468,7 @@ void MainWindow::editBoneForces()
     };
     enable();
     for (HotSpinBox* box : {gravity, wind, gusts})
-        connect(box, &HotText::valueChanged, &dialog, enable);
+        connect(box, &HotText::valueChanged, dialog, enable);
     form->addRow("Gravity", gravity);
     form->addRow("Direction", gravityAngle);
     form->addRow("Wind", wind);
@@ -5340,35 +5479,39 @@ void MainWindow::editBoneForces()
     if (!armature.hasSprings())
     {
         QLabel* note = new QLabel("They move only bones with a spring. Click a bone with the Bone tool to give it one.",
-            &dialog);
+            dialog);
         note->setWordWrap(true);
         form->addRow(note);
     }
-    QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
-    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
-    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, dialog);
+    connect(buttons, &QDialogButtonBox::accepted, dialog, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, dialog, &QDialog::reject);
     form->addRow(buttons);
-    if (dialog.exec() != QDialog::Accepted)
-        return;
+    const fla::FLADocument* asked = _flaDocument;
+    modal::open(dialog, [this, asked, span, child, gravity, gravityAngle, wind, windAngle, gusts, gustRate, seed](
+                            int result) {
+        if (result != QDialog::Accepted || _flaDocument != asked || !_phoenixView || child >= span->extraChildren.size())
+            return;
 
-    fla::BoneForces chosen;
-    chosen.gravity = gravity->value();
-    chosen.gravityAngle = gravityAngle->value();
-    chosen.wind = wind->value();
-    chosen.windAngle = windAngle->value();
-    chosen.gusts = gusts->value();
-    chosen.gustRate = gustRate->value();
-    chosen.seed = static_cast<int>(seed->value());
-    // Every frame's joints worked out again, the shapes bent and the
-    // instances carried as posing does.
-    const std::string before = span->extraChildren[child];
-    IKPoser poser;
-    poser.change(*_phoenixView, _editContext.commandStack(), span, child,
-        [=](fla::IKArmature& edited) {
-            edited.setForces(chosen);
-            return edited.xml() != before;
-        },
-        "Gravity and Wind");
+        fla::BoneForces chosen;
+        chosen.gravity = gravity->value();
+        chosen.gravityAngle = gravityAngle->value();
+        chosen.wind = wind->value();
+        chosen.windAngle = windAngle->value();
+        chosen.gusts = gusts->value();
+        chosen.gustRate = gustRate->value();
+        chosen.seed = static_cast<int>(seed->value());
+        // Every frame's joints worked out again, the shapes bent and the
+        // instances carried as posing does.
+        const std::string before = span->extraChildren[child];
+        IKPoser poser;
+        poser.change(*_phoenixView, _editContext.commandStack(), span, child,
+            [=](fla::IKArmature& edited) {
+                edited.setForces(chosen);
+                return edited.xml() != before;
+            },
+            "Gravity and Wind");
+    });
 }
 
 void MainWindow::smoothShapeJoints()
@@ -5388,40 +5531,43 @@ void MainWindow::smoothShapeJoints()
     const int bone = _bindTool ? _bindTool->chosenBone(chosenFrame, chosenChild) : -1;
     const bool chosen = bone >= 0 && chosenFrame == span && chosenChild == child;
 
-    QDialog dialog(this);
-    dialog.setWindowTitle("Smooth Joints");
-    QFormLayout* form = new QFormLayout(&dialog);
-    HotSpinBox* smoothness = new HotSpinBox(&dialog);
+    QDialog* dialog = new QDialog(this);
+    dialog->setWindowTitle("Smooth Joints");
+    QFormLayout* form = new QFormLayout(dialog);
+    HotSpinBox* smoothness = new HotSpinBox(dialog);
     smoothness->setRange(1, 100);
     smoothness->setSuffix("%");
     smoothness->setValue(bound.armature.smoothness() > 0.0 ? static_cast<int>(std::lround(bound.armature.smoothness())) : 50);
     smoothness->setToolTip("How far either side of each joint the shape blends from one bone to the next, as a share of "
                            "half the shorter bone");
     form->addRow("Smoothness", smoothness);
-    QCheckBox* only = new QCheckBox("Only the joints of the bone chosen with the Bind tool", &dialog);
+    QCheckBox* only = new QCheckBox("Only the joints of the bone chosen with the Bind tool", dialog);
     only->setChecked(chosen);
     only->setEnabled(chosen);
     form->addRow(only);
-    QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
-    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
-    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, dialog);
+    connect(buttons, &QDialogButtonBox::accepted, dialog, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, dialog, &QDialog::reject);
     form->addRow(buttons);
-    if (dialog.exec() != QDialog::Accepted)
-        return;
+    const fla::FLADocument* asked = _flaDocument;
+    modal::open(dialog, [this, asked, span, child, bound, bone, smoothness, only](int result) {
+        if (result != QDialog::Accepted || _flaDocument != asked)
+            return;
 
-    const std::vector<fla::IKJoint> joints = bound.armature.jointsAt(0);
-    const double amount = smoothness->value();
-    fla::ShapeBinding binding = bound.binding;
-    if (only->isChecked())
-    {
-        // The joints at either end of the chosen bone.
-        binding = fla::smoothJoint(binding, bound.anchors, joints, bone, amount);
-        if (static_cast<size_t>(bone) < joints.size())
-            binding = fla::smoothJoint(binding, bound.anchors, joints, joints[static_cast<size_t>(bone)].parent, amount);
-        rebindShape(span, child, binding);
-    }
-    else
-        rebindShape(span, child, fla::smoothJoints(binding, bound.anchors, joints, amount), amount);
+        const std::vector<fla::IKJoint> joints = bound.armature.jointsAt(0);
+        const double amount = smoothness->value();
+        fla::ShapeBinding binding = bound.binding;
+        if (only->isChecked())
+        {
+            // The joints at either end of the chosen bone.
+            binding = fla::smoothJoint(binding, bound.anchors, joints, bone, amount);
+            if (static_cast<size_t>(bone) < joints.size())
+                binding = fla::smoothJoint(binding, bound.anchors, joints, joints[static_cast<size_t>(bone)].parent, amount);
+            rebindShape(span, child, binding);
+        }
+        else
+            rebindShape(span, child, fla::smoothJoints(binding, bound.anchors, joints, amount), amount);
+    });
 }
 
 BoneCorrector* MainWindow::boneCorrector()
@@ -5622,14 +5768,14 @@ bool MainWindow::pasteMotion(const std::string& motion)
 
 void MainWindow::showMotionPresets()
 {
-    MotionPresetsDialog dialog(
+    MotionPresetsDialog* dialog = new MotionPresetsDialog(
         [this]() {
             fla::Frame* span = currentMotionSpan();
             const std::string* motion = span ? fla::timeline::motionOf(*span) : nullptr;
             return motion ? *motion : std::string();
         },
         [this](const std::string& motion) { return pasteMotion(motion); }, this);
-    dialog.exec();
+    modal::open(dialog);
 }
 
 void MainWindow::resizeSpan(const fla::Layer* constLayer, int keyframe, int duration)
@@ -6044,20 +6190,22 @@ void MainWindow::exportBakedDocument()
     const QString start = QDir(settings.value("export/bakedFolder", QDir::homePath()).toString())
                               .filePath(QFileInfo(_documentPath.isEmpty() ? QString("Untitled") : _documentPath)
                                             .completeBaseName() + ".fla");
-    const QString path = QFileDialog::getSaveFileName(this, "Export FLA for Other Apps", start,
-        "FLA documents (*.fla);;XFL folders (*.xfl)");
-    if (path.isEmpty())
-        return;
-    settings.setValue("export/bakedFolder", QFileInfo(path).absolutePath());
-    QString error;
-    int bakedLayers = 0;
-    const bool written = writeForOtherApps(path, error, &bakedLayers);
-    if (!written)
-        modal::warning(this, "Export FLA for Other Apps", QString("The copy could not be written: %1").arg(error));
-    else
-        statusBar()->showMessage(QString("Exported %1%2").arg(QFileInfo(path).fileName(),
-                                     bakedLayers == 0 ? QString(" (no behaviors to bake)") : QString(" with behaviors baked")),
-            4000);
+    const fla::FLADocument* asked = _flaDocument;
+    file_pick::save(this, "Export FLA for Other Apps", start, "FLA documents (*.fla);;XFL folders (*.xfl)",
+        [this, asked](const QString& path) {
+            if (_flaDocument != asked)
+                return;
+            QSettings().setValue("export/bakedFolder", QFileInfo(path).absolutePath());
+            QString error;
+            int bakedLayers = 0;
+            const bool written = writeForOtherApps(path, error, &bakedLayers);
+            if (!written)
+                modal::warning(this, "Export FLA for Other Apps", QString("The copy could not be written: %1").arg(error));
+            else
+                statusBar()->showMessage(QString("Exported %1%2").arg(QFileInfo(path).fileName(),
+                                             bakedLayers == 0 ? QString(" (no behaviors to bake)") : QString(" with behaviors baked")),
+                    4000);
+        });
 }
 
 int MainWindow::exportForOtherAppsFromCommandLine(const QString& source, const QString& output)
@@ -6987,18 +7135,20 @@ void MainWindow::setupMenus()
             return;
         const QString base = _documentPath.isEmpty() ? QString("movie") : QFileInfo(_documentPath).completeBaseName();
         const QString folder = _lastDirectory.isEmpty() ? QFileInfo(_documentPath).absolutePath() : _lastDirectory;
-        const QString path = QFileDialog::getSaveFileName(this, "Export SWF Movie", QDir(folder).filePath(base + ".swf"),
-            "SWF Movie (*.swf)");
-        if (path.isEmpty())
-            return;
-        QString error;
-        if (exportSwf(path, QSize(document->width, document->height), error))
-        {
-            _lastDirectory = QFileInfo(path).absolutePath();
-            statusBar()->showMessage(QString("Exported %1").arg(QDir::toNativeSeparators(path)), 5000);
-        }
-        else if (!error.isEmpty())
-            modal::warning(this, "Export Failed", error);
+        const fla::FLADocument* asked = _flaDocument;
+        file_pick::save(this, "Export SWF Movie", QDir(folder).filePath(base + ".swf"), "SWF Movie (*.swf)",
+            [this, asked, document](const QString& path) {
+                if (_flaDocument != asked)
+                    return;
+                QString error;
+                if (exportSwf(path, QSize(document->width, document->height), error))
+                {
+                    _lastDirectory = QFileInfo(path).absolutePath();
+                    statusBar()->showMessage(QString("Exported %1").arg(QDir::toNativeSeparators(path)), 5000);
+                }
+                else if (!error.isEmpty())
+                    modal::warning(this, "Export Failed", error);
+            });
     });
     exportMenu->addAction(exportSwfAction);
 
@@ -7188,26 +7338,30 @@ void MainWindow::setupMenus()
     shortcutsAction->setShortcut(QKeySequence(Qt::CTRL | Qt::ALT | Qt::SHIFT | Qt::Key_K));
     shortcutsAction->setStatusTip("See and change the key for any command or tool");
     connect(shortcutsAction, &QAction::triggered, this, [this]() {
-        ShortcutsDialog dialog(_shortcuts, this);
-        if (dialog.exec() != QDialog::Accepted)
-            return;
-        Shortcuts::setCurrentSet(dialog.chosen());
-        Shortcuts::apply(_shortcuts);
+        ShortcutsDialog* dialog = new ShortcutsDialog(_shortcuts, this);
+        modal::open(dialog, [this, dialog](int result) {
+            if (result != QDialog::Accepted)
+                return;
+            Shortcuts::setCurrentSet(dialog->chosen());
+            Shortcuts::apply(_shortcuts);
+        });
     });
     QAction* preferencesAction = editMenu->addAction("Pre&ferences...");
     preferencesAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_U));
     preferencesAction->setMenuRole(QAction::PreferencesRole);
     preferencesAction->setStatusTip("Undo levels, auto-recovery, highlight color, click accuracy and pen display");
     connect(preferencesAction, &QAction::triggered, this, [this]() {
-        PreferencesDialog dialog(this);
-        if (dialog.exec() != QDialog::Accepted)
-            return;
-        dialog.save();
-        _editContext.commandStack().setLimit(static_cast<size_t>(Preferences::undoLevels()));
-        if (_mcpServer)
-            _mcpServer->applySettings();
-        if (_phoenixView)
-            _phoenixView->update();
+        PreferencesDialog* dialog = new PreferencesDialog(this);
+        modal::open(dialog, [this, dialog](int result) {
+            if (result != QDialog::Accepted)
+                return;
+            dialog->save();
+            _editContext.commandStack().setLimit(static_cast<size_t>(Preferences::undoLevels()));
+            if (_mcpServer)
+                _mcpServer->applySettings();
+            if (_phoenixView)
+                _phoenixView->update();
+        });
     });
 
     // Modify menu.
@@ -7882,50 +8036,54 @@ void MainWindow::setupMenus()
             if (!_flaDocument || !_flaDocument->document || !_phoenixView)
                 return;
             fla::Document* document = _flaDocument->document;
-            QDialog dialog(this);
-            dialog.setWindowTitle("Guides");
-            QFormLayout* form = new QFormLayout(&dialog);
-            QColor color(document->guidesColor[0], document->guidesColor[1], document->guidesColor[2]);
-            QPushButton* colorButton = new QPushButton(color.name(), &dialog);
-            connect(colorButton, &QPushButton::clicked, &dialog, [&]() {
-                const QColor chosen = SwatchPopup::getColor(colorButton, document, color, "Guide Color", false);
-                if (chosen.isValid())
-                {
-                    color = chosen;
-                    colorButton->setText(color.name());
-                }
+            QDialog* dialog = new QDialog(this);
+            dialog->setWindowTitle("Guides");
+            QFormLayout* form = new QFormLayout(dialog);
+            const std::shared_ptr<QColor> color =
+                std::make_shared<QColor>(document->guidesColor[0], document->guidesColor[1], document->guidesColor[2]);
+            QPushButton* colorButton = new QPushButton(color->name(), dialog);
+            connect(colorButton, &QPushButton::clicked, dialog, [colorButton, document, color]() {
+                SwatchPopup::getColor(colorButton, document, *color, "Guide Color", false,
+                    [colorButton, color](const QColor& chosen) {
+                        *color = chosen;
+                        colorButton->setText(color->name());
+                    });
             });
             form->addRow("Color", colorButton);
-            QCheckBox* show = new QCheckBox("Show guides", &dialog);
+            QCheckBox* show = new QCheckBox("Show guides", dialog);
             show->setChecked(showGuidesAction->isChecked());
-            QCheckBox* snap = new QCheckBox("Snap to guides", &dialog);
+            QCheckBox* snap = new QCheckBox("Snap to guides", dialog);
             snap->setChecked(snapGuidesAction->isChecked());
-            QCheckBox* lock = new QCheckBox("Lock guides", &dialog);
+            QCheckBox* lock = new QCheckBox("Lock guides", dialog);
             lock->setChecked(lockGuidesAction->isChecked());
             form->addRow(QString(), show);
             form->addRow(QString(), snap);
             form->addRow(QString(), lock);
-            QPushButton* clearAll = new QPushButton("Clear All", &dialog);
-            bool cleared = false;
-            connect(clearAll, &QPushButton::clicked, &dialog, [&]() { cleared = true; });
-            QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+            QPushButton* clearAll = new QPushButton("Clear All", dialog);
+            const std::shared_ptr<bool> cleared = std::make_shared<bool>(false);
+            connect(clearAll, &QPushButton::clicked, dialog, [cleared]() { *cleared = true; });
+            QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, dialog);
             buttons->addButton(clearAll, QDialogButtonBox::ResetRole);
-            connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
-            connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+            connect(buttons, &QDialogButtonBox::accepted, dialog, &QDialog::accept);
+            connect(buttons, &QDialogButtonBox::rejected, dialog, &QDialog::reject);
             form->addRow(buttons);
-            if (dialog.exec() != QDialog::Accepted)
-                return;
-            document->guidesColor[0] = static_cast<uint8_t>(color.red());
-            document->guidesColor[1] = static_cast<uint8_t>(color.green());
-            document->guidesColor[2] = static_cast<uint8_t>(color.blue());
-            _editContext.commandStack().setDirty();
-            updateEditState();
-            showGuidesAction->setChecked(show->isChecked());
-            snapGuidesAction->setChecked(snap->isChecked());
-            lockGuidesAction->setChecked(lock->isChecked());
-            if (cleared)
-                _phoenixView->clearGuides();
-            _phoenixView->update();
+            const fla::FLADocument* asked = _flaDocument;
+            modal::open(dialog, [this, asked, document, color, show, snap, lock, cleared, showGuidesAction, snapGuidesAction,
+                                    lockGuidesAction](int result) {
+                if (result != QDialog::Accepted || _flaDocument != asked || !_phoenixView)
+                    return;
+                document->guidesColor[0] = static_cast<uint8_t>(color->red());
+                document->guidesColor[1] = static_cast<uint8_t>(color->green());
+                document->guidesColor[2] = static_cast<uint8_t>(color->blue());
+                _editContext.commandStack().setDirty();
+                updateEditState();
+                showGuidesAction->setChecked(show->isChecked());
+                snapGuidesAction->setChecked(snap->isChecked());
+                lockGuidesAction->setChecked(lock->isChecked());
+                if (*cleared)
+                    _phoenixView->clearGuides();
+                _phoenixView->update();
+            });
         });
     QAction* clearGuidesAction = guidesMenu->addAction("&Clear Guides");
     connect(clearGuidesAction, &QAction::triggered, this, [this]() {
@@ -8050,31 +8208,31 @@ void MainWindow::setupMenus()
         if (!_flaDocument || !_flaDocument->document || !_phoenixView)
             return;
         fla::Document* document = _flaDocument->document;
-        QDialog dialog(this);
-        dialog.setWindowTitle("Grid");
-        QFormLayout* form = new QFormLayout(&dialog);
-        QColor color(document->gridColor[0], document->gridColor[1], document->gridColor[2], document->gridColor[3]);
-        QPushButton* colorButton = new QPushButton(color.name(), &dialog);
-        connect(colorButton, &QPushButton::clicked, &dialog, [&]() {
-            const QColor chosen = SwatchPopup::getColor(colorButton, document, color, "Grid Color", false);
-            if (chosen.isValid())
-            {
-                color = chosen;
-                colorButton->setText(color.name());
-            }
+        QDialog* dialog = new QDialog(this);
+        dialog->setWindowTitle("Grid");
+        QFormLayout* form = new QFormLayout(dialog);
+        const std::shared_ptr<QColor> color = std::make_shared<QColor>(
+            document->gridColor[0], document->gridColor[1], document->gridColor[2], document->gridColor[3]);
+        QPushButton* colorButton = new QPushButton(color->name(), dialog);
+        connect(colorButton, &QPushButton::clicked, dialog, [colorButton, document, color]() {
+            SwatchPopup::getColor(colorButton, document, *color, "Grid Color", false,
+                [colorButton, color](const QColor& chosen) {
+                    *color = chosen;
+                    colorButton->setText(color->name());
+                });
         });
         form->addRow("Color", colorButton);
-        QCheckBox* show = new QCheckBox("Show grid", &dialog);
+        QCheckBox* show = new QCheckBox("Show grid", dialog);
         show->setChecked(showGridAction->isChecked());
-        QCheckBox* over = new QCheckBox("Show over objects", &dialog);
+        QCheckBox* over = new QCheckBox("Show over objects", dialog);
         over->setChecked(_phoenixView->gridOver());
-        QCheckBox* snap = new QCheckBox("Snap to grid", &dialog);
+        QCheckBox* snap = new QCheckBox("Snap to grid", dialog);
         snap->setChecked(snapToGridAction->isChecked());
         form->addRow(QString(), show);
         form->addRow(QString(), over);
         form->addRow(QString(), snap);
-        HotSpinBox* across = new HotSpinBox(&dialog);
-        HotSpinBox* down = new HotSpinBox(&dialog);
+        HotSpinBox* across = new HotSpinBox(dialog);
+        HotSpinBox* down = new HotSpinBox(dialog);
         for (HotSpinBox* box : {across, down})
         {
             box->setRange(1, 2000);
@@ -8084,25 +8242,29 @@ void MainWindow::setupMenus()
         down->setValue(document->gridSpacingY);
         form->addRow("Spacing across", across);
         form->addRow("Spacing down", down);
-        QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
-        connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
-        connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+        QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, dialog);
+        connect(buttons, &QDialogButtonBox::accepted, dialog, &QDialog::accept);
+        connect(buttons, &QDialogButtonBox::rejected, dialog, &QDialog::reject);
         form->addRow(buttons);
-        if (dialog.exec() != QDialog::Accepted)
-            return;
-        // The grid is the document's, saved with it.
-        document->gridColor[0] = static_cast<uint8_t>(color.red());
-        document->gridColor[1] = static_cast<uint8_t>(color.green());
-        document->gridColor[2] = static_cast<uint8_t>(color.blue());
-        document->gridSpacingX = across->value();
-        document->gridSpacingY = down->value();
-        _editContext.commandStack().setDirty();
-        updateEditState();
-        showGridAction->setChecked(show->isChecked());
-        snapToGridAction->setChecked(snap->isChecked());
-        _phoenixView->setGridOver(over->isChecked());
-        QSettings().setValue("view/gridOver", over->isChecked());
-        _phoenixView->update();
+        const fla::FLADocument* asked = _flaDocument;
+        modal::open(dialog, [this, asked, document, color, show, over, snap, across, down, showGridAction,
+                                snapToGridAction](int result) {
+            if (result != QDialog::Accepted || _flaDocument != asked || !_phoenixView)
+                return;
+            // The grid is the document's, saved with it.
+            document->gridColor[0] = static_cast<uint8_t>(color->red());
+            document->gridColor[1] = static_cast<uint8_t>(color->green());
+            document->gridColor[2] = static_cast<uint8_t>(color->blue());
+            document->gridSpacingX = across->value();
+            document->gridSpacingY = down->value();
+            _editContext.commandStack().setDirty();
+            updateEditState();
+            showGridAction->setChecked(show->isChecked());
+            snapToGridAction->setChecked(snap->isChecked());
+            _phoenixView->setGridOver(over->isChecked());
+            QSettings().setValue("view/gridOver", over->isChecked());
+            _phoenixView->update();
+        });
     });
     _phoenixView->setGridOver(QSettings().value("view/gridOver", false).toBool());
 
@@ -8434,14 +8596,17 @@ void MainWindow::openFile()
     }
 }
 
-bool MainWindow::confirmLossySave()
+void MainWindow::confirmLossySave(std::function<void()> proceed)
 {
     if (!_flaDocument || !_flaDocument->document)
-        return false;
+        return;
 
     const std::vector<std::string> lost = fla::unsupportedContent(*_flaDocument->document);
     if (lost.empty())
-        return true;
+    {
+        proceed();
+        return;
+    }
 
     QStringList items;
     for (const std::string& description : lost)
@@ -8449,43 +8614,53 @@ bool MainWindow::confirmLossySave()
 
     // Checked before writing rather than after, so declining leaves whatever is
     // already on disk untouched.
-    const QMessageBox::StandardButton answer = QMessageBox::warning(this,
+    modal::ask(this, QMessageBox::Warning,
         "Some Content Will Be Lost",
         QString("Phoenix cannot write this part of the document yet:\n\n%1\n\n"
                 "Saving will drop it. Overwriting the original file would lose it "
                 "for good.").arg(items.join("\n")),
         QMessageBox::Save | QMessageBox::Cancel,
-        QMessageBox::Cancel);
-
-    return answer == QMessageBox::Save;
+        QMessageBox::Cancel, [proceed](QMessageBox::StandardButton answer) {
+            if (answer == QMessageBox::Save)
+                proceed();
+        });
 }
 
-bool MainWindow::confirmPhoenixFeatures()
+void MainWindow::confirmPhoenixFeatures(std::function<void()> proceed)
 {
     if (!_flaDocument || !_flaDocument->document || _featuresAcknowledged.contains(_flaDocument))
-        return true;
+    {
+        proceed();
+        return;
+    }
     const std::vector<fla::features::Use> uses = fla::features::used(*_flaDocument->document);
     if (uses.empty())
-        return true;
+    {
+        proceed();
+        return;
+    }
 
     QString list;
     for (const fla::features::Use& use : uses)
         list += QString("<li><b>%1</b>: %2</li>")
                     .arg(QString::fromUtf8(use.feature->title), QString::fromUtf8(use.feature->elsewhere).toHtmlEscaped());
-    QMessageBox box(QMessageBox::Information, "Phoenix Features in an FLA",
+    QMessageBox* box = new QMessageBox(QMessageBox::Information, "Phoenix Features in an FLA",
         QString("This document uses features of Phoenix's own. Phoenix keeps them in the FLA or XFL file and reads "
                 "them back, but other FLA editors leave them out, showing:<ul>%1</ul>If one of them saves the file, "
                 "these features are gone from it. A Phoenix document (.phx) is the safe place for the master copy.")
             .arg(list),
         QMessageBox::Save | QMessageBox::Cancel, this);
-    box.setDefaultButton(QMessageBox::Save);
-    QCheckBox* dontAsk = new QCheckBox("Don't ask again for this document", &box);
-    box.setCheckBox(dontAsk);
-    if (box.exec() != QMessageBox::Save)
-        return false;
-    if (dontAsk->isChecked())
-        _featuresAcknowledged.insert(_flaDocument);
-    return true;
+    box->setDefaultButton(QMessageBox::Save);
+    QCheckBox* dontAsk = new QCheckBox("Don't ask again for this document", box);
+    box->setCheckBox(dontAsk);
+    const fla::FLADocument* asked = _flaDocument;
+    modal::open(box, [this, asked, dontAsk, proceed](QMessageBox::StandardButton answer) {
+        if (answer != QMessageBox::Save || _flaDocument != asked)
+            return;
+        if (dontAsk->isChecked())
+            _featuresAcknowledged.insert(_flaDocument);
+        proceed();
+    });
 }
 
 bool MainWindow::writeDocumentFile(const fla::Document& document, const QString& filePath, QString& error)
@@ -8548,12 +8723,12 @@ bool MainWindow::writeDocumentFile(const fla::Document& document, const QString&
     return error.isEmpty();
 }
 
-bool MainWindow::saveToPath(const QString& filePath)
+void MainWindow::saveToPath(const QString& filePath, std::function<void()> saved)
 {
     if (!_flaDocument || !_flaDocument->document)
     {
         modal::information(this, "No Document", "No FLA document is currently loaded.");
-        return false;
+        return;
     }
 
     // A group being edited is a group again in the file.
@@ -8566,44 +8741,59 @@ bool MainWindow::saveToPath(const QString& filePath)
     if (_phoenixView)
         _phoenixView->flushPendingMerge();
 
-    if (!isPhxPath(filePath) && (!confirmLossySave() || !confirmPhoenixFeatures()))
-        return false;
+    // The questions an FLA or XFL save asks come first; the document is
+    // written once they are answered.
+    const fla::FLADocument* asked = _flaDocument;
+    const auto write = [this, asked, filePath, saved]() {
+        if (_flaDocument != asked || !_flaDocument || !_flaDocument->document)
+            return;
 
-    // The recovery copy being written reads the media this save moves.
-    if (AutoSave* autoSave = activeAutoSave())
-        autoSave->waitForWrite();
-    QString error;
-    writeDocumentFile(*_flaDocument->document, filePath, error);
+        // The recovery copy being written reads the media this save moves.
+        if (AutoSave* autoSave = activeAutoSave())
+            autoSave->waitForWrite();
+        QString error;
+        writeDocumentFile(*_flaDocument->document, filePath, error);
 
-    if (!error.isEmpty())
-    {
-        modal::warning(this, "Save Failed",
-            QString("Failed to save:\n%1\n\n%2").arg(filePath).arg(error));
-        return false;
-    }
+        if (!error.isEmpty())
+        {
+            modal::warning(this, "Save Failed",
+                QString("Failed to save:\n%1\n\n%2").arg(filePath).arg(error));
+            return;
+        }
 
-    _documentPath = filePath;
-    _documentName = QFileInfo(filePath).fileName();
-    _editContext.markSaved();
-    if (AutoSave* autoSave = activeAutoSave())
-        autoSave->discard();
-    _flaDocument->fromBinary = false;
-    updateEditState();
-    addToRecentFiles(filePath);
-    statusBar()->showMessage(QString("Saved %1").arg(filePath), 5000);
+        _documentPath = filePath;
+        _documentName = QFileInfo(filePath).fileName();
+        _editContext.markSaved();
+        if (AutoSave* autoSave = activeAutoSave())
+            autoSave->discard();
+        _flaDocument->fromBinary = false;
+        updateEditState();
+        addToRecentFiles(filePath);
+        statusBar()->showMessage(QString("Saved %1").arg(filePath), 5000);
 #ifdef PHOENIX_WEB
-    // Written to the page's own file system; the browser keeps it as a download.
-    web_files::download(filePath);
+        // Written to the page's own file system; the browser keeps it as a download.
+        web_files::download(filePath);
 #endif
-    scriptEvent("documentSaved");
-    return true;
+        scriptEvent("documentSaved");
+        if (saved)
+            saved();
+    };
+    if (isPhxPath(filePath))
+        write();
+    else
+        confirmLossySave([this, write]() { confirmPhoenixFeatures(write); });
 }
 
 void MainWindow::saveFile()
 {
+    saveFileThen({});
+}
+
+void MainWindow::saveFileThen(std::function<void()> saved)
+{
     if (_documentPath.isEmpty())
     {
-        saveFileAs();
+        saveFileAsThen(saved);
         return;
     }
 
@@ -8619,19 +8809,24 @@ void MainWindow::saveFile()
         QPushButton* replace = box->addButton("Replace", QMessageBox::DestructiveRole);
         box->addButton(QMessageBox::Cancel);
         box->setDefaultButton(saveAs);
-        modal::open(box, [this, box, saveAs, replace](QMessageBox::StandardButton) {
+        modal::open(box, [this, box, saveAs, replace, saved](QMessageBox::StandardButton) {
             if (box->clickedButton() == saveAs)
-                saveFileAs();
+                saveFileAsThen(saved);
             else if (box->clickedButton() == replace)
-                saveToPath(_documentPath);
+                saveToPath(_documentPath, saved);
         });
         return;
     }
 
-    saveToPath(_documentPath);
+    saveToPath(_documentPath, saved);
 }
 
 void MainWindow::saveFileAs()
+{
+    saveFileAsThen({});
+}
+
+void MainWindow::saveFileAsThen(std::function<void()> saved)
 {
     if (!_flaDocument || !_flaDocument->document)
     {
@@ -8651,7 +8846,7 @@ void MainWindow::saveFileAs()
         QString name = _documentPath.isEmpty() ? QString("untitled") : QFileInfo(_documentPath).completeBaseName();
         const bool fla = _documentPath.isEmpty() ? format == "fla" : _documentPath.endsWith(".fla", Qt::CaseInsensitive);
         name += fla ? ".fla" : ".phx";
-        saveToPath(QDir(web_files::folder()).filePath(name));
+        saveToPath(QDir(web_files::folder()).filePath(name), saved);
         return;
     }
 #endif
@@ -8676,11 +8871,12 @@ void MainWindow::saveFileAs()
     else if (selected == flaFilter && !fileName.endsWith(".fla", Qt::CaseInsensitive))
         fileName += ".fla";
 
-    if (saveToPath(fileName))
-    {
+    saveToPath(fileName, [this, fileName, saved]() {
         _lastDirectory = QFileInfo(fileName).absolutePath();
         saveSettings();
-    }
+        if (saved)
+            saved();
+    });
 }
 
 void MainWindow::exportSvg()
@@ -8695,26 +8891,27 @@ void MainWindow::exportSvg()
     QString suggested = _lastDirectory.isEmpty() ? QString("export.svg")
                                                  : QDir(_lastDirectory).filePath("export.svg");
 
-    QString fileName = QFileDialog::getSaveFileName(this,
-        tr("Export to SVG"), suggested, tr("SVG Files (*.svg);;All Files (*)"));
+    file_pick::save(this, tr("Export to SVG"), suggested, tr("SVG Files (*.svg);;All Files (*)"),
+        [this](const QString& path) {
+            QString fileName = path;
+            if (!_phoenixView)
+                return;
 
-    if (fileName.isEmpty())
-        return;
+            if (!fileName.endsWith(".svg", Qt::CaseInsensitive))
+                fileName += ".svg";
 
-    if (!fileName.endsWith(".svg", Qt::CaseInsensitive))
-        fileName += ".svg";
-
-    if (_phoenixView->exportToSvg(fileName))
-    {
-        _lastDirectory = QFileInfo(fileName).absolutePath();
-        saveSettings();
-        statusBar()->showMessage(QString("Exported SVG to %1").arg(fileName), 5000);
-    }
-    else
-    {
-        modal::warning(this, "Export Failed",
-            QString("Failed to export SVG to:\n%1").arg(fileName));
-    }
+            if (_phoenixView->exportToSvg(fileName))
+            {
+                _lastDirectory = QFileInfo(fileName).absolutePath();
+                saveSettings();
+                statusBar()->showMessage(QString("Exported SVG to %1").arg(fileName), 5000);
+            }
+            else
+            {
+                modal::warning(this, "Export Failed",
+                    QString("Failed to export SVG to:\n%1").arg(fileName));
+            }
+        });
 }
 
 void MainWindow::goToScene(int index)
@@ -8813,12 +9010,12 @@ void MainWindow::checkDocument()
         fla::doctor::checkContainer(_documentPath.toStdString(), report);
     fla::doctor::checkDocument(*_flaDocument->document, report, false);
 
-    QDialog dialog(this);
-    dialog.setWindowTitle("Check Document");
-    QVBoxLayout* layout = new QVBoxLayout(&dialog);
-    QLabel* summary = new QLabel(&dialog);
+    QDialog* dialog = new QDialog(this);
+    dialog->setWindowTitle("Check Document");
+    QVBoxLayout* layout = new QVBoxLayout(dialog);
+    QLabel* summary = new QLabel(dialog);
     layout->addWidget(summary);
-    QTreeWidget* list = new QTreeWidget(&dialog);
+    QTreeWidget* list = new QTreeWidget(dialog);
     list->setHeaderLabels({"", "Where", "What"});
     list->setRootIsDecorated(false);
     list->header()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
@@ -8843,13 +9040,15 @@ void MainWindow::checkDocument()
                                                     .arg(shown.count(fla::doctor::Issue::Severity::Warning)));
     };
     fill(report);
-    QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Close, &dialog);
+    QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Close, dialog);
     QPushButton* repair = buttons->addButton("Repair", QDialogButtonBox::ActionRole);
     repair->setEnabled(std::any_of(report.issues.begin(), report.issues.end(),
         [](const fla::doctor::Issue& issue) { return issue.repairable && !issue.repaired; }));
     layout->addWidget(buttons);
-    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
-    connect(repair, &QPushButton::clicked, this, [this, &fill, repair]() {
+    connect(buttons, &QDialogButtonBox::rejected, dialog, &QDialog::reject);
+    connect(repair, &QPushButton::clicked, this, [this, fill, repair]() {
+        if (!_flaDocument || !_flaDocument->document)
+            return;
         // The repair reshapes the document under the history, which is
         // let go; the document is unsaved until saved.
         if (_phoenixView)
@@ -8872,7 +9071,7 @@ void MainWindow::checkDocument()
         }
         updateEditState();
     });
-    dialog.exec();
+    modal::open(dialog);
 }
 
 void MainWindow::linkToMaster(const QString& name)
@@ -8884,43 +9083,51 @@ void MainWindow::linkToMaster(const QString& name)
     if (!symbol)
         return;
     const QString start = _documentPath.isEmpty() ? _lastDirectory : QFileInfo(_documentPath).absolutePath();
-    const QString path = QFileDialog::getOpenFileName(this, "Master File", start, "Documents (*.fla *.phx *.xfl);;All files (*)");
-    if (path.isEmpty())
-        return;
-    std::string error;
-    std::unique_ptr<fla::FLADocument> master = commands::load(QFileInfo(path).suffix() == "xfl" ? QFileInfo(path).absolutePath().toStdString() : path.toStdString(), error);
-    if (!master || !master->document->symbolList)
-    {
-        modal::warning(this, "Link to Master File", QString("Could not read %1.\n\n%2").arg(path, QString::fromStdString(error)));
-        return;
-    }
-    // Which of the master's symbols: the one of the same name, by default.
-    QStringList names;
-    for (const fla::Symbol* item : master->document->symbolList->symbols)
-        if (item)
-            names << QString::fromStdString(item->name);
-    names.sort(Qt::CaseInsensitive);
-    bool ok = false;
-    const QString item = QInputDialog::getItem(this, "Link to Master File", "Master symbol:", names,
-        std::max(0, static_cast<int>(names.indexOf(name))), false, &ok);
-    if (!ok || item.isEmpty())
-        return;
-    // Kept relative to this file when it has been saved, so a show folder
-    // can move as a whole.
-    fla::links::Link link;
-    link.master = _documentPath.isEmpty() ? QDir::fromNativeSeparators(path).toStdString()
-                                          : QDir(QFileInfo(_documentPath).absolutePath()).relativeFilePath(path).toStdString();
-    link.item = item.toStdString();
-    fla::Symbol probe(nullptr);
-    probe.extraAttributes = symbol->extraAttributes;
-    fla::links::setLink(probe, link);
-    _editContext.commandStack().push(fla::CommandPtr(
-        new fla::SetPropertyCommand<std::vector<std::pair<std::string, std::string>>>(
-            symbol->extraAttributes, symbol->extraAttributes, probe.extraAttributes, "Link to Master")));
-    if (_libraryPanel)
-        _libraryPanel->refresh();
-    if (QMessageBox::question(this, "Link to Master File", QString("Update %1 from the master now?").arg(name)) == QMessageBox::Yes)
-        updateLinked({name});
+    const fla::FLADocument* asked = _flaDocument;
+    file_pick::open(this, "Master File", start, "Documents (*.fla *.phx *.xfl);;All files (*)",
+        [this, asked, symbol, name](const QString& path) {
+            if (_flaDocument != asked)
+                return;
+            std::string error;
+            std::unique_ptr<fla::FLADocument> master = commands::load(QFileInfo(path).suffix() == "xfl" ? QFileInfo(path).absolutePath().toStdString() : path.toStdString(), error);
+            if (!master || !master->document->symbolList)
+            {
+                modal::warning(this, "Link to Master File", QString("Could not read %1.\n\n%2").arg(path, QString::fromStdString(error)));
+                return;
+            }
+            // Which of the master's symbols: the one of the same name, by default.
+            QStringList names;
+            for (const fla::Symbol* item : master->document->symbolList->symbols)
+                if (item)
+                    names << QString::fromStdString(item->name);
+            names.sort(Qt::CaseInsensitive);
+            modal::getItem(this, "Link to Master File", "Master symbol:", names,
+                std::max(0, static_cast<int>(names.indexOf(name))), false,
+                [this, asked, symbol, name, path](const QString& item) {
+                    if (item.isEmpty() || _flaDocument != asked)
+                        return;
+                    // Kept relative to this file when it has been saved, so a show folder
+                    // can move as a whole.
+                    fla::links::Link link;
+                    link.master = _documentPath.isEmpty() ? QDir::fromNativeSeparators(path).toStdString()
+                                                          : QDir(QFileInfo(_documentPath).absolutePath()).relativeFilePath(path).toStdString();
+                    link.item = item.toStdString();
+                    fla::Symbol probe(nullptr);
+                    probe.extraAttributes = symbol->extraAttributes;
+                    fla::links::setLink(probe, link);
+                    _editContext.commandStack().push(fla::CommandPtr(
+                        new fla::SetPropertyCommand<std::vector<std::pair<std::string, std::string>>>(
+                            symbol->extraAttributes, symbol->extraAttributes, probe.extraAttributes, "Link to Master")));
+                    if (_libraryPanel)
+                        _libraryPanel->refresh();
+                    modal::ask(this, QMessageBox::Question, "Link to Master File",
+                        QString("Update %1 from the master now?").arg(name), QMessageBox::Yes | QMessageBox::No,
+                        QMessageBox::NoButton, [this, asked, name](QMessageBox::StandardButton answer) {
+                            if (answer == QMessageBox::Yes && _flaDocument == asked)
+                                updateLinked({name});
+                        });
+                });
+        });
 }
 
 void MainWindow::updateLinked(const QStringList& requested)
@@ -8934,10 +9141,19 @@ void MainWindow::updateLinked(const QStringList& requested)
             names << QString::fromStdString(name);
     if (names.isEmpty())
         return;
-    if (QMessageBox::question(this, "Update from Master",
-            QString("Replace %1 with the master's version? This cannot be undone.")
-                .arg(names.size() == 1 ? names.front() : QString("%1 linked symbols").arg(names.size()))) != QMessageBox::Yes)
-        return;
+    const fla::FLADocument* asked = _flaDocument;
+    modal::ask(this, QMessageBox::Question, "Update from Master",
+        QString("Replace %1 with the master's version? This cannot be undone.")
+            .arg(names.size() == 1 ? names.front() : QString("%1 linked symbols").arg(names.size())),
+        QMessageBox::Yes | QMessageBox::No, QMessageBox::NoButton, [this, asked, names](QMessageBox::StandardButton answer) {
+            if (answer == QMessageBox::Yes && _flaDocument == asked && _flaDocument && _flaDocument->document)
+                updateLinkedNow(names);
+        });
+}
+
+void MainWindow::updateLinkedNow(const QStringList& names)
+{
+    fla::Document& target = *_flaDocument->document;
     if (_phoenixView)
         _phoenixView->exitToDepth(0);
     _selection.clear();
@@ -8992,56 +9208,69 @@ void MainWindow::exportShots()
         modal::information(this, "Export Shots", "Save the episode first; the shots are cut from its file.");
         return;
     }
-    if (_editContext.isModified() &&
-        QMessageBox::question(this, "Export Shots",
-            "The episode has unsaved changes; the file as last saved is split. Go on?") != QMessageBox::Yes)
-        return;
+    // Asked first when there are unsaved changes; then the dialog.
+    const auto showDialog = [this]() {
+        QDialog* dialog = new QDialog(this);
+        dialog->setWindowTitle("Export Shots");
+        QFormLayout* form = new QFormLayout(dialog);
+        QComboBox* by = new QComboBox(dialog);
+        by->addItem("Frame labels", "label");
+        by->addItem("Scenes", "scene");
+        by->addItem("Camera cuts", "camera");
+        by->setToolTip("Labels: each named frame label starts a shot. Camera cuts: each camera keyframe it jumps to.");
+        form->addRow("Cut at:", by);
+        QComboBox* format = new QComboBox(dialog);
+        format->addItem("FLA files", "fla");
+        format->addItem("Phoenix documents", "phx");
+        format->addItem("XFL folders", "xfl");
+        form->addRow("Save as:", format);
+        QHBoxLayout* folderRow = new QHBoxLayout();
+        QLineEdit* folder = new QLineEdit(QFileInfo(_documentPath).absoluteDir().filePath(QFileInfo(_documentPath).completeBaseName() + "_shots"), dialog);
+        QPushButton* browse = new QPushButton("Browse...", dialog);
+        folderRow->addWidget(folder, 1);
+        folderRow->addWidget(browse);
+        form->addRow("Folder:", folderRow);
+        connect(browse, &QPushButton::clicked, dialog, [dialog, folder]() {
+            file_pick::directory(dialog, "Shots Folder", folder->text(), [folder](const QString& chosen) {
+                if (!chosen.isEmpty())
+                    folder->setText(chosen);
+            });
+        });
+        QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, dialog);
+        form->addRow(buttons);
+        connect(buttons, &QDialogButtonBox::accepted, dialog, &QDialog::accept);
+        connect(buttons, &QDialogButtonBox::rejected, dialog, &QDialog::reject);
+        dialog->resize(520, dialog->sizeHint().height());
+        const QString path = _documentPath;
+        modal::open(dialog, [this, path, by, format, folder](int result) {
+            if (result != QDialog::Accepted)
+                return;
 
-    QDialog dialog(this);
-    dialog.setWindowTitle("Export Shots");
-    QFormLayout* form = new QFormLayout(&dialog);
-    QComboBox* by = new QComboBox(&dialog);
-    by->addItem("Frame labels", "label");
-    by->addItem("Scenes", "scene");
-    by->addItem("Camera cuts", "camera");
-    by->setToolTip("Labels: each named frame label starts a shot. Camera cuts: each camera keyframe it jumps to.");
-    form->addRow("Cut at:", by);
-    QComboBox* format = new QComboBox(&dialog);
-    format->addItem("FLA files", "fla");
-    format->addItem("Phoenix documents", "phx");
-    format->addItem("XFL folders", "xfl");
-    form->addRow("Save as:", format);
-    QHBoxLayout* folderRow = new QHBoxLayout();
-    QLineEdit* folder = new QLineEdit(QFileInfo(_documentPath).absoluteDir().filePath(QFileInfo(_documentPath).completeBaseName() + "_shots"), &dialog);
-    QPushButton* browse = new QPushButton("Browse...", &dialog);
-    folderRow->addWidget(folder, 1);
-    folderRow->addWidget(browse);
-    form->addRow("Folder:", folderRow);
-    connect(browse, &QPushButton::clicked, &dialog, [&dialog, folder]() {
-        const QString chosen = QFileDialog::getExistingDirectory(&dialog, "Shots Folder", folder->text());
-        if (!chosen.isEmpty())
-            folder->setText(chosen);
-    });
-    QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
-    form->addRow(buttons);
-    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
-    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
-    dialog.resize(520, dialog.sizeHint().height());
-    if (dialog.exec() != QDialog::Accepted)
+            Process process;
+            QApplication::setOverrideCursor(Qt::WaitCursor);
+            process.start(QCoreApplication::applicationFilePath(), {"shots", path, "--by", by->currentData().toString(),
+                "--format", format->currentData().toString(), "--out", folder->text()});
+            process.waitForFinished(-1);
+            QApplication::restoreOverrideCursor();
+            const QString output = QString::fromLocal8Bit(process.readAllStandardOutput()) +
+                                   QString::fromLocal8Bit(process.readAllStandardError());
+            if (process.exitCode() != 0)
+                modal::warning(this, "Export Shots", output);
+            else
+                modal::information(this, "Export Shots", output);
+        });
+    };
+    if (!_editContext.isModified())
+    {
+        showDialog();
         return;
-
-    Process process;
-    QApplication::setOverrideCursor(Qt::WaitCursor);
-    process.start(QCoreApplication::applicationFilePath(), {"shots", _documentPath, "--by", by->currentData().toString(),
-        "--format", format->currentData().toString(), "--out", folder->text()});
-    process.waitForFinished(-1);
-    QApplication::restoreOverrideCursor();
-    const QString output = QString::fromLocal8Bit(process.readAllStandardOutput()) +
-                           QString::fromLocal8Bit(process.readAllStandardError());
-    if (process.exitCode() != 0)
-        modal::warning(this, "Export Shots", output);
-    else
-        modal::information(this, "Export Shots", output);
+    }
+    modal::ask(this, QMessageBox::Question, "Export Shots",
+        "The episode has unsaved changes; the file as last saved is split. Go on?", QMessageBox::Yes | QMessageBox::No,
+        QMessageBox::NoButton, [showDialog](QMessageBox::StandardButton answer) {
+            if (answer == QMessageBox::Yes)
+                showDialog();
+        });
 }
 
 void MainWindow::compareWith()
@@ -9051,53 +9280,62 @@ void MainWindow::compareWith()
         modal::information(this, "Compare With", "Save the document first; its file is what is compared.");
         return;
     }
-    if (_editContext.isModified() &&
-        QMessageBox::question(this, "Compare With",
-            "The document has unsaved changes; the file as last saved is compared. Go on?") != QMessageBox::Yes)
-        return;
-    const QString other = QFileDialog::getOpenFileName(this, "Compare With", QFileInfo(_documentPath).absolutePath(),
-        "Documents (*.fla *.phx);;All files (*)");
-    if (other.isEmpty())
-        return;
+    // Asked first when there are unsaved changes; then the file to compare.
+    const QString path = _documentPath;
+    const auto pick = [this, path]() {
+        file_pick::open(this, "Compare With", QFileInfo(path).absolutePath(), "Documents (*.fla *.phx);;All files (*)",
+            [this, path](const QString& other) {
+                // The diff command, run apart so neither document disturbs the open one.
+                QTemporaryDir folder;
+                Process process;
+                QApplication::setOverrideCursor(Qt::WaitCursor);
+                process.start(QCoreApplication::applicationFilePath(), {"diff", other, path, "--out", folder.path()});
+                process.waitForFinished(-1);
+                QApplication::restoreOverrideCursor();
+                const QString text = QString::fromLocal8Bit(process.readAllStandardOutput()) +
+                                     QString::fromLocal8Bit(process.readAllStandardError());
 
-    // The diff command, run apart so neither document disturbs the open one.
-    QTemporaryDir folder;
-    Process process;
-    QApplication::setOverrideCursor(Qt::WaitCursor);
-    process.start(QCoreApplication::applicationFilePath(), {"diff", other, _documentPath, "--out", folder.path()});
-    process.waitForFinished(-1);
-    QApplication::restoreOverrideCursor();
-    const QString text = QString::fromLocal8Bit(process.readAllStandardOutput()) +
-                         QString::fromLocal8Bit(process.readAllStandardError());
-
-    QDialog dialog(this);
-    dialog.setWindowTitle(QString("Compare: %1 → %2").arg(QFileInfo(other).fileName(), QFileInfo(_documentPath).fileName()));
-    QVBoxLayout* layout = new QVBoxLayout(&dialog);
-    QPlainTextEdit* report = new QPlainTextEdit(text, &dialog);
-    report->setReadOnly(true);
-    report->setMaximumHeight(180);
-    layout->addWidget(report);
-    // Each frame that draws differently: before, after, and the changes in red.
-    QScrollArea* scroll = new QScrollArea(&dialog);
-    QWidget* strips = new QWidget(scroll);
-    QVBoxLayout* stripLayout = new QVBoxLayout(strips);
-    for (const QFileInfo& image : QDir(folder.path()).entryInfoList({"frame*.png"}, QDir::Files, QDir::Name))
+                QDialog* dialog = new QDialog(this);
+                dialog->setWindowTitle(QString("Compare: %1 → %2").arg(QFileInfo(other).fileName(), QFileInfo(path).fileName()));
+                QVBoxLayout* layout = new QVBoxLayout(dialog);
+                QPlainTextEdit* report = new QPlainTextEdit(text, dialog);
+                report->setReadOnly(true);
+                report->setMaximumHeight(180);
+                layout->addWidget(report);
+                // Each frame that draws differently: before, after, and the changes in red.
+                QScrollArea* scroll = new QScrollArea(dialog);
+                QWidget* strips = new QWidget(scroll);
+                QVBoxLayout* stripLayout = new QVBoxLayout(strips);
+                for (const QFileInfo& image : QDir(folder.path()).entryInfoList({"frame*.png"}, QDir::Files, QDir::Name))
+                {
+                    QLabel* caption = new QLabel(QString("Frame %1: before, after, changes").arg(image.baseName().mid(5).toInt()), strips);
+                    QLabel* picture = new QLabel(strips);
+                    picture->setPixmap(QPixmap(image.absoluteFilePath()).scaledToWidth(900, Qt::SmoothTransformation));
+                    stripLayout->addWidget(caption);
+                    stripLayout->addWidget(picture);
+                }
+                stripLayout->addStretch(1);
+                scroll->setWidget(strips);
+                scroll->setWidgetResizable(true);
+                layout->addWidget(scroll, 1);
+                QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Close, dialog);
+                connect(buttons, &QDialogButtonBox::rejected, dialog, &QDialog::reject);
+                layout->addWidget(buttons);
+                dialog->resize(960, 760);
+                modal::open(dialog);
+            });
+    };
+    if (!_editContext.isModified())
     {
-        QLabel* caption = new QLabel(QString("Frame %1: before, after, changes").arg(image.baseName().mid(5).toInt()), strips);
-        QLabel* picture = new QLabel(strips);
-        picture->setPixmap(QPixmap(image.absoluteFilePath()).scaledToWidth(900, Qt::SmoothTransformation));
-        stripLayout->addWidget(caption);
-        stripLayout->addWidget(picture);
+        pick();
+        return;
     }
-    stripLayout->addStretch(1);
-    scroll->setWidget(strips);
-    scroll->setWidgetResizable(true);
-    layout->addWidget(scroll, 1);
-    QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Close, &dialog);
-    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
-    layout->addWidget(buttons);
-    dialog.resize(960, 760);
-    dialog.exec();
+    modal::ask(this, QMessageBox::Question, "Compare With",
+        "The document has unsaved changes; the file as last saved is compared. Go on?",
+        QMessageBox::Yes | QMessageBox::No, QMessageBox::NoButton, [pick](QMessageBox::StandardButton answer) {
+            if (answer == QMessageBox::Yes)
+                pick();
+        });
 }
 
 int MainWindow::renderCommand(const QString& source, const QStringList& options)
@@ -9552,22 +9790,30 @@ void MainWindow::exportImage()
     const fla::Document* document = _flaDocument->document;
     const QString base = _documentPath.isEmpty() ? QString("frame") : QFileInfo(_documentPath).completeBaseName();
     const QString folder = _lastDirectory.isEmpty() ? QFileInfo(_documentPath).absolutePath() : _lastDirectory;
-    ImageExportDialog dialog(QSize(document->width, document->height), std::max(1, _phoenixView->frameCount()),
-        _player ? _player->currentFrame() : 0, QDir(folder).filePath(base + ".png"), this);
-    if (dialog.exec() != QDialog::Accepted)
-        return;
-    const ImageExportSettings settings = dialog.settings();
-    QString error;
-    const bool written = ImageExport::run(settings, *_phoenixView, error);
-    _phoenixView->update();
-    if (!written)
-    {
-        modal::warning(this, "Export Image", QString("Could not write %1:\n\n%2").arg(settings.path, error));
-        return;
-    }
-    _lastDirectory = QFileInfo(settings.path).absolutePath();
-    saveSettings();
-    statusBar()->showMessage(QString("Exported %1").arg(settings.path), 5000);
+    ImageExportDialog* dialog = new ImageExportDialog(QSize(document->width, document->height),
+        std::max(1, _phoenixView->frameCount()), _player ? _player->currentFrame() : 0, QDir(folder).filePath(base + ".png"),
+        this);
+    const fla::FLADocument* asked = _flaDocument;
+    modal::open(dialog, [this, asked, dialog](int result) {
+        if (result != QDialog::Accepted || _flaDocument != asked || !_phoenixView)
+            return;
+        const ImageExportSettings settings = dialog->settings();
+        QString error;
+        const bool written = ImageExport::run(settings, *_phoenixView, error);
+        _phoenixView->update();
+        if (!written)
+        {
+            modal::warning(this, "Export Image", QString("Could not write %1:\n\n%2").arg(settings.path, error));
+            return;
+        }
+#ifdef PHOENIX_WEB
+        // Written to the page's own file system; the browser keeps it as a download.
+        web_files::download(settings.path);
+#endif
+        _lastDirectory = QFileInfo(settings.path).absolutePath();
+        saveSettings();
+        statusBar()->showMessage(QString("Exported %1").arg(settings.path), 5000);
+    });
 }
 
 void MainWindow::exportMovie()
@@ -9580,44 +9826,51 @@ void MainWindow::exportMovie()
     const fla::Document* document = _flaDocument->document;
     const QString base = _documentPath.isEmpty() ? QString("movie") : QFileInfo(_documentPath).completeBaseName();
     const QString folder = _lastDirectory.isEmpty() ? QFileInfo(_documentPath).absolutePath() : _lastDirectory;
-    MovieExportDialog dialog(QSize(static_cast<int>(std::lround(document->width)),
-                                 static_cast<int>(std::lround(document->height))),
+    MovieExportDialog* dialog = new MovieExportDialog(QSize(static_cast<int>(std::lround(document->width)),
+                                                       static_cast<int>(std::lround(document->height))),
         std::max(1, _phoenixView->frameCount()), QDir(folder).filePath(base + ".mp4"), this);
     QStringList scenes;
     for (const fla::Timeline* timeline : document->timelines)
         scenes << (timeline ? QString::fromStdString(timeline->name) : QString());
-    dialog.setScenes(scenes, document->currentSceneIndex());
+    dialog->setScenes(scenes, document->currentSceneIndex());
     QStringList layers;
     if (const fla::Timeline* scene = document->currentScene())
         for (const fla::Layer* layer : scene->layers)
             if (layer && (layer->layerType == fla::Layer::Type::Normal || layer->layerType == fla::Layer::Type::Masked))
                 layers << QString::fromStdString(layer->name);
-    dialog.setLayers(layers);
-    if (dialog.exec() != QDialog::Accepted)
-        return;
-    MovieExportSettings settings = dialog.settings();
-    settings.showScene = [this](int index) {
-        goToScene(index);
-        return std::max(1, _phoenixView->frameCount());
-    };
+    dialog->setLayers(layers);
+    const fla::FLADocument* asked = _flaDocument;
+    modal::open(dialog, [this, asked, dialog, document](int result) {
+        if (result != QDialog::Accepted || _flaDocument != asked || !_phoenixView)
+            return;
+        MovieExportSettings settings = dialog->settings();
+        settings.showScene = [this](int index) {
+            goToScene(index);
+            return std::max(1, _phoenixView->frameCount());
+        };
 
-    if (settings.format == MovieExportSettings::Format::Video &&
-        findFfmpeg("Export Movie").isEmpty())
-        return;
+        if (settings.format == MovieExportSettings::Format::Video &&
+            findFfmpeg("Export Movie").isEmpty())
+            return;
 
-    QString error;
-    const bool written = MovieExport::run(settings, *_phoenixView, _timelineAudio, document->frameRate, this, error);
-    _phoenixView->update();
-    if (written)
-    {
-        _lastDirectory = QFileInfo(settings.path).absolutePath();
-        saveSettings();
-        statusBar()->showMessage(QString("Exported %1").arg(QDir::toNativeSeparators(settings.path)), 5000);
-    }
-    else if (!error.isEmpty())
-    {
-        modal::warning(this, "Export Failed", error);
-    }
+        QString error;
+        const bool written = MovieExport::run(settings, *_phoenixView, _timelineAudio, document->frameRate, this, error);
+        _phoenixView->update();
+        if (written)
+        {
+#ifdef PHOENIX_WEB
+            // Written to the page's own file system; the browser keeps it as a download.
+            web_files::download(settings.path);
+#endif
+            _lastDirectory = QFileInfo(settings.path).absolutePath();
+            saveSettings();
+            statusBar()->showMessage(QString("Exported %1").arg(QDir::toNativeSeparators(settings.path)), 5000);
+        }
+        else if (!error.isEmpty())
+        {
+            modal::warning(this, "Export Failed", error);
+        }
+    });
 }
 
 void MainWindow::openBrushProperties()
@@ -9683,47 +9936,52 @@ QString MainWindow::publishDocumentFolder() const
     return !last.isEmpty() ? last : QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation);
 }
 
-bool MainWindow::editPublishSettings(bool fromPublish)
+void MainWindow::editPublishSettings(bool fromPublish, std::function<void(bool publish)> done)
 {
     fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
     if (!document)
-        return false;
+        return;
     const QString name = _documentPath.isEmpty() ? QString("Untitled") : QFileInfo(_documentPath).completeBaseName();
     const std::string xml = publishXml(*document);
-    PublishSettingsDialog dialog(xml, name, document->width, document->height, publishDocumentFolder(),
-        !_documentPath.isEmpty(), this);
+    PublishSettingsDialog* dialog = new PublishSettingsDialog(xml, name, document->width, document->height,
+        publishDocumentFolder(), !_documentPath.isEmpty(), this);
     if (fromPublish)
-        dialog.preferPublish();
-    if (dialog.exec() != QDialog::Accepted)
-        return false;
-    // The parent folder is offered again for the next document never saved.
-    QSettings().setValue("publish/parentFolder", dialog.parentFolder());
-    const std::string written = dialog.xml();
-    if (written != xml)
-    {
-        // One undo step: the package file replaced, or added.
-        using Files = std::vector<std::pair<std::string, fla::LazyBytes>>;
-        Files after = document->extraFiles;
-        bool found = false;
-        for (auto& [path, bytes] : after)
-            if (path == kPublishFile)
-            {
-                bytes = fla::LazyBytes(std::vector<uint8_t>(written.begin(), written.end()));
-                found = true;
-            }
-        if (!found)
-            after.emplace_back(kPublishFile, fla::LazyBytes(std::vector<uint8_t>(written.begin(), written.end())));
-        _editContext.commandStack().push(fla::CommandPtr(
-            new fla::SetPropertyCommand<Files>(document->extraFiles, document->extraFiles, after, "Publish Settings")));
-        _editContext.commandStack().breakMergeChain();
-    }
-    return dialog.publishRequested();
+        dialog->preferPublish();
+    const fla::FLADocument* asked = _flaDocument;
+    modal::open(dialog, [this, asked, dialog, document, xml, done](int result) {
+        if (result != QDialog::Accepted || _flaDocument != asked)
+            return;
+        // The parent folder is offered again for the next document never saved.
+        QSettings().setValue("publish/parentFolder", dialog->parentFolder());
+        const std::string written = dialog->xml();
+        if (written != xml)
+        {
+            // One undo step: the package file replaced, or added.
+            using Files = std::vector<std::pair<std::string, fla::LazyBytes>>;
+            Files after = document->extraFiles;
+            bool found = false;
+            for (auto& [path, bytes] : after)
+                if (path == kPublishFile)
+                {
+                    bytes = fla::LazyBytes(std::vector<uint8_t>(written.begin(), written.end()));
+                    found = true;
+                }
+            if (!found)
+                after.emplace_back(kPublishFile, fla::LazyBytes(std::vector<uint8_t>(written.begin(), written.end())));
+            _editContext.commandStack().push(fla::CommandPtr(
+                new fla::SetPropertyCommand<Files>(document->extraFiles, document->extraFiles, after, "Publish Settings")));
+            _editContext.commandStack().breakMergeChain();
+        }
+        done(dialog->publishRequested());
+    });
 }
 
 void MainWindow::publishSettings()
 {
-    if (editPublishSettings(false))
-        publish();
+    editPublishSettings(false, [this](bool publishRequested) {
+        if (publishRequested)
+            publish();
+    });
 }
 
 void MainWindow::publish(const QString& profile)
@@ -9731,91 +9989,99 @@ void MainWindow::publish(const QString& profile)
     fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
     if (!document || !_phoenixView)
         return;
+    const auto go = [this, document, profile]() {
+        QStringList written;
+        QStringList problems;
+        publishFiles(written, problems, profile);
+        const QString folder = QDir::toNativeSeparators(_publishedFolder);
+
+        // What was written, in the Output panel.
+        if (OutputPanel* output = _scripts ? _scripts->output() : nullptr)
+        {
+            QString name = _documentPath.isEmpty() ? QString("Untitled") : QFileInfo(_documentPath).fileName();
+            const std::vector<std::string> configurations = fla::publish::profiles(publishXml(*document));
+            if (configurations.size() > 1)
+                name += QString(" (%1)").arg(profile.isEmpty()
+                        ? QString::fromStdString(fla::publish::currentProfile(publishXml(*document)))
+                        : profile);
+            output->append(written.isEmpty() ? QString("Publish %1: nothing was published.").arg(name)
+                                             : QString("Published %1 to %2:").arg(name, folder));
+            for (const QString& file : written)
+                output->append("    " + file);
+            for (const QString& problem : problems)
+                output->appendError(problem);
+        }
+        statusBar()->showMessage(written.isEmpty() ? QString("Nothing was published.")
+                                                   : QString("Published %1").arg(written.join(", ")),
+            6000);
+
+        // And a dialog that opens the page, or shows the files, unless asked
+        // not to.
+        QSettings options;
+        if (!options.value("publish/showComplete", true).toBool() && problems.isEmpty())
+            return;
+        // The page to open: the HTML5 page, which plays without the SWF, or
+        // else the SWF's page.
+        const QDir out(_publishedFolder);
+        const std::string base =
+            (_documentPath.isEmpty() ? QString("Untitled") : QFileInfo(_documentPath).completeBaseName()).toStdString();
+        const fla::publish::Settings settings = fla::publish::read(publishXml(*document), base, profile.toStdString());
+        QString page;
+        const auto pageOf = [&](bool on, const char* format) {
+            const QString file = QString::fromStdString(fla::publish::fileName(settings, format, base));
+            if (on && written.contains(file))
+                page = out.filePath(file);
+        };
+        pageOf(settings.html, "html");
+        pageOf(settings.html5, "html5");
+        QMessageBox* box = new QMessageBox(this);
+        box->setWindowTitle("Publish");
+        box->setIcon(problems.isEmpty() ? QMessageBox::Information : QMessageBox::Warning);
+        if (written.isEmpty())
+            box->setText("Nothing was published.");
+        else
+            box->setText(QString("Published %1 %2 to<br><b>%3</b>")
+                            .arg(written.size())
+                            .arg(written.size() == 1 ? "file" : "files")
+                            .arg(folder.toHtmlEscaped()));
+        box->setInformativeText(problems.isEmpty() ? QString() : problems.join("\n"));
+        box->setDetailedText(written.join("\n"));
+        QPushButton* openPage = page.isEmpty() ? nullptr : box->addButton("Open in Browser", QMessageBox::ActionRole);
+        if (openPage)
+            openPage->setToolTip(QDir::toNativeSeparators(page));
+#if defined(Q_OS_MACOS)
+        const char* showLabel = "Show in Finder";
+#elif defined(Q_OS_WIN)
+        const char* showLabel = "Show in Explorer";
+#else
+        const char* showLabel = "Show Files";
+#endif
+        QPushButton* showFiles = written.isEmpty() ? nullptr : box->addButton(showLabel, QMessageBox::ActionRole);
+        box->addButton(QMessageBox::Close);
+        QCheckBox* again = new QCheckBox("Show this after publishing", box);
+        again->setChecked(options.value("publish/showComplete", true).toBool());
+        box->setCheckBox(again);
+        modal::open(box, [box, again, openPage, showFiles, page, out, written](QMessageBox::StandardButton) {
+            QSettings().setValue("publish/showComplete", again->isChecked());
+            if (openPage && box->clickedButton() == openPage)
+                QDesktopServices::openUrl(QUrl::fromLocalFile(page));
+            else if (showFiles && box->clickedButton() == showFiles)
+                revealInFileManager(page.isEmpty() ? out.filePath(written.front()) : page);
+        });
+    };
     // A document never saved has no folder of its own: the first time, the
     // settings come up to choose where its files go.
     if (_documentPath.isEmpty() && _publishAskedFor != document)
     {
         _publishAskedFor = document;
-        if (!editPublishSettings(true))
-            return;
-    }
-    QStringList written;
-    QStringList problems;
-    publishFiles(written, problems, profile);
-    const QString folder = QDir::toNativeSeparators(_publishedFolder);
-
-    // What was written, in the Output panel.
-    if (OutputPanel* output = _scripts ? _scripts->output() : nullptr)
-    {
-        QString name = _documentPath.isEmpty() ? QString("Untitled") : QFileInfo(_documentPath).fileName();
-        const std::vector<std::string> configurations = fla::publish::profiles(publishXml(*document));
-        if (configurations.size() > 1)
-            name += QString(" (%1)").arg(profile.isEmpty()
-                    ? QString::fromStdString(fla::publish::currentProfile(publishXml(*document)))
-                    : profile);
-        output->append(written.isEmpty() ? QString("Publish %1: nothing was published.").arg(name)
-                                         : QString("Published %1 to %2:").arg(name, folder));
-        for (const QString& file : written)
-            output->append("    " + file);
-        for (const QString& problem : problems)
-            output->appendError(problem);
-    }
-    statusBar()->showMessage(written.isEmpty() ? QString("Nothing was published.")
-                                               : QString("Published %1").arg(written.join(", ")),
-        6000);
-
-    // And a dialog that opens the page, or shows the files, unless asked
-    // not to.
-    QSettings options;
-    if (!options.value("publish/showComplete", true).toBool() && problems.isEmpty())
+        const fla::FLADocument* asked = _flaDocument;
+        editPublishSettings(true, [this, asked, go](bool publishRequested) {
+            if (publishRequested && _flaDocument == asked && _phoenixView)
+                go();
+        });
         return;
-    // The page to open: the HTML5 page, which plays without the SWF, or
-    // else the SWF's page.
-    const QDir out(_publishedFolder);
-    const std::string base =
-        (_documentPath.isEmpty() ? QString("Untitled") : QFileInfo(_documentPath).completeBaseName()).toStdString();
-    const fla::publish::Settings settings = fla::publish::read(publishXml(*document), base, profile.toStdString());
-    QString page;
-    const auto pageOf = [&](bool on, const char* format) {
-        const QString file = QString::fromStdString(fla::publish::fileName(settings, format, base));
-        if (on && written.contains(file))
-            page = out.filePath(file);
-    };
-    pageOf(settings.html, "html");
-    pageOf(settings.html5, "html5");
-    QMessageBox box(this);
-    box.setWindowTitle("Publish");
-    box.setIcon(problems.isEmpty() ? QMessageBox::Information : QMessageBox::Warning);
-    if (written.isEmpty())
-        box.setText("Nothing was published.");
-    else
-        box.setText(QString("Published %1 %2 to<br><b>%3</b>")
-                        .arg(written.size())
-                        .arg(written.size() == 1 ? "file" : "files")
-                        .arg(folder.toHtmlEscaped()));
-    box.setInformativeText(problems.isEmpty() ? QString() : problems.join("\n"));
-    box.setDetailedText(written.join("\n"));
-    QPushButton* openPage = page.isEmpty() ? nullptr : box.addButton("Open in Browser", QMessageBox::ActionRole);
-    if (openPage)
-        openPage->setToolTip(QDir::toNativeSeparators(page));
-#if defined(Q_OS_MACOS)
-    const char* showLabel = "Show in Finder";
-#elif defined(Q_OS_WIN)
-    const char* showLabel = "Show in Explorer";
-#else
-    const char* showLabel = "Show Files";
-#endif
-    QPushButton* showFiles = written.isEmpty() ? nullptr : box.addButton(showLabel, QMessageBox::ActionRole);
-    box.addButton(QMessageBox::Close);
-    QCheckBox* again = new QCheckBox("Show this after publishing", &box);
-    again->setChecked(options.value("publish/showComplete", true).toBool());
-    box.setCheckBox(again);
-    box.exec();
-    options.setValue("publish/showComplete", again->isChecked());
-    if (openPage && box.clickedButton() == openPage)
-        QDesktopServices::openUrl(QUrl::fromLocalFile(page));
-    else if (showFiles && box.clickedButton() == showFiles)
-        revealInFileManager(page.isEmpty() ? out.filePath(written.front()) : page);
+    }
+    go();
 }
 
 bool MainWindow::publishFiles(QStringList& written, QStringList& problems, const QString& profile)
@@ -10273,17 +10539,21 @@ void MainWindow::exportSpriteSheet(const QString& symbolName)
         base = QFileInfo(_documentPath).completeBaseName() + (document->timelines.size() > 1 ? "_" + source : QString());
     base.replace(QRegularExpression("[\\\\/:*?\"<>|]"), "_");
     const QString folder = _lastDirectory.isEmpty() ? QFileInfo(_documentPath).absolutePath() : _lastDirectory;
-    SpriteSheetDialog dialog(source, count, document->frameRate, render, QDir(folder).filePath(base + ".png"), this);
+    SpriteSheetDialog* dialog =
+        new SpriteSheetDialog(source, count, document->frameRate, render, QDir(folder).filePath(base + ".png"), this);
     _phoenixView->update();
-    if (dialog.exec() != QDialog::Accepted)
-        return;
-    QString error;
-    if (!dialog.write(error))
-    {
-        modal::warning(this, "Export Failed", error);
-        return;
-    }
-    statusBar()->showMessage(QString("Exported the sprite sheet of %1").arg(source), 5000);
+    const fla::FLADocument* asked = _flaDocument;
+    modal::open(dialog, [this, asked, dialog, source](int result) {
+        if (result != QDialog::Accepted || _flaDocument != asked)
+            return;
+        QString error;
+        if (!dialog->write(error))
+        {
+            modal::warning(this, "Export Failed", error);
+            return;
+        }
+        statusBar()->showMessage(QString("Exported the sprite sheet of %1").arg(source), 5000);
+    });
 }
 
 void MainWindow::quit()
@@ -10663,15 +10933,21 @@ void MainWindow::fillWorkspaceMenu(QMenu* menu)
     menu->addSeparator();
 
     menu->addAction("&New Workspace...", this, [this]() {
-        bool ok = false;
-        const QString name = QInputDialog::getText(this, "New Workspace", "Save the current layout as:",
-            QLineEdit::Normal, QString(), &ok).trimmed();
-        if (!ok || name.isEmpty())
-            return;
-        if (savedWorkspaces().contains(name) &&
-            QMessageBox::question(this, "New Workspace", QString("Replace the workspace %1?").arg(name)) != QMessageBox::Yes)
-            return;
-        saveWorkspaceAs(name);
+        modal::getText(this, "New Workspace", "Save the current layout as:", QString(), [this](const QString& entered) {
+            const QString name = entered.trimmed();
+            if (name.isEmpty())
+                return;
+            if (!savedWorkspaces().contains(name))
+            {
+                saveWorkspaceAs(name);
+                return;
+            }
+            modal::ask(this, QMessageBox::Question, "New Workspace", QString("Replace the workspace %1?").arg(name),
+                QMessageBox::Yes | QMessageBox::No, QMessageBox::NoButton, [this, name](QMessageBox::StandardButton answer) {
+                    if (answer == QMessageBox::Yes)
+                        saveWorkspaceAs(name);
+                });
+        });
     });
     menu->addAction(QString("&Save Workspace \"%1\"").arg(current), this, [this, current]() { saveWorkspaceAs(current); });
     menu->addAction(QString("&Reset \"%1\"").arg(current), this, [this, current]() {
@@ -10688,66 +10964,68 @@ void MainWindow::fillWorkspaceMenu(QMenu* menu)
     for (const QString& name : own)
     {
         rename->addAction(name, this, [this, name]() {
-            bool ok = false;
-            const QString to = QInputDialog::getText(this, "Rename Workspace", "New name:", QLineEdit::Normal, name, &ok).trimmed();
-            if (!ok || to.isEmpty() || to == name)
-                return;
-            if (savedWorkspaces().contains(to))
-            {
-                modal::information(this, "Rename Workspace", QString("There is already a workspace called %1.").arg(to));
-                return;
-            }
-            QSettings settings;
-            settings.setValue(workspaceKey(to), settings.value(workspaceKey(name)));
-            settings.remove(workspaceKey(name));
-            if (settings.value("workspace/current").toString() == name)
-                settings.setValue("workspace/current", to);
+            modal::getText(this, "Rename Workspace", "New name:", name, [this, name](const QString& entered) {
+                const QString to = entered.trimmed();
+                if (to.isEmpty() || to == name)
+                    return;
+                if (savedWorkspaces().contains(to))
+                {
+                    modal::information(this, "Rename Workspace", QString("There is already a workspace called %1.").arg(to));
+                    return;
+                }
+                QSettings settings;
+                settings.setValue(workspaceKey(to), settings.value(workspaceKey(name)));
+                settings.remove(workspaceKey(name));
+                if (settings.value("workspace/current").toString() == name)
+                    settings.setValue("workspace/current", to);
+            });
         });
         remove->addAction(name, this, [this, name]() {
-            if (QMessageBox::question(this, "Delete Workspace", QString("Delete the workspace %1?").arg(name)) != QMessageBox::Yes)
-                return;
-            QSettings settings;
-            settings.remove(workspaceKey(name));
-            if (settings.value("workspace/current").toString() == name)
-                settings.setValue("workspace/current", "Essentials");
+            modal::ask(this, QMessageBox::Question, "Delete Workspace", QString("Delete the workspace %1?").arg(name),
+                QMessageBox::Yes | QMessageBox::No, QMessageBox::NoButton, [name](QMessageBox::StandardButton answer) {
+                    if (answer != QMessageBox::Yes)
+                        return;
+                    QSettings settings;
+                    settings.remove(workspaceKey(name));
+                    if (settings.value("workspace/current").toString() == name)
+                        settings.setValue("workspace/current", "Essentials");
+                });
         });
     }
     menu->addSeparator();
 
     menu->addAction("&Import Workspace...", this, [this]() {
-        const QString path = QFileDialog::getOpenFileName(this, "Import Workspace", _lastDirectory,
-            "Phoenix workspaces (*.phxworkspace);;All files (*)");
-        if (path.isEmpty())
-            return;
-        QFile file(path);
-        const QJsonObject workspace =
-            file.open(QIODevice::ReadOnly) ? QJsonDocument::fromJson(file.readAll()).object() : QJsonObject();
-        if (!workspace.contains("phoenixWorkspace"))
-        {
-            modal::warning(this, "Import Workspace", "That file is not a Phoenix workspace.");
-            return;
-        }
-        QString name = workspace["name"].toString().trimmed();
-        if (name.isEmpty())
-            name = QFileInfo(path).completeBaseName();
-        // Never over one already here.
-        const QString base = name;
-        for (int n = 2; savedWorkspaces().contains(name); ++n)
-            name = QString("%1 %2").arg(base).arg(n);
-        if (!applyWorkspace(workspace))
-            statusBar()->showMessage("The panels' arrangement in that workspace could not be used; the rest was.", 5000);
-        saveWorkspaceAs(name);
+        file_pick::open(this, "Import Workspace", _lastDirectory, "Phoenix workspaces (*.phxworkspace);;All files (*)",
+            [this](const QString& path) {
+                QFile file(path);
+                const QJsonObject workspace =
+                    file.open(QIODevice::ReadOnly) ? QJsonDocument::fromJson(file.readAll()).object() : QJsonObject();
+                if (!workspace.contains("phoenixWorkspace"))
+                {
+                    modal::warning(this, "Import Workspace", "That file is not a Phoenix workspace.");
+                    return;
+                }
+                QString name = workspace["name"].toString().trimmed();
+                if (name.isEmpty())
+                    name = QFileInfo(path).completeBaseName();
+                // Never over one already here.
+                const QString base = name;
+                for (int n = 2; savedWorkspaces().contains(name); ++n)
+                    name = QString("%1 %2").arg(base).arg(n);
+                if (!applyWorkspace(workspace))
+                    statusBar()->showMessage("The panels' arrangement in that workspace could not be used; the rest was.", 5000);
+                saveWorkspaceAs(name);
+            });
     });
     menu->addAction("&Export Workspace...", this, [this, current]() {
-        const QString path = QFileDialog::getSaveFileName(this, "Export Workspace",
-            QDir(_lastDirectory).filePath(current + ".phxworkspace"), "Phoenix workspaces (*.phxworkspace)");
-        if (path.isEmpty())
-            return;
-        QJsonObject workspace = currentWorkspace();
-        workspace["name"] = current;
-        QFile file(path);
-        if (!file.open(QIODevice::WriteOnly) || file.write(QJsonDocument(workspace).toJson()) < 0)
-            modal::warning(this, "Export Workspace", QString("Could not write %1.").arg(path));
+        file_pick::save(this, "Export Workspace", QDir(_lastDirectory).filePath(current + ".phxworkspace"),
+            "Phoenix workspaces (*.phxworkspace)", [this, current](const QString& path) {
+                QJsonObject workspace = currentWorkspace();
+                workspace["name"] = current;
+                QFile file(path);
+                if (!file.open(QIODevice::WriteOnly) || file.write(QJsonDocument(workspace).toJson()) < 0)
+                    modal::warning(this, "Export Workspace", QString("Could not write %1.").arg(path));
+            });
     });
 }
 
@@ -10984,33 +11262,35 @@ void MainWindow::updateWindowTitle()
         refreshTabs();
 }
 
-bool MainWindow::confirmDiscardChanges()
+void MainWindow::confirmDiscardChanges(std::function<void()> proceed)
 {
     // Text being typed counts as a change to save.
     settleGestures();
     if (!_editContext.isModified())
-        return true;
+    {
+        proceed();
+        return;
+    }
 
-    const QMessageBox::StandardButton answer = QMessageBox::warning(this,
+    modal::ask(this, QMessageBox::Warning,
         "Unsaved Changes",
         QString("%1 has unsaved changes.").arg(_documentName),
         QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel,
-        QMessageBox::Save);
-
-    if (answer == QMessageBox::Cancel)
-        return false;
-
-    if (answer == QMessageBox::Save)
-    {
-        saveFile();
-
-        // Saving can still not happen: Save As can be canceled, a lossy save
-        // can be declined, and a write can fail. The changes are then still
-        // there, and carrying on would throw away what the user asked to keep.
-        return !_editContext.isModified();
-    }
-
-    return true;
+        QMessageBox::Save, [this, proceed](QMessageBox::StandardButton answer) {
+            if (answer == QMessageBox::Save)
+            {
+                // Saving can still not happen: Save As can be canceled, a lossy
+                // save can be declined, and a write can fail. The changes are
+                // then still there, and carrying on would throw away what the
+                // user asked to keep.
+                saveFileThen([this, proceed]() {
+                    if (!_editContext.isModified())
+                        proceed();
+                });
+            }
+            else if (answer == QMessageBox::Discard)
+                proceed();
+        });
 }
 
 void MainWindow::setupToolBar()
@@ -11845,41 +12125,44 @@ void MainWindow::setupPropertiesPanel()
             palettes.list.push_back(fla::palettes::Palette{"Palette", {}});
             palettes.active = "Palette";
         }
-        fla::palettes::Palette* active = palettes.activePalette();
-        bool ok = false;
-        const QString name = QInputDialog::getText(this, "Convert to Tagged Swatch", "Name:", QLineEdit::Normal,
-            QString("Swatch %1").arg(active->colors.size() + 1), &ok).trimmed();
-        if (!ok || name.isEmpty())
-            return;
-        for (const fla::palettes::Color& color : active->colors)
-            if (color.name == name.toStdString())
-            {
-                modal::information(this, "Convert to Tagged Swatch", "The palette has a color of that name already.");
-                return;
-            }
-        fla::palettes::Color color;
-        color.name = name.toStdString();
-        for (int i = 0; i < 4; ++i)
-            color.rgba[i] = shown[static_cast<size_t>(index)][static_cast<size_t>(i)];
-        active->colors.push_back(color);
-        using Attributes = std::vector<std::pair<std::string, std::string>>;
-        fla::CommandStack& stack = _editContext.commandStack();
-        stack.beginMacro("Tag Swatch");
-        // A default palette color becomes one of the document's swatches.
-        if (own.empty())
-        {
-            const fla::swatches::State before = fla::swatches::stateOf(*document);
-            stack.push(fla::CommandPtr(new fla::SetSwatchesCommand(document, before, fla::swatches::withColors(before, shown), "Tag Swatch")));
-        }
-        stack.push(fla::CommandPtr(new fla::SetPropertyCommand<Attributes>(document->extraAttributes,
-            document->extraAttributes, fla::palettes::saved(*document, palettes), "Tag Swatch")));
-        if (fla::CommandPtr link = fla::palettes::linkMatching(*document, color))
-            stack.push(std::move(link));
-        stack.endMacro();
-        stack.breakMergeChain();
-        if (_palettes)
-            _palettes->refresh();
-        _swatchesPanel->refreshIfStale();
+        const size_t count = palettes.activePalette()->colors.size();
+        const fla::FLADocument* asked = _flaDocument;
+        modal::getText(this, "Convert to Tagged Swatch", "Name:", QString("Swatch %1").arg(count + 1),
+            [this, asked, document, own, shown, index, palettes](const QString& entered) mutable {
+                const QString name = entered.trimmed();
+                if (name.isEmpty() || _flaDocument != asked)
+                    return;
+                fla::palettes::Palette* active = palettes.activePalette();
+                for (const fla::palettes::Color& color : active->colors)
+                    if (color.name == name.toStdString())
+                    {
+                        modal::information(this, "Convert to Tagged Swatch", "The palette has a color of that name already.");
+                        return;
+                    }
+                fla::palettes::Color color;
+                color.name = name.toStdString();
+                for (int i = 0; i < 4; ++i)
+                    color.rgba[i] = shown[static_cast<size_t>(index)][static_cast<size_t>(i)];
+                active->colors.push_back(color);
+                using Attributes = std::vector<std::pair<std::string, std::string>>;
+                fla::CommandStack& stack = _editContext.commandStack();
+                stack.beginMacro("Tag Swatch");
+                // A default palette color becomes one of the document's swatches.
+                if (own.empty())
+                {
+                    const fla::swatches::State before = fla::swatches::stateOf(*document);
+                    stack.push(fla::CommandPtr(new fla::SetSwatchesCommand(document, before, fla::swatches::withColors(before, shown), "Tag Swatch")));
+                }
+                stack.push(fla::CommandPtr(new fla::SetPropertyCommand<Attributes>(document->extraAttributes,
+                    document->extraAttributes, fla::palettes::saved(*document, palettes), "Tag Swatch")));
+                if (fla::CommandPtr link = fla::palettes::linkMatching(*document, color))
+                    stack.push(std::move(link));
+                stack.endMacro();
+                stack.breakMergeChain();
+                if (_palettes)
+                    _palettes->refresh();
+                _swatchesPanel->refreshIfStale();
+            });
     });
     connect(_swatchesPanel, &SwatchesPanel::removeRequested, this, [this](int index) {
         if (!_flaDocument || !_flaDocument->document || index < 0)
@@ -12142,41 +12425,52 @@ void MainWindow::setupPropertiesPanel()
                         QString("%1 is in use, so it cannot be deleted.").arg(kept.join(", ")));
                 return;
             }
-            // Ask before taking instances with the symbols.
-            if (instances > 0)
-            {
-                const QString what = symbols.size() == 1 ? QString::fromStdString(symbols.front()->name)
-                                                         : QString("These %1 symbols").arg(symbols.size());
-                if (QMessageBox::question(this, "Delete",
-                        QString("%1 %2 used %3 time%4 in the document. Delete %5 along with %6?")
-                            .arg(what)
-                            .arg(symbols.size() == 1 ? "is" : "are")
-                            .arg(instances)
-                            .arg(instances == 1 ? "" : "s")
-                            .arg(symbols.size() == 1 ? "it" : "them")
-                            .arg(instances == 1 ? "the instance" : "every instance")) != QMessageBox::Yes)
+            const fla::FLADocument* asked = _flaDocument;
+            fla::Document* target = &document;
+            const auto remove = [this, afterLibraryEdit, asked, target, symbols, bitmaps, kept]() {
+                if (_flaDocument != asked)
                     return;
-            }
-            // Not while one is open for editing.
-            if (_phoenixView)
+                // Not while one is open for editing.
+                if (_phoenixView)
+                {
+                    _phoenixView->exitToDepth(0);
+                    if (_phoenixView->selection())
+                        _phoenixView->selection()->clear();
+                }
+                fla::CommandStack& stack = _editContext.commandStack();
+                const size_t count = symbols.size() + bitmaps.size();
+                stack.beginMacro(count == 1 ? (symbols.empty() ? "Delete Bitmap" : "Delete Symbol") : "Delete Library Items");
+                for (fla::Symbol* symbol : symbols)
+                    stack.push(fla::CommandPtr(new fla::DeleteSymbolCommand(target, symbol)));
+                for (fla::Bitmap* bitmap : bitmaps)
+                    stack.push(fla::CommandPtr(new fla::RemoveBitmapCommand(target, bitmap)));
+                stack.endMacro();
+                if (!kept.isEmpty())
+                    statusBar()->showMessage(QString("Kept %1: it is in use.").arg(kept.join(", ")), 4000);
+                afterLibraryEdit();
+                if (_timelineView)
+                    _timelineView->refreshFrames();
+            };
+            if (instances == 0)
             {
-                _phoenixView->exitToDepth(0);
-                if (_phoenixView->selection())
-                    _phoenixView->selection()->clear();
+                remove();
+                return;
             }
-            fla::CommandStack& stack = _editContext.commandStack();
-            const size_t count = symbols.size() + bitmaps.size();
-            stack.beginMacro(count == 1 ? (symbols.empty() ? "Delete Bitmap" : "Delete Symbol") : "Delete Library Items");
-            for (fla::Symbol* symbol : symbols)
-                stack.push(fla::CommandPtr(new fla::DeleteSymbolCommand(&document, symbol)));
-            for (fla::Bitmap* bitmap : bitmaps)
-                stack.push(fla::CommandPtr(new fla::RemoveBitmapCommand(&document, bitmap)));
-            stack.endMacro();
-            if (!kept.isEmpty())
-                statusBar()->showMessage(QString("Kept %1: it is in use.").arg(kept.join(", ")), 4000);
-            afterLibraryEdit();
-            if (_timelineView)
-                _timelineView->refreshFrames();
+            // Ask before taking instances with the symbols.
+            const QString what = symbols.size() == 1 ? QString::fromStdString(symbols.front()->name)
+                                                     : QString("These %1 symbols").arg(symbols.size());
+            modal::ask(this, QMessageBox::Question, "Delete",
+                QString("%1 %2 used %3 time%4 in the document. Delete %5 along with %6?")
+                    .arg(what)
+                    .arg(symbols.size() == 1 ? "is" : "are")
+                    .arg(instances)
+                    .arg(instances == 1 ? "" : "s")
+                    .arg(symbols.size() == 1 ? "it" : "them")
+                    .arg(instances == 1 ? "the instance" : "every instance"),
+                QMessageBox::Yes | QMessageBox::No, QMessageBox::NoButton, [remove](QMessageBox::StandardButton answer) {
+                    if (answer == QMessageBox::Yes)
+                        remove();
+                });
         });
     connect(_libraryPanel, &LibraryPanel::linkToMasterRequested, this, &MainWindow::linkToMaster);
     connect(_libraryPanel, &LibraryPanel::updateLinkedRequested, this, &MainWindow::updateLinked);
@@ -12198,17 +12492,19 @@ void MainWindow::setupPropertiesPanel()
             fla::Symbol* symbol = symbolNamed(name);
             if (!symbol)
                 return;
-            bool ok = false;
-            const QString className = QInputDialog::getText(this, "Linkage",
-                "Class (empty for no export):", QLineEdit::Normal,
-                QString::fromStdString(fla::library::linkageOf(*symbol)), &ok).trimmed();
-            if (!ok || className.toStdString() == fla::library::linkageOf(*symbol))
-                return;
-            auto after = fla::library::withLinkage(symbol->extraAttributes, className.toStdString());
-            _editContext.commandStack().push(fla::CommandPtr(
-                new fla::SetPropertyCommand<std::vector<std::pair<std::string, std::string>>>(
-                    symbol->extraAttributes, symbol->extraAttributes, after, "Linkage")));
-            afterLibraryEdit();
+            const fla::FLADocument* asked = _flaDocument;
+            modal::getText(this, "Linkage", "Class (empty for no export):",
+                QString::fromStdString(fla::library::linkageOf(*symbol)),
+                [this, afterLibraryEdit, asked, symbol](const QString& entered) {
+                    const QString className = entered.trimmed();
+                    if (_flaDocument != asked || className.toStdString() == fla::library::linkageOf(*symbol))
+                        return;
+                    auto after = fla::library::withLinkage(symbol->extraAttributes, className.toStdString());
+                    _editContext.commandStack().push(fla::CommandPtr(
+                        new fla::SetPropertyCommand<std::vector<std::pair<std::string, std::string>>>(
+                            symbol->extraAttributes, symbol->extraAttributes, after, "Linkage")));
+                    afterLibraryEdit();
+                });
         });
     // Properties...: the symbol's type, its linkage and 9-slice scaling, one
     // step to undo.
@@ -12217,69 +12513,72 @@ void MainWindow::setupPropertiesPanel()
             fla::Symbol* symbol = symbolNamed(name);
             if (!symbol)
                 return;
-            QDialog dialog(this);
-            dialog.setWindowTitle("Symbol Properties");
-            auto* form = new QFormLayout(&dialog);
-            form->addRow("Name:", new QLabel(name, &dialog));
-            auto* type = new QComboBox(&dialog);
+            QDialog* dialog = new QDialog(this);
+            dialog->setWindowTitle("Symbol Properties");
+            auto* form = new QFormLayout(dialog);
+            form->addRow("Name:", new QLabel(name, dialog));
+            auto* type = new QComboBox(dialog);
             type->addItems({"Movie Clip", "Button", "Graphic"});
             type->setCurrentIndex(static_cast<int>(symbol->symbolType));
             type->setEnabled(symbol->otherSymbolType.empty());
             form->addRow("Type:", type);
-            auto* className = new QLineEdit(QString::fromStdString(fla::library::linkageOf(*symbol)), &dialog);
+            auto* className = new QLineEdit(QString::fromStdString(fla::library::linkageOf(*symbol)), dialog);
             className->setPlaceholderText("Not exported for ActionScript");
             form->addRow("Class:", className);
-            auto* slices = new QCheckBox("Enable guides for 9-slice scaling", &dialog);
+            auto* slices = new QCheckBox("Enable guides for 9-slice scaling", dialog);
             slices->setChecked(symbol->scale9);
             slices->setToolTip("Scale a movie clip by its middle and edges, keeping its corners: edit the symbol to place the guides");
             form->addRow(QString(), slices);
-            auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
-            connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
-            connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+            auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, dialog);
+            connect(buttons, &QDialogButtonBox::accepted, dialog, &QDialog::accept);
+            connect(buttons, &QDialogButtonBox::rejected, dialog, &QDialog::reject);
             form->addRow(buttons);
-            if (dialog.exec() != QDialog::Accepted)
-                return;
+            const fla::FLADocument* asked = _flaDocument;
+            modal::open(dialog, [this, afterLibraryEdit, asked, symbol, type, className, slices](int result) {
+                if (result != QDialog::Accepted || _flaDocument != asked)
+                    return;
 
-            fla::CommandStack& stack = _editContext.commandStack();
-            stack.beginMacro("Symbol Properties");
-            const auto chosenType = static_cast<fla::SymbolType>(type->currentIndex());
-            if (chosenType != symbol->symbolType)
-                stack.push(fla::CommandPtr(new fla::SetPropertyCommand<fla::SymbolType>(
-                    symbol->symbolType, symbol->symbolType, chosenType, "Symbol Type")));
-            const std::string linkage = className->text().trimmed().toStdString();
-            if (linkage != fla::library::linkageOf(*symbol))
-            {
-                auto after = fla::library::withLinkage(symbol->extraAttributes, linkage);
-                stack.push(fla::CommandPtr(new fla::SetPropertyCommand<std::vector<std::pair<std::string, std::string>>>(
-                    symbol->extraAttributes, symbol->extraAttributes, after, "Linkage")));
-            }
-            if (slices->isChecked() != symbol->scale9)
-            {
-                stack.push(fla::CommandPtr(new fla::SetPropertyCommand<bool>(
-                    symbol->scale9, symbol->scale9, slices->isChecked(), "9-Slice Scaling")));
-                // Guides never set start a third of the way in from each
-                // edge of the art.
-                const bool unset = symbol->scaleGridLeft == 0.0 && symbol->scaleGridRight == 0.0 &&
-                    symbol->scaleGridTop == 0.0 && symbol->scaleGridBottom == 0.0;
-                const QRectF art = _phoenixView ? _phoenixView->symbolFramesBounds(symbol, 0, 0) : QRectF();
-                if (slices->isChecked() && unset && art.isValid() && !art.isEmpty())
+                fla::CommandStack& stack = _editContext.commandStack();
+                stack.beginMacro("Symbol Properties");
+                const auto chosenType = static_cast<fla::SymbolType>(type->currentIndex());
+                if (chosenType != symbol->symbolType)
+                    stack.push(fla::CommandPtr(new fla::SetPropertyCommand<fla::SymbolType>(
+                        symbol->symbolType, symbol->symbolType, chosenType, "Symbol Type")));
+                const std::string linkage = className->text().trimmed().toStdString();
+                if (linkage != fla::library::linkageOf(*symbol))
                 {
-                    const double values[4] = {art.left() + art.width() / 3.0, art.right() - art.width() / 3.0,
-                        art.top() + art.height() / 3.0, art.bottom() - art.height() / 3.0};
-                    double* fields[4] = {&symbol->scaleGridLeft, &symbol->scaleGridRight, &symbol->scaleGridTop,
-                        &symbol->scaleGridBottom};
-                    for (int i = 0; i < 4; ++i)
-                        stack.push(fla::CommandPtr(new fla::SetPropertyCommand<double>(
-                            *fields[i], *fields[i], std::round(values[i] * 20.0) / 20.0, "9-Slice Scaling")));
+                    auto after = fla::library::withLinkage(symbol->extraAttributes, linkage);
+                    stack.push(fla::CommandPtr(new fla::SetPropertyCommand<std::vector<std::pair<std::string, std::string>>>(
+                        symbol->extraAttributes, symbol->extraAttributes, after, "Linkage")));
                 }
-            }
-            stack.endMacro();
-            if (_phoenixView)
-            {
-                _phoenixView->clearCaches();
-                _phoenixView->update();
-            }
-            afterLibraryEdit();
+                if (slices->isChecked() != symbol->scale9)
+                {
+                    stack.push(fla::CommandPtr(new fla::SetPropertyCommand<bool>(
+                        symbol->scale9, symbol->scale9, slices->isChecked(), "9-Slice Scaling")));
+                    // Guides never set start a third of the way in from each
+                    // edge of the art.
+                    const bool unset = symbol->scaleGridLeft == 0.0 && symbol->scaleGridRight == 0.0 &&
+                        symbol->scaleGridTop == 0.0 && symbol->scaleGridBottom == 0.0;
+                    const QRectF art = _phoenixView ? _phoenixView->symbolFramesBounds(symbol, 0, 0) : QRectF();
+                    if (slices->isChecked() && unset && art.isValid() && !art.isEmpty())
+                    {
+                        const double values[4] = {art.left() + art.width() / 3.0, art.right() - art.width() / 3.0,
+                            art.top() + art.height() / 3.0, art.bottom() - art.height() / 3.0};
+                        double* fields[4] = {&symbol->scaleGridLeft, &symbol->scaleGridRight, &symbol->scaleGridTop,
+                            &symbol->scaleGridBottom};
+                        for (int i = 0; i < 4; ++i)
+                            stack.push(fla::CommandPtr(new fla::SetPropertyCommand<double>(
+                                *fields[i], *fields[i], std::round(values[i] * 20.0) / 20.0, "9-Slice Scaling")));
+                    }
+                }
+                stack.endMacro();
+                if (_phoenixView)
+                {
+                    _phoenixView->clearCaches();
+                    _phoenixView->update();
+                }
+                afterLibraryEdit();
+            });
         });
     connect(_libraryPanel, &LibraryPanel::newFolderRequested, this,
         [this, afterLibraryEdit](const QString& parentPath) {
@@ -12500,46 +12799,50 @@ void MainWindow::importToStage()
 {
     if (!_flaDocument || !_flaDocument->document)
         return;
-    QSettings settings;
-    const QStringList paths = QFileDialog::getOpenFileNames(this, "Import to Stage",
-        settings.value("importFolder").toString(), kImportFilter);
-    if (paths.isEmpty())
-        return;
-    settings.setValue("importFolder", QFileInfo(paths.front()).absolutePath());
+    const fla::FLADocument* asked = _flaDocument;
+    file_pick::openMany(this, "Import to Stage", QSettings().value("importFolder").toString(), kImportFilter,
+        [this, asked](const QStringList& paths) {
+            if (paths.isEmpty() || _flaDocument != asked)
+                return;
+            QSettings().setValue("importFolder", QFileInfo(paths.front()).absolutePath());
 
-    // One numbered image of a sequence offers the rest.
-    if (paths.size() == 1 && MediaImport::isImage(paths.front()))
-    {
-        const QStringList sequence = MediaImport::sequenceOf(paths.front());
-        if (!sequence.isEmpty())
-        {
-            const QMessageBox::StandardButton answer = QMessageBox::question(this, "Import to Stage",
-                QString("%1 appears to be one of a sequence of %2 images. Import them all?")
-                    .arg(QFileInfo(paths.front()).fileName()).arg(sequence.size()),
-                QMessageBox::Yes | QMessageBox::No | QMessageBox::Cancel, QMessageBox::Yes);
-            if (answer == QMessageBox::Cancel)
-                return;
-            if (answer == QMessageBox::Yes)
+            // One numbered image of a sequence offers the rest.
+            if (paths.size() == 1 && MediaImport::isImage(paths.front()))
             {
-                importSequence(sequence);
-                return;
+                const QStringList sequence = MediaImport::sequenceOf(paths.front());
+                if (!sequence.isEmpty())
+                {
+                    modal::ask(this, QMessageBox::Question, "Import to Stage",
+                        QString("%1 appears to be one of a sequence of %2 images. Import them all?")
+                            .arg(QFileInfo(paths.front()).fileName()).arg(sequence.size()),
+                        QMessageBox::Yes | QMessageBox::No | QMessageBox::Cancel, QMessageBox::Yes,
+                        [this, asked, paths, sequence](QMessageBox::StandardButton answer) {
+                            if (answer == QMessageBox::Cancel || _flaDocument != asked)
+                                return;
+                            if (answer == QMessageBox::Yes)
+                                importSequence(sequence);
+                            else
+                                importMedia(paths, true);
+                        });
+                    return;
+                }
             }
-        }
-    }
-    importMedia(paths, true);
+            importMedia(paths, true);
+        });
 }
 
 void MainWindow::importToLibrary()
 {
     if (!_flaDocument || !_flaDocument->document)
         return;
-    QSettings settings;
-    const QStringList paths = QFileDialog::getOpenFileNames(this, "Import to Library",
-        settings.value("importFolder").toString(), kImportFilter);
-    if (paths.isEmpty())
-        return;
-    settings.setValue("importFolder", QFileInfo(paths.front()).absolutePath());
-    importMedia(paths, false);
+    const fla::FLADocument* asked = _flaDocument;
+    file_pick::openMany(this, "Import to Library", QSettings().value("importFolder").toString(), kImportFilter,
+        [this, asked](const QStringList& paths) {
+            if (paths.isEmpty() || _flaDocument != asked)
+                return;
+            QSettings().setValue("importFolder", QFileInfo(paths.front()).absolutePath());
+            importMedia(paths, false);
+        });
 }
 
 QString MainWindow::findFfmpeg(const QString& title)
@@ -12557,149 +12860,152 @@ void MainWindow::importVideo()
     fla::Timeline* timeline = editedTimeline();
     if (!timeline)
         return;
-    QSettings settings;
-    const QString video = QFileDialog::getOpenFileName(this, "Import Video",
-        settings.value("importFolder").toString(), VideoImport::fileFilter());
-    if (video.isEmpty())
-        return;
-    settings.setValue("importFolder", QFileInfo(video).absolutePath());
-    const QString ffmpeg = findFfmpeg("Import Video");
-    if (ffmpeg.isEmpty())
-        return;
+    const fla::FLADocument* asked = _flaDocument;
+    file_pick::open(this, "Import Video", QSettings().value("importFolder").toString(), VideoImport::fileFilter(),
+        [this, asked, timeline](const QString& video) {
+            if (_flaDocument != asked)
+                return;
+            QSettings().setValue("importFolder", QFileInfo(video).absolutePath());
+            const QString ffmpeg = findFfmpeg("Import Video");
+            if (ffmpeg.isEmpty())
+                return;
 
-    // The video import choices that matter for a reference.
-    QDialog options(this);
-    options.setWindowTitle("Import Video");
-    QLabel* about = new QLabel(QString("%1 goes on a guide layer of its own, a still for each frame at %2 fps, "
-        "to animate over. Guide layers are left out of what is published and exported.")
-        .arg(QFileInfo(video).fileName()).arg(_flaDocument->document->frameRate, 0, 'f', 2), &options);
-    about->setWordWrap(true);
-    QCheckBox* fit = new QCheckBox("Shrink to the stage width", &options);
-    fit->setChecked(true);
-    QCheckBox* sound = new QCheckBox("Import its sound, as a stream", &options);
-    sound->setChecked(true);
-    QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &options);
-    connect(buttons, &QDialogButtonBox::accepted, &options, &QDialog::accept);
-    connect(buttons, &QDialogButtonBox::rejected, &options, &QDialog::reject);
-    QVBoxLayout* optionsLayout = new QVBoxLayout(&options);
-    optionsLayout->addWidget(about);
-    optionsLayout->addWidget(fit);
-    optionsLayout->addWidget(sound);
-    optionsLayout->addWidget(buttons);
-    options.setMinimumWidth(420);
-    if (options.exec() != QDialog::Accepted)
-        return;
+            // The video import choices that matter for a reference.
+            QDialog* options = new QDialog(this);
+            options->setWindowTitle("Import Video");
+            QLabel* about = new QLabel(QString("%1 goes on a guide layer of its own, a still for each frame at %2 fps, "
+                "to animate over. Guide layers are left out of what is published and exported.")
+                .arg(QFileInfo(video).fileName()).arg(_flaDocument->document->frameRate, 0, 'f', 2), options);
+            about->setWordWrap(true);
+            QCheckBox* fit = new QCheckBox("Shrink to the stage width", options);
+            fit->setChecked(true);
+            QCheckBox* sound = new QCheckBox("Import its sound, as a stream", options);
+            sound->setChecked(true);
+            QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, options);
+            connect(buttons, &QDialogButtonBox::accepted, options, &QDialog::accept);
+            connect(buttons, &QDialogButtonBox::rejected, options, &QDialog::reject);
+            QVBoxLayout* optionsLayout = new QVBoxLayout(options);
+            optionsLayout->addWidget(about);
+            optionsLayout->addWidget(fit);
+            optionsLayout->addWidget(sound);
+            optionsLayout->addWidget(buttons);
+            options->setMinimumWidth(420);
+            modal::open(options, [this, asked, timeline, video, ffmpeg, fit, sound](int result) {
+                if (result != QDialog::Accepted || _flaDocument != asked)
+                    return;
 
-    fla::Document* document = _flaDocument->document;
-    QTemporaryDir folder;
-    if (!folder.isValid())
-    {
-        modal::warning(this, "Import Video", "There is no room for the video's frames in the temporary folder.");
-        return;
-    }
-    VideoImport::Result extracted;
-    QString error;
-    const double rate = document->frameRate > 0.0 ? document->frameRate : 24.0;
-    if (!VideoImport::extract(ffmpeg, video, folder.path(), rate, fit->isChecked() ? document->width : 0,
-            sound->isChecked(), this, extracted, error))
-    {
-        if (!error.isEmpty())
-            modal::warning(this, "Import Video", error);
-        return;
-    }
+                fla::Document* document = _flaDocument->document;
+                QTemporaryDir folder;
+                if (!folder.isValid())
+                {
+                    modal::warning(this, "Import Video", "There is no room for the video's frames in the temporary folder.");
+                    return;
+                }
+                VideoImport::Result extracted;
+                QString error;
+                const double rate = document->frameRate > 0.0 ? document->frameRate : 24.0;
+                if (!VideoImport::extract(ffmpeg, video, folder.path(), rate, fit->isChecked() ? document->width : 0,
+                        sound->isChecked(), this, extracted, error))
+                {
+                    if (!error.isEmpty())
+                        modal::warning(this, "Import Video", error);
+                    return;
+                }
 
-    // The stills go in a library folder of their own.
-    const QString baseName = QFileInfo(video).completeBaseName();
-    const std::string folderName = fla::media::freeName(*document, baseName.toStdString() + " frames");
-    QStringList problems;
-    std::vector<fla::Bitmap*> bitmaps;
-    for (const QString& still : extracted.frames)
-    {
-        QString stillError;
-        fla::Bitmap* bitmap = MediaImport::loadImage(*document, still, stillError);
-        if (!bitmap)
-        {
-            problems << stillError;
-            continue;
-        }
-        bitmap->name = folderName + "/" + bitmap->name;
-        bitmap->href = bitmap->name;
-        bitmap->sourceExternalFilepath = video.toStdString();
-        bitmaps.push_back(bitmap);
-    }
-    if (bitmaps.empty())
-    {
-        modal::warning(this, "Import Video", problems.join("\n"));
-        return;
-    }
+                // The stills go in a library folder of their own.
+                const QString baseName = QFileInfo(video).completeBaseName();
+                const std::string folderName = fla::media::freeName(*document, baseName.toStdString() + " frames");
+                QStringList problems;
+                std::vector<fla::Bitmap*> bitmaps;
+                for (const QString& still : extracted.frames)
+                {
+                    QString stillError;
+                    fla::Bitmap* bitmap = MediaImport::loadImage(*document, still, stillError);
+                    if (!bitmap)
+                    {
+                        problems << stillError;
+                        continue;
+                    }
+                    bitmap->name = folderName + "/" + bitmap->name;
+                    bitmap->href = bitmap->name;
+                    bitmap->sourceExternalFilepath = video.toStdString();
+                    bitmaps.push_back(bitmap);
+                }
+                if (bitmaps.empty())
+                {
+                    modal::warning(this, "Import Video", problems.join("\n"));
+                    return;
+                }
 
-    // A locked guide layer at the bottom, a keyframe per still.
-    fla::Layer* layer = fla::newLayerFor(*timeline, false);
-    for (fla::Frame* frame : layer->frames)
-        delete frame;
-    layer->frames.clear();
-    layer->name = baseName.toStdString();
-    layer->autoNamed = false;
-    layer->layerType = fla::Layer::Type::Guide;
-    layer->locked = true;
-    for (size_t i = 0; i < bitmaps.size(); ++i)
-    {
-        fla::Frame* frame = new fla::Frame(layer);
-        frame->index = static_cast<int>(i);
-        frame->duration = 1;
-        frame->keyMode = "9728";
-        fla::BitmapInstance* instance = new fla::BitmapInstance(frame);
-        instance->libraryItemName = bitmaps[i]->name;
-        frame->elements.push_back(instance);
-        layer->frames.push_back(frame);
-    }
-    layer->firstFrame = 0;
-    layer->lastFrame = static_cast<int>(bitmaps.size());
+                // A locked guide layer at the bottom, a keyframe per still.
+                fla::Layer* layer = fla::newLayerFor(*timeline, false);
+                for (fla::Frame* frame : layer->frames)
+                    delete frame;
+                layer->frames.clear();
+                layer->name = baseName.toStdString();
+                layer->autoNamed = false;
+                layer->layerType = fla::Layer::Type::Guide;
+                layer->locked = true;
+                for (size_t i = 0; i < bitmaps.size(); ++i)
+                {
+                    fla::Frame* frame = new fla::Frame(layer);
+                    frame->index = static_cast<int>(i);
+                    frame->duration = 1;
+                    frame->keyMode = "9728";
+                    fla::BitmapInstance* instance = new fla::BitmapInstance(frame);
+                    instance->libraryItemName = bitmaps[i]->name;
+                    frame->elements.push_back(instance);
+                    layer->frames.push_back(frame);
+                }
+                layer->firstFrame = 0;
+                layer->lastFrame = static_cast<int>(bitmaps.size());
 
-    fla::CommandStack& stack = _editContext.commandStack();
-    stack.beginMacro("Import Video");
-    stack.push(fla::CommandPtr(new fla::AddFolderCommand(document, folderName)));
-    for (fla::Bitmap* bitmap : bitmaps)
-        stack.push(fla::CommandPtr(new fla::AddBitmapCommand(document, bitmap, "Import Video")));
-    if (!extracted.audio.isEmpty())
-    {
-        fla::media::Sound soundData;
-        QString soundError;
-        if (MediaImport::loadSound(extracted.audio, soundData, soundError))
-        {
-            soundData.name = baseName.toStdString() + ".wav";
-            soundData.sourcePath = video.toStdString();
-            auto* addSound = new fla::AddSoundCommand(document, soundData, "Import Video");
-            const std::string soundName = addSound->soundName();
-            stack.push(fla::CommandPtr(addSound));
-            fla::Frame* first = layer->frames.front();
-            first->extraAttributes.emplace_back("soundName", soundName);
-            first->extraAttributes.emplace_back("soundSync", "stream");
-        }
-        else
-        {
-            problems << soundError;
-        }
-    }
-    stack.push(fla::CommandPtr(new fla::AddLayerCommand(timeline, static_cast<int>(timeline->layers.size()), layer,
-        "Import Video")));
-    stack.endMacro();
-    stack.breakMergeChain();
+                fla::CommandStack& stack = _editContext.commandStack();
+                stack.beginMacro("Import Video");
+                stack.push(fla::CommandPtr(new fla::AddFolderCommand(document, folderName)));
+                for (fla::Bitmap* bitmap : bitmaps)
+                    stack.push(fla::CommandPtr(new fla::AddBitmapCommand(document, bitmap, "Import Video")));
+                if (!extracted.audio.isEmpty())
+                {
+                    fla::media::Sound soundData;
+                    QString soundError;
+                    if (MediaImport::loadSound(extracted.audio, soundData, soundError))
+                    {
+                        soundData.name = baseName.toStdString() + ".wav";
+                        soundData.sourcePath = video.toStdString();
+                        auto* addSound = new fla::AddSoundCommand(document, soundData, "Import Video");
+                        const std::string soundName = addSound->soundName();
+                        stack.push(fla::CommandPtr(addSound));
+                        fla::Frame* first = layer->frames.front();
+                        first->extraAttributes.emplace_back("soundName", soundName);
+                        first->extraAttributes.emplace_back("soundSync", "stream");
+                    }
+                    else
+                    {
+                        problems << soundError;
+                    }
+                }
+                stack.push(fla::CommandPtr(new fla::AddLayerCommand(timeline, static_cast<int>(timeline->layers.size()), layer,
+                    "Import Video")));
+                stack.endMacro();
+                stack.breakMergeChain();
 
-    if (_libraryPanel)
-        _libraryPanel->refreshIfStale();
-    if (_timelineView)
-    {
-        _timelineView->refresh();
-        _timelineView->refreshFrames();
-    }
-    onVisibilityChanged();
-    _phoenixView->invalidateBounds();
-    _phoenixView->clearCaches();
-    _phoenixView->update();
-    statusBar()->showMessage(QString("Imported %1 frames of %2.").arg(bitmaps.size()).arg(QFileInfo(video).fileName()), 5000);
-    if (!problems.isEmpty())
-        modal::warning(this, "Import Video", problems.join("\n"));
+                if (_libraryPanel)
+                    _libraryPanel->refreshIfStale();
+                if (_timelineView)
+                {
+                    _timelineView->refresh();
+                    _timelineView->refreshFrames();
+                }
+                onVisibilityChanged();
+                _phoenixView->invalidateBounds();
+                _phoenixView->clearCaches();
+                _phoenixView->update();
+                statusBar()->showMessage(QString("Imported %1 frames of %2.").arg(bitmaps.size()).arg(QFileInfo(video).fileName()), 5000);
+                if (!problems.isEmpty())
+                    modal::warning(this, "Import Video", problems.join("\n"));
+            });
+        });
 }
 
 void MainWindow::importMedia(const QStringList& paths, bool toStage, const QPointF* at, QStringList* problemsOut)
@@ -14063,107 +14369,115 @@ void MainWindow::straightenSelection()
 
 void MainWindow::advancedSmooth()
 {
-    QDialog dialog(this);
-    dialog.setWindowTitle("Advanced Smooth");
-    QFormLayout* form = new QFormLayout(&dialog);
+    QDialog* dialog = new QDialog(this);
+    dialog->setWindowTitle("Advanced Smooth");
+    QFormLayout* form = new QFormLayout(dialog);
     QSettings settings;
-    QCheckBox* belowOn = new QCheckBox("Smooth angles below", &dialog);
+    QCheckBox* belowOn = new QCheckBox("Smooth angles below", dialog);
     belowOn->setChecked(settings.value("advancedSmooth/belowOn", true).toBool());
-    HotSpinBox* below = new HotSpinBox(&dialog);
+    HotSpinBox* below = new HotSpinBox(dialog);
     below->setRange(0, 180);
     below->setSuffix(QString::fromUtf8("\u00b0"));
     below->setValue(settings.value("advancedSmooth/below", 90).toInt());
     form->addRow(belowOn, below);
-    QCheckBox* aboveOn = new QCheckBox("Smooth angles above", &dialog);
+    QCheckBox* aboveOn = new QCheckBox("Smooth angles above", dialog);
     aboveOn->setChecked(settings.value("advancedSmooth/aboveOn", true).toBool());
-    HotSpinBox* above = new HotSpinBox(&dialog);
+    HotSpinBox* above = new HotSpinBox(dialog);
     above->setRange(0, 180);
     above->setSuffix(QString::fromUtf8("\u00b0"));
     above->setValue(settings.value("advancedSmooth/above", 90).toInt());
     form->addRow(aboveOn, above);
-    HotSpinBox* strength = new HotSpinBox(&dialog);
+    HotSpinBox* strength = new HotSpinBox(dialog);
     strength->setRange(0, 100);
     strength->setSuffix("%");
     strength->setValue(settings.value("advancedSmooth/strength", 50).toInt());
     form->addRow("Smoothing strength:", strength);
-    form->addRow(new QLabel("A corner's angle is 180\u00b0 where the line runs straight on.", &dialog));
-    QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
-    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
-    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    form->addRow(new QLabel("A corner's angle is 180\u00b0 where the line runs straight on.", dialog));
+    QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, dialog);
+    connect(buttons, &QDialogButtonBox::accepted, dialog, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, dialog, &QDialog::reject);
     form->addRow(buttons);
-    if (dialog.exec() != QDialog::Accepted)
-        return;
-    settings.setValue("advancedSmooth/belowOn", belowOn->isChecked());
-    settings.setValue("advancedSmooth/below", below->value());
-    settings.setValue("advancedSmooth/aboveOn", aboveOn->isChecked());
-    settings.setValue("advancedSmooth/above", above->value());
-    settings.setValue("advancedSmooth/strength", strength->value());
-    const bool useBelow = belowOn->isChecked();
-    const bool useAbove = aboveOn->isChecked();
-    const double belowAngle = below->value();
-    const double aboveAngle = above->value();
-    const double amount = strength->value() / 100.0;
-    tidySelectedShapes("Advanced Smooth", [=](fla::EditablePath& path) {
-        fla::smoothPath(path, amount, [=](double angle) {
-            return (useBelow && angle < belowAngle) || (useAbove && angle > aboveAngle);
+    const fla::FLADocument* asked = _flaDocument;
+    modal::open(dialog, [this, asked, belowOn, below, aboveOn, above, strength](int result) {
+        if (result != QDialog::Accepted || _flaDocument != asked)
+            return;
+        QSettings settings;
+        settings.setValue("advancedSmooth/belowOn", belowOn->isChecked());
+        settings.setValue("advancedSmooth/below", below->value());
+        settings.setValue("advancedSmooth/aboveOn", aboveOn->isChecked());
+        settings.setValue("advancedSmooth/above", above->value());
+        settings.setValue("advancedSmooth/strength", strength->value());
+        const bool useBelow = belowOn->isChecked();
+        const bool useAbove = aboveOn->isChecked();
+        const double belowAngle = below->value();
+        const double aboveAngle = above->value();
+        const double amount = strength->value() / 100.0;
+        tidySelectedShapes("Advanced Smooth", [=](fla::EditablePath& path) {
+            fla::smoothPath(path, amount, [=](double angle) {
+                return (useBelow && angle < belowAngle) || (useAbove && angle > aboveAngle);
+            });
         });
     });
 }
 
 void MainWindow::advancedStraighten()
 {
-    QDialog dialog(this);
-    dialog.setWindowTitle("Advanced Straighten");
-    QFormLayout* form = new QFormLayout(&dialog);
+    QDialog* dialog = new QDialog(this);
+    dialog->setWindowTitle("Advanced Straighten");
+    QFormLayout* form = new QFormLayout(dialog);
     QSettings settings;
-    HotSpinBox* strength = new HotSpinBox(&dialog);
+    HotSpinBox* strength = new HotSpinBox(dialog);
     strength->setRange(0, 100);
     strength->setSuffix("%");
     strength->setValue(settings.value("advancedStraighten/strength", 50).toInt());
     form->addRow("Straightening strength:", strength);
-    QCheckBox* recognize = new QCheckBox("Recognize shapes", &dialog);
+    QCheckBox* recognize = new QCheckBox("Recognize shapes", dialog);
     recognize->setToolTip("A closed path that reads as a rectangle or an oval becomes one");
     recognize->setChecked(settings.value("advancedStraighten/recognize", false).toBool());
     form->addRow("", recognize);
-    QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
-    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
-    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, dialog);
+    connect(buttons, &QDialogButtonBox::accepted, dialog, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, dialog, &QDialog::reject);
     form->addRow(buttons);
-    if (dialog.exec() != QDialog::Accepted)
-        return;
-    settings.setValue("advancedStraighten/strength", strength->value());
-    settings.setValue("advancedStraighten/recognize", recognize->isChecked());
-    // The strength is a tolerance in screen pixels.
-    const double screenTolerance = 0.25 + 7.75 * (strength->value() / 100.0);
-    const double tolerance = screenTolerance / qMax(_phoenixView ? _phoenixView->zoom() : 1.0, 1.0e-6);
-    const bool shapes = recognize->isChecked();
-    tidySelectedShapes("Advanced Straighten", [tolerance, shapes](fla::EditablePath& path) {
-        const std::vector<fla::Point> raw = fla::samplePath(path, 2.0);
-        fla::straightenPath(path, tolerance);
-        if (shapes && path.closed)
-        {
-            fla::StrokeTidyOptions options;
-            options.connectLines = false;
-            options.recognizeShapes = true;
-            fla::tidyStraightenedStroke(path, raw, options);
-        }
+    const fla::FLADocument* asked = _flaDocument;
+    modal::open(dialog, [this, asked, strength, recognize](int result) {
+        if (result != QDialog::Accepted || _flaDocument != asked)
+            return;
+        QSettings settings;
+        settings.setValue("advancedStraighten/strength", strength->value());
+        settings.setValue("advancedStraighten/recognize", recognize->isChecked());
+        // The strength is a tolerance in screen pixels.
+        const double screenTolerance = 0.25 + 7.75 * (strength->value() / 100.0);
+        const double tolerance = screenTolerance / qMax(_phoenixView ? _phoenixView->zoom() : 1.0, 1.0e-6);
+        const bool shapes = recognize->isChecked();
+        tidySelectedShapes("Advanced Straighten", [tolerance, shapes](fla::EditablePath& path) {
+            const std::vector<fla::Point> raw = fla::samplePath(path, 2.0);
+            fla::straightenPath(path, tolerance);
+            if (shapes && path.closed)
+            {
+                fla::StrokeTidyOptions options;
+                options.connectLines = false;
+                options.recognizeShapes = true;
+                fla::tidyStraightenedStroke(path, raw, options);
+            }
+        });
     });
 }
 
 void MainWindow::optimizeSelection()
 {
-    bool ok = false;
-    const int amount = QInputDialog::getInt(this, "Optimize Curves",
-        "Optimization strength (0 keeps the shape, 100 simplifies most):", 50, 0, 100, 1, &ok);
-    if (!ok)
-        return;
-
-    // The strength is a tolerance in screen pixels, like the pencil's smoothing.
-    const double screenTolerance = 0.25 + 4.75 * (amount / 100.0);
-    const double tolerance = screenTolerance / qMax(_phoenixView ? _phoenixView->zoom() : 1.0, 1.0e-6);
-    tidySelectedShapes("Optimize", [tolerance](fla::EditablePath& path) {
-        fla::optimizePath(path, tolerance);
-    });
+    const fla::FLADocument* asked = _flaDocument;
+    modal::getInt(this, "Optimize Curves", "Optimization strength (0 keeps the shape, 100 simplifies most):", 50, 0, 100,
+        1, [this, asked](int amount) {
+            if (_flaDocument != asked)
+                return;
+            // The strength is a tolerance in screen pixels, like the pencil's smoothing.
+            const double screenTolerance = 0.25 + 4.75 * (amount / 100.0);
+            const double tolerance = screenTolerance / qMax(_phoenixView ? _phoenixView->zoom() : 1.0, 1.0e-6);
+            tidySelectedShapes("Optimize", [tolerance](fla::EditablePath& path) {
+                fla::optimizePath(path, tolerance);
+            });
+        });
 }
 
 void MainWindow::reshapeSelectedShapes(const char* name,
@@ -14213,15 +14527,16 @@ void MainWindow::convertLinesToFillsSelection()
 namespace {
 
 /// The Expand Fill and Soften Fill Edges dialogs: a distance, for
-/// softening a number of steps, and whether to go outward or inward.
-bool askFillOffset(QWidget* parent, const QString& title, bool withSteps,
-    double& distance, int& steps, bool& inset)
+/// softening a number of steps, and whether to go outward or inward;
+/// \a done gets them once the dialog is accepted.
+void askFillOffset(QWidget* parent, const QString& title, bool withSteps, double distance, int steps, bool inset,
+    std::function<void(double distance, int steps, bool inset)> done)
 {
-    QDialog dialog(parent);
-    dialog.setWindowTitle(title);
-    QFormLayout* form = new QFormLayout(&dialog);
+    QDialog* dialog = new QDialog(parent);
+    dialog->setWindowTitle(title);
+    QFormLayout* form = new QFormLayout(dialog);
 
-    HotDoubleSpinBox* distanceBox = new HotDoubleSpinBox(&dialog);
+    HotDoubleSpinBox* distanceBox = new HotDoubleSpinBox(dialog);
     distanceBox->setRange(0.1, 1000.0);
     distanceBox->setDecimals(1);
     distanceBox->setSuffix(" px");
@@ -14231,13 +14546,13 @@ bool askFillOffset(QWidget* parent, const QString& title, bool withSteps,
     HotSpinBox* stepsBox = nullptr;
     if (withSteps)
     {
-        stepsBox = new HotSpinBox(&dialog);
+        stepsBox = new HotSpinBox(dialog);
         stepsBox->setRange(1, 50);
         stepsBox->setValue(steps);
         form->addRow("Number of steps:", stepsBox);
     }
 
-    QWidget* direction = new QWidget(&dialog);
+    QWidget* direction = new QWidget(dialog);
     QHBoxLayout* directionLayout = new QHBoxLayout(direction);
     directionLayout->setContentsMargins(0, 0, 0, 0);
     QRadioButton* expand = new QRadioButton("Expand", direction);
@@ -14248,21 +14563,19 @@ bool askFillOffset(QWidget* parent, const QString& title, bool withSteps,
     directionLayout->addStretch();
     form->addRow("Direction:", direction);
 
-    QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
-    QObject::connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
-    QObject::connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, dialog);
+    QObject::connect(buttons, &QDialogButtonBox::accepted, dialog, &QDialog::accept);
+    QObject::connect(buttons, &QDialogButtonBox::rejected, dialog, &QDialog::reject);
     form->addRow(buttons);
 
     // The distance is what is usually retyped, so it comes selected.
     distanceBox->setFocus();
     distanceBox->selectAll();
-    if (dialog.exec() != QDialog::Accepted)
-        return false;
-    distance = distanceBox->value();
-    if (stepsBox)
-        steps = stepsBox->value();
-    inset = insetButton->isChecked();
-    return true;
+    modal::open(dialog, [distanceBox, stepsBox, insetButton, steps, done](int result) {
+        if (result != QDialog::Accepted)
+            return;
+        done(distanceBox->value(), stepsBox ? stepsBox->value() : steps, insetButton->isChecked());
+    });
 }
 
 } // namespace
@@ -14272,12 +14585,15 @@ void MainWindow::expandFillSelection()
     // The last settings are offered again.
     static double distance = 4.0;
     static bool inset = false;
-    int steps = 1;
-    if (!askFillOffset(this, "Expand Fill", false, distance, steps, inset))
-        return;
-
-    reshapeSelectedShapes("Expand Fill", [this](fla::Shape& shape, fla::Shape& after) {
-        return fla::filloffset::expandFill(after, _phoenixView->fillRegions(shape), distance, inset);
+    const fla::FLADocument* asked = _flaDocument;
+    askFillOffset(this, "Expand Fill", false, distance, 1, inset, [this, asked](double chosen, int, bool inward) {
+        if (_flaDocument != asked)
+            return;
+        distance = chosen;
+        inset = inward;
+        reshapeSelectedShapes("Expand Fill", [this](fla::Shape& shape, fla::Shape& after) {
+            return fla::filloffset::expandFill(after, _phoenixView->fillRegions(shape), distance, inset);
+        });
     });
 }
 
@@ -14286,13 +14602,43 @@ void MainWindow::softenFillEdgesSelection()
     static double distance = 8.0;
     static int steps = 4;
     static bool inset = false;
-    if (!askFillOffset(this, "Soften Fill Edges", true, distance, steps, inset))
-        return;
-
-    reshapeSelectedShapes("Soften Fill Edges", [this](fla::Shape& shape, fla::Shape& after) {
-        return fla::filloffset::softenFillEdges(after, _phoenixView->fillRegions(shape), distance, steps, inset);
-    });
+    const fla::FLADocument* asked = _flaDocument;
+    askFillOffset(this, "Soften Fill Edges", true, distance, steps, inset,
+        [this, asked](double chosen, int count, bool inward) {
+            if (_flaDocument != asked)
+                return;
+            distance = chosen;
+            steps = count;
+            inset = inward;
+            reshapeSelectedShapes("Soften Fill Edges", [this](fla::Shape& shape, fla::Shape& after) {
+                return fla::filloffset::softenFillEdges(after, _phoenixView->fillRegions(shape), distance, steps, inset);
+            });
+        });
 }
+
+namespace {
+
+/// Convert to Symbol's dialog, kept open while \a check turns the name
+/// down.
+class SymbolNameDialog : public ConvertToSymbolDialog
+{
+public:
+    SymbolNameDialog(const QString& name, std::function<bool(const QString&)> check, QWidget* parent)
+        : ConvertToSymbolDialog(name, parent), _check(std::move(check))
+    {
+    }
+
+    void accept() override
+    {
+        if (_check(symbolName()))
+            ConvertToSymbolDialog::accept();
+    }
+
+private:
+    std::function<bool(const QString&)> _check;
+};
+
+} // namespace
 
 void MainWindow::convertToSymbol()
 {
@@ -14338,50 +14684,52 @@ void MainWindow::convertToSymbol()
             break;
     }
 
-    ConvertToSymbolDialog dialog(QString::fromStdString(symbolName), this);
-    for (;;)
-    {
-        if (dialog.exec() != QDialog::Accepted)
-            return;
-
-        // The name has to be one the library does not have; Phoenix refuses
-        // a clash rather than renaming behind the user's back.
-        symbolName = dialog.symbolName().toStdString();
-        if (symbolName.empty())
+    // The name has to be one the library does not have; Phoenix refuses
+    // a clash rather than renaming behind the user's back, and the dialog
+    // stays up for another.
+    const auto check = [this, document](const QString& name) {
+        const std::string chosen = name.toStdString();
+        if (chosen.empty())
         {
             modal::warning(this, "Convert to Symbol", "Please enter a name for the symbol.");
-            continue;
+            return false;
         }
-        if (document->symbolList && document->symbolList->symbolMap.count(symbolName) != 0)
+        if (document->symbolList && document->symbolList->symbolMap.count(chosen) != 0)
         {
             modal::warning(this, "Convert to Symbol",
-                QString("A symbol named \"%1\" already exists in the library.")
-                    .arg(QString::fromStdString(symbolName)));
-            continue;
+                QString("A symbol named \"%1\" already exists in the library.").arg(name));
+            return false;
         }
-        break;
-    }
+        return true;
+    };
+    SymbolNameDialog* dialog = new SymbolNameDialog(QString::fromStdString(symbolName), check, this);
+    const fla::FLADocument* asked = _flaDocument;
+    modal::open(dialog, [this, asked, dialog, document, elements, frame, bounds](int result) {
+        if (result != QDialog::Accepted || _flaDocument != asked)
+            return;
+        const std::string symbolName = dialog->symbolName().toStdString();
 
-    // The registration point is the corner, edge or center of the selection
-    // the dialog's grid picked.
-    QPointF registration;
-    if (bounds.isValid())
-    {
-        const QPointF fraction = dialog.registrationFraction();
-        registration = QPointF(bounds.left() + bounds.width() * fraction.x(),
-            bounds.top() + bounds.height() * fraction.y());
-    }
+        // The registration point is the corner, edge or center of the selection
+        // the dialog's grid picked.
+        QPointF registration;
+        if (bounds.isValid())
+        {
+            const QPointF fraction = dialog->registrationFraction();
+            registration = QPointF(bounds.left() + bounds.width() * fraction.x(),
+                bounds.top() + bounds.height() * fraction.y());
+        }
 
-    fla::CommandStack& stack = _editContext.commandStack();
-    stack.push(fla::CommandPtr(new fla::ConvertToSymbolCommand(document, frame, elements,
-        symbolName, registration.x(), registration.y(), "Convert to Symbol", &_selection,
-        dialog.symbolType())));
-    stack.breakMergeChain();
+        fla::CommandStack& stack = _editContext.commandStack();
+        stack.push(fla::CommandPtr(new fla::ConvertToSymbolCommand(document, frame, elements,
+            symbolName, registration.x(), registration.y(), "Convert to Symbol", &_selection,
+            dialog->symbolType())));
+        stack.breakMergeChain();
 
-    // The library gained an item, which the document tree lists.
-    _documentView->setDocument(_flaDocument);
-    _phoenixView->clearCaches();
-    _phoenixView->update();
+        // The library gained an item, which the document tree lists.
+        _documentView->setDocument(_flaDocument);
+        _phoenixView->clearCaches();
+        _phoenixView->update();
+    });
 }
 
 void MainWindow::safeZoneSettings()
@@ -14394,30 +14742,34 @@ void MainWindow::safeZoneSettings()
     // Shown as it is edited, so the overlay is on while the dialog is open.
     const bool wasShown = _phoenixView->showSafeZones();
     _phoenixView->setShowSafeZones(true);
-    SafeZonesDialog dialog(fla::safezones::of(*document), [this, document](const fla::safezones::Settings& settings) {
-        document->extraAttributes = fla::safezones::withSettings(*document, settings);
+    SafeZonesDialog* dialog = new SafeZonesDialog(fla::safezones::of(*document),
+        [this, document](const fla::safezones::Settings& settings) {
+            document->extraAttributes = fla::safezones::withSettings(*document, settings);
+            _phoenixView->safeZonesChanged();
+        },
+        this);
+    modal::open(dialog, [this, dialog, document, before, wasShown](int result) {
+        const bool accepted = result == QDialog::Accepted;
+        // The dialog may have outlived the document only if something replaced
+        // it while open; nothing does, but be safe.
+        if (!_flaDocument || _flaDocument->document != document)
+            return;
+        const Attributes after = fla::safezones::withSettings(*document, dialog->settings());
+        document->extraAttributes = before;
+        if (accepted && after != before)
+        {
+            _editContext.commandStack().push(fla::CommandPtr(
+                new fla::SetPropertyCommand<Attributes>(document->extraAttributes, before, after, "Safe Zone Settings")));
+            if (_safeZonesAction)
+                _safeZonesAction->setChecked(true);
+        }
+        else if (_safeZonesAction)
+        {
+            _phoenixView->setShowSafeZones(wasShown);
+            _safeZonesAction->setChecked(wasShown);
+        }
         _phoenixView->safeZonesChanged();
-    }, this);
-    const bool accepted = dialog.exec() == QDialog::Accepted;
-    // The dialog may have outlived the document only if something replaced
-    // it while open; nothing does, but be safe.
-    if (!_flaDocument || _flaDocument->document != document)
-        return;
-    const Attributes after = fla::safezones::withSettings(*document, dialog.settings());
-    document->extraAttributes = before;
-    if (accepted && after != before)
-    {
-        _editContext.commandStack().push(fla::CommandPtr(
-            new fla::SetPropertyCommand<Attributes>(document->extraAttributes, before, after, "Safe Zone Settings")));
-        if (_safeZonesAction)
-            _safeZonesAction->setChecked(true);
-    }
-    else if (_safeZonesAction)
-    {
-        _phoenixView->setShowSafeZones(wasShown);
-        _safeZonesAction->setChecked(wasShown);
-    }
-    _phoenixView->safeZonesChanged();
+    });
 }
 
 void MainWindow::documentSettings()
@@ -14426,22 +14778,31 @@ void MainWindow::documentSettings()
     if (!document || !_phoenixView)
         return;
     using fla::docsettings::Unit;
-    QDialog dialog(this);
-    dialog.setWindowTitle("Document Settings");
-    QFormLayout* form = new QFormLayout(&dialog);
-    QComboBox* units = new QComboBox(&dialog);
+    QDialog* dialog = new QDialog(this);
+    dialog->setWindowTitle("Document Settings");
+    QFormLayout* form = new QFormLayout(dialog);
+    QComboBox* units = new QComboBox(dialog);
     const std::pair<Unit, const char*> unitNames[] = {{Unit::Pixels, "Pixels"}, {Unit::Inches, "Inches"},
         {Unit::Points, "Points"}, {Unit::Centimeters, "Centimeters"}, {Unit::Millimeters, "Millimeters"}};
     for (const auto& [unit, name] : unitNames)
         units->addItem(name, static_cast<int>(unit));
     units->setCurrentIndex(units->findData(static_cast<int>(fla::docsettings::unitOf(*document))));
     form->addRow("Units:", units);
-    HotDoubleSpinBox* width = new HotDoubleSpinBox(&dialog);
-    HotDoubleSpinBox* height = new HotDoubleSpinBox(&dialog);
-    // The size in pixels, shown in the units chosen.
-    double pixelWidth = document->width;
-    double pixelHeight = document->height;
-    const auto showSize = [&]() {
+    HotDoubleSpinBox* width = new HotDoubleSpinBox(dialog);
+    HotDoubleSpinBox* height = new HotDoubleSpinBox(dialog);
+    // The size in pixels, shown in the units chosen, and how far Match
+    // Contents moves the art.
+    struct Stage
+    {
+        double width = 0.0;
+        double height = 0.0;
+        double moveX = 0.0;
+        double moveY = 0.0;
+    };
+    const std::shared_ptr<Stage> stage = std::make_shared<Stage>();
+    stage->width = document->width;
+    stage->height = document->height;
+    const auto showSize = [units, width, height, stage]() {
         const Unit unit = static_cast<Unit>(units->currentData().toInt());
         const double per = fla::docsettings::pixelsPer(unit);
         for (HotDoubleSpinBox* box : {width, height})
@@ -14453,28 +14814,26 @@ void MainWindow::documentSettings()
         }
         const QSignalBlocker blockWidth(width);
         const QSignalBlocker blockHeight(height);
-        width->setValue(pixelWidth / per);
-        height->setValue(pixelHeight / per);
+        width->setValue(stage->width / per);
+        height->setValue(stage->height / per);
     };
     showSize();
-    connect(units, &QComboBox::currentIndexChanged, &dialog, [&]() { showSize(); });
-    const auto perUnit = [&]() { return fla::docsettings::pixelsPer(static_cast<Unit>(units->currentData().toInt())); };
-    connect(width, &HotDoubleSpinBox::valueChanged, &dialog, [&](double value) { pixelWidth = value * perUnit(); });
-    connect(height, &HotDoubleSpinBox::valueChanged, &dialog, [&](double value) { pixelHeight = value * perUnit(); });
+    connect(units, &QComboBox::currentIndexChanged, dialog, [showSize]() { showSize(); });
+    const auto perUnit = [units]() { return fla::docsettings::pixelsPer(static_cast<Unit>(units->currentData().toInt())); };
+    connect(width, &HotDoubleSpinBox::valueChanged, dialog, [stage, perUnit](double value) { stage->width = value * perUnit(); });
+    connect(height, &HotDoubleSpinBox::valueChanged, dialog, [stage, perUnit](double value) { stage->height = value * perUnit(); });
     QHBoxLayout* size = new QHBoxLayout();
     size->addWidget(width);
-    size->addWidget(new QLabel("x", &dialog));
+    size->addWidget(new QLabel("x", dialog));
     size->addWidget(height);
     form->addRow("Stage size:", size);
 
     // Match Contents: the stage around everything on it, the art moved to
     // its corner.
-    double moveX = 0.0;
-    double moveY = 0.0;
-    QPushButton* match = new QPushButton("Match Contents", &dialog);
+    QPushButton* match = new QPushButton("Match Contents", dialog);
     match->setToolTip("Size the stage to what is on it, in every frame of every scene");
     match->setAutoDefault(false);
-    connect(match, &QPushButton::clicked, &dialog, [&]() {
+    connect(match, &QPushButton::clicked, dialog, [this, document, stage, showSize]() {
         QRectF bounds;
         for (fla::Element* element : fla::docsettings::sceneElements(*document))
         {
@@ -14484,23 +14843,23 @@ void MainWindow::documentSettings()
         }
         if (!bounds.isValid())
             return;
-        pixelWidth = std::max(1.0, std::ceil(bounds.width()));
-        pixelHeight = std::max(1.0, std::ceil(bounds.height()));
-        moveX = -bounds.left();
-        moveY = -bounds.top();
+        stage->width = std::max(1.0, std::ceil(bounds.width()));
+        stage->height = std::max(1.0, std::ceil(bounds.height()));
+        stage->moveX = -bounds.left();
+        stage->moveY = -bounds.top();
         showSize();
     });
     form->addRow("", match);
-    QCheckBox* scaleContent = new QCheckBox("Scale content with stage", &dialog);
+    QCheckBox* scaleContent = new QCheckBox("Scale content with stage", dialog);
     scaleContent->setToolTip("Everything on the stage grows or shrinks with it");
     form->addRow("", scaleContent);
     // Anchor: which part of the stage the art keeps to when the stage grows
     // or shrinks around it unscaled.
-    QWidget* anchorGrid = new QWidget(&dialog);
+    QWidget* anchorGrid = new QWidget(dialog);
     QGridLayout* anchorLayout = new QGridLayout(anchorGrid);
     anchorLayout->setContentsMargins(0, 0, 0, 0);
     anchorLayout->setSpacing(2);
-    QButtonGroup* anchors = new QButtonGroup(&dialog);
+    QButtonGroup* anchors = new QButtonGroup(dialog);
     for (int row = 0; row < 3; ++row)
         for (int column = 0; column < 3; ++column)
         {
@@ -14517,43 +14876,46 @@ void MainWindow::documentSettings()
     anchorLayout->setColumnStretch(3, 1);
     form->addRow("Anchor:", anchorGrid);
     connect(scaleContent, &QCheckBox::toggled, anchorGrid, [anchorGrid](bool on) { anchorGrid->setEnabled(!on); });
-    form->addRow("", new QLabel("Stage color and frame rate are in the Properties panel's Doc tab.", &dialog));
-    QDialogButtonBox* box = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+    form->addRow("", new QLabel("Stage color and frame rate are in the Properties panel's Doc tab.", dialog));
+    QDialogButtonBox* box = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, dialog);
     box->button(QDialogButtonBox::Ok)->setDefault(true);
-    connect(box, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
-    connect(box, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    connect(box, &QDialogButtonBox::accepted, dialog, &QDialog::accept);
+    connect(box, &QDialogButtonBox::rejected, dialog, &QDialog::reject);
     form->addRow(box);
-    if (dialog.exec() != QDialog::Accepted)
-        return;
+    const fla::FLADocument* asked = _flaDocument;
+    modal::open(dialog, [this, asked, document, stage, units, scaleContent, anchors](int result) {
+        if (result != QDialog::Accepted || _flaDocument != asked || !_phoenixView)
+            return;
 
-    const int newWidth = static_cast<int>(std::lround(pixelWidth));
-    const int newHeight = static_cast<int>(std::lround(pixelHeight));
-    const Unit unit = static_cast<Unit>(units->currentData().toInt());
-    // The anchor moves the art with the side it keeps to; Match Contents
-    // has already placed it.
-    if (!scaleContent->isChecked() && moveX == 0.0 && moveY == 0.0)
-    {
-        const int cell = std::max(0, anchors->checkedId());
-        moveX = (newWidth - document->width) * (cell % 3) / 2.0;
-        moveY = (newHeight - document->height) * (cell / 3) / 2.0;
-    }
-    fla::CommandStack& stack = _editContext.commandStack();
-    stack.beginMacro("Document Settings");
-    if (newWidth != document->width || newHeight != document->height || moveX != 0.0 || moveY != 0.0)
-        stack.push(fla::docsettings::resize(*document, newWidth, newHeight, scaleContent->isChecked(), moveX, moveY));
-    if (unit != fla::docsettings::unitOf(*document))
-    {
-        using Attributes = std::vector<std::pair<std::string, std::string>>;
-        stack.push(fla::CommandPtr(new fla::SetPropertyCommand<Attributes>(document->extraAttributes,
-            document->extraAttributes, fla::docsettings::withUnit(*document, unit), "Document Settings")));
-    }
-    stack.endMacro();
-    stack.breakMergeChain();
-    _phoenixView->invalidateBounds();
-    _phoenixView->clearCaches();
-    _phoenixView->update();
-    if (_propertiesPanel)
-        _propertiesPanel->refresh();
+        const int newWidth = static_cast<int>(std::lround(stage->width));
+        const int newHeight = static_cast<int>(std::lround(stage->height));
+        const Unit unit = static_cast<Unit>(units->currentData().toInt());
+        // The anchor moves the art with the side it keeps to; Match Contents
+        // has already placed it.
+        if (!scaleContent->isChecked() && stage->moveX == 0.0 && stage->moveY == 0.0)
+        {
+            const int cell = std::max(0, anchors->checkedId());
+            stage->moveX = (newWidth - document->width) * (cell % 3) / 2.0;
+            stage->moveY = (newHeight - document->height) * (cell / 3) / 2.0;
+        }
+        fla::CommandStack& stack = _editContext.commandStack();
+        stack.beginMacro("Document Settings");
+        if (newWidth != document->width || newHeight != document->height || stage->moveX != 0.0 || stage->moveY != 0.0)
+            stack.push(fla::docsettings::resize(*document, newWidth, newHeight, scaleContent->isChecked(), stage->moveX, stage->moveY));
+        if (unit != fla::docsettings::unitOf(*document))
+        {
+            using Attributes = std::vector<std::pair<std::string, std::string>>;
+            stack.push(fla::CommandPtr(new fla::SetPropertyCommand<Attributes>(document->extraAttributes,
+                document->extraAttributes, fla::docsettings::withUnit(*document, unit), "Document Settings")));
+        }
+        stack.endMacro();
+        stack.breakMergeChain();
+        _phoenixView->invalidateBounds();
+        _phoenixView->clearCaches();
+        _phoenixView->update();
+        if (_propertiesPanel)
+            _propertiesPanel->refresh();
+    });
 }
 
 void MainWindow::applyTextStyle(const QString& keyName, const QString& valueText)
@@ -14654,39 +15016,41 @@ void MainWindow::fontMappingDialog(bool onlyMissing)
             modal::information(this, "Font Mapping", "This document's fonts are all installed, and no fonts are mapped.");
         return;
     }
-    QDialog dialog(this);
-    dialog.setWindowTitle(onlyMissing ? "Missing Fonts" : "Font Mapping");
-    QVBoxLayout* layout = new QVBoxLayout(&dialog);
+    QDialog* dialog = new QDialog(this);
+    dialog->setWindowTitle(onlyMissing ? "Missing Fonts" : "Font Mapping");
+    QVBoxLayout* layout = new QVBoxLayout(dialog);
     QLabel* intro = new QLabel(onlyMissing
             ? "This document uses fonts that are not installed. Choose a font to show each one in; the document keeps the fonts it names."
-            : "Each missing font is shown in the font chosen for it.", &dialog);
+            : "Each missing font is shown in the font chosen for it.", dialog);
     intro->setWordWrap(true);
     layout->addWidget(intro);
     QFormLayout* form = new QFormLayout();
     std::vector<std::pair<QString, QFontComboBox*>> choices;
     for (const QString& face : faces)
     {
-        QFontComboBox* box = new QFontComboBox(&dialog);
+        QFontComboBox* box = new QFontComboBox(dialog);
         box->setCurrentFont(QFont(mapping.value(face, TextLayout::familyOf(face))));
         form->addRow(face + ":", box);
         choices.emplace_back(face, box);
     }
     layout->addLayout(form);
-    QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
-    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
-    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, dialog);
+    connect(buttons, &QDialogButtonBox::accepted, dialog, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, dialog, &QDialog::reject);
     layout->addWidget(buttons);
-    if (dialog.exec() != QDialog::Accepted)
-        return;
-    for (const auto& [face, box] : choices)
-        mapping.insert(face, box->currentFont().family());
-    TextLayout::setFontMapping(mapping);
-    if (_phoenixView)
-    {
-        _phoenixView->invalidateBounds();
-        _phoenixView->clearCaches();
-        _phoenixView->update();
-    }
+    modal::open(dialog, [this, mapping, choices](int result) mutable {
+        if (result != QDialog::Accepted)
+            return;
+        for (const auto& [face, box] : choices)
+            mapping.insert(face, box->currentFont().family());
+        TextLayout::setFontMapping(mapping);
+        if (_phoenixView)
+        {
+            _phoenixView->invalidateBounds();
+            _phoenixView->clearCaches();
+            _phoenixView->update();
+        }
+    });
 }
 
 std::vector<fla::StaticText*> MainWindow::allTexts() const
@@ -14860,8 +15224,7 @@ void MainWindow::manageBrushes()
         _editContext.commandStack().breakMergeChain();
         refreshView();
     };
-    DocumentBrushesDialog dialog(*document, hooks, this);
-    dialog.exec();
+    modal::open(new DocumentBrushesDialog(*document, hooks, this));
 }
 
 void MainWindow::drawWithPaintBrush(const fla::PaintBrushDefinition& definition)
@@ -14999,26 +15362,26 @@ void MainWindow::bitmapProperties(const QString& name)
     fla::Bitmap* bitmap = bitmapNamed(name);
     if (!bitmap || !_phoenixView)
         return;
-    QDialog dialog(this);
-    dialog.setWindowTitle("Bitmap Properties");
-    QHBoxLayout* layout = new QHBoxLayout(&dialog);
-    QLabel* preview = new QLabel(&dialog);
+    QDialog* dialog = new QDialog(this);
+    dialog->setWindowTitle("Bitmap Properties");
+    QHBoxLayout* layout = new QHBoxLayout(dialog);
+    QLabel* preview = new QLabel(dialog);
     preview->setFixedSize(160, 160);
     preview->setAlignment(Qt::AlignCenter);
     preview->setPixmap(_phoenixView->libraryBitmap(name).scaled(150, 150, Qt::KeepAspectRatio, Qt::SmoothTransformation));
     layout->addWidget(preview, 0, Qt::AlignTop);
     QFormLayout* form = new QFormLayout();
     layout->addLayout(form, 1);
-    form->addRow("Name", new QLabel(name, &dialog));
+    form->addRow("Name", new QLabel(name, dialog));
     const QString source = QString::fromStdString(bitmap->sourceExternalFilepath);
-    QLabel* path = new QLabel(source.isEmpty() ? QString("(not known)") : source, &dialog);
+    QLabel* path = new QLabel(source.isEmpty() ? QString("(not known)") : source, dialog);
     path->setWordWrap(true);
     path->setTextInteractionFlags(Qt::TextSelectableByMouse);
     form->addRow("Source", path);
-    form->addRow("Size", new QLabel(QString("%1 x %2 pixels").arg(bitmap->frameRight / 20).arg(bitmap->frameBottom / 20), &dialog));
+    form->addRow("Size", new QLabel(QString("%1 x %2 pixels").arg(bitmap->frameRight / 20).arg(bitmap->frameBottom / 20), dialog));
     if (bitmap->sourceLastImported > 0)
-        form->addRow("Imported", new QLabel(QDateTime::fromSecsSinceEpoch(bitmap->sourceLastImported).toString("yyyy-MM-dd hh:mm"), &dialog));
-    QCheckBox* smoothing = new QCheckBox("Allow smoothing", &dialog);
+        form->addRow("Imported", new QLabel(QDateTime::fromSecsSinceEpoch(bitmap->sourceLastImported).toString("yyyy-MM-dd hh:mm"), dialog));
+    QCheckBox* smoothing = new QCheckBox("Allow smoothing", dialog);
     smoothing->setChecked(bitmap->allowSmoothing);
     form->addRow(QString(), smoothing);
     // How it is compressed when published: kept for that.
@@ -15026,67 +15389,72 @@ void MainWindow::bitmapProperties(const QString& name)
     for (const auto& attribute : bitmap->extraAttributes)
         if (attribute.first == "compressionType" || attribute.first == "originalCompressionType")
             compression = attribute.second;
-    QComboBox* kind = new QComboBox(&dialog);
+    QComboBox* kind = new QComboBox(dialog);
     kind->addItems({"Photo (JPEG)", "Lossless (PNG/GIF)"});
     kind->setCurrentIndex(compression == "lossless" ? 1 : 0);
     form->addRow("Compression", kind);
-    HotSpinBox* quality = new HotSpinBox(&dialog);
+    HotSpinBox* quality = new HotSpinBox(dialog);
     quality->setRange(0, 100);
     quality->setSpecialValueText("Document default");
     quality->setValue(bitmap->quality);
     quality->setEnabled(kind->currentIndex() == 0);
-    connect(kind, &QComboBox::currentIndexChanged, &dialog, [quality](int index) { quality->setEnabled(index == 0); });
+    connect(kind, &QComboBox::currentIndexChanged, dialog, [quality](int index) { quality->setEnabled(index == 0); });
     form->addRow("Quality", quality);
     QHBoxLayout* buttonsRow = new QHBoxLayout();
-    QPushButton* update = new QPushButton("Update", &dialog);
+    QPushButton* update = new QPushButton("Update", dialog);
     update->setEnabled(!source.isEmpty() && QFileInfo::exists(source));
-    QPushButton* import = new QPushButton("Import...", &dialog);
-    QPushButton* editWith = new QPushButton("Edit With...", &dialog);
+    QPushButton* import = new QPushButton("Import...", dialog);
+    QPushButton* editWith = new QPushButton("Edit With...", dialog);
     buttonsRow->addWidget(update);
     buttonsRow->addWidget(import);
     buttonsRow->addWidget(editWith);
     form->addRow(buttonsRow);
-    connect(update, &QPushButton::clicked, &dialog, [this, bitmap, source, preview, name]() {
+    connect(update, &QPushButton::clicked, dialog, [this, bitmap, source, preview, name]() {
         if (reimportBitmap(bitmap, source, "Update Bitmap"))
             preview->setPixmap(_phoenixView->libraryBitmap(name).scaled(150, 150, Qt::KeepAspectRatio, Qt::SmoothTransformation));
     });
-    connect(import, &QPushButton::clicked, &dialog, [this, bitmap, preview, path, name]() {
-        const QString chosen = QFileDialog::getOpenFileName(this, "Import Bitmap", QString(),
-            "Images (*.png *.jpg *.jpeg *.gif *.bmp)");
-        if (chosen.isEmpty() || !reimportBitmap(bitmap, chosen, "Import Bitmap"))
-            return;
-        bitmap->sourceExternalFilepath = chosen.toStdString();
-        path->setText(chosen);
-        preview->setPixmap(_phoenixView->libraryBitmap(name).scaled(150, 150, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+    connect(import, &QPushButton::clicked, dialog, [this, dialog, bitmap, preview, path, name]() {
+        file_pick::open(dialog, "Import Bitmap", QString(), "Images (*.png *.jpg *.jpeg *.gif *.bmp)",
+            [this, bitmap, preview, path, name](const QString& chosen) {
+                if (chosen.isEmpty() || !reimportBitmap(bitmap, chosen, "Import Bitmap"))
+                    return;
+                bitmap->sourceExternalFilepath = chosen.toStdString();
+                path->setText(chosen);
+                preview->setPixmap(
+                    _phoenixView->libraryBitmap(name).scaled(150, 150, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+            });
     });
-    connect(editWith, &QPushButton::clicked, &dialog, [this, name]() { editBitmapWith(name); });
-    QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
-    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
-    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    connect(editWith, &QPushButton::clicked, dialog, [this, name]() { editBitmapWith(name); });
+    QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, dialog);
+    connect(buttons, &QDialogButtonBox::accepted, dialog, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, dialog, &QDialog::reject);
     form->addRow(buttons);
-    if (dialog.exec() != QDialog::Accepted)
-        return;
-    using Attributes = std::vector<std::pair<std::string, std::string>>;
-    Attributes attributes;
-    for (const auto& attribute : bitmap->extraAttributes)
-        if (attribute.first != "compressionType")
-            attributes.push_back(attribute);
-    attributes.emplace_back("compressionType", kind->currentIndex() == 1 ? "lossless" : "photo");
-    fla::CommandStack& stack = _editContext.commandStack();
-    stack.beginMacro("Bitmap Properties");
-    if (smoothing->isChecked() != bitmap->allowSmoothing)
-        stack.push(fla::CommandPtr(new fla::SetPropertyCommand<bool>(bitmap->allowSmoothing, bitmap->allowSmoothing,
-            smoothing->isChecked(), "Bitmap Properties")));
-    if (quality->value() != bitmap->quality)
-        stack.push(fla::CommandPtr(new fla::SetPropertyCommand<int>(bitmap->quality, bitmap->quality, quality->value(),
-            "Bitmap Properties")));
-    if (attributes != bitmap->extraAttributes)
-        stack.push(fla::CommandPtr(new fla::SetPropertyCommand<Attributes>(bitmap->extraAttributes,
-            bitmap->extraAttributes, attributes, "Bitmap Properties")));
-    stack.endMacro();
-    stack.breakMergeChain();
-    _phoenixView->clearCaches();
-    _phoenixView->update();
+    const fla::FLADocument* asked = _flaDocument;
+    modal::open(dialog, [this, asked, bitmap, kind, smoothing, quality](int result) {
+        if (result != QDialog::Accepted || _flaDocument != asked || !_phoenixView)
+            return;
+        using Attributes = std::vector<std::pair<std::string, std::string>>;
+        Attributes attributes;
+        for (const auto& attribute : bitmap->extraAttributes)
+            if (attribute.first != "compressionType")
+                attributes.push_back(attribute);
+        attributes.emplace_back("compressionType", kind->currentIndex() == 1 ? "lossless" : "photo");
+        fla::CommandStack& stack = _editContext.commandStack();
+        stack.beginMacro("Bitmap Properties");
+        if (smoothing->isChecked() != bitmap->allowSmoothing)
+            stack.push(fla::CommandPtr(new fla::SetPropertyCommand<bool>(bitmap->allowSmoothing, bitmap->allowSmoothing,
+                smoothing->isChecked(), "Bitmap Properties")));
+        if (quality->value() != bitmap->quality)
+            stack.push(fla::CommandPtr(new fla::SetPropertyCommand<int>(bitmap->quality, bitmap->quality, quality->value(),
+                "Bitmap Properties")));
+        if (attributes != bitmap->extraAttributes)
+            stack.push(fla::CommandPtr(new fla::SetPropertyCommand<Attributes>(bitmap->extraAttributes,
+                bitmap->extraAttributes, attributes, "Bitmap Properties")));
+        stack.endMacro();
+        stack.breakMergeChain();
+        _phoenixView->clearCaches();
+        _phoenixView->update();
+    });
 }
 
 void MainWindow::editBitmapWith(const QString& name)
@@ -15098,7 +15466,11 @@ void MainWindow::editBitmapWith(const QString& name)
     // system's own for PNG files.
     QSettings settings;
     QString program = settings.value("library/editWith").toString();
-    if (program.isEmpty() || !QFileInfo::exists(program))
+    // A program to choose is a desktop's: where nothing can wait for the
+    // choice (the web build), the system's own is asked to open it.
+    if (modal::cannotWait())
+        program.clear();
+    else if (program.isEmpty() || !QFileInfo::exists(program))
     {
         program = QFileDialog::getOpenFileName(this, "Edit With", QString(),
 #ifdef Q_OS_WIN
@@ -15174,26 +15546,26 @@ void MainWindow::soundProperties(const QString& name)
     if (!info)
         return;
     std::shared_ptr<const PcmBuffer> pcm = _timelineAudio ? _timelineAudio->librarySound(info->name) : nullptr;
-    QDialog dialog(this);
-    dialog.setWindowTitle("Sound Properties");
-    QFormLayout* form = new QFormLayout(&dialog);
-    form->addRow("Name", new QLabel(name, &dialog));
-    form->addRow("Format", new QLabel(info->format.empty() ? QString("MP3") : QString::fromStdString(info->format), &dialog));
+    QDialog* dialog = new QDialog(this);
+    dialog->setWindowTitle("Sound Properties");
+    QFormLayout* form = new QFormLayout(dialog);
+    form->addRow("Name", new QLabel(name, dialog));
+    form->addRow("Format", new QLabel(info->format.empty() ? QString("MP3") : QString::fromStdString(info->format), dialog));
     if (pcm)
     {
         const double seconds = static_cast<double>(pcm->frames()) / PcmBuffer::kRate;
-        form->addRow("Length", new QLabel(QString("%1 s").arg(seconds, 0, 'f', 2), &dialog));
+        form->addRow("Length", new QLabel(QString("%1 s").arg(seconds, 0, 'f', 2), dialog));
     }
-    QPushButton* play = new QPushButton("Play", &dialog);
-    QPushButton* stop = new QPushButton("Stop", &dialog);
+    QPushButton* play = new QPushButton("Play", dialog);
+    QPushButton* stop = new QPushButton("Stop", dialog);
     play->setEnabled(pcm != nullptr);
     auto voice = std::make_shared<int>(-1);
-    connect(play, &QPushButton::clicked, &dialog, [pcm, voice]() {
+    connect(play, &QPushButton::clicked, dialog, [pcm, voice]() {
         if (*voice >= 0)
             AudioEngine::instance().stop(*voice);
         *voice = AudioEngine::instance().play(pcm, 0, pcm->frames());
     });
-    connect(stop, &QPushButton::clicked, &dialog, [voice]() {
+    connect(stop, &QPushButton::clicked, dialog, [voice]() {
         if (*voice >= 0)
             AudioEngine::instance().stop(*voice);
         *voice = -1;
@@ -15203,12 +15575,13 @@ void MainWindow::soundProperties(const QString& name)
     row->addWidget(stop);
     row->addStretch(1);
     form->addRow(row);
-    QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Close, &dialog);
-    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Close, dialog);
+    connect(buttons, &QDialogButtonBox::rejected, dialog, &QDialog::reject);
     form->addRow(buttons);
-    dialog.exec();
-    if (*voice >= 0)
-        AudioEngine::instance().stop(*voice);
+    modal::open(dialog, [voice](int) {
+        if (*voice >= 0)
+            AudioEngine::instance().stop(*voice);
+    });
 }
 
 bool MainWindow::documentAlive(const fla::Document* document) const
@@ -15238,7 +15611,12 @@ std::vector<std::string> MainWindow::copyLibraryItems(const fla::Document& sourc
         items.push_back(name.toStdString());
     fla::transfer::Resolution resolution = fla::transfer::Resolution::Skip;
     const std::vector<std::string> clashes = fla::transfer::conflicts(*document, source, items);
-    if (!clashes.empty())
+    // Resolve Library Conflicts: the copy is wanted on the spot, so where
+    // nothing can wait for the answer (the web build) the items the library
+    // has already are kept, as the dialog offers first.
+    if (!clashes.empty() && modal::cannotWait())
+        statusBar()->showMessage("The library has some of these already: its own are kept.", 5000);
+    else if (!clashes.empty())
     {
         // Resolve Library Conflicts.
         QDialog dialog(this);
@@ -15295,62 +15673,60 @@ std::vector<std::string> MainWindow::copyLibraryItems(const fla::Document& sourc
 
 void MainWindow::openExternalLibrary()
 {
-    QSettings settings;
-    const QString path = QFileDialog::getOpenFileName(this, "Open External Library",
-        settings.value("importFolder").toString(), "Documents (*.fla *.xfl *.phx);;All files (*)");
-    if (path.isEmpty())
-        return;
-    std::string error;
-    std::unique_ptr<fla::FLADocument> loaded = commands::load(
-        QFileInfo(path).suffix() == "xfl" ? QFileInfo(path).absolutePath().toStdString() : path.toStdString(), error);
-    if (!loaded || !loaded->document)
-    {
-        modal::warning(this, "Open External Library",
-            QString("%1 could not be opened.\n\n%2").arg(QFileInfo(path).fileName(), QString::fromStdString(error)));
-        return;
-    }
-    auto library = std::make_unique<ExternalLibrary>();
-    library->document = std::move(loaded);
-    QDockWidget* dock = new QDockWidget("Library - " + QFileInfo(path).fileName(), this);
-    dock->setObjectName("externalLibrary" + QString::number(_externalLibraries.size()));
-    dock->setAttribute(Qt::WA_DeleteOnClose);
-    LibraryPanel* panel = new LibraryPanel(dock);
-    panel->setExternal(true);
-    panel->setDocument(library->document.get());
-    dock->setWidget(panel);
-    addDockWidget(Qt::RightDockWidgetArea, dock);
-    dock->setFloating(true);
-    dock->resize(320, 520);
-    dock->show();
-    library->dock = dock;
-    library->panel = panel;
-    const fla::Document* source = library->document->document;
-    connect(panel, &LibraryPanel::copyToDocumentRequested, this, [this, source](const QStringList& names) {
-        if (documentAlive(source))
-            copyLibraryItems(*source, names);
-    });
-    connect(panel, &LibraryPanel::copyItemsRequested, this, [this, source](const QStringList& names) {
-        _libraryClipboardSource = source;
-        _libraryClipboard = names;
-    });
-    connect(panel, &LibraryPanel::externalDragStarted, this, [this, source](const QString&, const QString& name) {
-        _externalDragSource = source;
-        _externalDragName = name;
-    });
-    connect(panel, &LibraryPanel::externalDragEnded, this, [this]() {
-        // After the drop has been handled.
-        QTimer::singleShot(0, this, []() { _externalDragSource = nullptr; });
-    });
-    // Closing the panel lets the file go.
-    ExternalLibrary* raw = library.get();
-    connect(dock, &QObject::destroyed, this, [this, raw]() {
-        if (_libraryClipboardSource && raw->document && _libraryClipboardSource == raw->document->document)
-            _libraryClipboard.clear();
-        _externalLibraries.erase(std::remove_if(_externalLibraries.begin(), _externalLibraries.end(),
-                                     [raw](const std::unique_ptr<ExternalLibrary>& entry) { return entry.get() == raw; }),
-            _externalLibraries.end());
-    });
-    _externalLibraries.push_back(std::move(library));
+    file_pick::open(this, "Open External Library", QSettings().value("importFolder").toString(),
+        "Documents (*.fla *.xfl *.phx);;All files (*)", [this](const QString& path) {
+            std::string error;
+            std::unique_ptr<fla::FLADocument> loaded = commands::load(
+                QFileInfo(path).suffix() == "xfl" ? QFileInfo(path).absolutePath().toStdString() : path.toStdString(), error);
+            if (!loaded || !loaded->document)
+            {
+                modal::warning(this, "Open External Library",
+                    QString("%1 could not be opened.\n\n%2").arg(QFileInfo(path).fileName(), QString::fromStdString(error)));
+                return;
+            }
+            auto library = std::make_unique<ExternalLibrary>();
+            library->document = std::move(loaded);
+            QDockWidget* dock = new QDockWidget("Library - " + QFileInfo(path).fileName(), this);
+            dock->setObjectName("externalLibrary" + QString::number(_externalLibraries.size()));
+            dock->setAttribute(Qt::WA_DeleteOnClose);
+            LibraryPanel* panel = new LibraryPanel(dock);
+            panel->setExternal(true);
+            panel->setDocument(library->document.get());
+            dock->setWidget(panel);
+            addDockWidget(Qt::RightDockWidgetArea, dock);
+            dock->setFloating(true);
+            dock->resize(320, 520);
+            dock->show();
+            library->dock = dock;
+            library->panel = panel;
+            const fla::Document* source = library->document->document;
+            connect(panel, &LibraryPanel::copyToDocumentRequested, this, [this, source](const QStringList& names) {
+                if (documentAlive(source))
+                    copyLibraryItems(*source, names);
+            });
+            connect(panel, &LibraryPanel::copyItemsRequested, this, [this, source](const QStringList& names) {
+                _libraryClipboardSource = source;
+                _libraryClipboard = names;
+            });
+            connect(panel, &LibraryPanel::externalDragStarted, this, [this, source](const QString&, const QString& name) {
+                _externalDragSource = source;
+                _externalDragName = name;
+            });
+            connect(panel, &LibraryPanel::externalDragEnded, this, [this]() {
+                // After the drop has been handled.
+                QTimer::singleShot(0, this, []() { _externalDragSource = nullptr; });
+            });
+            // Closing the panel lets the file go.
+            ExternalLibrary* raw = library.get();
+            connect(dock, &QObject::destroyed, this, [this, raw]() {
+                if (_libraryClipboardSource && raw->document && _libraryClipboardSource == raw->document->document)
+                    _libraryClipboard.clear();
+                _externalLibraries.erase(std::remove_if(_externalLibraries.begin(), _externalLibraries.end(),
+                                             [raw](const std::unique_ptr<ExternalLibrary>& entry) { return entry.get() == raw; }),
+                    _externalLibraries.end());
+            });
+            _externalLibraries.push_back(std::move(library));
+        });
 }
 
 void MainWindow::goToMatch(const fla::find::Match& match)
@@ -15394,7 +15770,7 @@ void MainWindow::testMovie()
     };
     const QString name = _activeTab >= 0 && _activeTab < static_cast<int>(_tabs.size()) ? tabName(*_tabs[static_cast<size_t>(_activeTab)])
                                                                                      : QString("Untitled");
-    TestMovieWindow window(*_flaDocument, name,
+    TestMovieWindow* window = new TestMovieWindow(*_flaDocument, name,
         [output, showOutput](const QString& line) {
             if (!output)
                 return;
@@ -15412,7 +15788,7 @@ void MainWindow::testMovie()
             showOutput();
         },
         this, _documentPath);
-    window.exec();
+    modal::open(window);
 }
 
 fla::SymbolInstance* MainWindow::makePuppet(fla::Element* art, fla::Frame* frame)
@@ -15509,7 +15885,6 @@ void MainWindow::traceBitmaps()
         return;
     }
     _phoenixView->flushPendingMerge();
-    fla::CommandStack& stack = _editContext.commandStack();
     const auto refresh = [this] {
         _phoenixView->invalidateBounds();
         _phoenixView->clearCaches();
@@ -15518,29 +15893,39 @@ void MainWindow::traceBitmaps()
 
     // The trace is made as one step to undo. A preview is that step, taken
     // back without a trace in the history when the settings change or the
-    // dialog is canceled, and kept when it is accepted as it stands.
-    bool applied = false;
-    std::optional<fla::trace::Options> appliedWith;
-    std::vector<fla::DOMElement*> traced;
-    const auto takeBack = [&] {
-        if (!applied)
+    // dialog is canceled, and kept when it is accepted as it stands. What
+    // it keeps lasts while the dialog is up, which in a browser outlasts
+    // this call.
+    struct Traced
+    {
+        std::vector<Source> sources;
+        bool applied = false;
+        std::optional<fla::trace::Options> appliedWith;
+        std::vector<fla::DOMElement*> traced;
+    };
+    const std::shared_ptr<Traced> state = std::make_shared<Traced>();
+    state->sources = std::move(sources);
+    const auto takeBack = [this, state] {
+        fla::CommandStack& stack = _editContext.commandStack();
+        if (!state->applied)
             return;
         if (!stack.discardLast())
             stack.undo();
-        applied = false;
-        appliedWith.reset();
-        traced.clear();
+        state->applied = false;
+        state->appliedWith.reset();
+        state->traced.clear();
         std::vector<fla::DOMElement*> back;
-        for (const Source& source : sources)
+        for (const Source& source : state->sources)
             back.push_back(source.bitmap);
         _selection.select(back);
     };
-    const auto trace = [&](const fla::trace::Options& options) {
+    const auto trace = [this, state, takeBack, refresh](const fla::trace::Options& options) {
+        fla::CommandStack& stack = _editContext.commandStack();
         takeBack();
         TraceBitmapDialog::Counts counts;
         const size_t before = stack.index();
         stack.beginMacro("Trace Bitmap");
-        for (const Source& source : sources)
+        for (const Source& source : state->sources)
         {
             fla::BitmapInstance* bitmap = source.bitmap;
             auto* frame = static_cast<fla::Frame*>(bitmap->parent);
@@ -15564,13 +15949,13 @@ void MainWindow::traceBitmaps()
             const int index = found == frame->elements.end() ? -1 : static_cast<int>(found - frame->elements.begin());
             stack.push(fla::CommandPtr(new fla::RemoveElementCommand(frame, bitmap, "Trace Bitmap", &_selection)));
             stack.push(fla::CommandPtr(new fla::AddElementCommand(frame, shape, "Trace Bitmap", &_selection, index)));
-            traced.push_back(shape);
+            state->traced.push_back(shape);
         }
         stack.endMacro();
         stack.breakMergeChain();
-        applied = stack.index() > before;
-        if (applied)
-            appliedWith = options;
+        state->applied = stack.index() > before;
+        if (state->applied)
+            state->appliedWith = options;
         // Nothing selected while previewing, so the artwork shows as it
         // will be rather than under the selection's hatching.
         _selection.clear();
@@ -15578,24 +15963,26 @@ void MainWindow::traceBitmaps()
         return counts;
     };
 
-    TraceBitmapDialog dialog(static_cast<int>(sources.size()), trace, this);
-    const bool accepted = dialog.exec() == QDialog::Accepted;
-    const fla::trace::Options options = dialog.options();
-    const auto same = [](const fla::trace::Options& a, const fla::trace::Options& b) {
-        return a.colorThreshold == b.colorThreshold && a.minimumArea == b.minimumArea && a.curveFit == b.curveFit;
-    };
-    if (!accepted)
-        takeBack();
-    else if (!appliedWith || !same(*appliedWith, options))
-    {
-        QApplication::setOverrideCursor(Qt::WaitCursor);
-        trace(options);
-        QApplication::restoreOverrideCursor();
-    }
-    if (accepted && !traced.empty())
-        _selection.select(traced);
-    refresh();
-    updateSelectionState();
+    TraceBitmapDialog* dialog = new TraceBitmapDialog(static_cast<int>(state->sources.size()), trace, this);
+    modal::open(dialog, [this, dialog, state, trace, takeBack, refresh](int result) {
+        const bool accepted = result == QDialog::Accepted;
+        const fla::trace::Options options = dialog->options();
+        const auto same = [](const fla::trace::Options& a, const fla::trace::Options& b) {
+            return a.colorThreshold == b.colorThreshold && a.minimumArea == b.minimumArea && a.curveFit == b.curveFit;
+        };
+        if (!accepted)
+            takeBack();
+        else if (!state->appliedWith || !same(*state->appliedWith, options))
+        {
+            QApplication::setOverrideCursor(Qt::WaitCursor);
+            trace(options);
+            QApplication::restoreOverrideCursor();
+        }
+        if (accepted && !state->traced.empty())
+            _selection.select(state->traced);
+        refresh();
+        updateSelectionState();
+    });
 }
 
 void MainWindow::editEnvelope(fla::Frame* frame)
@@ -15613,31 +16000,35 @@ void MainWindow::editEnvelope(fla::Frame* frame)
     }
     size_t in = 0, out = 0;
     fla::frame_sound::trim(*frame, in, out);
-    EnvelopeDialog dialog(sound, _flaDocument->document->frameRate, fla::frame_sound::envelope(*frame), in, out, this);
-    if (dialog.exec() != QDialog::Accepted)
-    {
+    EnvelopeDialog* dialog =
+        new EnvelopeDialog(sound, _flaDocument->document->frameRate, fla::frame_sound::envelope(*frame), in, out, this);
+    const fla::FLADocument* asked = _flaDocument;
+    modal::open(dialog, [this, asked, dialog, frame](int result) {
+        if (result != QDialog::Accepted || _flaDocument != asked)
+        {
+            if (_propertiesPanel)
+                _propertiesPanel->refresh();
+            return;
+        }
+        using Attributes = std::vector<std::pair<std::string, std::string>>;
+        Attributes attributes = frame->extraAttributes;
+        std::vector<std::string> children = frame->extraChildren;
+        fla::frame_sound::setEnvelope(dialog->editor()->points, dialog->editor()->in, dialog->editor()->out, attributes, children);
+        if (attributes != frame->extraAttributes || children != frame->extraChildren)
+        {
+            auto* command = new fla::CompoundCommand("Edit Envelope");
+            command->addCommand(fla::CommandPtr(new fla::SetPropertyCommand<Attributes>(
+                frame->extraAttributes, frame->extraAttributes, attributes, "Edit Envelope")));
+            command->addCommand(fla::CommandPtr(new fla::SetPropertyCommand<std::vector<std::string>>(
+                frame->extraChildren, frame->extraChildren, children, "Edit Envelope")));
+            _editContext.commandStack().push(fla::CommandPtr(command));
+            _editContext.commandStack().breakMergeChain();
+        }
+        if (_timelineView)
+            _timelineView->refreshFrames();
         if (_propertiesPanel)
             _propertiesPanel->refresh();
-        return;
-    }
-    using Attributes = std::vector<std::pair<std::string, std::string>>;
-    Attributes attributes = frame->extraAttributes;
-    std::vector<std::string> children = frame->extraChildren;
-    fla::frame_sound::setEnvelope(dialog.editor()->points, dialog.editor()->in, dialog.editor()->out, attributes, children);
-    if (attributes != frame->extraAttributes || children != frame->extraChildren)
-    {
-        auto* command = new fla::CompoundCommand("Edit Envelope");
-        command->addCommand(fla::CommandPtr(new fla::SetPropertyCommand<Attributes>(
-            frame->extraAttributes, frame->extraAttributes, attributes, "Edit Envelope")));
-        command->addCommand(fla::CommandPtr(new fla::SetPropertyCommand<std::vector<std::string>>(
-            frame->extraChildren, frame->extraChildren, children, "Edit Envelope")));
-        _editContext.commandStack().push(fla::CommandPtr(command));
-        _editContext.commandStack().breakMergeChain();
-    }
-    if (_timelineView)
-        _timelineView->refreshFrames();
-    if (_propertiesPanel)
-        _propertiesPanel->refresh();
+    });
 }
 
 void MainWindow::splitAudio()
@@ -15673,15 +16064,29 @@ void MainWindow::checkSpelling()
 {
     if (!_flaDocument || !_flaDocument->document)
         return;
-    SpellChecker checker;
-    if (!checker.available())
+    // Where the search stands: the field and how far into it, kept while
+    // the dialog is up, which in a browser outlasts this call.
+    struct Spelling
+    {
+        SpellChecker checker;
+        std::vector<fla::StaticText*> texts;
+        size_t field = 0;
+        int position = 0;
+        int start = 0;
+        int length = 0;
+        QString word;
+        int changes = 0;
+        QStringList ignored;
+    };
+    const std::shared_ptr<Spelling> state = std::make_shared<Spelling>();
+    if (!state->checker.available())
     {
         modal::information(this, "Check Spelling", "No spell checker is available on this computer.");
         return;
     }
     if (_textTool && _textTool->isEditing() && _phoenixView)
         _textTool->deactivate(*_phoenixView);
-    const std::vector<fla::StaticText*> texts = allTexts();
+    state->texts = allTexts();
 
     // Replaces characters of a field's text, inside one run, undoably; the
     // box is measured again.
@@ -15721,30 +16126,30 @@ void MainWindow::checkSpelling()
         return false;
     };
 
-    QDialog dialog(this);
-    dialog.setWindowTitle("Check Spelling");
-    QVBoxLayout* layout = new QVBoxLayout(&dialog);
-    QLabel* context = new QLabel(&dialog);
+    QDialog* dialog = new QDialog(this);
+    dialog->setWindowTitle("Check Spelling");
+    QVBoxLayout* layout = new QVBoxLayout(dialog);
+    QLabel* context = new QLabel(dialog);
     context->setWordWrap(true);
     context->setTextFormat(Qt::RichText);
     context->setMinimumWidth(360);
     layout->addWidget(context);
     QHBoxLayout* changeRow = new QHBoxLayout();
-    changeRow->addWidget(new QLabel("Change to:", &dialog));
-    QLineEdit* changeTo = new QLineEdit(&dialog);
+    changeRow->addWidget(new QLabel("Change to:", dialog));
+    QLineEdit* changeTo = new QLineEdit(dialog);
     changeRow->addWidget(changeTo, 1);
     layout->addLayout(changeRow);
-    QListWidget* suggestions = new QListWidget(&dialog);
+    QListWidget* suggestions = new QListWidget(dialog);
     suggestions->setMaximumHeight(140);
     layout->addWidget(suggestions);
     connect(suggestions, &QListWidget::currentTextChanged, changeTo, &QLineEdit::setText);
     QGridLayout* buttons = new QGridLayout();
-    QPushButton* change = new QPushButton("Change", &dialog);
-    QPushButton* changeAll = new QPushButton("Change All", &dialog);
-    QPushButton* ignore = new QPushButton("Ignore", &dialog);
-    QPushButton* ignoreAll = new QPushButton("Ignore All", &dialog);
-    QPushButton* addWord = new QPushButton("Add to Dictionary", &dialog);
-    QPushButton* close = new QPushButton("Close", &dialog);
+    QPushButton* change = new QPushButton("Change", dialog);
+    QPushButton* changeAll = new QPushButton("Change All", dialog);
+    QPushButton* ignore = new QPushButton("Ignore", dialog);
+    QPushButton* ignoreAll = new QPushButton("Ignore All", dialog);
+    QPushButton* addWord = new QPushButton("Add to Dictionary", dialog);
+    QPushButton* close = new QPushButton("Close", dialog);
     buttons->addWidget(change, 0, 0);
     buttons->addWidget(changeAll, 0, 1);
     buttons->addWidget(ignore, 1, 0);
@@ -15752,55 +16157,47 @@ void MainWindow::checkSpelling()
     buttons->addWidget(addWord, 2, 0);
     buttons->addWidget(close, 2, 1);
     layout->addLayout(buttons);
-    connect(close, &QPushButton::clicked, &dialog, &QDialog::reject);
+    connect(close, &QPushButton::clicked, dialog, &QDialog::reject);
 
-    // Where the search stands: the field and how far into it.
-    size_t field = 0;
-    int position = 0;
-    int start = 0;
-    int length = 0;
-    QString word;
-    int changes = 0;
-    QStringList ignored;
-    std::function<void()> next = [&]() {
-        while (field < texts.size())
+    std::function<void()> next = [state, context, suggestions, changeTo, dialog]() {
+        while (state->field < state->texts.size())
         {
-            const QString joined = TextLayout::joinedText(*texts[field]);
-            for (const SpellChecker::Misspelling& miss : checker.check(joined))
+            const QString joined = TextLayout::joinedText(*state->texts[state->field]);
+            for (const SpellChecker::Misspelling& miss : state->checker.check(joined))
             {
                 const QString candidate = joined.mid(miss.start, miss.length);
-                if (miss.start < position || ignored.contains(candidate))
+                if (miss.start < state->position || state->ignored.contains(candidate))
                     continue;
-                start = miss.start;
-                length = miss.length;
-                word = candidate;
-                const QString before = joined.mid(std::max(0, start - 30), std::min(start, 30)).toHtmlEscaped();
-                const QString after = joined.mid(start + length, 30).toHtmlEscaped();
+                state->start = miss.start;
+                state->length = miss.length;
+                state->word = candidate;
+                const QString before = joined.mid(std::max(0, state->start - 30), std::min(state->start, 30)).toHtmlEscaped();
+                const QString after = joined.mid(state->start + state->length, 30).toHtmlEscaped();
                 context->setText(QString("Not in the dictionary: <b>%1</b><br><br>%2<u><b>%1</b></u>%3")
-                                     .arg(word.toHtmlEscaped(), before, after));
+                                     .arg(state->word.toHtmlEscaped(), before, after));
                 suggestions->clear();
-                const QStringList offered = checker.suggestions(word);
+                const QStringList offered = state->checker.suggestions(state->word);
                 suggestions->addItems(offered);
-                changeTo->setText(offered.isEmpty() ? word : offered.front());
+                changeTo->setText(offered.isEmpty() ? state->word : offered.front());
                 return;
             }
-            ++field;
-            position = 0;
+            ++state->field;
+            state->position = 0;
         }
-        dialog.accept();
+        dialog->accept();
     };
-    connect(change, &QPushButton::clicked, &dialog, [&]() {
-        if (field < texts.size() && replace(texts[field], start, length, changeTo->text()))
-            ++changes;
-        position = start + static_cast<int>(changeTo->text().length());
+    connect(change, &QPushButton::clicked, dialog, [=]() {
+        if (state->field < state->texts.size() && replace(state->texts[state->field], state->start, state->length, changeTo->text()))
+            ++state->changes;
+        state->position = state->start + static_cast<int>(changeTo->text().length());
         next();
     });
-    connect(changeAll, &QPushButton::clicked, &dialog, [&]() {
+    connect(changeAll, &QPushButton::clicked, dialog, [=]() {
         // The word everywhere, as a whole word.
-        const QString from = word;
+        const QString from = state->word;
         const QString with = changeTo->text();
         const QRegularExpression whole("\\b" + QRegularExpression::escape(from) + "\\b");
-        for (fla::StaticText* text : texts)
+        for (fla::StaticText* text : state->texts)
         {
             int offset = 0;
             for (;;)
@@ -15809,42 +16206,50 @@ void MainWindow::checkSpelling()
                 if (!match.hasMatch())
                     break;
                 if (replace(text, static_cast<int>(match.capturedStart()), static_cast<int>(match.capturedLength()), with))
-                    ++changes;
+                    ++state->changes;
                 offset = static_cast<int>(match.capturedStart() + with.length());
             }
         }
-        position = start + static_cast<int>(with.length());
+        state->position = state->start + static_cast<int>(with.length());
         next();
     });
-    connect(ignore, &QPushButton::clicked, &dialog, [&]() {
-        position = start + length;
+    connect(ignore, &QPushButton::clicked, dialog, [=]() {
+        state->position = state->start + state->length;
         next();
     });
-    connect(ignoreAll, &QPushButton::clicked, &dialog, [&]() {
-        ignored << word;
-        checker.ignore(word);
+    connect(ignoreAll, &QPushButton::clicked, dialog, [=]() {
+        state->ignored << state->word;
+        state->checker.ignore(state->word);
         next();
     });
-    connect(addWord, &QPushButton::clicked, &dialog, [&]() {
-        checker.add(word);
-        ignored << word;
+    connect(addWord, &QPushButton::clicked, dialog, [=]() {
+        state->checker.add(state->word);
+        state->ignored << state->word;
         next();
     });
     next();
-    const bool finished = field >= texts.size();
-    if (!finished)
-        dialog.exec();
-    _editContext.commandStack().breakMergeChain();
-    if (_phoenixView)
+    // The rest once the dialog is closed, or at once when nothing was found.
+    const auto done = [this, state]() {
+        _editContext.commandStack().breakMergeChain();
+        if (_phoenixView)
+        {
+            _phoenixView->invalidateBounds();
+            _phoenixView->clearCaches();
+            _phoenixView->update();
+        }
+        if (state->field >= state->texts.size())
+            modal::information(this, "Check Spelling",
+                state->changes > 0
+                    ? QString("Spelling checked; %1 change%2 made.").arg(state->changes).arg(state->changes == 1 ? "" : "s")
+                    : QString("Spelling checked; nothing to change."));
+    };
+    if (state->field >= state->texts.size())
     {
-        _phoenixView->invalidateBounds();
-        _phoenixView->clearCaches();
-        _phoenixView->update();
+        delete dialog;
+        done();
+        return;
     }
-    if (field >= texts.size())
-        modal::information(this, "Check Spelling",
-            changes > 0 ? QString("Spelling checked; %1 change%2 made.").arg(changes).arg(changes == 1 ? "" : "s")
-                        : QString("Spelling checked; nothing to change."));
+    modal::open(dialog, [done](int) { done(); });
 }
 
 void MainWindow::syncFontSymbols()
@@ -15906,18 +16311,18 @@ void MainWindow::fontItemDialog(const QString& name)
         item.ranges = {1, 2, 3, 4};
     }
 
-    QDialog dialog(this);
-    dialog.setWindowTitle(editing >= 0 ? "Font Properties" : "New Font");
-    QFormLayout* form = new QFormLayout(&dialog);
-    QLineEdit* nameEdit = new QLineEdit(QString::fromStdString(item.name), &dialog);
+    QDialog* dialog = new QDialog(this);
+    dialog->setWindowTitle(editing >= 0 ? "Font Properties" : "New Font");
+    QFormLayout* form = new QFormLayout(dialog);
+    QLineEdit* nameEdit = new QLineEdit(QString::fromStdString(item.name), dialog);
     form->addRow("Name:", nameEdit);
-    QFontComboBox* family = new QFontComboBox(&dialog);
+    QFontComboBox* family = new QFontComboBox(dialog);
     family->setCurrentFont(QFont(TextLayout::familyOf(QString::fromStdString(item.font))));
     form->addRow("Font:", family);
     const QString font = QString::fromStdString(item.font);
-    QCheckBox* bold = new QCheckBox("Bold", &dialog);
+    QCheckBox* bold = new QCheckBox("Bold", dialog);
     bold->setChecked(font.contains("Bold", Qt::CaseInsensitive));
-    QCheckBox* italic = new QCheckBox("Italic", &dialog);
+    QCheckBox* italic = new QCheckBox("Italic", dialog);
     italic->setChecked(font.contains("Italic", Qt::CaseInsensitive) || font.contains("Oblique", Qt::CaseInsensitive));
     QHBoxLayout* style = new QHBoxLayout();
     style->addWidget(bold);
@@ -15932,58 +16337,62 @@ void MainWindow::fontItemDialog(const QString& name)
     QVBoxLayout* embed = new QVBoxLayout();
     for (const auto& [id, label] : ranges)
     {
-        QCheckBox* box = new QCheckBox(label, &dialog);
+        QCheckBox* box = new QCheckBox(label, dialog);
         box->setChecked(std::find(item.ranges.begin(), item.ranges.end(), id) != item.ranges.end());
         embed->addWidget(box);
         rangeBoxes.emplace_back(id, box);
     }
     form->addRow("Embed:", embed);
-    QLineEdit* characters = new QLineEdit(QString::fromStdString(item.characters), &dialog);
+    QLineEdit* characters = new QLineEdit(QString::fromStdString(item.characters), dialog);
     characters->setPlaceholderText("Other characters to embed");
     form->addRow("Also:", characters);
-    QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
-    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
-    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, dialog);
+    connect(buttons, &QDialogButtonBox::accepted, dialog, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, dialog, &QDialog::reject);
     form->addRow(buttons);
-    if (dialog.exec() != QDialog::Accepted)
-        return;
+    const fla::FLADocument* asked = _flaDocument;
+    modal::open(dialog, [this, asked, dialog, document, items, editing, item, nameEdit, family, bold, italic, rangeBoxes,
+                            characters](int result) mutable {
+        if (result != QDialog::Accepted || _flaDocument != asked)
+            return;
 
-    const std::string newName = nameEdit->text().trimmed().toStdString();
-    const bool nameTaken = std::any_of(items.begin(), items.end(), [&](const auto& other) {
-        return other.name == newName && &other != (editing >= 0 ? &items[static_cast<size_t>(editing)] : nullptr);
-    }) || (newName != item.name && !fla::library::nameIsFree(*document, newName));
-    if (newName.empty() || nameTaken)
-    {
-        modal::information(this, dialog.windowTitle(), "Choose a name no other library item has.");
-        return;
-    }
-    // The font as text names it: the family run together, then its style.
-    QString face = family->currentFont().family().remove(' ');
-    if (bold->isChecked() || italic->isChecked())
-        face += QString("-") + (bold->isChecked() ? "Bold" : "") + (italic->isChecked() ? "Italic" : "");
-    item.name = newName;
-    item.font = face.toStdString();
-    item.ranges.clear();
-    for (const auto& [id, box] : rangeBoxes)
-        if (box->isChecked())
-            item.ranges.push_back(id);
-    item.characters = characters->text().toStdString();
-    if (item.itemId.empty())
-        item.itemId = fla::media::newItemId();
-    const std::string oldName = editing >= 0 ? items[static_cast<size_t>(editing)].name : std::string();
-    if (editing >= 0)
-        items[static_cast<size_t>(editing)] = item;
-    else
-        items.push_back(item);
+        const std::string newName = nameEdit->text().trimmed().toStdString();
+        const bool nameTaken = std::any_of(items.begin(), items.end(), [&](const auto& other) {
+            return other.name == newName && &other != (editing >= 0 ? &items[static_cast<size_t>(editing)] : nullptr);
+        }) || (newName != item.name && !fla::library::nameIsFree(*document, newName));
+        if (newName.empty() || nameTaken)
+        {
+            modal::information(this, dialog->windowTitle(), "Choose a name no other library item has.");
+            return;
+        }
+        // The font as text names it: the family run together, then its style.
+        QString face = family->currentFont().family().remove(' ');
+        if (bold->isChecked() || italic->isChecked())
+            face += QString("-") + (bold->isChecked() ? "Bold" : "") + (italic->isChecked() ? "Italic" : "");
+        item.name = newName;
+        item.font = face.toStdString();
+        item.ranges.clear();
+        for (const auto& [id, box] : rangeBoxes)
+            if (box->isChecked())
+                item.ranges.push_back(id);
+        item.characters = characters->text().toStdString();
+        if (item.itemId.empty())
+            item.itemId = fla::media::newItemId();
+        const std::string oldName = editing >= 0 ? items[static_cast<size_t>(editing)].name : std::string();
+        if (editing >= 0)
+            items[static_cast<size_t>(editing)] = item;
+        else
+            items.push_back(item);
 
-    fla::CommandStack& stack = _editContext.commandStack();
-    stack.beginMacro(editing >= 0 ? "Font Properties" : "New Font");
-    setFontItems(items, editing >= 0 ? "Font Properties" : "New Font");
-    // Renamed: the text set in it follows.
-    if (!oldName.empty() && oldName != newName)
-        renameFontFaces(oldName + "*", newName + "*");
-    stack.endMacro();
-    stack.breakMergeChain();
+        fla::CommandStack& stack = _editContext.commandStack();
+        stack.beginMacro(editing >= 0 ? "Font Properties" : "New Font");
+        setFontItems(items, editing >= 0 ? "Font Properties" : "New Font");
+        // Renamed: the text set in it follows.
+        if (!oldName.empty() && oldName != newName)
+            renameFontFaces(oldName + "*", newName + "*");
+        stack.endMacro();
+        stack.breakMergeChain();
+    });
 }
 
 void MainWindow::renameFontFaces(const std::string& from, const std::string& to)
@@ -16040,30 +16449,33 @@ void MainWindow::swapBitmap()
         if (const auto* bitmap = dynamic_cast<const fla::Bitmap*>(resource))
             names << QString::fromStdString(bitmap->name);
     names.sort(Qt::CaseInsensitive);
-    SwapSymbolDialog dialog(names, QString::fromStdString(bitmaps.front()->libraryItemName),
+    SwapSymbolDialog* dialog = new SwapSymbolDialog(names, QString::fromStdString(bitmaps.front()->libraryItemName),
         [this](const QString& name, const QSize& size) {
             return _phoenixView ? _phoenixView->libraryPreview("bitmap", name, size) : QImage();
         },
         nullptr, this, "Swap Bitmap");
-    if (dialog.exec() != QDialog::Accepted)
-        return;
-    const std::string chosen = dialog.chosen().toStdString();
-    fla::CommandStack& stack = _editContext.commandStack();
-    stack.beginMacro("Swap Bitmap");
-    for (fla::BitmapInstance* bitmap : bitmaps)
-        if (bitmap->libraryItemName != chosen)
-            stack.push(fla::CommandPtr(new fla::SetPropertyCommand<std::string>(
-                bitmap->libraryItemName, bitmap->libraryItemName, chosen, "Swap Bitmap")));
-    stack.endMacro();
-    stack.breakMergeChain();
-    if (_phoenixView)
-    {
-        _phoenixView->invalidateBounds();
-        _phoenixView->clearCaches();
-        _phoenixView->update();
-    }
-    if (_propertiesPanel)
-        _propertiesPanel->refresh();
+    const fla::FLADocument* asked = _flaDocument;
+    modal::open(dialog, [this, asked, dialog, bitmaps](int result) {
+        if (result != QDialog::Accepted || _flaDocument != asked)
+            return;
+        const std::string chosen = dialog->chosen().toStdString();
+        fla::CommandStack& stack = _editContext.commandStack();
+        stack.beginMacro("Swap Bitmap");
+        for (fla::BitmapInstance* bitmap : bitmaps)
+            if (bitmap->libraryItemName != chosen)
+                stack.push(fla::CommandPtr(new fla::SetPropertyCommand<std::string>(
+                    bitmap->libraryItemName, bitmap->libraryItemName, chosen, "Swap Bitmap")));
+        stack.endMacro();
+        stack.breakMergeChain();
+        if (_phoenixView)
+        {
+            _phoenixView->invalidateBounds();
+            _phoenixView->clearCaches();
+            _phoenixView->update();
+        }
+        if (_propertiesPanel)
+            _propertiesPanel->refresh();
+    });
 }
 
 void MainWindow::editTemplateFields()
@@ -16092,15 +16504,15 @@ void MainWindow::editTemplateFields()
     }
     const fla::templates::Values before = fla::templates::valuesOf(*instances.front());
 
-    QDialog dialog(this);
-    dialog.setWindowTitle(QString("Template Fields: %1").arg(QString::fromStdString(symbol->name)));
-    auto* layout = new QVBoxLayout(&dialog);
+    QDialog* dialog = new QDialog(this);
+    dialog->setWindowTitle(QString("Template Fields: %1").arg(QString::fromStdString(symbol->name)));
+    auto* layout = new QVBoxLayout(dialog);
     auto* form = new QFormLayout();
     layout->addLayout(form);
     std::vector<std::pair<std::string, QLineEdit*>> edits;
     for (const fla::templates::Field& field : fields)
     {
-        auto* edit = new QLineEdit(&dialog);
+        auto* edit = new QLineEdit(dialog);
         const auto given = before.find(field.name);
         if (given != before.end())
             edit->setText(QString::fromStdString(given->second));
@@ -16115,64 +16527,64 @@ void MainWindow::editTemplateFields()
             edit->setPlaceholderText("as drawn (or #RRGGBB)");
             auto* row = new QHBoxLayout();
             row->addWidget(edit, 1);
-            auto* pick = new QPushButton("Pick...", &dialog);
-            connect(pick, &QPushButton::clicked, &dialog, [this, edit, pick]() {
-                const QColor color =
-                    SwatchPopup::getColor(pick, _flaDocument ? _flaDocument->document : nullptr, QColor(edit->text()), "Color", false);
-                if (color.isValid())
-                    edit->setText(color.name().toUpper());
+            auto* pick = new QPushButton("Pick...", dialog);
+            connect(pick, &QPushButton::clicked, dialog, [this, edit, pick]() {
+                SwatchPopup::getColor(pick, _flaDocument ? _flaDocument->document : nullptr, QColor(edit->text()), "Color",
+                    false, [edit](const QColor& color) { edit->setText(color.name().toUpper()); });
             });
             row->addWidget(pick);
             form->addRow(QString::fromStdString(field.name) + " (color)", row);
         }
         edits.emplace_back(field.name, edit);
     }
-    auto* note = new QLabel("Left empty, a field shows what the symbol has.", &dialog);
+    auto* note = new QLabel("Left empty, a field shows what the symbol has.", dialog);
     note->setWordWrap(true);
     layout->addWidget(note);
-    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
-    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
-    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, dialog);
+    connect(buttons, &QDialogButtonBox::accepted, dialog, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, dialog, &QDialog::reject);
     layout->addWidget(buttons);
-    dialog.resize(420, dialog.sizeHint().height());
-    if (dialog.exec() != QDialog::Accepted)
-        return;
+    dialog->resize(420, dialog->sizeHint().height());
+    modal::open(dialog, [this, instances, before, edits](int result) mutable {
+        if (result != QDialog::Accepted)
+            return;
 
-    // Any that went while the dialog was up are left alone.
-    const fla::FLADocument* filled = _flaDocument;
-    instances.erase(std::remove_if(instances.begin(), instances.end(),
-                        [this, filled](const fla::SymbolInstance* instance) { return !stillInDocument(filled, instance); }),
-        instances.end());
-    fla::templates::Values after = before;
-    for (const auto& [name, edit] : edits)
-    {
-        after.erase(name);
-        if (!edit->text().isEmpty())
-            after[name] = edit->text().toStdString();
-    }
-    using Attributes = std::vector<std::pair<std::string, std::string>>;
-    fla::CommandStack& stack = _editContext.commandStack();
-    bool any = false;
-    for (fla::SymbolInstance* instance : instances)
-    {
-        const Attributes changed = fla::templates::withValues(*instance, after);
-        if (changed == instance->extraAttributes)
-            continue;
+        // Any that went while the dialog was up are left alone.
+        const fla::FLADocument* filled = _flaDocument;
+        instances.erase(std::remove_if(instances.begin(), instances.end(),
+                            [this, filled](const fla::SymbolInstance* instance) { return !stillInDocument(filled, instance); }),
+            instances.end());
+        fla::templates::Values after = before;
+        for (const auto& [name, edit] : edits)
+        {
+            after.erase(name);
+            if (!edit->text().isEmpty())
+                after[name] = edit->text().toStdString();
+        }
+        using Attributes = std::vector<std::pair<std::string, std::string>>;
+        fla::CommandStack& stack = _editContext.commandStack();
+        bool any = false;
+        for (fla::SymbolInstance* instance : instances)
+        {
+            const Attributes changed = fla::templates::withValues(*instance, after);
+            if (changed == instance->extraAttributes)
+                continue;
+            if (!any)
+                stack.beginMacro("Template Fields");
+            any = true;
+            stack.push(fla::CommandPtr(new fla::SetPropertyCommand<Attributes>(instance->extraAttributes,
+                instance->extraAttributes, changed, "Template Fields")));
+        }
         if (!any)
-            stack.beginMacro("Template Fields");
-        any = true;
-        stack.push(fla::CommandPtr(new fla::SetPropertyCommand<Attributes>(instance->extraAttributes,
-            instance->extraAttributes, changed, "Template Fields")));
-    }
-    if (!any)
-        return;
-    stack.endMacro();
-    stack.breakMergeChain();
-    if (_phoenixView)
-    {
-        _phoenixView->clearCaches();
-        _phoenixView->update();
-    }
+            return;
+        stack.endMacro();
+        stack.breakMergeChain();
+        if (_phoenixView)
+        {
+            _phoenixView->clearCaches();
+            _phoenixView->update();
+        }
+    });
 }
 
 std::vector<fla::templates::Values> MainWindow::rowsOfData(QFile& file)
@@ -16264,9 +16676,16 @@ void MainWindow::renderFromData()
 {
     if (!_flaDocument || !_flaDocument->document)
         return;
-    const QString csv = QFileDialog::getOpenFileName(this, "Render from Data", QString(), "CSV files (*.csv);;All files (*)");
-    if (csv.isEmpty())
-        return;
+    const fla::FLADocument* asked = _flaDocument;
+    file_pick::open(this, "Render from Data", QString(), "CSV files (*.csv);;All files (*)",
+        [this, asked](const QString& csv) {
+            if (_flaDocument == asked)
+                renderFromDataFile(csv);
+        });
+}
+
+void MainWindow::renderFromDataFile(const QString& csv)
+{
     QFile file(csv);
     if (!file.open(QIODevice::ReadOnly))
     {
@@ -16280,29 +16699,30 @@ void MainWindow::renderFromData()
             "The file has no rows to render: the first row names the template fields, and each row after it is a movie.");
         return;
     }
-    bool chosen = false;
-    const QString extension = QInputDialog::getItem(this, "Render from Data",
-        QString("%1 rows, each rendered as:").arg(rows.size()), {"mp4", "mov", "gif", "png"}, 0, false, &chosen);
-    if (!chosen)
-        return;
-    const QString folder = QFileDialog::getExistingDirectory(this, "Render into Folder", QFileInfo(csv).absolutePath());
-    if (folder.isEmpty())
-        return;
-    QProgressDialog progress("Rendering...", "Cancel", 0, static_cast<int>(rows.size()), this);
-    progress.setWindowModality(Qt::WindowModal);
-    progress.setMinimumDuration(0);
-    QString error;
-    const bool ok = renderRows(rows, folder, extension, error, [&progress](int row, int count) {
-        progress.setLabelText(QString("Rendering row %1 of %2...").arg(row + 1).arg(count));
-        progress.setValue(row);
-        QCoreApplication::processEvents();
-        return !progress.wasCanceled();
-    });
-    progress.setValue(static_cast<int>(rows.size()));
-    if (!ok)
-        modal::warning(this, "Render from Data", error);
-    else
-        statusBar()->showMessage(QString("Rendered %1 movies into %2").arg(rows.size()).arg(folder), 5000);
+    const fla::FLADocument* asked = _flaDocument;
+    modal::getItem(this, "Render from Data", QString("%1 rows, each rendered as:").arg(rows.size()),
+        {"mp4", "mov", "gif", "png"}, 0, false, [this, asked, csv, rows](const QString& extension) {
+            file_pick::directory(this, "Render into Folder", QFileInfo(csv).absolutePath(),
+                [this, asked, rows, extension](const QString& folder) {
+                    if (folder.isEmpty() || _flaDocument != asked)
+                        return;
+                    QProgressDialog progress("Rendering...", "Cancel", 0, static_cast<int>(rows.size()), this);
+                    progress.setWindowModality(Qt::WindowModal);
+                    progress.setMinimumDuration(0);
+                    QString error;
+                    const bool ok = renderRows(rows, folder, extension, error, [&progress](int row, int count) {
+                        progress.setLabelText(QString("Rendering row %1 of %2...").arg(row + 1).arg(count));
+                        progress.setValue(row);
+                        QCoreApplication::processEvents();
+                        return !progress.wasCanceled();
+                    });
+                    progress.setValue(static_cast<int>(rows.size()));
+                    if (!ok)
+                        modal::warning(this, "Render from Data", error);
+                    else
+                        statusBar()->showMessage(QString("Rendered %1 movies into %2").arg(rows.size()).arg(folder), 5000);
+                });
+        });
 }
 
 void MainWindow::swapSymbol()
@@ -16329,7 +16749,7 @@ void MainWindow::swapSymbol()
 
     // A duplicate made in the dialog stays, whether or not it is chosen;
     // it is its own undo step.
-    SwapSymbolDialog dialog(names, QString::fromStdString(instances.front()->libraryItemName),
+    SwapSymbolDialog* dialog = new SwapSymbolDialog(names, QString::fromStdString(instances.front()->libraryItemName),
         [this](const QString& name, const QSize& size) {
             return _phoenixView ? _phoenixView->libraryPreview("symbol", name, size) : QImage();
         },
@@ -16339,9 +16759,14 @@ void MainWindow::swapSymbol()
                 return QString();
             bool ok = false;
             const std::string suggested = fla::library::freeCopyName(*document, found->second->name);
-            const QString copyName = QInputDialog::getText(this, "Duplicate Symbol", "Symbol name:",
-                QLineEdit::Normal, QString::fromStdString(suggested), &ok).trimmed();
-            if (!ok || copyName.isEmpty())
+            // The dialog wants the copy's name on the spot: where nothing can
+            // wait for one to be typed (the web build), it takes the name
+            // offered, which the library does not have.
+            const QString copyName = modal::cannotWait()
+                ? QString::fromStdString(suggested)
+                : QInputDialog::getText(this, "Duplicate Symbol", "Symbol name:", QLineEdit::Normal,
+                      QString::fromStdString(suggested), &ok).trimmed();
+            if ((!ok && !modal::cannotWait()) || copyName.isEmpty())
                 return QString();
             if (!fla::library::nameIsFree(*document, copyName.toStdString()))
             {
@@ -16356,43 +16781,46 @@ void MainWindow::swapSymbol()
             return copyName;
         },
         this);
-    if (dialog.exec() != QDialog::Accepted)
-        return;
-    const std::string chosen = dialog.chosen().toStdString();
-    const auto found = document->symbolList->symbolMap.find(chosen);
-    if (found == document->symbolList->symbolMap.end() || !found->second)
-        return;
-    fla::Symbol* symbol = found->second;
-    if (_phoenixView && fla::symbolContains(symbol, _phoenixView->scopeSymbol()))
-    {
-        modal::information(this, "Swap Symbol",
-            QString("%1 contains the symbol being edited, which cannot go inside itself.")
-                .arg(QString::fromStdString(chosen)));
-        return;
-    }
+    const fla::FLADocument* asked = _flaDocument;
+    modal::open(dialog, [this, asked, dialog, document, instances](int result) {
+        if (result != QDialog::Accepted || _flaDocument != asked)
+            return;
+        const std::string chosen = dialog->chosen().toStdString();
+        const auto found = document->symbolList->symbolMap.find(chosen);
+        if (found == document->symbolList->symbolMap.end() || !found->second)
+            return;
+        fla::Symbol* symbol = found->second;
+        if (_phoenixView && fla::symbolContains(symbol, _phoenixView->scopeSymbol()))
+        {
+            modal::information(this, "Swap Symbol",
+                QString("%1 contains the symbol being edited, which cannot go inside itself.")
+                    .arg(QString::fromStdString(chosen)));
+            return;
+        }
 
-    fla::CommandStack& stack = _editContext.commandStack();
-    stack.beginMacro("Swap Symbol");
-    for (fla::SymbolInstance* instance : instances)
-    {
-        if (instance->symbol == symbol)
-            continue;
-        stack.push(fla::CommandPtr(new fla::SetPropertyCommand<std::string>(
-            instance->libraryItemName, instance->libraryItemName, chosen, "Swap Symbol")));
-        stack.push(fla::CommandPtr(new fla::SetPropertyCommand<fla::Symbol*>(
-            instance->symbol, instance->symbol, symbol, "Swap Symbol")));
-    }
-    stack.endMacro();
-    stack.breakMergeChain();
-    if (_phoenixView)
-    {
-        _phoenixView->invalidateBounds();
-        _phoenixView->clearCaches();
-        _phoenixView->update();
-    }
-    if (_propertiesPanel)
-        _propertiesPanel->refresh();
-    updateFramePicker();
+        fla::CommandStack& stack = _editContext.commandStack();
+        stack.beginMacro("Swap Symbol");
+        for (fla::SymbolInstance* instance : instances)
+        {
+            if (instance->symbol == symbol)
+                continue;
+            stack.push(fla::CommandPtr(new fla::SetPropertyCommand<std::string>(
+                instance->libraryItemName, instance->libraryItemName, chosen, "Swap Symbol")));
+            stack.push(fla::CommandPtr(new fla::SetPropertyCommand<fla::Symbol*>(
+                instance->symbol, instance->symbol, symbol, "Swap Symbol")));
+        }
+        stack.endMacro();
+        stack.breakMergeChain();
+        if (_phoenixView)
+        {
+            _phoenixView->invalidateBounds();
+            _phoenixView->clearCaches();
+            _phoenixView->update();
+        }
+        if (_propertiesPanel)
+            _propertiesPanel->refresh();
+        updateFramePicker();
+    });
 }
 
 namespace {
@@ -16452,33 +16880,36 @@ void MainWindow::scaleAndRotate()
         return;
     static double scale = 100.0;
     static double rotation = 0.0;
-    QDialog dialog(this);
-    dialog.setWindowTitle("Scale and Rotate");
-    HotDoubleSpinBox* scaleBox = new HotDoubleSpinBox(&dialog);
+    QDialog* dialog = new QDialog(this);
+    dialog->setWindowTitle("Scale and Rotate");
+    HotDoubleSpinBox* scaleBox = new HotDoubleSpinBox(dialog);
     scaleBox->setRange(1.0, 10000.0);
     scaleBox->setSuffix(" %");
     scaleBox->setValue(scale);
-    HotDoubleSpinBox* rotateBox = new HotDoubleSpinBox(&dialog);
+    HotDoubleSpinBox* rotateBox = new HotDoubleSpinBox(dialog);
     rotateBox->setRange(-360.0, 360.0);
     rotateBox->setSuffix(QString::fromUtf8(" °"));
     rotateBox->setValue(rotation);
     QFormLayout* form = new QFormLayout();
     form->addRow("Scale:", scaleBox);
     form->addRow("Rotate:", rotateBox);
-    QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
-    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
-    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
-    QVBoxLayout* layout = new QVBoxLayout(&dialog);
+    QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, dialog);
+    connect(buttons, &QDialogButtonBox::accepted, dialog, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, dialog, &QDialog::reject);
+    QVBoxLayout* layout = new QVBoxLayout(dialog);
     layout->addLayout(form);
     layout->addWidget(buttons);
-    if (dialog.exec() != QDialog::Accepted)
-        return;
-    scale = scaleBox->value();
-    rotation = rotateBox->value();
-    QTransform change;
-    change.rotate(rotation);
-    change.scale(scale / 100.0, scale / 100.0);
-    transformSelection("Scale and Rotate", change);
+    const fla::FLADocument* asked = _flaDocument;
+    modal::open(dialog, [this, asked, scaleBox, rotateBox](int result) {
+        if (result != QDialog::Accepted || _flaDocument != asked)
+            return;
+        scale = scaleBox->value();
+        rotation = rotateBox->value();
+        QTransform change;
+        change.rotate(rotation);
+        change.scale(scale / 100.0, scale / 100.0);
+        transformSelection("Scale and Rotate", change);
+    });
 }
 
 void MainWindow::removeTransform()
@@ -16528,42 +16959,45 @@ void MainWindow::newSymbol()
         if (fla::library::nameIsFree(*document, suggested))
             break;
     }
-    ConvertToSymbolDialog dialog(QString::fromStdString(suggested), this);
-    dialog.setWindowTitle("Create New Symbol");
-    dialog.hideRegistration();
-    if (dialog.exec() != QDialog::Accepted)
-        return;
-    std::string name = dialog.symbolName().trimmed().toStdString();
-    // Into the library folder selected.
-    const QString folder = _libraryPanel ? _libraryPanel->currentFolder() : QString();
-    if (!folder.isEmpty() && name.find('/') == std::string::npos && !name.empty())
-        name = folder.toStdString() + "/" + name;
-    if (name.empty() || !fla::library::nameIsFree(*document, name))
-    {
-        modal::information(this, "Create New Symbol",
-            QString("The library already has an item named %1.").arg(QString::fromStdString(name)));
-        return;
-    }
-    if (!document->symbolList)
-        document->symbolList = new fla::SymbolList(document);
+    ConvertToSymbolDialog* dialog = new ConvertToSymbolDialog(QString::fromStdString(suggested), this);
+    dialog->setWindowTitle("Create New Symbol");
+    dialog->hideRegistration();
+    const fla::FLADocument* asked = _flaDocument;
+    modal::open(dialog, [this, asked, dialog, document](int result) {
+        if (result != QDialog::Accepted || _flaDocument != asked || !_phoenixView)
+            return;
+        std::string name = dialog->symbolName().trimmed().toStdString();
+        // Into the library folder selected.
+        const QString folder = _libraryPanel ? _libraryPanel->currentFolder() : QString();
+        if (!folder.isEmpty() && name.find('/') == std::string::npos && !name.empty())
+            name = folder.toStdString() + "/" + name;
+        if (name.empty() || !fla::library::nameIsFree(*document, name))
+        {
+            modal::information(this, "Create New Symbol",
+                QString("The library already has an item named %1.").arg(QString::fromStdString(name)));
+            return;
+        }
+        if (!document->symbolList)
+            document->symbolList = new fla::SymbolList(document);
 
-    // One layer with one empty keyframe.
-    auto* symbol = new fla::Symbol(document->symbolList);
-    symbol->name = name;
-    symbol->href = name + ".xml";
-    symbol->symbolType = dialog.symbolType();
-    symbol->itemId = fla::media::newItemId();
-    auto* timeline = new fla::Timeline(symbol);
-    timeline->name = name.substr(name.find_last_of('/') == std::string::npos ? 0 : name.find_last_of('/') + 1);
-    fla::Layer* layer = fla::newLayerFor(*timeline, false);
-    timeline->layers.push_back(layer);
-    symbol->timelines.push_back(timeline);
+        // One layer with one empty keyframe.
+        auto* symbol = new fla::Symbol(document->symbolList);
+        symbol->name = name;
+        symbol->href = name + ".xml";
+        symbol->symbolType = dialog->symbolType();
+        symbol->itemId = fla::media::newItemId();
+        auto* timeline = new fla::Timeline(symbol);
+        timeline->name = name.substr(name.find_last_of('/') == std::string::npos ? 0 : name.find_last_of('/') + 1);
+        fla::Layer* layer = fla::newLayerFor(*timeline, false);
+        timeline->layers.push_back(layer);
+        symbol->timelines.push_back(timeline);
 
-    _editContext.commandStack().push(fla::CommandPtr(new fla::AddSymbolCommand(document, symbol, "New Symbol")));
-    _editContext.commandStack().breakMergeChain();
-    if (_libraryPanel)
-        _libraryPanel->refreshIfStale();
-    _phoenixView->editSymbol(symbol);
+        _editContext.commandStack().push(fla::CommandPtr(new fla::AddSymbolCommand(document, symbol, "New Symbol")));
+        _editContext.commandStack().breakMergeChain();
+        if (_libraryPanel)
+            _libraryPanel->refreshIfStale();
+        _phoenixView->editSymbol(symbol);
+    });
 }
 
 void MainWindow::editSymbolsOrDocument()
@@ -16746,20 +17180,22 @@ void MainWindow::fillOnionMenu(QMenu* menu)
     resetShift->setStatusTip("Put every shifted ghost back where its frame has it");
     menu->addSeparator();
     menu->addAction("Color Before...", this, [this]() {
-        const QColor chosen = QColorDialog::getColor(_onion.beforeColor, this, "Onion Skin: Frames Before");
-        if (chosen.isValid())
-        {
-            _onion.beforeColor = chosen;
-            applyOnion();
-        }
+        modal::getColor(_onion.beforeColor, this, "Onion Skin: Frames Before", [this](const QColor& chosen) {
+            if (chosen.isValid())
+            {
+                _onion.beforeColor = chosen;
+                applyOnion();
+            }
+        });
     });
     menu->addAction("Color After...", this, [this]() {
-        const QColor chosen = QColorDialog::getColor(_onion.afterColor, this, "Onion Skin: Frames After");
-        if (chosen.isValid())
-        {
-            _onion.afterColor = chosen;
-            applyOnion();
-        }
+        modal::getColor(_onion.afterColor, this, "Onion Skin: Frames After", [this](const QColor& chosen) {
+            if (chosen.isValid())
+            {
+                _onion.afterColor = chosen;
+                applyOnion();
+            }
+        });
     });
 }
 
@@ -17012,15 +17448,15 @@ void MainWindow::pinToText(fla::SymbolInstance* instance)
             "then this instance can move or stretch with it as a template gives it other words.");
         return;
     }
-    QDialog dialog(this);
-    dialog.setWindowTitle("Pin to Text");
-    auto* form = new QFormLayout(&dialog);
-    auto* field = new QComboBox(&dialog);
+    QDialog* dialog = new QDialog(this);
+    dialog->setWindowTitle("Pin to Text");
+    auto* form = new QFormLayout(dialog);
+    auto* field = new QComboBox(dialog);
     field->addItem("Not pinned", QString());
     for (const QString& name : names)
         field->addItem(name, name);
     field->setCurrentIndex(std::max(0, field->findData(QString::fromStdString(was.text))));
-    auto* mode = new QComboBox(&dialog);
+    auto* mode = new QComboBox(dialog);
     const std::vector<std::pair<QString, QString>> modes = {{"Stretch to its width", "width"},
         {"Stretch to its height", "height"}, {"Stretch to its width and height", "both"}, {"Move with its right edge", "right"},
         {"Move with its left edge", "left"}, {"Move with its bottom edge", "bottom"}, {"Move with its top edge", "top"}};
@@ -17030,35 +17466,37 @@ void MainWindow::pinToText(fla::SymbolInstance* instance)
     form->addRow("Text field", field);
     form->addRow("This instance", mode);
     auto* note = new QLabel("As the words a template gives the field make it longer or shorter than drawn, this instance keeps "
-                            "the same room around them: a bar behind a name that fits it.", &dialog);
+                            "the same room around them: a bar behind a name that fits it.", dialog);
     note->setWordWrap(true);
     form->addRow(note);
-    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
-    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
-    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, dialog);
+    connect(buttons, &QDialogButtonBox::accepted, dialog, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, dialog, &QDialog::reject);
     form->addRow(buttons);
-    dialog.resize(420, dialog.sizeHint().height());
-    if (dialog.exec() != QDialog::Accepted)
-        return;
-    // While the dialog was up, the instance may have gone.
-    if (!stillInDocument(_flaDocument, instance))
-        return;
-    fla::templates::Pin pin;
-    pin.text = field->currentData().toString().toStdString();
-    if (!pin.text.empty())
-        pin.mode = mode->currentData().toString().toStdString();
-    using Attributes = std::vector<std::pair<std::string, std::string>>;
-    const Attributes after = fla::templates::withPin(*instance, pin);
-    if (after == instance->extraAttributes)
-        return;
-    _editContext.commandStack().push(fla::CommandPtr(
-        new fla::SetPropertyCommand<Attributes>(instance->extraAttributes, instance->extraAttributes, after, "Pin to Text")));
-    _editContext.commandStack().breakMergeChain();
-    if (_phoenixView)
-    {
-        _phoenixView->clearCaches();
-        _phoenixView->update();
-    }
+    dialog->resize(420, dialog->sizeHint().height());
+    modal::open(dialog, [this, instance, field, mode](int result) {
+        if (result != QDialog::Accepted)
+            return;
+        // While the dialog was up, the instance may have gone.
+        if (!stillInDocument(_flaDocument, instance))
+            return;
+        fla::templates::Pin pin;
+        pin.text = field->currentData().toString().toStdString();
+        if (!pin.text.empty())
+            pin.mode = mode->currentData().toString().toStdString();
+        using Attributes = std::vector<std::pair<std::string, std::string>>;
+        const Attributes after = fla::templates::withPin(*instance, pin);
+        if (after == instance->extraAttributes)
+            return;
+        _editContext.commandStack().push(fla::CommandPtr(
+            new fla::SetPropertyCommand<Attributes>(instance->extraAttributes, instance->extraAttributes, after, "Pin to Text")));
+        _editContext.commandStack().breakMergeChain();
+        if (_phoenixView)
+        {
+            _phoenixView->clearCaches();
+            _phoenixView->update();
+        }
+    });
 }
 
 void MainWindow::motionSketch()
@@ -18221,11 +18659,28 @@ void MainWindow::closeEvent(QCloseEvent* event)
         return;
     }
     // The documents with unsaved changes are asked about, unless quitting
-    // asked about every window's already.
-    if (!s_quitting && !settleUnsaved({this}, this))
+    // asked about every window's already, or this close comes once they
+    // were (below).
+    if (!s_quitting && !_unsavedSettled)
     {
-        event->ignore();
-        return;
+        // Settled at once, it goes on closing; settled later, where nothing
+        // can wait for the answers (the web build), it closes again then.
+        const std::shared_ptr<bool> settled = std::make_shared<bool>(false);
+        const std::shared_ptr<bool> waiting = std::make_shared<bool>(false);
+        settleUnsaved({this}, this, nullptr, [this, settled, waiting]() {
+            *settled = true;
+            if (!*waiting)
+                return;
+            _unsavedSettled = true;
+            close();
+            _unsavedSettled = false;
+        });
+        if (!*settled)
+        {
+            *waiting = true;
+            event->ignore();
+            return;
+        }
     }
     // The last window to close says what to reopen next time.
     const bool last = s_windows.size() == 1 && s_windows.front() == this;

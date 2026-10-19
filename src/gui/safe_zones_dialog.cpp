@@ -174,22 +174,20 @@ SafeZonesDialog::SafeZonesDialog(const sz::Settings& settings, std::function<voi
     });
 
     connect(add, &QPushButton::clicked, this, [this]() {
-        bool ok = false;
-        const QString text = QInputDialog::getText(this, "Add Frame", "Aspect ratio (width:height):",
-            QLineEdit::Normal, "3:2", &ok);
-        if (!ok)
-            return;
-        sz::AspectFrame frame;
-        if (!sz::parseRatio(text.toStdString(), frame.width, frame.height))
-        {
-            modal::warning(this, "Add Frame", QString("\"%1\" is not an aspect ratio, such as 3:2 or 1.66:1.").arg(text));
-            return;
-        }
-        frame.on = true;
-        _settings.frames.push_back(frame);
-        fillFrames();
-        fillFollow();
-        changed();
+        modal::getText(this, "Add Frame", "Aspect ratio (width:height):", "3:2", [this](const QString& text) {
+            sz::AspectFrame frame;
+            if (!sz::parseRatio(text.toStdString(), frame.width, frame.height))
+            {
+                modal::warning(this, "Add Frame",
+                    QString("\"%1\" is not an aspect ratio, such as 3:2 or 1.66:1.").arg(text));
+                return;
+            }
+            frame.on = true;
+            _settings.frames.push_back(frame);
+            fillFrames();
+            fillFollow();
+            changed();
+        });
     });
     connect(removeFrame, &QPushButton::clicked, this, [this]() {
         const int row = _frames->indexOfTopLevelItem(_frames->currentItem());
@@ -226,23 +224,25 @@ SafeZonesDialog::SafeZonesDialog(const sz::Settings& settings, std::function<voi
         }
     });
     connect(save, &QPushButton::clicked, this, [this]() {
-        bool ok = false;
-        const QString name = QInputDialog::getText(this, "Save Preset", "Name:", QLineEdit::Normal, QString(), &ok).trimmed();
-        if (!ok || name.isEmpty())
-            return;
-        for (const auto& [builtIn, settings] : sz::presets())
-        {
-            if (name.compare(QString::fromStdString(builtIn), Qt::CaseInsensitive) == 0)
-            {
-                modal::warning(this, "Save Preset", QString("\"%1\" is a built-in preset; choose another name.").arg(name));
+        modal::getText(this, "Save Preset", "Name:", QString(), [this](const QString& value) {
+            const QString name = value.trimmed();
+            if (name.isEmpty())
                 return;
+            for (const auto& [builtIn, settings] : sz::presets())
+            {
+                if (name.compare(QString::fromStdString(builtIn), Qt::CaseInsensitive) == 0)
+                {
+                    modal::warning(this, "Save Preset",
+                        QString("\"%1\" is a built-in preset; choose another name.").arg(name));
+                    return;
+                }
             }
-        }
-        QVariantMap mine = userPresets();
-        mine.insert(name, QString::fromStdString(sz::toText(_settings)));
-        QSettings().setValue(kPresetsKey, mine);
-        fillPresets();
-        _presets->setCurrentIndex(_presets->findData(name));
+            QVariantMap mine = userPresets();
+            mine.insert(name, QString::fromStdString(sz::toText(_settings)));
+            QSettings().setValue(kPresetsKey, mine);
+            fillPresets();
+            _presets->setCurrentIndex(_presets->findData(name));
+        });
     });
     connect(remove, &QPushButton::clicked, this, [this]() {
         const QString name = _presets->currentData().toString();
@@ -328,16 +328,20 @@ void SafeZonesDialog::fillFrames()
         connect(color, &QToolButton::clicked, this, [this, i, color]() {
             if (i >= _settings.frames.size())
                 return;
-            uint8_t* c = _settings.frames[i].color;
-            const QColor chosen = SwatchPopup::getColor(color, nullptr, QColor(c[0], c[1], c[2], c[3]), "Frame Color", true);
-            if (!chosen.isValid())
-                return;
-            c[0] = static_cast<uint8_t>(chosen.red());
-            c[1] = static_cast<uint8_t>(chosen.green());
-            c[2] = static_cast<uint8_t>(chosen.blue());
-            c[3] = static_cast<uint8_t>(chosen.alpha());
-            color->setIcon(swatch(c));
-            changed();
+            const uint8_t* was = _settings.frames[i].color;
+            SwatchPopup::getColor(color, nullptr, QColor(was[0], was[1], was[2], was[3]), "Frame Color", true,
+                [this, i, color](const QColor& chosen) {
+                    // The frames may have changed while the pop-up was open.
+                    if (i >= _settings.frames.size())
+                        return;
+                    uint8_t* c = _settings.frames[i].color;
+                    c[0] = static_cast<uint8_t>(chosen.red());
+                    c[1] = static_cast<uint8_t>(chosen.green());
+                    c[2] = static_cast<uint8_t>(chosen.blue());
+                    c[3] = static_cast<uint8_t>(chosen.alpha());
+                    color->setIcon(swatch(c));
+                    changed();
+                });
         });
         _frames->setItemWidget(item, Color, color);
 

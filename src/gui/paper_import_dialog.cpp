@@ -1,4 +1,5 @@
 #include "paper_import_dialog.h"
+#include "file_pick.h"
 #include "modal.h"
 
 #include "hot_text.h"
@@ -34,6 +35,7 @@
 #include <QLineEdit>
 #include <QMessageBox>
 #include <QPainter>
+#include <QPointer>
 #include <QPushButton>
 #include <QSettings>
 #include <QVBoxLayout>
@@ -160,12 +162,11 @@ PaperImportDialog::PaperImportDialog(int currentFrame, QWidget* parent)
     _color->setIcon(swatch(_lineColor));
     _color->setToolTip("The color the traced lines are drawn in");
     connect(_color, &QPushButton::clicked, this, [this] {
-        const QColor chosen = SwatchPopup::getColor(_color, nullptr, _lineColor, "Line Color", false);
-        if (!chosen.isValid())
-            return;
-        _lineColor = chosen;
-        _color->setIcon(swatch(_lineColor));
-        updatePreview();
+        SwatchPopup::getColor(_color, nullptr, _lineColor, "Line Color", false, [this](const QColor& chosen) {
+            _lineColor = chosen;
+            _color->setIcon(swatch(_lineColor));
+            updatePreview();
+        });
     });
     cleanForm->addRow("Line color", _color);
     steps->addWidget(clean);
@@ -261,13 +262,14 @@ PaperImportDialog::PaperImportDialog(int currentFrame, QWidget* parent)
 void PaperImportDialog::browse()
 {
     QSettings settings;
-    const QStringList paths = QFileDialog::getOpenFileNames(this, "Import Paper Drawings",
-        settings.value("importFolder").toString(), "Images (*.png *.jpg *.jpeg *.bmp *.tif *.tiff *.gif *.webp)");
-    if (paths.isEmpty())
-        return;
-    // Several picked: those, in order, rather than a sequence.
-    _sequence->setChecked(paths.size() == 1);
-    _path->setText(paths.size() == 1 ? paths.front() : paths.join(';'));
+    file_pick::openMany(this, "Import Paper Drawings", settings.value("importFolder").toString(),
+        "Images (*.png *.jpg *.jpeg *.bmp *.tif *.tiff *.gif *.webp)", [this](const QStringList& paths) {
+            if (paths.isEmpty())
+                return;
+            // Several picked: those, in order, rather than a sequence.
+            _sequence->setChecked(paths.size() == 1);
+            _path->setText(paths.size() == 1 ? paths.front() : paths.join(';'));
+        });
 }
 
 void PaperImportDialog::filesChanged()
@@ -492,25 +494,34 @@ void open(QWidget* parent, fla::FLADocument* document, PhoenixView* view, Timeli
 {
     if (!document || !document->document || !view || !timelineView)
         return;
-    PaperImportDialog dialog(player ? player->currentFrame() : 0, parent);
-    if (dialog.exec() != QDialog::Accepted)
-        return;
-    const PaperImportDialog::Choices choices = dialog.choices();
-    view->flushPendingMerge();
-    QApplication::setOverrideCursor(Qt::WaitCursor);
-    QStringList problems;
-    const QString message = run(choices, *document, *timelineView, stack, selection, problems);
-    QApplication::restoreOverrideCursor();
-    timelineView->refreshFrames();
-    if (player)
-        player->setCurrentFrame(std::max(0, choices.startFrame));
-    view->invalidateBounds();
-    view->clearCaches();
-    view->update();
-    if (status)
-        status(message);
-    if (!problems.isEmpty())
-        modal::warning(parent, "Import Paper Drawings", problems.join("\n"));
+    PaperImportDialog* dialog = new PaperImportDialog(player ? player->currentFrame() : 0, parent);
+    // The views are checked again once answered, as they may be gone by then
+    // where nothing can wait for the answer.
+    const QPointer<PhoenixView> keptView(view);
+    const QPointer<TimelineView> keptTimeline(timelineView);
+    const QPointer<Player> keptPlayer(player);
+    fla::CommandStack* commands = &stack;
+    fla::Selection* selected = &selection;
+    modal::open(dialog, [=](int result) {
+        if (result != QDialog::Accepted || !keptView || !keptTimeline)
+            return;
+        const PaperImportDialog::Choices choices = dialog->choices();
+        keptView->flushPendingMerge();
+        QApplication::setOverrideCursor(Qt::WaitCursor);
+        QStringList problems;
+        const QString message = run(choices, *document, *keptTimeline, *commands, *selected, problems);
+        QApplication::restoreOverrideCursor();
+        keptTimeline->refreshFrames();
+        if (keptPlayer)
+            keptPlayer->setCurrentFrame(std::max(0, choices.startFrame));
+        keptView->invalidateBounds();
+        keptView->clearCaches();
+        keptView->update();
+        if (status)
+            status(message);
+        if (!problems.isEmpty())
+            modal::warning(parent, "Import Paper Drawings", problems.join("\n"));
+    });
 }
 
 } // namespace PaperImport

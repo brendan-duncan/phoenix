@@ -717,8 +717,12 @@ QJsonValue CepPanel::fileCall(const QString& name, const QJsonArray& args)
             return QUrl(path).toLocalFile();
         return path;
     };
+    // A panel waits for what these dialogs answer: where nothing can wait,
+    // they answer as if canceled.
     if (name == "showOpenDialog")
     {
+        if (modal::cannotWait())
+            return fileResult(kNoError, QJsonArray());
         const bool multiple = arg(0).toBool(), directory = arg(1).toBool();
         const QString title = arg(2).toString(), start = localPath(arg(3).toString());
         QStringList chosen;
@@ -740,6 +744,8 @@ QJsonValue CepPanel::fileCall(const QString& name, const QJsonArray& args)
     }
     if (name == "showSaveDialog")
     {
+        if (modal::cannotWait())
+            return fileResult(kNoError, QString());
         QString start = localPath(arg(1).toString());
         if (!arg(3).toString().isEmpty())
             start = QDir(start).filePath(arg(3).toString());

@@ -5,6 +5,8 @@
 #include <QPointF>
 #include <QRectF>
 
+#include <functional>
+
 namespace fla {
 class CommandStack;
 class DrawingStyle;
@@ -121,8 +123,11 @@ private:
     /// Alt held when the press came: a click without a drag asks for the
     /// size instead.
     bool _altClick = false;
-    /// The size dialog for an Alt-click at \a at; false when cancelled.
-    bool askSize(PhoenixView& view, const QPointF& at, QPointF& start, QPointF& end);
+    /// The size dialog for an Alt-click at \a at: \a done gets the corners
+    /// asked for, and is not called when it is cancelled.
+    void askSize(PhoenixView& view, const QPointF& at, std::function<void(const QPointF& start, const QPointF& end)> done);
+    /// Draws the object from \a start to \a end on \a frame.
+    void drawBetween(PhoenixView& view, fla::Frame* frame, const QPointF& start, const QPointF& end);
 
     /// Whether the last snapped position actually snapped, for the ring.
     mutable bool _snapped = false;

@@ -4,6 +4,8 @@
 
 #include <QDialog>
 
+#include <functional>
+
 class QComboBox;
 class HotDoubleSpinBox;
 class HotSpinBox;
@@ -30,7 +32,10 @@ private:
     void fill();
     void pick(QTreeWidgetItem* item);
     void changed();
-    bool saveAs();
+    /// Asks for a name and saves the theme under it; \a saved is called
+    /// once it is.
+    void saveAs(std::function<void()> saved);
+    void saveUnder(const QString& name, std::function<void()> saved);
 
     theme::Theme _theme;
     /// The theme in use when the editor opened, put back if nothing is

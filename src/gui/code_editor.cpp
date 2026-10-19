@@ -1,4 +1,5 @@
 #include "code_editor.h"
+#include "modal.h"
 
 #include <QAbstractItemView>
 #include <QApplication>
@@ -1081,9 +1082,7 @@ void CodeView::replaceAll()
 
 void CodeView::askGoToLine()
 {
-    bool ok = false;
-    const int line = QInputDialog::getInt(this, "Go to Line", QString("Line (1 to %1):").arg(_editor->blockCount()),
-        _editor->textCursor().blockNumber() + 1, 1, std::max(1, _editor->blockCount()), 1, &ok);
-    if (ok)
-        _editor->goToLine(line);
+    modal::getInt(this, "Go to Line", QString("Line (1 to %1):").arg(_editor->blockCount()),
+        _editor->textCursor().blockNumber() + 1, 1, std::max(1, _editor->blockCount()), 1,
+        [this](int line) { _editor->goToLine(line); });
 }

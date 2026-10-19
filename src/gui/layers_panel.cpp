@@ -49,6 +49,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <functional>
+#include <memory>
 
 namespace {
 
@@ -1795,14 +1796,14 @@ void LayersPanel::showLayerProperties(QTreeWidgetItem* item)
     const fla::LayerSnapshot now = fla::snapshotLayers(*timeline);
     const fla::layers::Kind kind = fla::layers::kindOf(now, layer);
 
-    QDialog dialog(this);
-    dialog.setWindowTitle("Layer Properties");
-    QFormLayout* form = new QFormLayout(&dialog);
-    QLineEdit* name = new QLineEdit(QString::fromStdString(layer->name), &dialog);
+    QDialog* dialog = new QDialog(this);
+    dialog->setWindowTitle("Layer Properties");
+    QFormLayout* form = new QFormLayout(dialog);
+    QLineEdit* name = new QLineEdit(QString::fromStdString(layer->name), dialog);
     form->addRow("Name:", name);
-    QCheckBox* show = new QCheckBox("Show", &dialog);
+    QCheckBox* show = new QCheckBox("Show", dialog);
     show->setChecked(layer->visible);
-    QCheckBox* lock = new QCheckBox("Lock", &dialog);
+    QCheckBox* lock = new QCheckBox("Lock", dialog);
     lock->setChecked(layer->locked);
     QHBoxLayout* flags = new QHBoxLayout();
     flags->addWidget(show);
@@ -1811,8 +1812,8 @@ void LayersPanel::showLayerProperties(QTreeWidgetItem* item)
     form->addRow("", flags);
     // Transparent: shown faded while editing, so what is under shows.
     QHBoxLayout* fadeRow = new QHBoxLayout();
-    QCheckBox* fade = new QCheckBox("Transparent, shown at", &dialog);
-    HotSpinBox* fadePercent = new HotSpinBox(&dialog);
+    QCheckBox* fade = new QCheckBox("Transparent, shown at", dialog);
+    HotSpinBox* fadePercent = new HotSpinBox(dialog);
     fadePercent->setRange(5, 95);
     fadePercent->setSuffix("%");
     const int transparency = fla::layers::transparencyOf(*layer);
@@ -1833,7 +1834,7 @@ void LayersPanel::showLayerProperties(QTreeWidgetItem* item)
     QVBoxLayout* typeLayout = new QVBoxLayout();
     for (const auto& [value, label] : kinds)
     {
-        QRadioButton* button = new QRadioButton(label, &dialog);
+        QRadioButton* button = new QRadioButton(label, dialog);
         button->setChecked(value == kind);
         const bool folderEither = value == fla::layers::Kind::Folder || kind == fla::layers::Kind::Folder;
         button->setEnabled(value == kind || !folderEither);
@@ -1842,33 +1843,34 @@ void LayersPanel::showLayerProperties(QTreeWidgetItem* item)
     }
     form->addRow("Type:", typeLayout);
 
-    QColor color(layer->color[0], layer->color[1], layer->color[2]);
-    QPushButton* colorButton = new QPushButton(&dialog);
+    // Shared with the dialog's answer, which comes after this function has
+    // returned where nothing can wait for it.
+    const auto color = std::make_shared<QColor>(layer->color[0], layer->color[1], layer->color[2]);
+    QPushButton* colorButton = new QPushButton(dialog);
     const auto showColor = [colorButton](const QColor& c) {
         colorButton->setStyleSheet(QString("background-color: %1; min-width: 48px;").arg(c.name()));
     };
-    showColor(color);
-    connect(colorButton, &QPushButton::clicked, &dialog, [&]() {
-        const QColor chosen = SwatchPopup::getColor(colorButton, nullptr, color, "Outline Color", false);
-        if (chosen.isValid())
-        {
-            color = chosen;
-            showColor(color);
-        }
+    showColor(*color);
+    connect(colorButton, &QPushButton::clicked, dialog, [colorButton, color, showColor]() {
+        SwatchPopup::getColor(colorButton, nullptr, *color, "Outline Color", false,
+            [color, showColor](const QColor& chosen) {
+                *color = chosen;
+                showColor(*color);
+            });
     });
     form->addRow("Outline color:", colorButton);
-    QCheckBox* outline = new QCheckBox("View layer as outlines", &dialog);
+    QCheckBox* outline = new QCheckBox("View layer as outlines", dialog);
     outline->setChecked(layer->outline);
     form->addRow("", outline);
 
     // Layer parenting: the parts of the parent's transform this layer takes
     // on. Position and rotation always do.
     const fla::layers::ParentPropagation propagation = fla::layers::propagationOf(*layer);
-    QCheckBox* parentScale = new QCheckBox("Scale", &dialog);
+    QCheckBox* parentScale = new QCheckBox("Scale", dialog);
     parentScale->setChecked(propagation.scale);
-    QCheckBox* parentSkew = new QCheckBox("Skew", &dialog);
+    QCheckBox* parentSkew = new QCheckBox("Skew", dialog);
     parentSkew->setChecked(propagation.skew);
-    QCheckBox* parentFlip = new QCheckBox("Flip", &dialog);
+    QCheckBox* parentFlip = new QCheckBox("Flip", dialog);
     parentFlip->setChecked(propagation.flip);
     QHBoxLayout* propagationRow = new QHBoxLayout();
     for (QCheckBox* check : {parentScale, parentSkew, parentFlip})
@@ -1880,50 +1882,51 @@ void LayersPanel::showLayerProperties(QTreeWidgetItem* item)
     propagationRow->addStretch();
     form->addRow("Follow parent's:", propagationRow);
 
-    QDialogButtonBox* box = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
-    connect(box, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
-    connect(box, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    QDialogButtonBox* box = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, dialog);
+    connect(box, &QDialogButtonBox::accepted, dialog, &QDialog::accept);
+    connect(box, &QDialogButtonBox::rejected, dialog, &QDialog::reject);
     form->addRow(box);
-    if (dialog.exec() != QDialog::Accepted)
-        return;
-
-    fla::LayerSnapshot after = now;
-    fla::layers::Kind chosenKind = kind;
-    for (const auto& [value, button] : buttons)
-    {
-        if (button->isChecked())
-            chosenKind = value;
-    }
-    if (!fla::layers::setKind(after, layer, chosenKind))
-    {
-        modal::information(this, "Layer Properties",
-            chosenKind == fla::layers::Kind::Masked ? "There is no mask layer above this one to mask it."
-            : chosenKind == fla::layers::Kind::Guided ? "There is no guide layer above this one to guide it."
-            : "A layer cannot become a folder, or a folder a layer.");
-        return;
-    }
-    for (fla::LayerState& state : after)
-    {
-        if (state.layer != layer)
-            continue;
-        const std::string typed = name->text().trimmed().toStdString();
-        if (!typed.empty() && typed != state.name)
+    modal::open(dialog, [=](int result) {
+        if (result != QDialog::Accepted)
+            return;
+        fla::LayerSnapshot after = now;
+        fla::layers::Kind chosenKind = kind;
+        for (const auto& [value, button] : buttons)
         {
-            state.name = typed;
-            state.autoNamed = false;
+            if (button->isChecked())
+                chosenKind = value;
         }
-        state.visible = show->isChecked();
-        state.locked = lock->isChecked();
-        state.outline = outline->isChecked();
-        state.color[0] = static_cast<uint8_t>(color.red());
-        state.color[1] = static_cast<uint8_t>(color.green());
-        state.color[2] = static_cast<uint8_t>(color.blue());
-        fla::layers::ParentPropagation follows;
-        follows.scale = parentScale->isChecked();
-        follows.skew = parentSkew->isChecked();
-        follows.flip = parentFlip->isChecked();
-        state.extraAttributes = fla::layers::withPropagation(
-            fla::layers::withTransparency(*layer, fade->isChecked() ? fadePercent->value() : 0), follows);
-    }
-    emit layerEditRequested(timeline, after, "Layer Properties");
+        if (!fla::layers::setKind(after, layer, chosenKind))
+        {
+            modal::information(this, "Layer Properties",
+                chosenKind == fla::layers::Kind::Masked ? "There is no mask layer above this one to mask it."
+                : chosenKind == fla::layers::Kind::Guided ? "There is no guide layer above this one to guide it."
+                : "A layer cannot become a folder, or a folder a layer.");
+            return;
+        }
+        for (fla::LayerState& state : after)
+        {
+            if (state.layer != layer)
+                continue;
+            const std::string typed = name->text().trimmed().toStdString();
+            if (!typed.empty() && typed != state.name)
+            {
+                state.name = typed;
+                state.autoNamed = false;
+            }
+            state.visible = show->isChecked();
+            state.locked = lock->isChecked();
+            state.outline = outline->isChecked();
+            state.color[0] = static_cast<uint8_t>(color->red());
+            state.color[1] = static_cast<uint8_t>(color->green());
+            state.color[2] = static_cast<uint8_t>(color->blue());
+            fla::layers::ParentPropagation follows;
+            follows.scale = parentScale->isChecked();
+            follows.skew = parentSkew->isChecked();
+            follows.flip = parentFlip->isChecked();
+            state.extraAttributes = fla::layers::withPropagation(
+                fla::layers::withTransparency(*layer, fade->isChecked() ? fadePercent->value() : 0), follows);
+        }
+        emit layerEditRequested(timeline, after, "Layer Properties");
+    });
 }

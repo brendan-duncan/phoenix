@@ -1,4 +1,5 @@
 #include "sprite_sheet_dialog.h"
+#include "file_pick.h"
 
 #include <QCheckBox>
 #include <QComboBox>
@@ -261,9 +262,8 @@ void SpriteSheetDialog::relayout()
 
 void SpriteSheetDialog::browse()
 {
-    const QString chosen = QFileDialog::getSaveFileName(this, "Export Sprite Sheet", _path->text(), "PNG Image (*.png)");
-    if (!chosen.isEmpty())
-        _path->setText(chosen);
+    file_pick::save(this, "Export Sprite Sheet", _path->text(), "PNG Image (*.png)",
+        [this](const QString& chosen) { _path->setText(chosen); });
 }
 
 bool SpriteSheetDialog::write(QString& error)

@@ -1,6 +1,7 @@
 #include "swatch_popup.h"
 
 #include "color_picker_widgets.h"
+#include "modal.h"
 
 #include "phoenix_view.h"
 
@@ -15,6 +16,7 @@
 #include "../edit/swatches.h"
 
 #include <QColorDialog>
+#include <QCoreApplication>
 #include <QCursor>
 #include <QEventLoop>
 #include <QGuiApplication>
@@ -415,18 +417,40 @@ SwatchPopup* SwatchPopup::open(QWidget* anchor, const fla::Document* document, c
     return popup;
 }
 
-QColor SwatchPopup::getColor(QWidget* anchor, const fla::Document* document, const QColor& current,
-    const QString& title, bool alpha)
+void SwatchPopup::getColor(QWidget* anchor, const fla::Document* document, const QColor& current,
+    const QString& title, bool alpha, std::function<void(const QColor&)> done)
 {
     Offer offer;
     offer.alpha = alpha;
     SwatchPopup* popup = open(anchor, document, current, title, offer);
-    // Waited for until it is gone, the full picker it may open included.
-    QColor chosen;
+    // The answer is the last color picked, given once the pop-up is gone,
+    // the full picker it may open included.
+    auto chosen = std::make_shared<QColor>();
+    connect(popup, &SwatchPopup::colorPicked, popup, [chosen](const QColor& color) { *chosen = color; });
+    if (modal::cannotWait())
+    {
+        // Answered after the pop-up's deletion rather than from inside it,
+        // and not at all if what asked is gone by then.
+        QObject* context = anchor ? static_cast<QObject*>(anchor) : QCoreApplication::instance();
+        connect(popup, &QObject::destroyed, context, [chosen, done]() {
+            if (chosen->isValid() && done)
+                done(*chosen);
+        }, Qt::QueuedConnection);
+        return;
+    }
     QEventLoop loop;
-    connect(popup, &SwatchPopup::colorPicked, &loop, [&chosen](const QColor& color) { chosen = color; });
     connect(popup, &QObject::destroyed, &loop, &QEventLoop::quit);
     loop.exec();
+    if (chosen->isValid() && done)
+        done(*chosen);
+}
+
+QColor SwatchPopup::getColor(QWidget* anchor, const fla::Document* document, const QColor& current,
+    const QString& title, bool alpha)
+{
+    QColor chosen;
+    if (!modal::cannotWait())
+        getColor(anchor, document, current, title, alpha, [&chosen](const QColor& color) { chosen = color; });
     return chosen;
 }
 
@@ -711,14 +735,21 @@ void SwatchPopup::openPicker()
         _offersAlpha ? QColorDialog::ShowAlphaChannel : QColorDialog::ColorDialogOptions();
     QPointer<SwatchPopup> self(this);
     hide();
-    const QColor chosen = QColorDialog::getColor(start, owner, title.isEmpty() ? QString("Color") : title, options);
-    if (!self)
-        return;
-    if (chosen.isValid())
-    {
-        RecentColors::instance().add(chosen);
-        emit colorPicked(chosen);
-    }
-    if (self)
-        close();
+    // Built by hand rather than with modal::getColor(): a cancel has to close
+    // the pop-up too.
+    QColorDialog* dialog = new QColorDialog(start, owner);
+    dialog->setWindowTitle(title.isEmpty() ? QString("Color") : title);
+    dialog->setOptions(options);
+    modal::open(dialog, [self, dialog](int result) {
+        if (!self)
+            return;
+        const QColor chosen = result == QDialog::Accepted ? dialog->selectedColor() : QColor();
+        if (chosen.isValid())
+        {
+            RecentColors::instance().add(chosen);
+            emit self->colorPicked(chosen);
+        }
+        if (self)
+            self->close();
+    });
 }

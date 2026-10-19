@@ -9,6 +9,7 @@
 #include <QPointer>
 #include <QWidget>
 
+#include <functional>
 #include <memory>
 #include <utility>
 #include <vector>
@@ -68,10 +69,16 @@ public:
     static SwatchPopup* open(QWidget* anchor, const fla::Document* document, const QColor& current,
         const QString& title, const Offer& offer);
 
-    /// A color from a pop-up under \a anchor, solid colors only, waited
-    /// for as a color dialog is: the color picked, or an invalid one when
-    /// it closed without a pick. With \a alpha the color may be
-    /// see-through.
+    /// A color from a pop-up under \a anchor, solid colors only, answered
+    /// as modal::getColor() is: \a done gets the color picked once the
+    /// pop-up is gone, and is not called when it closed without a pick.
+    /// With \a alpha the color may be see-through.
+    static void getColor(QWidget* anchor, const fla::Document* document, const QColor& current,
+        const QString& title, bool alpha, std::function<void(const QColor&)> done);
+
+    /// The same, waited for as a color dialog is: the color picked, or an
+    /// invalid one when it closed without a pick. Where nothing can wait
+    /// (modal::cannotWait()) nothing is shown and the answer is invalid.
     static QColor getColor(QWidget* anchor, const fla::Document* document, const QColor& current,
         const QString& title, bool alpha);
 

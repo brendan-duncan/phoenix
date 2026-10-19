@@ -680,7 +680,7 @@ endif()
 # The web build's stand-ins for what a browser cannot do.
 if(PHOENIX_WEB)
     list(REMOVE_ITEM SOURCES src/gui/terminal_view.cpp)
-    list(APPEND SOURCES src/gui/terminal_view_web.cpp)
+    list(APPEND SOURCES src/gui/terminal_view_web.cpp src/gui/web_drag.cpp src/gui/web_exec.cpp)
 endif()
 
 qt6_add_executable(Phoenix MANUAL_FINALIZATION ${SOURCES} ${HEADERS})
@@ -791,6 +791,17 @@ if(PHOENIX_WEB)
     # thread has to be free for (util/parallel.cpp sizes its pool to fit).
     # Memory grows as documents need it, up to what the build allows (4 GB
     # for wasm32; Qt's default, larger, for wasm64).
+    # Nothing may wait in an event loop of its own: drags run in the page
+    # (src/gui/web_drag.cpp), and the menus and dialogs Qt's own widgets
+    # open with exec() pop up or answer at once (src/gui/web_exec.cpp).
+    target_link_options(Phoenix PRIVATE
+        "-Wl,--wrap=_ZN5QDrag4execE6QFlagsIN2Qt10DropActionEE"
+        "-Wl,--wrap=_ZN5QDrag4execE6QFlagsIN2Qt10DropActionEES2_"
+        "-Wl,--wrap=_ZN5QMenu4execERK6QPointP7QAction"
+        "-Wl,--wrap=_ZN5QMenu4execEv"
+        "-Wl,--wrap=_ZN7QDialog4execEv")
+    find_package(Qt6 REQUIRED COMPONENTS GuiPrivate)
+    target_link_libraries(Phoenix PRIVATE Qt6::GuiPrivate)
     set_target_properties(Phoenix PROPERTIES
         QT_WASM_PTHREAD_POOL_SIZE 8
         QT_WASM_INITIAL_MEMORY "256MB")

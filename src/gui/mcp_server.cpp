@@ -1,6 +1,7 @@
 #include "mcp_server.h"
 
 #include "main_window.h"
+#include "modal.h"
 #include "script_api.h"
 
 #include <QApplication>
@@ -180,6 +181,10 @@ McpServer::McpServer(MainWindow* window)
         const QString folder = QFileInfo(path).absolutePath();
         if (_allowedFolders.contains(folder) || QGuiApplication::platformName() == "offscreen")
             return true;
+        // The operation writing needs its answer before it carries on; where
+        // nothing can wait for one, the file is not written.
+        if (modal::cannotWait())
+            return false;
         const auto answer = QMessageBox::question(_window, "AI Assistant",
             QString("An AI assistant wants to write a file:\n\n%1\n\nAllow it to write files in this folder until "
                     "Phoenix closes?")
@@ -456,13 +461,14 @@ std::string McpServer::dispatch(const std::shared_ptr<Shared>& shared, McpServer
                 if (pending->abandoned)
                     return;
             }
-            QJsonObject answer = server->handle(message, client);
-            {
-                std::lock_guard<std::mutex> lock(shared->mutex);
-                pending->reply = std::move(answer);
-                pending->done = true;
-            }
-            shared->answered.notify_all();
+            server->handle(message, client, [shared, pending](const QJsonObject& answer) {
+                {
+                    std::lock_guard<std::mutex> lock(shared->mutex);
+                    pending->reply = answer;
+                    pending->done = true;
+                }
+                shared->answered.notify_all();
+            });
         }, Qt::QueuedConnection);
         shared->answered.wait(lock, [&pending, &cut]() { return pending->done || cut(); });
         if (!pending->done)
@@ -483,45 +489,57 @@ McpServer::Client* McpServer::clientOf(int id)
     return found == _clients.end() ? nullptr : &*found;
 }
 
-bool McpServer::allow(int id)
+void McpServer::allow(int id, std::function<void(bool allowed)> done)
 {
     Client* client = clientOf(id);
     if (!client)
-        return false;
+    {
+        done(false);
+        return;
+    }
     if (client->allowed)
-        return true;
+    {
+        done(true);
+        return;
+    }
     // Without a screen (QT_QPA_PLATFORM=offscreen, for automation) there is
     // no one to ask: whoever ran it that way chose to.
     if (QGuiApplication::platformName() == "offscreen")
     {
         client->allowed = true;
-        return true;
+        done(true);
+        return;
     }
     if (_allowedNames.contains(client->name))
     {
         client->allowed = true;
-        return true;
+        done(true);
+        return;
     }
     const QString name = client->name;
-    QMessageBox box(QMessageBox::Question, "AI Assistant",
+    QMessageBox* box = new QMessageBox(QMessageBox::Question, "AI Assistant",
         QString("<b>%1</b> wants to work with Phoenix: read the documents you have open and change them.<br><br>"
                 "Its changes go into the undo history, and it asks before writing any file. The status bar shows "
                 "while it is connected, with a button that stops it.<br><br>Allow it?")
             .arg(name.toHtmlEscaped()),
         QMessageBox::NoButton, _window);
-    QPushButton* yes = box.addButton("Allow", QMessageBox::AcceptRole);
-    box.addButton("Don't Allow", QMessageBox::RejectRole);
-    box.exec();
-    // It may have gone, or been stopped, while it was asked about.
-    client = clientOf(id);
-    if (!client || box.clickedButton() != yes)
-        return false;
-    client->allowed = true;
-    _allowedNames.insert(name);
-    return true;
+    QPushButton* yes = box->addButton("Allow", QMessageBox::AcceptRole);
+    box->addButton("Don't Allow", QMessageBox::RejectRole);
+    modal::open(box, [this, id, name, box, yes, done](QMessageBox::StandardButton) {
+        // It may have gone, or been stopped, while it was asked about.
+        Client* asked = clientOf(id);
+        if (!asked || box->clickedButton() != yes)
+        {
+            done(false);
+            return;
+        }
+        asked->allowed = true;
+        _allowedNames.insert(name);
+        done(true);
+    });
 }
 
-QJsonObject McpServer::handle(const QJsonObject& message, int id)
+void McpServer::handle(const QJsonObject& message, int id, std::function<void(const QJsonObject&)> reply)
 {
     const QJsonValue requestId = message.value("id");
     const QString method = message.value("method").toString();
@@ -537,52 +555,72 @@ QJsonObject McpServer::handle(const QJsonObject& message, int id)
     {
         if (!_sessionToken.isEmpty() && message.value("phoenixSession").toString() == _sessionToken)
             clientOf(id)->allowed = true;
-        return QJsonObject();
+        reply(QJsonObject());
+        return;
     }
     if (notification)
-        return QJsonObject();
+    {
+        reply(QJsonObject());
+        return;
+    }
     if (method == "ping")
-        return resultReply(requestId, QJsonObject());
+    {
+        reply(resultReply(requestId, QJsonObject()));
+        return;
+    }
     // While a dialog is up (a question asked, Test Movie, the save prompt),
     // a request would run inside it, on a document that may be mid-change:
     // it is turned away, as is asking about a new client over the dialog.
     const bool dialog = QApplication::activeModalWidget() != nullptr;
-    const auto busy = [&requestId]() {
-        return errorReply(requestId, -32003, "Phoenix is showing a dialog; try again when it is closed.");
-    };
     if (dialog && (!clientOf(id)->allowed || method == "tools/call" || method == "resources/read"))
-        return busy();
+    {
+        reply(errorReply(requestId, -32003, "Phoenix is showing a dialog; try again when it is closed."));
+        return;
+    }
     if (method == "initialize")
     {
         const QString name = params.value("clientInfo").toObject().value("name").toString();
         if (!name.isEmpty())
             clientOf(id)->name = name;
         const QString who = clientOf(id)->name;
-        if (!allow(id))
-        {
-            log(who, "connect", {}, false);
-            return errorReply(requestId, -32001, "The person using Phoenix did not allow this connection.");
-        }
-        log(who, "connect", {}, true);
-        showActivity("connected");
-        QString version = params.value("protocolVersion").toString();
-        if (std::find(std::begin(kProtocolVersions), std::end(kProtocolVersions), version.toStdString()) ==
-            std::end(kProtocolVersions))
-            version = kProtocolVersions[0];
-        return resultReply(requestId,
-            QJsonObject{{"protocolVersion", version},
-                {"capabilities", QJsonObject{{"tools", QJsonObject{}}, {"resources", QJsonObject{}}}},
-                {"serverInfo", QJsonObject{{"name", "phoenix"}, {"title", "Phoenix"},
-                                   {"version", QCoreApplication::applicationVersion()}}},
-                {"instructions",
-                    "Phoenix is a vector animation software. These tools read and change the document open in it. Frames "
-                    "count from 1; layers are named or counted from 0 at the top. Look with get_document, "
-                    "get_timeline, get_elements and render_frame before changing things, and wrap a request that "
-                    "takes several changes in begin_edit and end_edit so it undoes in one step."}});
+        allow(id, [this, who, requestId, params, reply](bool allowed) {
+            if (!allowed)
+            {
+                log(who, "connect", {}, false);
+                reply(errorReply(requestId, -32001, "The person using Phoenix did not allow this connection."));
+                return;
+            }
+            log(who, "connect", {}, true);
+            showActivity("connected");
+            QString version = params.value("protocolVersion").toString();
+            if (std::find(std::begin(kProtocolVersions), std::end(kProtocolVersions), version.toStdString()) ==
+                std::end(kProtocolVersions))
+                version = kProtocolVersions[0];
+            reply(resultReply(requestId,
+                QJsonObject{{"protocolVersion", version},
+                    {"capabilities", QJsonObject{{"tools", QJsonObject{}}, {"resources", QJsonObject{}}}},
+                    {"serverInfo", QJsonObject{{"name", "phoenix"}, {"title", "Phoenix"},
+                                       {"version", QCoreApplication::applicationVersion()}}},
+                    {"instructions",
+                        "Phoenix is a vector animation software. These tools read and change the document open in it. "
+                        "Frames count from 1; layers are named or counted from 0 at the top. Look with get_document, "
+                        "get_timeline, get_elements and render_frame before changing things, and wrap a request that "
+                        "takes several changes in begin_edit and end_edit so it undoes in one step."}}));
+        });
+        return;
     }
-    if (!allow(id))
-        return errorReply(requestId, -32001, "The person using Phoenix did not allow this connection.");
+    allow(id, [this, requestId, method, params, id, reply](bool allowed) {
+        if (!allowed)
+        {
+            reply(errorReply(requestId, -32001, "The person using Phoenix did not allow this connection."));
+            return;
+        }
+        reply(respond(requestId, method, params, id));
+    });
+}
 
+QJsonObject McpServer::respond(const QJsonValue& requestId, const QString& method, const QJsonObject& params, int id)
+{
     if (method == "tools/list")
     {
         QJsonArray tools;

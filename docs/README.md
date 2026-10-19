@@ -7,6 +7,7 @@ Notes for people working on Phoenix's source. The user guide and website are in
 
 - [building.md](building.md): building Phoenix, running the tests, command-line checks
 - [architecture.md](architecture.md): how the source is laid out, the document model, editing and undo, the GUI
+- [web.md](web.md): the web build (Qt for WebAssembly): building it, serving it, what it does differently
 
 ## File formats
 

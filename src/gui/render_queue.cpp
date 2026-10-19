@@ -1,4 +1,5 @@
 #include "render_queue.h"
+#include "file_pick.h"
 #include "modal.h"
 
 #include <QCheckBox>
@@ -129,25 +130,28 @@ RenderQueue::RenderQueue(std::function<QString()> current, QWidget* parent)
             modal::information(this, "Render Queue", "Save the document first: the queue renders the saved file.");
             return;
         }
-        const QString data = QFileDialog::getOpenFileName(this, "Rows to Render", QFileInfo(document).absolutePath(),
-            "CSV files (*.csv);;All Files (*)");
-        if (!data.isEmpty())
-            addJob(document, data);
+        file_pick::open(this, "Rows to Render", QFileInfo(document).absolutePath(), "CSV files (*.csv);;All Files (*)",
+            [this, document](const QString& data) { addJob(document, data); });
     });
     connect(addFiles, &QPushButton::clicked, this, [this]() {
-        const QStringList files = QFileDialog::getOpenFileNames(this, "Add to Render Queue", QString(),
-            "Documents (*.fla *.phx *.xfl);;All Files (*)");
-        for (const QString& file : files)
-            addJob(file);
+        file_pick::openMany(this, "Add to Render Queue", QString(), "Documents (*.fla *.phx *.xfl);;All Files (*)",
+            [this](const QStringList& files) {
+                for (const QString& file : files)
+                    addJob(file);
+            });
     });
     connect(edit, &QPushButton::clicked, this, [this]() {
         const int row = _list->indexOfTopLevelItem(_list->currentItem());
-        if (row >= 0 && editJob(_jobs[static_cast<size_t>(row)]))
-        {
+        if (row < 0)
+            return;
+        editJob(_jobs[static_cast<size_t>(row)], [this, row](const RenderJob& job) {
+            if (row >= static_cast<int>(_jobs.size()))
+                return;
+            _jobs[static_cast<size_t>(row)] = job;
             _jobs[static_cast<size_t>(row)].state = RenderJob::State::Waiting;
             save();
             fill();
-        }
+        });
     });
     connect(_list, &QTreeWidget::itemDoubleClicked, edit, &QPushButton::click);
     connect(remove, &QPushButton::clicked, this, [this]() {
@@ -285,40 +289,42 @@ void RenderQueue::addJob(const QString& document, const QString& data)
         job.output = info.absoluteDir().filePath(info.completeBaseName() + "_renders");
         job.format = "mp4";
     }
-    if (!editJob(job))
-        return;
-    _jobs.push_back(job);
-    save();
-    fill();
+    editJob(job, [this](const RenderJob& edited) {
+        _jobs.push_back(edited);
+        save();
+        fill();
+    });
 }
 
-bool RenderQueue::editJob(RenderJob& job)
+void RenderQueue::editJob(const RenderJob& job, std::function<void(const RenderJob&)> done)
 {
-    QDialog dialog(this);
-    dialog.setWindowTitle(QFileInfo(job.document).fileName());
-    QFormLayout* form = new QFormLayout(&dialog);
+    QDialog* dialog = new QDialog(this);
+    dialog->setWindowTitle(QFileInfo(job.document).fileName());
+    QFormLayout* form = new QFormLayout(dialog);
     if (!job.data.isEmpty())
-        return editDataJob(job, dialog, form);
-    QLineEdit* output = new QLineEdit(job.output, &dialog);
-    QPushButton* browse = new QPushButton("Browse...", &dialog);
+    {
+        editDataJob(job, dialog, form, done);
+        return;
+    }
+    QLineEdit* output = new QLineEdit(job.output, dialog);
+    QPushButton* browse = new QPushButton("Browse...", dialog);
     QHBoxLayout* outputRow = new QHBoxLayout;
     outputRow->addWidget(output, 1);
     outputRow->addWidget(browse);
     form->addRow("Output", outputRow);
-    form->addRow("", new QLabel("A folder for a PNG sequence, or a file: .mp4, .mov, .gif, .svg (a sequence) or .swf.", &dialog));
-    connect(browse, &QPushButton::clicked, &dialog, [&dialog, output]() {
-        const QString chosen = QFileDialog::getSaveFileName(&dialog, "Render To", output->text(),
-            "Video (*.mp4 *.mov);;GIF (*.gif);;SVG Sequence (*.svg);;SWF (*.swf);;PNG Sequence (*.png)");
-        if (!chosen.isEmpty())
-            output->setText(chosen);
+    form->addRow("", new QLabel("A folder for a PNG sequence, or a file: .mp4, .mov, .gif, .svg (a sequence) or .swf.", dialog));
+    connect(browse, &QPushButton::clicked, dialog, [dialog, output]() {
+        file_pick::save(dialog, "Render To", output->text(),
+            "Video (*.mp4 *.mov);;GIF (*.gif);;SVG Sequence (*.svg);;SWF (*.swf);;PNG Sequence (*.png)",
+            [output](const QString& chosen) { output->setText(chosen); });
     });
-    QLineEdit* range = new QLineEdit(job.range, &dialog);
+    QLineEdit* range = new QLineEdit(job.range, dialog);
     range->setPlaceholderText("All, or 1-240");
     form->addRow("Frames", range);
-    QLineEdit* size = new QLineEdit(job.size, &dialog);
+    QLineEdit* size = new QLineEdit(job.size, dialog);
     size->setPlaceholderText("The stage's, or 1920x1080");
     form->addRow("Size", size);
-    QComboBox* scenes = new QComboBox(&dialog);
+    QComboBox* scenes = new QComboBox(dialog);
     scenes->setEditable(true);
     scenes->addItem("The scene it opens on", QString());
     scenes->addItem("All scenes, one after another", QString("*"));
@@ -333,70 +339,77 @@ bool RenderQueue::editJob(RenderJob& job)
     std::vector<QCheckBox*> boxes;
     for (const auto& [flag, label] : kOptions)
     {
-        QCheckBox* box = new QCheckBox(label, &dialog);
+        QCheckBox* box = new QCheckBox(label, dialog);
         box->setChecked(job.options.contains(flag));
         form->addRow("", box);
         boxes.push_back(box);
     }
-    QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
-    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
-    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, dialog);
+    connect(buttons, &QDialogButtonBox::accepted, dialog, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, dialog, &QDialog::reject);
     form->addRow(buttons);
-    if (dialog.exec() != QDialog::Accepted)
-        return false;
-    job.output = output->text().trimmed();
-    job.range = range->text().trimmed();
-    job.size = size->text().trimmed();
-    const int index = scenes->findText(scenes->currentText());
-    job.scene = index >= 0 ? scenes->itemData(index).toString() : scenes->currentText().trimmed();
-    job.options.clear();
-    for (size_t i = 0; i < boxes.size(); ++i)
-        if (boxes[i]->isChecked())
-            job.options << kOptions[i].first;
-    return !job.output.isEmpty();
+    modal::open(dialog, [job, output, range, size, scenes, boxes, done](int result) {
+        if (result != QDialog::Accepted)
+            return;
+        RenderJob edited = job;
+        edited.output = output->text().trimmed();
+        edited.range = range->text().trimmed();
+        edited.size = size->text().trimmed();
+        const int index = scenes->findText(scenes->currentText());
+        edited.scene = index >= 0 ? scenes->itemData(index).toString() : scenes->currentText().trimmed();
+        edited.options.clear();
+        for (size_t i = 0; i < boxes.size(); ++i)
+            if (boxes[i]->isChecked())
+                edited.options << kOptions[i].first;
+        if (!edited.output.isEmpty() && done)
+            done(edited);
+    });
 }
 
-bool RenderQueue::editDataJob(RenderJob& job, QDialog& dialog, QFormLayout* form)
+void RenderQueue::editDataJob(const RenderJob& job, QDialog* dialog, QFormLayout* form,
+    std::function<void(const RenderJob&)> done)
 {
     // A movie for each row: the rows, the folder they go into, and as what.
-    QLineEdit* data = new QLineEdit(job.data, &dialog);
-    QPushButton* browseData = new QPushButton("Browse...", &dialog);
+    QLineEdit* data = new QLineEdit(job.data, dialog);
+    QPushButton* browseData = new QPushButton("Browse...", dialog);
     QHBoxLayout* dataRow = new QHBoxLayout;
     dataRow->addWidget(data, 1);
     dataRow->addWidget(browseData);
     form->addRow("Rows", dataRow);
-    connect(browseData, &QPushButton::clicked, &dialog, [&dialog, data]() {
-        const QString chosen = QFileDialog::getOpenFileName(&dialog, "Rows to Render", data->text(), "CSV files (*.csv);;All Files (*)");
-        if (!chosen.isEmpty())
-            data->setText(chosen);
+    connect(browseData, &QPushButton::clicked, dialog, [dialog, data]() {
+        file_pick::open(dialog, "Rows to Render", data->text(), "CSV files (*.csv);;All Files (*)",
+            [data](const QString& chosen) { data->setText(chosen); });
     });
-    QLineEdit* output = new QLineEdit(job.output, &dialog);
-    QPushButton* browse = new QPushButton("Browse...", &dialog);
+    QLineEdit* output = new QLineEdit(job.output, dialog);
+    QPushButton* browse = new QPushButton("Browse...", dialog);
     QHBoxLayout* outputRow = new QHBoxLayout;
     outputRow->addWidget(output, 1);
     outputRow->addWidget(browse);
     form->addRow("Into folder", outputRow);
-    connect(browse, &QPushButton::clicked, &dialog, [&dialog, output]() {
-        const QString chosen = QFileDialog::getExistingDirectory(&dialog, "Render Into", output->text());
-        if (!chosen.isEmpty())
-            output->setText(chosen);
+    connect(browse, &QPushButton::clicked, dialog, [dialog, output]() {
+        file_pick::directory(dialog, "Render Into", output->text(),
+            [output](const QString& chosen) { output->setText(chosen); });
     });
-    QComboBox* format = new QComboBox(&dialog);
+    QComboBox* format = new QComboBox(dialog);
     format->addItems({"mp4", "mov", "gif", "png"});
     format->setCurrentText(job.format.isEmpty() ? QString("mp4") : job.format);
     form->addRow("Each row as", format);
     form->addRow("", new QLabel("The first row names the template fields; each row after it is a movie,\n"
-                                "named by its file column when it has one.", &dialog));
-    QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
-    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
-    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+                                "named by its file column when it has one.", dialog));
+    QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, dialog);
+    connect(buttons, &QDialogButtonBox::accepted, dialog, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, dialog, &QDialog::reject);
     form->addRow(buttons);
-    if (dialog.exec() != QDialog::Accepted)
-        return false;
-    job.data = data->text().trimmed();
-    job.output = output->text().trimmed();
-    job.format = format->currentText();
-    return !job.data.isEmpty() && !job.output.isEmpty();
+    modal::open(dialog, [job, data, output, format, done](int result) {
+        if (result != QDialog::Accepted)
+            return;
+        RenderJob edited = job;
+        edited.data = data->text().trimmed();
+        edited.output = output->text().trimmed();
+        edited.format = format->currentText();
+        if (!edited.data.isEmpty() && !edited.output.isEmpty() && done)
+            done(edited);
+    });
 }
 
 void RenderQueue::start()

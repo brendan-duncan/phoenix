@@ -9,6 +9,8 @@
 #include "../util/gif_writer.h"
 #include "../util/share_formats.h"
 
+#include "file_pick.h"
+#include "modal.h"
 #include "phoenix_view.h"
 #include "timeline_audio.h"
 
@@ -183,31 +185,33 @@ MovieExportDialog::MovieExportDialog(const QSize& documentSize, int frameCount, 
     _chooseLayers = new QPushButton("All visible layers", this);
     _chooseLayers->setToolTip("Choose which layers get a sequence of their own");
     connect(_chooseLayers, &QPushButton::clicked, this, [this]() {
-        QDialog chooser(this);
-        chooser.setWindowTitle("Layers to Export");
-        QVBoxLayout* list = new QVBoxLayout(&chooser);
+        QDialog* chooser = new QDialog(this);
+        chooser->setWindowTitle("Layers to Export");
+        QVBoxLayout* list = new QVBoxLayout(chooser);
         std::vector<QCheckBox*> boxes;
         for (const QString& name : _layerNames)
         {
-            QCheckBox* box = new QCheckBox(name, &chooser);
+            QCheckBox* box = new QCheckBox(name, chooser);
             box->setChecked(_chosenLayers.isEmpty() || _chosenLayers.contains(name));
             list->addWidget(box);
             boxes.push_back(box);
         }
-        QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &chooser);
-        connect(buttons, &QDialogButtonBox::accepted, &chooser, &QDialog::accept);
-        connect(buttons, &QDialogButtonBox::rejected, &chooser, &QDialog::reject);
+        QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, chooser);
+        connect(buttons, &QDialogButtonBox::accepted, chooser, &QDialog::accept);
+        connect(buttons, &QDialogButtonBox::rejected, chooser, &QDialog::reject);
         list->addWidget(buttons);
-        if (chooser.exec() != QDialog::Accepted)
-            return;
-        _chosenLayers.clear();
-        for (QCheckBox* box : boxes)
-            if (box->isChecked())
-                _chosenLayers << box->text();
-        if (_chosenLayers.size() == static_cast<int>(boxes.size()))
+        modal::open(chooser, [this, boxes](int result) {
+            if (result != QDialog::Accepted)
+                return;
             _chosenLayers.clear();
-        _chooseLayers->setText(_chosenLayers.isEmpty() ? QString("All visible layers")
-                                                       : QString("%1 layer%2").arg(_chosenLayers.size()).arg(_chosenLayers.size() == 1 ? "" : "s"));
+            for (QCheckBox* box : boxes)
+                if (box->isChecked())
+                    _chosenLayers << box->text();
+            if (_chosenLayers.size() == static_cast<int>(boxes.size()))
+                _chosenLayers.clear();
+            _chooseLayers->setText(_chosenLayers.isEmpty() ? QString("All visible layers")
+                                                           : QString("%1 layer%2").arg(_chosenLayers.size()).arg(_chosenLayers.size() == 1 ? "" : "s"));
+        });
     });
     form->addRow("Layers", _chooseLayers);
 
@@ -308,10 +312,11 @@ void MovieExportDialog::browse()
     const int index = _format->currentIndex();
     const char* filters[8] = {"PNG Images (*.png)", "MP4 Video (*.mp4);;QuickTime Movie (*.mov)", "GIF Animation (*.gif)",
         "PNG Images (*.png)", "WAV Sound (*.wav)", "PNG Images (*.png)", "OpenEXR Images (*.exr)", "SVG Images (*.svg)"};
-    const QString file = QFileDialog::getSaveFileName(this, "Export Movie", _path->text(),
-        filters[std::clamp(index, 0, kLastIndex)]);
-    if (!file.isEmpty())
-        _path->setText(file);
+    file_pick::save(this, "Export Movie", _path->text(), filters[std::clamp(index, 0, kLastIndex)],
+        [this](const QString& file) {
+            if (!file.isEmpty())
+                _path->setText(file);
+        });
 }
 
 void MovieExportDialog::widthChanged(int width)

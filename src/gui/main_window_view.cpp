@@ -4,6 +4,7 @@
 
 #include "main_window.h"
 #include "modal.h"
+#include "file_pick.h"
 
 #include "canvas_only.h"
 #include "stage_controls.h"
@@ -195,35 +196,39 @@ void MainWindow::addReferenceImages()
 {
     if (!_flaDocument || !_flaDocument->document || !_referenceBoard)
         return;
-    const QStringList paths = QFileDialog::getOpenFileNames(this, "Add Reference Image", _lastDirectory,
-        "Images (*.png *.jpg *.jpeg *.gif *.bmp *.webp *.tif *.tiff);;All files (*)");
-    if (paths.isEmpty())
-        return;
-    _lastDirectory = QFileInfo(paths.front()).absolutePath();
-    const size_t before = _referenceBoard->board().images.size();
-    const QStringList failed = _referenceBoard->addFiles(paths, nullptr);
-    if (!failed.isEmpty())
-        modal::warning(this, "Add Reference Image", "These could not be read as pictures:\n" + failed.join("\n"));
-    // Out of sight beside the stage, the view draws back to show it too.
-    const refs::Board board = _referenceBoard->board();
-    if (board.images.size() > before)
-    {
-        const fla::Document* document = _flaDocument->document;
-        QRectF wanted(0, 0, document->width, document->height);
-        for (size_t i = before; i < board.images.size(); ++i)
-        {
-            const QSizeF size = _referenceBoard->imageSize(static_cast<int>(i));
-            wanted |= _referenceBoard->imageToStage(board.images[i]).mapRect(QRectF(QPointF(0, 0), size));
-        }
-        const QRectF shown(_phoenixView->widgetToStage(QPointF(0, 0)),
-            _phoenixView->widgetToStage(QPointF(_phoenixView->width(), _phoenixView->height())));
-        if (!shown.normalized().contains(wanted))
-            _phoenixView->zoomToRect(wanted.adjusted(-20, -20, 20, 20));
-        _phoenixView->update();
-        statusBar()->showMessage("Reference images are never exported. View > Reference Images > Arrange Reference "
-                                 "Images moves and sizes them",
-            8000);
-    }
+    const fla::FLADocument* asked = _flaDocument;
+    file_pick::openMany(this, "Add Reference Image", _lastDirectory,
+        "Images (*.png *.jpg *.jpeg *.gif *.bmp *.webp *.tif *.tiff);;All files (*)",
+        [this, asked](const QStringList& paths) {
+            // In a browser the document may have changed while the picker was up.
+            if (paths.isEmpty() || _flaDocument != asked || !_flaDocument || !_referenceBoard)
+                return;
+            _lastDirectory = QFileInfo(paths.front()).absolutePath();
+            const size_t before = _referenceBoard->board().images.size();
+            const QStringList failed = _referenceBoard->addFiles(paths, nullptr);
+            if (!failed.isEmpty())
+                modal::warning(this, "Add Reference Image", "These could not be read as pictures:\n" + failed.join("\n"));
+            // Out of sight beside the stage, the view draws back to show it too.
+            const refs::Board board = _referenceBoard->board();
+            if (board.images.size() > before)
+            {
+                const fla::Document* document = _flaDocument->document;
+                QRectF wanted(0, 0, document->width, document->height);
+                for (size_t i = before; i < board.images.size(); ++i)
+                {
+                    const QSizeF size = _referenceBoard->imageSize(static_cast<int>(i));
+                    wanted |= _referenceBoard->imageToStage(board.images[i]).mapRect(QRectF(QPointF(0, 0), size));
+                }
+                const QRectF shown(_phoenixView->widgetToStage(QPointF(0, 0)),
+                    _phoenixView->widgetToStage(QPointF(_phoenixView->width(), _phoenixView->height())));
+                if (!shown.normalized().contains(wanted))
+                    _phoenixView->zoomToRect(wanted.adjusted(-20, -20, 20, 20));
+                _phoenixView->update();
+                statusBar()->showMessage("Reference images are never exported. View > Reference Images > Arrange Reference "
+                                         "Images moves and sizes them",
+                    8000);
+            }
+        });
 }
 
 bool MainWindow::showReferenceMenu(const QPoint& globalPos)

@@ -66,8 +66,11 @@ private:
     void save() const;
     void load();
     void addJob(const QString& document, const QString& data = QString());
-    bool editJob(RenderJob& job);
-    bool editDataJob(RenderJob& job, QDialog& dialog, class QFormLayout* form);
+    /// Shows \a job's settings to change; \a done gets the job as changed,
+    /// and is not called when the dialog is canceled or left incomplete.
+    void editJob(const RenderJob& job, std::function<void(const RenderJob&)> done);
+    void editDataJob(const RenderJob& job, QDialog* dialog, class QFormLayout* form,
+        std::function<void(const RenderJob&)> done);
     void start();
     void runNext();
     void stop();

@@ -1,5 +1,6 @@
 #include "image_export.h"
 
+#include "file_pick.h"
 #include "phoenix_view.h"
 #include "../data/document.h"
 #include "../data/fla_document.h"
@@ -156,12 +157,11 @@ ImageExportDialog::ImageExportDialog(const QSize& documentSize, int frameCount, 
     _matteSwatch->setIcon(colorIcon(_matteColor));
     _matteSwatch->setAutoRaise(true);
     connect(_matteSwatch, &QToolButton::clicked, this, [this]() {
-        const QColor chosen = SwatchPopup::getColor(_matteSwatch, nullptr, _matteColor, "Matte Color", false);
-        if (!chosen.isValid())
-            return;
-        _matteColor = chosen;
-        _matteSwatch->setIcon(colorIcon(chosen));
-        _matte->setCurrentIndex(2);
+        SwatchPopup::getColor(_matteSwatch, nullptr, _matteColor, "Matte Color", false, [this](const QColor& chosen) {
+            _matteColor = chosen;
+            _matteSwatch->setIcon(colorIcon(chosen));
+            _matte->setCurrentIndex(2);
+        });
     });
     QHBoxLayout* matteRow = new QHBoxLayout();
     matteRow->addWidget(_matte, 1);
@@ -236,12 +236,11 @@ void ImageExportDialog::formatChanged()
 
 void ImageExportDialog::browse()
 {
-    const QString chosen = QFileDialog::getSaveFileName(this, "Export Image", _path->text(),
-        "PNG Image (*.png);;JPEG Image (*.jpg *.jpeg);;GIF Image (*.gif)");
-    if (chosen.isEmpty())
-        return;
-    _path->setText(chosen);
-    _format->setCurrentIndex(static_cast<int>(formatOf(chosen)));
+    file_pick::save(this, "Export Image", _path->text(), "PNG Image (*.png);;JPEG Image (*.jpg *.jpeg);;GIF Image (*.gif)",
+        [this](const QString& chosen) {
+            _path->setText(chosen);
+            _format->setCurrentIndex(static_cast<int>(formatOf(chosen)));
+        });
 }
 
 ImageExportSettings ImageExportDialog::settings() const

@@ -181,19 +181,25 @@ void ControllersPanel::addController()
     fla::CommandStack* commands = _links.commands ? _links.commands() : nullptr;
     if (!document || !commands)
         return;
-    std::vector<fla::controllers::Controller> list = fla::controllers::load(*document);
-    bool ok = false;
-    const QString name = QInputDialog::getText(this, "New Controller", "Name:", QLineEdit::Normal,
-        QString("Controller %1").arg(list.size() + 1), &ok).trimmed();
-    if (!ok || name.isEmpty())
-        return;
-    fla::controllers::Controller controller;
-    controller.name = name.toStdString();
-    list.push_back(controller);
-    commands->push(fla::CommandPtr(new fla::SetPropertyCommand<Attributes>(document->extraAttributes,
-        document->extraAttributes, fla::controllers::saved(*document, list), "New Controller")));
-    refresh();
-    _list->setCurrentItem(_list->topLevelItem(_list->topLevelItemCount() - 1));
+    const size_t count = fla::controllers::load(*document).size();
+    modal::getText(this, "New Controller", "Name:", QString("Controller %1").arg(count + 1),
+        [this, document](const QString& text) {
+            const QString name = text.trimmed();
+            if (name.isEmpty())
+                return;
+            // The document may have changed while the name was asked for.
+            fla::CommandStack* commands = _links.commands ? _links.commands() : nullptr;
+            if (!commands || !_links.document || _links.document() != document)
+                return;
+            std::vector<fla::controllers::Controller> list = fla::controllers::load(*document);
+            fla::controllers::Controller controller;
+            controller.name = name.toStdString();
+            list.push_back(controller);
+            commands->push(fla::CommandPtr(new fla::SetPropertyCommand<Attributes>(document->extraAttributes,
+                document->extraAttributes, fla::controllers::saved(*document, list), "New Controller")));
+            refresh();
+            _list->setCurrentItem(_list->topLevelItem(_list->topLevelItemCount() - 1));
+        });
 }
 
 void ControllersPanel::bind()
@@ -215,16 +221,16 @@ void ControllersPanel::bind()
     }
     const int frame = _links.currentFrame ? _links.currentFrame() : 0;
 
-    QDialog dialog(this);
-    dialog.setWindowTitle("Bind to Controller");
-    QFormLayout* form = new QFormLayout(&dialog);
-    form->addRow("Layer:", new QLabel(QString::fromStdString(layer->name), &dialog));
-    QComboBox* property = new QComboBox(&dialog);
+    QDialog* dialog = new QDialog(this);
+    dialog->setWindowTitle("Bind to Controller");
+    QFormLayout* form = new QFormLayout(dialog);
+    form->addRow("Layer:", new QLabel(QString::fromStdString(layer->name), dialog));
+    QComboBox* property = new QComboBox(dialog);
     for (const std::string& name : fla::controllers::properties())
         property->addItem(propertyLabel(name), QString::fromStdString(name));
     form->addRow("Property:", property);
-    HotDoubleSpinBox* from = new HotDoubleSpinBox(&dialog);
-    HotDoubleSpinBox* to = new HotDoubleSpinBox(&dialog);
+    HotDoubleSpinBox* from = new HotDoubleSpinBox(dialog);
+    HotDoubleSpinBox* to = new HotDoubleSpinBox(dialog);
     for (HotDoubleSpinBox* box : {from, to})
     {
         box->setRange(-100000.0, 100000.0);
@@ -235,7 +241,7 @@ void ControllersPanel::bind()
     form->addRow("At 0:", from);
     form->addRow("At 1:", to);
     // Both start at the value it has now.
-    const auto fill = [&]() {
+    const auto fill = [layer, frame, property, from, to]() {
         double now = 0.0;
         if (fla::controllers::currentValue(*layer, frame, property->currentData().toString().toStdString(), now))
         {
@@ -244,27 +250,32 @@ void ControllersPanel::bind()
         }
     };
     fill();
-    connect(property, &QComboBox::currentIndexChanged, &dialog, fill);
-    QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+    connect(property, &QComboBox::currentIndexChanged, dialog, fill);
+    QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, dialog);
     form->addRow(buttons);
-    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
-    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
-    if (dialog.exec() != QDialog::Accepted)
-        return;
+    connect(buttons, &QDialogButtonBox::accepted, dialog, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, dialog, &QDialog::reject);
+    modal::open(dialog, [this, document, commands, index, timeline, layer, property, from, to](int result) {
+        if (result != QDialog::Accepted)
+            return;
+        // The document may have changed while the dialog was up.
+        if (!_links.document || _links.document() != document || !_links.commands || _links.commands() != commands)
+            return;
 
-    std::vector<fla::controllers::Controller> list = fla::controllers::load(*document);
-    if (index >= static_cast<int>(list.size()))
-        return;
-    fla::controllers::Binding binding;
-    binding.timeline = fla::controllers::nameOf(*document, timeline);
-    binding.layer = layer->name;
-    binding.property = property->currentData().toString().toStdString();
-    binding.from = from->value();
-    binding.to = to->value();
-    list[static_cast<size_t>(index)].bindings.push_back(binding);
-    commands->push(fla::CommandPtr(new fla::SetPropertyCommand<Attributes>(document->extraAttributes,
-        document->extraAttributes, fla::controllers::saved(*document, list), "Bind to Controller")));
-    refresh();
+        std::vector<fla::controllers::Controller> list = fla::controllers::load(*document);
+        if (index >= static_cast<int>(list.size()))
+            return;
+        fla::controllers::Binding binding;
+        binding.timeline = fla::controllers::nameOf(*document, timeline);
+        binding.layer = layer->name;
+        binding.property = property->currentData().toString().toStdString();
+        binding.from = from->value();
+        binding.to = to->value();
+        list[static_cast<size_t>(index)].bindings.push_back(binding);
+        commands->push(fla::CommandPtr(new fla::SetPropertyCommand<Attributes>(document->extraAttributes,
+            document->extraAttributes, fla::controllers::saved(*document, list), "Bind to Controller")));
+        refresh();
+    });
 }
 
 void ControllersPanel::removeSelected()

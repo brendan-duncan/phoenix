@@ -35,7 +35,8 @@ void MainWindow::shareMovie()
         return written;
     };
     hooks.reveal = [](const QString& path) { revealInFileManager(path); };
-    ShareDialog dialog(QSize(static_cast<int>(std::lround(document->width)), static_cast<int>(std::lround(document->height))),
+    ShareDialog* dialog = new ShareDialog(
+        QSize(static_cast<int>(std::lround(document->width)), static_cast<int>(std::lround(document->height))),
         document->frameRate, std::max(1, _phoenixView->frameCount()), base, hooks, this);
-    dialog.exec();
+    modal::open(dialog);
 }

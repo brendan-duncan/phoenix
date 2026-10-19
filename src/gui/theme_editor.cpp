@@ -1,4 +1,5 @@
 #include "theme_editor.h"
+#include "file_pick.h"
 #include "modal.h"
 
 #include <QColorDialog>
@@ -114,65 +115,63 @@ ThemeEditor::ThemeEditor(QWidget* parent)
         const QString key = item ? item->data(0, KeyRole).toString() : QString();
         if (key.isEmpty())
             return;
-        QMenu menu(this);
-        QAction* change = menu.addAction("Change...");
-        QAction* reset = menu.addAction(QString("Use %1's Own").arg(_theme.base));
+        QMenu* menu = new QMenu(this);
+        QAction* change = menu->addAction("Change...");
+        QAction* reset = menu->addAction(QString("Use %1's Own").arg(_theme.base));
         reset->setEnabled(_theme.colors.contains(key));
-        QAction* chosen = menu.exec(_roles->viewport()->mapToGlobal(at));
-        if (chosen == change)
-        {
-            pick(item);
-        }
-        else if (chosen == reset)
-        {
-            _theme.colors.remove(key);
-            changed();
-        }
+        modal::popup(menu, _roles->viewport()->mapToGlobal(at), [this, item, key, change, reset](QAction* chosen) {
+            if (chosen == change)
+            {
+                pick(item);
+            }
+            else if (chosen == reset)
+            {
+                _theme.colors.remove(key);
+                changed();
+            }
+        });
     });
     connect(save, &QPushButton::clicked, this, [this]() {
-        if (saveAs())
-            accept();
+        saveAs([this]() { accept(); });
     });
     connect(buttons, &QDialogButtonBox::rejected, this, &ThemeEditor::reject);
     connect(import, &QPushButton::clicked, this, [this]() {
-        const QString path = QFileDialog::getOpenFileName(this, "Import Theme", QString(),
-            "Phoenix themes (*.phxtheme);;All files (*)");
-        if (path.isEmpty())
-            return;
-        QFile file(path);
-        bool ok = false;
-        theme::Theme imported = file.open(QIODevice::ReadOnly)
-            ? theme::Theme::fromJson(QJsonDocument::fromJson(file.readAll()).object(), &ok) : theme::Theme();
-        if (!ok)
-        {
-            modal::warning(this, "Import Theme", "That file is not a Phoenix theme.");
-            return;
-        }
-        if (imported.name.isEmpty())
-            imported.name = QFileInfo(path).completeBaseName();
-        const QString base = imported.name;
-        for (int n = 2; theme::names().contains(imported.name); ++n)
-            imported.name = QString("%1 %2").arg(base).arg(n);
-        if (!theme::save(imported))
-        {
-            modal::warning(this, "Import Theme", "The theme could not be saved.");
-            return;
-        }
-        _start->blockSignals(true);
-        _start->clear();
-        _start->addItems(theme::names());
-        _start->blockSignals(false);
-        _start->setCurrentText(imported.name);
+        file_pick::open(this, "Import Theme", QString(), "Phoenix themes (*.phxtheme);;All files (*)",
+            [this](const QString& path) {
+                QFile file(path);
+                bool ok = false;
+                theme::Theme imported = file.open(QIODevice::ReadOnly)
+                    ? theme::Theme::fromJson(QJsonDocument::fromJson(file.readAll()).object(), &ok) : theme::Theme();
+                if (!ok)
+                {
+                    modal::warning(this, "Import Theme", "That file is not a Phoenix theme.");
+                    return;
+                }
+                if (imported.name.isEmpty())
+                    imported.name = QFileInfo(path).completeBaseName();
+                const QString base = imported.name;
+                for (int n = 2; theme::names().contains(imported.name); ++n)
+                    imported.name = QString("%1 %2").arg(base).arg(n);
+                if (!theme::save(imported))
+                {
+                    modal::warning(this, "Import Theme", "The theme could not be saved.");
+                    return;
+                }
+                _start->blockSignals(true);
+                _start->clear();
+                _start->addItems(theme::names());
+                _start->blockSignals(false);
+                _start->setCurrentText(imported.name);
+            });
     });
     connect(exportButton, &QPushButton::clicked, this, [this]() {
         const QString name = _theme.name.isEmpty() ? QString("Theme") : _theme.name;
-        const QString path = QFileDialog::getSaveFileName(this, "Export Theme", name + ".phxtheme",
-            "Phoenix themes (*.phxtheme)");
-        if (path.isEmpty())
-            return;
-        QFile file(path);
-        if (!file.open(QIODevice::WriteOnly) || file.write(QJsonDocument(_theme.toJson()).toJson()) < 0)
-            modal::warning(this, "Export Theme", QString("Could not write %1.").arg(path));
+        file_pick::save(this, "Export Theme", name + ".phxtheme", "Phoenix themes (*.phxtheme)",
+            [this](const QString& path) {
+                QFile file(path);
+                if (!file.open(QIODevice::WriteOnly) || file.write(QJsonDocument(_theme.toJson()).toJson()) < 0)
+                    modal::warning(this, "Export Theme", QString("Could not write %1.").arg(path));
+            });
     });
     connect(remove, &QPushButton::clicked, this, [this]() {
         const QString name = _start->currentText();
@@ -181,14 +180,17 @@ ThemeEditor::ThemeEditor(QWidget* parent)
             modal::information(this, "Delete Theme", "The built-in themes stay.");
             return;
         }
-        if (QMessageBox::question(this, "Delete Theme", QString("Delete the theme %1?").arg(name)) != QMessageBox::Yes)
-            return;
-        theme::remove(name);
-        if (_was == name)
-            _was = "Follow System";
-        _start->clear();
-        _start->addItems(theme::names());
-        _start->setCurrentText(_was);
+        modal::ask(this, QMessageBox::Question, "Delete Theme", QString("Delete the theme %1?").arg(name),
+            QMessageBox::Yes | QMessageBox::No, QMessageBox::NoButton, [this, name](QMessageBox::StandardButton answer) {
+                if (answer != QMessageBox::Yes)
+                    return;
+                theme::remove(name);
+                if (_was == name)
+                    _was = "Follow System";
+                _start->clear();
+                _start->addItems(theme::names());
+                _start->setCurrentText(_was);
+            });
     });
 
     startFrom(_was);
@@ -249,11 +251,12 @@ void ThemeEditor::pick(QTreeWidgetItem* item)
     const QString key = item ? item->data(0, KeyRole).toString() : QString();
     if (key.isEmpty())
         return;
-    const QColor chosen = QColorDialog::getColor(_theme.color(key), this, item->text(0), QColorDialog::ShowAlphaChannel);
-    if (!chosen.isValid())
-        return;
-    _theme.colors[key] = chosen;
-    changed();
+    modal::getColor(_theme.color(key), this, item->text(0), [this, key](const QColor& chosen) {
+        if (!chosen.isValid())
+            return;
+        _theme.colors[key] = chosen;
+        changed();
+    }, QColorDialog::ShowAlphaChannel);
 }
 
 void ThemeEditor::changed()
@@ -263,26 +266,39 @@ void ThemeEditor::changed()
     fill();
 }
 
-bool ThemeEditor::saveAs()
+void ThemeEditor::saveAs(std::function<void()> saved)
 {
-    bool ok = false;
-    QString name = QInputDialog::getText(this, "Save Theme", "Theme name:", QLineEdit::Normal,
-        _theme.name.isEmpty() ? QString("My Theme") : _theme.name, &ok).trimmed();
-    if (!ok || name.isEmpty())
-        return false;
-    if (theme::builtInNames().contains(name))
-    {
-        modal::information(this, "Save Theme", "Pick a name other than the built-in themes'.");
-        return false;
-    }
-    if (theme::names().contains(name) && name != _theme.name &&
-        QMessageBox::question(this, "Save Theme", QString("Replace the theme %1?").arg(name)) != QMessageBox::Yes)
-        return false;
+    modal::getText(this, "Save Theme", "Theme name:", _theme.name.isEmpty() ? QString("My Theme") : _theme.name,
+        [this, saved](const QString& typed) {
+            const QString name = typed.trimmed();
+            if (name.isEmpty())
+                return;
+            if (theme::builtInNames().contains(name))
+            {
+                modal::information(this, "Save Theme", "Pick a name other than the built-in themes'.");
+                return;
+            }
+            if (theme::names().contains(name) && name != _theme.name)
+            {
+                modal::ask(this, QMessageBox::Question, "Save Theme", QString("Replace the theme %1?").arg(name),
+                    QMessageBox::Yes | QMessageBox::No, QMessageBox::NoButton,
+                    [this, name, saved](QMessageBox::StandardButton answer) {
+                        if (answer == QMessageBox::Yes)
+                            saveUnder(name, saved);
+                    });
+                return;
+            }
+            saveUnder(name, saved);
+        });
+}
+
+void ThemeEditor::saveUnder(const QString& name, std::function<void()> saved)
+{
     _theme.name = name;
     if (!theme::save(_theme))
     {
         modal::warning(this, "Save Theme", "The theme could not be saved.");
-        return false;
+        return;
     }
     // The onion skin takes the theme's colors from now on.
     QSettings settings;
@@ -292,7 +308,8 @@ bool ThemeEditor::saveAs()
     theme::use(name);
     if (_theme.uiScale != 1.0)
         modal::information(this, "Save Theme", "The UI scale is used from the next start.");
-    return true;
+    if (saved)
+        saved();
 }
 
 void ThemeEditor::reject()

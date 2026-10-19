@@ -12,9 +12,14 @@
 // What a callback needs from the dialog, it reads from the dialog it is
 // given: the dialog is deleted only after the callback returns.
 
+#include <QColor>
+#include <QColorDialog>
+#include <QFont>
+#include <QLineEdit>
 #include <QMessageBox>
 #include <QPoint>
 #include <QString>
+#include <QStringList>
 
 #include <functional>
 
@@ -56,5 +61,23 @@ void about(QWidget* parent, const QString& title, const QString& text);
 /// or nullptr; then deletes it. \a menu is created with new and handed over.
 /// Actions connected to as usual are triggered as usual.
 void popup(QMenu* menu, const QPoint& globalPos, std::function<void(QAction*)> done = {});
+
+// QInputDialog's, QColorDialog's and QFontDialog's get functions, with the
+// same arguments. \a done is called only when the dialog is accepted, with
+// what was entered or chosen.
+
+void getText(QWidget* parent, const QString& title, const QString& label, const QString& text,
+    std::function<void(const QString&)> done, QLineEdit::EchoMode echo = QLineEdit::Normal);
+void getMultiLineText(QWidget* parent, const QString& title, const QString& label, const QString& text,
+    std::function<void(const QString&)> done);
+void getInt(QWidget* parent, const QString& title, const QString& label, int value, int minimum, int maximum,
+    int step, std::function<void(int)> done);
+void getDouble(QWidget* parent, const QString& title, const QString& label, double value, double minimum,
+    double maximum, int decimals, std::function<void(double)> done, double step = 1.0);
+void getItem(QWidget* parent, const QString& title, const QString& label, const QStringList& items, int current,
+    bool editable, std::function<void(const QString&)> done);
+void getColor(const QColor& initial, QWidget* parent, const QString& title, std::function<void(const QColor&)> done,
+    QColorDialog::ColorDialogOptions options = {});
+void getFont(const QFont& initial, QWidget* parent, const QString& title, std::function<void(const QFont&)> done);
 
 } // namespace modal

@@ -1,6 +1,7 @@
 #include "primitive_tool.h"
 
 #include "draw_placement.h"
+#include "modal.h"
 #include "phoenix_view.h"
 
 #include "../data/frame.h"
@@ -216,37 +217,50 @@ bool PrimitiveTool::mouseRelease(PhoenixView& view, QMouseEvent* event, const QP
     const bool click = std::hypot(_end.x() - _start.x(), _end.y() - _start.y()) < 2.0;
     if (_altClick && click && _kind != Kind::Line && _kind != Kind::PolyStar)
     {
-        if (!askSize(view, _start, start, end))
-        {
-            view.update();
-            return true;
-        }
+        PhoenixView* asked = &view;
+        askSize(view, _start, [this, asked](const QPointF& from, const QPointF& to) {
+            // The frame drawn on, as it is once the size is given.
+            fla::Frame* now = asked->activeFrame();
+            if (!now)
+            {
+                asked->update();
+                return;
+            }
+            drawBetween(*asked, now, from, to);
+        });
+        return true;
     }
 
+    drawBetween(view, frame, start, end);
+    return true;
+}
+
+void PrimitiveTool::drawBetween(PhoenixView& view, fla::Frame* frame, const QPointF& start, const QPointF& end)
+{
     fla::Element* element = createElement(frame, start, end);
     if (!element)
     {
         // Too small to be a shape, so the click drew nothing.
         view.update();
-        return true;
+        return;
     }
 
     placeDrawnElement(view, _commandStack, _selection, frame, element, name(),
         _style.objectDrawing);
-    return true;
 }
 
-bool PrimitiveTool::askSize(PhoenixView& view, const QPointF& at, QPointF& start, QPointF& end)
+void PrimitiveTool::askSize(PhoenixView& view, const QPointF& at,
+    std::function<void(const QPointF& start, const QPointF& end)> done)
 {
     const bool rectangle = _kind == Kind::Rectangle || _kind == Kind::RectanglePrimitive;
-    QDialog dialog(&view);
-    dialog.setWindowTitle(rectangle ? "Rectangle Settings" : "Oval Settings");
-    QFormLayout* form = new QFormLayout(&dialog);
+    QDialog* dialog = new QDialog(&view);
+    dialog->setWindowTitle(rectangle ? "Rectangle Settings" : "Oval Settings");
+    QFormLayout* form = new QFormLayout(dialog);
     // The last size asked for, from run to run.
     QSettings settings;
     const QString key = rectangle ? "rectangleSettings" : "ovalSettings";
-    HotDoubleSpinBox* width = new HotDoubleSpinBox(&dialog);
-    HotDoubleSpinBox* height = new HotDoubleSpinBox(&dialog);
+    HotDoubleSpinBox* width = new HotDoubleSpinBox(dialog);
+    HotDoubleSpinBox* height = new HotDoubleSpinBox(dialog);
     for (HotDoubleSpinBox* box : {width, height})
     {
         box->setRange(1.0, 8192.0);
@@ -260,31 +274,37 @@ bool PrimitiveTool::askSize(PhoenixView& view, const QPointF& at, QPointF& start
     HotDoubleSpinBox* radius = nullptr;
     if (rectangle)
     {
-        radius = new HotDoubleSpinBox(&dialog);
+        radius = new HotDoubleSpinBox(dialog);
         radius->setRange(-500.0, 500.0);
         radius->setDecimals(2);
         radius->setSuffix(" px");
         radius->setValue(_style.cornerRadius);
         form->addRow("Corner radius:", radius);
     }
-    QCheckBox* center = new QCheckBox("Draw from center", &dialog);
+    QCheckBox* center = new QCheckBox("Draw from center", dialog);
     center->setChecked(settings.value(key + "/center", false).toBool());
     form->addRow("", center);
-    QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
-    QObject::connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
-    QObject::connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, dialog);
+    QObject::connect(buttons, &QDialogButtonBox::accepted, dialog, &QDialog::accept);
+    QObject::connect(buttons, &QDialogButtonBox::rejected, dialog, &QDialog::reject);
     form->addRow(buttons);
-    if (dialog.exec() != QDialog::Accepted)
-        return false;
-    settings.setValue(key + "/width", width->value());
-    settings.setValue(key + "/height", height->value());
-    settings.setValue(key + "/center", center->isChecked());
-    if (radius)
-        _cornerRadius = radius->value();
-    const QPointF size(width->value(), height->value());
-    start = center->isChecked() ? at - size / 2.0 : at;
-    end = start + size;
-    return true;
+    PhoenixView* asked = &view;
+    modal::open(dialog, [this, asked, at, key, width, height, radius, center, done](int result) {
+        if (result != QDialog::Accepted)
+        {
+            asked->update();
+            return;
+        }
+        QSettings stored;
+        stored.setValue(key + "/width", width->value());
+        stored.setValue(key + "/height", height->value());
+        stored.setValue(key + "/center", center->isChecked());
+        if (radius)
+            _cornerRadius = radius->value();
+        const QPointF size(width->value(), height->value());
+        const QPointF start = center->isChecked() ? at - size / 2.0 : at;
+        done(start, start + size);
+    });
 }
 
 bool PrimitiveTool::keyPress(PhoenixView& view, QKeyEvent* event)

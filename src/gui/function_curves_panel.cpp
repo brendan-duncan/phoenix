@@ -2,6 +2,7 @@
 #include "behavior_library.h"
 #include "../jsfl/behavior_frames.h"
 
+#include "modal.h"
 #include "theme.h"
 
 #include "../data/layer.h"
@@ -211,11 +212,9 @@ protected:
         if (index < 0)
             return;
         const fla::curves::Key key = _keys[static_cast<size_t>(index)];
-        bool ok = false;
-        const double value = QInputDialog::getDouble(this, "Keyframe Value",
-            QString("%1 on frame %2:").arg(_panel->_property->currentText()).arg(key.frame + 1), key.value, -1.0e7, 1.0e7, 3, &ok);
-        if (ok)
-            commit(key.frame, value);
+        modal::getDouble(this, "Keyframe Value",
+            QString("%1 on frame %2:").arg(_panel->_property->currentText()).arg(key.frame + 1), key.value, -1.0e7, 1.0e7, 3,
+            [this, key](double value) { commit(key.frame, value); });
     }
 
 private:

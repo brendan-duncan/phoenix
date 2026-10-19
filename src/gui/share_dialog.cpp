@@ -1,4 +1,5 @@
 #include "share_dialog.h"
+#include "file_pick.h"
 #include "modal.h"
 
 #include "new_document_dialog.h"
@@ -438,10 +439,7 @@ void ShareDialog::save()
         folder = QStandardPaths::writableLocation(QStandardPaths::PicturesLocation);
     const QString suggested = QDir(folder).filePath(_baseName + "." + share::suffix(chosen));
     const QString filter = QString("%1 (*.%2)").arg(share::title(chosen), share::suffix(chosen));
-    const QString path = QFileDialog::getSaveFileName(this, "Share", suggested, filter);
-    if (path.isEmpty())
-        return;
-    saveTo(path);
+    file_pick::save(this, "Share", suggested, filter, [this](const QString& path) { saveTo(path); });
 }
 
 bool ShareDialog::saveTo(const QString& given)

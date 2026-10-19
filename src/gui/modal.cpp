@@ -2,7 +2,9 @@
 
 #include <QAction>
 #include <QDialog>
+#include <QFontDialog>
 #include <QIcon>
+#include <QInputDialog>
 #include <QMenu>
 #include <QPointer>
 
@@ -119,6 +121,113 @@ void popup(QMenu* menu, const QPoint& globalPos, std::function<void(QAction*)> d
         done(chosen);
     delete menu;
 #endif
+}
+
+namespace {
+
+/// An input dialog set up as QInputDialog's get functions set it up.
+QInputDialog* inputDialog(QWidget* parent, const QString& title, const QString& label)
+{
+    QInputDialog* dialog = new QInputDialog(parent);
+    dialog->setWindowTitle(title);
+    dialog->setLabelText(label);
+    return dialog;
+}
+
+} // namespace
+
+void getText(QWidget* parent, const QString& title, const QString& label, const QString& text,
+    std::function<void(const QString&)> done, QLineEdit::EchoMode echo)
+{
+    QInputDialog* dialog = inputDialog(parent, title, label);
+    dialog->setInputMode(QInputDialog::TextInput);
+    dialog->setTextEchoMode(echo);
+    dialog->setTextValue(text);
+    open(dialog, [dialog, done](int result) {
+        if (result == QDialog::Accepted && done)
+            done(dialog->textValue());
+    });
+}
+
+void getMultiLineText(QWidget* parent, const QString& title, const QString& label, const QString& text,
+    std::function<void(const QString&)> done)
+{
+    QInputDialog* dialog = inputDialog(parent, title, label);
+    dialog->setInputMode(QInputDialog::TextInput);
+    dialog->setOption(QInputDialog::UsePlainTextEditForTextInput);
+    dialog->setTextValue(text);
+    open(dialog, [dialog, done](int result) {
+        if (result == QDialog::Accepted && done)
+            done(dialog->textValue());
+    });
+}
+
+void getInt(QWidget* parent, const QString& title, const QString& label, int value, int minimum, int maximum,
+    int step, std::function<void(int)> done)
+{
+    QInputDialog* dialog = inputDialog(parent, title, label);
+    dialog->setInputMode(QInputDialog::IntInput);
+    dialog->setIntRange(minimum, maximum);
+    dialog->setIntStep(step);
+    dialog->setIntValue(value);
+    open(dialog, [dialog, done](int result) {
+        if (result == QDialog::Accepted && done)
+            done(dialog->intValue());
+    });
+}
+
+void getDouble(QWidget* parent, const QString& title, const QString& label, double value, double minimum,
+    double maximum, int decimals, std::function<void(double)> done, double step)
+{
+    QInputDialog* dialog = inputDialog(parent, title, label);
+    dialog->setInputMode(QInputDialog::DoubleInput);
+    dialog->setDoubleDecimals(decimals);
+    dialog->setDoubleRange(minimum, maximum);
+    dialog->setDoubleStep(step);
+    dialog->setDoubleValue(value);
+    open(dialog, [dialog, done](int result) {
+        if (result == QDialog::Accepted && done)
+            done(dialog->doubleValue());
+    });
+}
+
+void getItem(QWidget* parent, const QString& title, const QString& label, const QStringList& items, int current,
+    bool editable, std::function<void(const QString&)> done)
+{
+    QInputDialog* dialog = inputDialog(parent, title, label);
+    dialog->setComboBoxItems(items);
+    dialog->setComboBoxEditable(editable);
+    if (current >= 0 && current < items.size())
+        dialog->setTextValue(items.at(current));
+    open(dialog, [dialog, done](int result) {
+        if (result == QDialog::Accepted && done)
+            done(dialog->textValue());
+    });
+}
+
+void getColor(const QColor& initial, QWidget* parent, const QString& title, std::function<void(const QColor&)> done,
+    QColorDialog::ColorDialogOptions options)
+{
+    QColorDialog* dialog = new QColorDialog(parent);
+    if (!title.isEmpty())
+        dialog->setWindowTitle(title);
+    dialog->setOptions(options);
+    dialog->setCurrentColor(initial);
+    open(dialog, [dialog, done](int result) {
+        if (result == QDialog::Accepted && done)
+            done(dialog->selectedColor());
+    });
+}
+
+void getFont(const QFont& initial, QWidget* parent, const QString& title, std::function<void(const QFont&)> done)
+{
+    QFontDialog* dialog = new QFontDialog(initial, parent);
+    if (!title.isEmpty())
+        dialog->setWindowTitle(title);
+    open(dialog, [dialog, done](int result) {
+        if (result == QDialog::Accepted && done)
+            done(dialog->selectedFont());
+    });
 }
 
 } // namespace modal

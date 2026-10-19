@@ -1,4 +1,5 @@
 #include "lip_sync_dialog.h"
+#include "file_pick.h"
 #include "modal.h"
 
 #include "audio_engine.h"
@@ -164,29 +165,24 @@ LipSyncDialog::LipSyncDialog(const QString& mouthName, const std::map<std::strin
     layout->addWidget(buttons);
 
     connect(audioBrowse, &QPushButton::clicked, this, [this]() {
-        const QString file = QFileDialog::getOpenFileName(this, "Recording", _audio->text(), "Audio (*.wav *.ogg);;All files (*)");
-        if (!file.isEmpty())
-        {
+        file_pick::open(this, "Recording", _audio->text(), "Audio (*.wav *.ogg);;All files (*)", [this](const QString& file) {
             _audio->setText(file);
             _fromAudio->setChecked(true);
-        }
+        });
     });
     connect(rhubarbBrowse, &QPushButton::clicked, this, [this]() {
-        const QString file = QFileDialog::getOpenFileName(this, "Rhubarb Lip Sync", _rhubarb->text(), "rhubarb (rhubarb*);;All files (*)");
-        if (!file.isEmpty())
-        {
-            _rhubarb->setText(file);
-            QSettings().setValue("lipsync/rhubarb", file);
-        }
+        file_pick::open(this, "Rhubarb Lip Sync", _rhubarb->text(), "rhubarb (rhubarb*);;All files (*)",
+            [this](const QString& file) {
+                _rhubarb->setText(file);
+                QSettings().setValue("lipsync/rhubarb", file);
+            });
     });
     connect(cueBrowse, &QPushButton::clicked, this, [this]() {
-        const QString file = QFileDialog::getOpenFileName(this, "Cue File", _cueFile->text(),
-            "Mouth cues (*.tsv *.txt *.dat);;All files (*)");
-        if (!file.isEmpty())
-        {
-            _cueFile->setText(file);
-            _fromCues->setChecked(true);
-        }
+        file_pick::open(this, "Cue File", _cueFile->text(), "Mouth cues (*.tsv *.txt *.dat);;All files (*)",
+            [this](const QString& file) {
+                _cueFile->setText(file);
+                _fromCues->setChecked(true);
+            });
     });
     connect(readButton, &QPushButton::clicked, this, [this]() { read(); });
     connect(buttons, &QDialogButtonBox::accepted, this, [this]() {

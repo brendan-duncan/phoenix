@@ -1,6 +1,8 @@
 #include "brush_library_dialog.h"
 
 #include "brush_library_store.h"
+#include "file_pick.h"
+#include "modal.h"
 
 #include "../data/document.h"
 
@@ -131,11 +133,8 @@ BrushLibraryDialog::BrushLibraryDialog(BrushLibraryStore& store, Hooks hooks, QW
         if (!entry)
             return;
         const std::string guid = entry->definition.guid();
-        bool ok = false;
-        const QString name = QInputDialog::getText(this, "Rename Brush", "Name:", QLineEdit::Normal,
-            QString::fromStdString(entry->definition.name), &ok);
-        if (ok)
-            _store.renameBrush(guid, name);
+        modal::getText(this, "Rename Brush", "Name:", QString::fromStdString(entry->definition.name),
+            [this, guid](const QString& name) { _store.renameBrush(guid, name); });
     });
     connect(_move, &QPushButton::clicked, this, [this, chosenDefinition]() {
         const fla::BrushLibraryEntry* entry = chosenDefinition();
@@ -144,42 +143,41 @@ BrushLibraryDialog::BrushLibraryDialog(BrushLibraryStore& store, Hooks hooks, QW
         const std::string guid = entry->definition.guid();
         QStringList categories = _store.categories();
         categories.removeAll("Phoenix");
-        bool ok = false;
-        const QString category = QInputDialog::getItem(this, "Move Brush", "Category:", categories,
-            std::max<qsizetype>(0, categories.indexOf(QString::fromStdString(entry->category))), true, &ok);
-        if (ok)
-            _store.moveBrush(guid, category);
+        modal::getItem(this, "Move Brush", "Category:", categories,
+            static_cast<int>(std::max<qsizetype>(0, categories.indexOf(QString::fromStdString(entry->category)))), true,
+            [this, guid](const QString& category) { _store.moveBrush(guid, category); });
     });
     connect(_delete, &QPushButton::clicked, this, [this]() { _store.removeBrush(chosenGuid()); });
     connect(_renameCategory, &QPushButton::clicked, this, [this]() {
         const QString category = chosenCategory();
         if (category.isEmpty())
             return;
-        bool ok = false;
-        const QString name =
-            QInputDialog::getText(this, "Rename Category", "Name:", QLineEdit::Normal, category, &ok).trimmed();
-        if (ok && _store.renameCategory(category, name))
-        {
-            const QList<QListWidgetItem*> found = _categories->findItems(name, Qt::MatchStartsWith);
-            if (!found.isEmpty())
-                _categories->setCurrentItem(found.front());
-        }
+        modal::getText(this, "Rename Category", "Name:", category, [this, category](const QString& typed) {
+            const QString name = typed.trimmed();
+            if (_store.renameCategory(category, name))
+            {
+                const QList<QListWidgetItem*> found = _categories->findItems(name, Qt::MatchStartsWith);
+                if (!found.isEmpty())
+                    _categories->setCurrentItem(found.front());
+            }
+        });
     });
     connect(_deleteCategory, &QPushButton::clicked, this, [this]() {
         const QString category = chosenCategory();
         if (category.isEmpty())
             return;
-        if (QMessageBox::question(this, "Delete Category",
-                QString("Delete %1 and its brushes from the brush library? Documents that use them keep their "
-                        "copies.")
-                    .arg(category)) == QMessageBox::Yes)
-            _store.removeCategory(category);
+        modal::ask(this, QMessageBox::Question, "Delete Category",
+            QString("Delete %1 and its brushes from the brush library? Documents that use them keep their "
+                    "copies.")
+                .arg(category),
+            QMessageBox::Yes | QMessageBox::No, QMessageBox::NoButton, [this, category](QMessageBox::StandardButton answer) {
+                if (answer == QMessageBox::Yes)
+                    _store.removeCategory(category);
+            });
     });
     connect(import, &QPushButton::clicked, this, [this]() {
-        const QString path = QFileDialog::getOpenFileName(this, "Import Brushes from Document", QString(),
-            "Documents (*.fla *.xfl);;All files (*)");
-        if (!path.isEmpty())
-            importFrom(path);
+        file_pick::open(this, "Import Brushes from Document", QString(), "Documents (*.fla *.xfl);;All files (*)",
+            [this](const QString& path) { importFrom(path); });
     });
     connect(_fromThis, &QPushButton::clicked, this, [this]() {
         const fla::Document* document = _hooks.document ? _hooks.document() : nullptr;

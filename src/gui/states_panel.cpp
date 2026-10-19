@@ -1,4 +1,5 @@
 #include "states_panel.h"
+#include "modal.h"
 
 #include "../data/document.h"
 #include "../data/timeline.h"
@@ -838,16 +839,16 @@ void StatesPanel::addState()
         if (_graph.stateNamed(label) < 0)
             unused << QString::fromStdString(label);
 
-    QDialog dialog(this);
-    dialog.setWindowTitle("Add State");
-    QFormLayout* form = new QFormLayout(&dialog);
+    QDialog* dialog = new QDialog(this);
+    dialog->setWindowTitle("Add State");
+    QFormLayout* form = new QFormLayout(dialog);
     QLabel* about = new QLabel(unused.isEmpty()
             ? "A new frame label is made for the state, at the frame given, on the States layer."
             : "Pick a frame label for the state, or type a new name to make a label at the frame given.",
-        &dialog);
+        dialog);
     about->setWordWrap(true);
     form->addRow(about);
-    QComboBox* name = new QComboBox(&dialog);
+    QComboBox* name = new QComboBox(dialog);
     name->setEditable(true);
     name->addItems(unused);
     if (unused.isEmpty())
@@ -857,10 +858,10 @@ void StatesPanel::addState()
             ++n;
         name->setEditText(QString("state %1").arg(n));
     }
-    QSpinBox* frame = new QSpinBox(&dialog);
+    QSpinBox* frame = new QSpinBox(dialog);
     frame->setRange(1, 1 << 20);
     frame->setValue((_links.currentFrame ? _links.currentFrame() : 0) + 1);
-    QComboBox* play = new QComboBox(&dialog);
+    QComboBox* play = new QComboBox(dialog);
     for (st::Play each : {st::Play::Loop, st::Play::Once, st::Play::Hold})
         play->addItem(QString::fromStdString(st::words(each)), static_cast<int>(each));
     form->addRow("Label", name);
@@ -872,33 +873,38 @@ void StatesPanel::addState()
                 return true;
         return false;
     };
-    const auto update = [&]() { frame->setEnabled(!labelled(name->currentText().trimmed())); };
-    connect(name, &QComboBox::currentTextChanged, &dialog, update);
+    const auto update = [frame, name, labelled]() { frame->setEnabled(!labelled(name->currentText().trimmed())); };
+    connect(name, &QComboBox::currentTextChanged, dialog, update);
     update();
-    QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+    QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, dialog);
     form->addRow(buttons);
-    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
-    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
-    if (dialog.exec() != QDialog::Accepted)
-        return;
-    const std::string label = name->currentText().trimmed().toStdString();
-    if (label.empty() || _graph.stateNamed(label) >= 0)
-        return;
-    st::Graph graph = _graph;
-    st::State state;
-    state.label = label;
-    state.play = static_cast<st::Play>(play->currentData().toInt());
-    const int n = static_cast<int>(graph.states.size());
-    // Two to a row, every other row set in: no box in line with two others.
-    state.x = 30.0 + 280.0 * (n % 2) + 140.0 * ((n / 2) % 2);
-    state.y = 20.0 + 120.0 * (n / 2);
-    graph.states.push_back(state);
-    st::Edit edit;
-    if (!labelled(QString::fromStdString(label)))
-        edit.newLabels.emplace_back(label, frame->value() - 1);
-    commit(graph, edit, "Add State");
-    pick(Picked::State, n);
-    _view->setPicked(StatesView::Pick::State, n);
+    connect(buttons, &QDialogButtonBox::accepted, dialog, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, dialog, &QDialog::reject);
+    modal::open(dialog, [this, edited, name, frame, play, labelled](int result) {
+        if (result != QDialog::Accepted)
+            return;
+        // Another timeline may have come up while the dialog was.
+        if (timeline() != edited)
+            return;
+        const std::string label = name->currentText().trimmed().toStdString();
+        if (label.empty() || _graph.stateNamed(label) >= 0)
+            return;
+        st::Graph graph = _graph;
+        st::State state;
+        state.label = label;
+        state.play = static_cast<st::Play>(play->currentData().toInt());
+        const int n = static_cast<int>(graph.states.size());
+        // Two to a row, every other row set in: no box in line with two others.
+        state.x = 30.0 + 280.0 * (n % 2) + 140.0 * ((n / 2) % 2);
+        state.y = 20.0 + 120.0 * (n / 2);
+        graph.states.push_back(state);
+        st::Edit edit;
+        if (!labelled(QString::fromStdString(label)))
+            edit.newLabels.emplace_back(label, frame->value() - 1);
+        commit(graph, edit, "Add State");
+        pick(Picked::State, n);
+        _view->setPicked(StatesView::Pick::State, n);
+    });
 }
 
 void StatesPanel::addTransition(int from, int to)

@@ -1,6 +1,7 @@
 #include "popup_palette.h"
 
 #include "color_picker_widgets.h"
+#include "modal.h"
 
 #include <QAction>
 #include <QGuiApplication>
@@ -282,29 +283,30 @@ void PopupPalette::keyPressEvent(QKeyEvent* event)
 void PopupPalette::editFavorites()
 {
     // Every tool, the favorites ticked; as many as fit around the edge.
-    QMenu menu(this);
-    menu.setObjectName("popupPaletteFavorites");
+    QMenu* menu = new QMenu(this);
+    menu->setObjectName("popupPaletteFavorites");
     for (QAction* tool : _tools)
     {
         if (!tool)
             continue;
-        QAction* item = menu.addAction(tool->icon(), tool->text());
+        QAction* item = menu->addAction(tool->icon(), tool->text());
         item->setCheckable(true);
         item->setChecked(_favorites.contains(tool->text()));
         item->setEnabled(item->isChecked() || _favorites.size() < mostFavorites());
     }
-    menu.addSeparator();
-    QAction* reset = menu.addAction("Reset Favorites");
-    QAction* chosen = menu.exec(mapToGlobal(editChip().bottomLeft().toPoint()));
-    if (!chosen)
-        return;
-    QStringList favorites = _favorites;
-    if (chosen == reset)
-        favorites = defaultFavorites();
-    else if (chosen->isChecked())
-        favorites << chosen->text();
-    else
-        favorites.removeAll(chosen->text());
-    setTools(_tools, favorites);
-    emit favoritesChanged(_favorites);
+    menu->addSeparator();
+    QAction* reset = menu->addAction("Reset Favorites");
+    modal::popup(menu, mapToGlobal(editChip().bottomLeft().toPoint()), [this, reset](QAction* chosen) {
+        if (!chosen)
+            return;
+        QStringList favorites = _favorites;
+        if (chosen == reset)
+            favorites = defaultFavorites();
+        else if (chosen->isChecked())
+            favorites << chosen->text();
+        else
+            favorites.removeAll(chosen->text());
+        setTools(_tools, favorites);
+        emit favoritesChanged(_favorites);
+    });
 }

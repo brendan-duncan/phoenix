@@ -7,6 +7,7 @@
 
 #include <atomic>
 #include <condition_variable>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <thread>
@@ -66,9 +67,10 @@ public:
     /// be opened, and the token that client sends to be let in unasked.
     int openSession(QString& token);
 
-    /// Handles one JSON-RPC message from a client; empty for a notification.
-    /// Runs on the GUI thread.
-    QJsonObject handle(const QJsonObject& message, int client);
+    /// Handles one JSON-RPC message from a client and gives \a reply its
+    /// answer, empty for a notification: at once, or after the person is
+    /// asked whether the client may work. Runs on the GUI thread.
+    void handle(const QJsonObject& message, int client, std::function<void(const QJsonObject&)> reply);
 
 private:
     struct Client
@@ -115,7 +117,11 @@ private:
     /// The client with \a id, or null: looked up again after anything that
     /// runs the event loop, as the clients may change meanwhile.
     Client* clientOf(int id);
-    bool allow(int client);
+    /// Calls \a done with whether \a client may work, asking the person the
+    /// first time.
+    void allow(int client, std::function<void(bool allowed)> done);
+    /// The answer to a request from a client already let in.
+    QJsonObject respond(const QJsonValue& requestId, const QString& method, const QJsonObject& params, int client);
     void showActivity(const QString& what);
     void stopAll();
     void log(const QString& client, const QString& tool, const QJsonObject& arguments, bool ok);

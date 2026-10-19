@@ -138,11 +138,20 @@ void ScenePanel::deleteScene()
     }
     const int current = document->currentSceneIndex();
     const QString name = QString::fromStdString(document->timelines[static_cast<size_t>(current)]->name);
-    if (QMessageBox::question(this, "Delete Scene", QString("Delete %1?").arg(name)) != QMessageBox::Yes)
-        return;
-    std::vector<fla::Timeline*> scenes = document->timelines;
-    scenes.erase(scenes.begin() + current);
-    push(std::move(scenes), std::max(0, current - 1), "Delete Scene");
+    modal::ask(this, QMessageBox::Question, "Delete Scene", QString("Delete %1?").arg(name),
+        QMessageBox::Yes | QMessageBox::No, QMessageBox::NoButton,
+        [this, document, current](QMessageBox::StandardButton answer) {
+            if (answer != QMessageBox::Yes)
+                return;
+            // The same document and scene as asked about, in case either
+            // changed while the question was up.
+            if (!_links.document || _links.document() != document || document->timelines.size() <= 1 ||
+                document->currentSceneIndex() != current)
+                return;
+            std::vector<fla::Timeline*> scenes = document->timelines;
+            scenes.erase(scenes.begin() + current);
+            push(std::move(scenes), std::max(0, current - 1), "Delete Scene");
+        });
 }
 
 void ScenePanel::renamed(QListWidgetItem* item)

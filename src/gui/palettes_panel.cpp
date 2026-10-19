@@ -1,4 +1,5 @@
 #include "palettes_panel.h"
+#include "file_pick.h"
 #include "modal.h"
 
 #include "../data/document.h"
@@ -293,23 +294,29 @@ void PalettesPanel::savePaletteFile()
     const QString suggested = active->file.empty()
         ? QDir(folder).filePath(QString::fromStdString(active->name) + ".phxpal")
         : resolved(active->file);
-    const QString path = QFileDialog::getSaveFileName(this, "Save Palette to File", suggested,
-        "Phoenix palettes (*.phxpal)");
-    if (path.isEmpty())
-        return;
-    const std::string text = fla::palettes::toText(*active);
-    QFile out(path);
-    if (!out.open(QIODevice::WriteOnly | QIODevice::Truncate) ||
-        out.write(text.data(), static_cast<qint64>(text.size())) != static_cast<qint64>(text.size()))
-    {
-        modal::warning(this, "Save Palette to File",
-            QString("Could not write %1.").arg(QDir::toNativeSeparators(path)));
-        return;
-    }
-    out.close();
-    _known[std::make_pair(static_cast<const void*>(document), QDir::cleanPath(path))] = text;
-    active->file = kept(QDir::cleanPath(path));
-    store(state, "Link Palette File");
+    file_pick::save(this, "Save Palette to File", suggested, "Phoenix palettes (*.phxpal)",
+        [this, document](const QString& path) {
+            // The document asked about has to be the one still open.
+            if (!_links.document || _links.document() != document)
+                return;
+            PalettesState now{fla::palettes::load(*document)};
+            fla::palettes::Palette* palette = now.palettes.activePalette();
+            if (!palette)
+                return;
+            const std::string text = fla::palettes::toText(*palette);
+            QFile out(path);
+            if (!out.open(QIODevice::WriteOnly | QIODevice::Truncate) ||
+                out.write(text.data(), static_cast<qint64>(text.size())) != static_cast<qint64>(text.size()))
+            {
+                modal::warning(this, "Save Palette to File",
+                    QString("Could not write %1.").arg(QDir::toNativeSeparators(path)));
+                return;
+            }
+            out.close();
+            _known[std::make_pair(static_cast<const void*>(document), QDir::cleanPath(path))] = text;
+            palette->file = kept(QDir::cleanPath(path));
+            store(now, "Link Palette File");
+        });
 }
 
 void PalettesPanel::linkPaletteFile()
@@ -318,39 +325,40 @@ void PalettesPanel::linkPaletteFile()
     if (!document)
         return;
     const QString folder = _links.folder ? _links.folder() : QString();
-    const QString path = QFileDialog::getOpenFileName(this, "Link Palette File", folder, "Phoenix palettes (*.phxpal)");
-    if (path.isEmpty())
-        return;
-    QFile file(path);
-    QByteArray bytes;
-    if (file.open(QIODevice::ReadOnly))
-        bytes = file.readAll();
-    const std::string text(bytes.constData(), static_cast<size_t>(bytes.size()));
-    fla::palettes::Palette read;
-    if (!fla::palettes::fromText(text, read))
-    {
-        modal::warning(this, "Link Palette File",
-            QString("%1 is not a Phoenix palette.").arg(QDir::toNativeSeparators(path)));
-        return;
-    }
-    if (read.name.empty())
-        read.name = QFileInfo(path).completeBaseName().toStdString();
-    read.file = kept(QDir::cleanPath(path));
-    _known[std::make_pair(static_cast<const void*>(document), QDir::cleanPath(path))] = text;
-    // A palette of the same name takes the file's colors; otherwise it is
-    // a new one. Either way it is the one in use.
-    PalettesState state{fla::palettes::load(*document)};
-    bool replaced = false;
-    for (fla::palettes::Palette& palette : state.palettes.list)
-        if (palette.name == read.name)
+    file_pick::open(this, "Link Palette File", folder, "Phoenix palettes (*.phxpal)", [this, document](const QString& path) {
+        if (!_links.document || _links.document() != document)
+            return;
+        QFile file(path);
+        QByteArray bytes;
+        if (file.open(QIODevice::ReadOnly))
+            bytes = file.readAll();
+        const std::string text(bytes.constData(), static_cast<size_t>(bytes.size()));
+        fla::palettes::Palette read;
+        if (!fla::palettes::fromText(text, read))
         {
-            palette = read;
-            replaced = true;
+            modal::warning(this, "Link Palette File",
+                QString("%1 is not a Phoenix palette.").arg(QDir::toNativeSeparators(path)));
+            return;
         }
-    if (!replaced)
-        state.palettes.list.push_back(read);
-    state.palettes.active = read.name;
-    store(state, "Link Palette File");
+        if (read.name.empty())
+            read.name = QFileInfo(path).completeBaseName().toStdString();
+        read.file = kept(QDir::cleanPath(path));
+        _known[std::make_pair(static_cast<const void*>(document), QDir::cleanPath(path))] = text;
+        // A palette of the same name takes the file's colors; otherwise it is
+        // a new one. Either way it is the one in use.
+        PalettesState state{fla::palettes::load(*document)};
+        bool replaced = false;
+        for (fla::palettes::Palette& palette : state.palettes.list)
+            if (palette.name == read.name)
+            {
+                palette = read;
+                replaced = true;
+            }
+        if (!replaced)
+            state.palettes.list.push_back(read);
+        state.palettes.active = read.name;
+        store(state, "Link Palette File");
+    });
 }
 
 void PalettesPanel::unlinkPaletteFile()
@@ -395,26 +403,28 @@ void PalettesPanel::newPalette()
     fla::Document* document = _links.document ? _links.document() : nullptr;
     if (!document)
         return;
-    PalettesState state{fla::palettes::load(*document)};
-    bool ok = false;
-    const QString name = QInputDialog::getText(this, "New Palette",
-        state.palettes.list.empty() ? QString("Name:") : QString("Name (a copy of the one in use, to recolor):"),
-        QLineEdit::Normal, state.palettes.list.empty() ? QString("Day") : QString("Night"), &ok).trimmed();
-    if (!ok || name.isEmpty())
-        return;
-    for (const fla::palettes::Palette& palette : state.palettes.list)
-        if (palette.name == name.toStdString())
-        {
-            modal::information(this, "New Palette", "There is a palette of that name already.");
-            return;
-        }
-    fla::palettes::Palette palette;
-    if (const fla::palettes::Palette* active = state.palettes.activePalette())
-        palette = *active;
-    palette.name = name.toStdString();
-    state.palettes.list.push_back(palette);
-    state.palettes.active = palette.name;
-    store(state, "New Palette");
+    const bool first = fla::palettes::load(*document).list.empty();
+    modal::getText(this, "New Palette",
+        first ? QString("Name:") : QString("Name (a copy of the one in use, to recolor):"),
+        first ? QString("Day") : QString("Night"), [this, document](const QString& typed) {
+            const QString name = typed.trimmed();
+            if (name.isEmpty() || !_links.document || _links.document() != document)
+                return;
+            PalettesState state{fla::palettes::load(*document)};
+            for (const fla::palettes::Palette& palette : state.palettes.list)
+                if (palette.name == name.toStdString())
+                {
+                    modal::information(this, "New Palette", "There is a palette of that name already.");
+                    return;
+                }
+            fla::palettes::Palette palette;
+            if (const fla::palettes::Palette* active = state.palettes.activePalette())
+                palette = *active;
+            palette.name = name.toStdString();
+            state.palettes.list.push_back(palette);
+            state.palettes.active = palette.name;
+            store(state, "New Palette");
+        });
 }
 
 void PalettesPanel::renamePalette()
@@ -427,14 +437,19 @@ void PalettesPanel::renamePalette()
     fla::palettes::Palette* active = state.palettes.activePalette();
     if (!active)
         return;
-    bool ok = false;
-    const QString name = QInputDialog::getText(this, "Rename Palette", "Name:", QLineEdit::Normal,
-        QString::fromStdString(active->name), &ok).trimmed();
-    if (!ok || name.isEmpty())
-        return;
-    active->name = name.toStdString();
-    state.palettes.active = active->name;
-    store(state, "Rename Palette");
+    modal::getText(this, "Rename Palette", "Name:", QString::fromStdString(active->name),
+        [this, document](const QString& typed) {
+            const QString name = typed.trimmed();
+            if (name.isEmpty() || !_links.document || _links.document() != document)
+                return;
+            PalettesState now{fla::palettes::load(*document)};
+            fla::palettes::Palette* palette = now.palettes.activePalette();
+            if (!palette)
+                return;
+            palette->name = name.toStdString();
+            now.palettes.active = palette->name;
+            store(now, "Rename Palette");
+        });
 }
 
 void PalettesPanel::removePalette()
@@ -469,25 +484,27 @@ void PalettesPanel::addColor()
         state.palettes.list.push_back(first);
         state.palettes.active = first.name;
     }
-    bool ok = false;
-    const QString name = QInputDialog::getText(this, "Add Color", "Name (skin, hair, shadow...):", QLineEdit::Normal,
-        QString("Color %1").arg(state.palettes.activePalette()->colors.size() + 1), &ok).trimmed();
-    if (!ok || name.isEmpty())
-        return;
-    const QColor start = _links.fillColor ? _links.fillColor() : QColor(Qt::black);
-    fla::palettes::Color color;
-    color.name = name.toStdString();
-    color.rgba[0] = static_cast<uint8_t>(start.red());
-    color.rgba[1] = static_cast<uint8_t>(start.green());
-    color.rgba[2] = static_cast<uint8_t>(start.blue());
-    color.rgba[3] = static_cast<uint8_t>(start.alpha());
-    // Every palette gets it, so a swap always has a color for it.
-    for (fla::palettes::Palette& palette : state.palettes.list)
-        if (std::none_of(palette.colors.begin(), palette.colors.end(),
-                [&color](const fla::palettes::Color& c) { return c.name == color.name; }))
-            palette.colors.push_back(color);
-    store(state, "Add Color");
-    _colors->setCurrentRow(_colors->count() - 1);
+    modal::getText(this, "Add Color", "Name (skin, hair, shadow...):",
+        QString("Color %1").arg(state.palettes.activePalette()->colors.size() + 1),
+        [this, document, state](const QString& typed) mutable {
+            const QString name = typed.trimmed();
+            if (name.isEmpty() || !_links.document || _links.document() != document)
+                return;
+            const QColor start = _links.fillColor ? _links.fillColor() : QColor(Qt::black);
+            fla::palettes::Color color;
+            color.name = name.toStdString();
+            color.rgba[0] = static_cast<uint8_t>(start.red());
+            color.rgba[1] = static_cast<uint8_t>(start.green());
+            color.rgba[2] = static_cast<uint8_t>(start.blue());
+            color.rgba[3] = static_cast<uint8_t>(start.alpha());
+            // Every palette gets it, so a swap always has a color for it.
+            for (fla::palettes::Palette& palette : state.palettes.list)
+                if (std::none_of(palette.colors.begin(), palette.colors.end(),
+                        [&color](const fla::palettes::Color& c) { return c.name == color.name; }))
+                    palette.colors.push_back(color);
+            store(state, "Add Color");
+            _colors->setCurrentRow(_colors->count() - 1);
+        });
 }
 
 void PalettesPanel::editColor()
@@ -501,16 +518,18 @@ void PalettesPanel::editColor()
     fla::palettes::Palette* active = state.palettes.activePalette();
     if (!active || index >= static_cast<int>(active->colors.size()))
         return;
-    fla::palettes::Color& color = active->colors[static_cast<size_t>(index)];
-    const QColor chosen = QColorDialog::getColor(QColor(color.rgba[0], color.rgba[1], color.rgba[2], color.rgba[3]), this,
-        QString::fromStdString(color.name), QColorDialog::ShowAlphaChannel);
-    if (!chosen.isValid())
-        return;
-    color.rgba[0] = static_cast<uint8_t>(chosen.red());
-    color.rgba[1] = static_cast<uint8_t>(chosen.green());
-    color.rgba[2] = static_cast<uint8_t>(chosen.blue());
-    color.rgba[3] = static_cast<uint8_t>(chosen.alpha());
-    store(state, "Edit Color");
+    const fla::palettes::Color& color = active->colors[static_cast<size_t>(index)];
+    modal::getColor(QColor(color.rgba[0], color.rgba[1], color.rgba[2], color.rgba[3]), this,
+        QString::fromStdString(color.name), [this, document, state, index](const QColor& chosen) mutable {
+            if (!chosen.isValid() || !_links.document || _links.document() != document)
+                return;
+            fla::palettes::Color& edited = state.palettes.activePalette()->colors[static_cast<size_t>(index)];
+            edited.rgba[0] = static_cast<uint8_t>(chosen.red());
+            edited.rgba[1] = static_cast<uint8_t>(chosen.green());
+            edited.rgba[2] = static_cast<uint8_t>(chosen.blue());
+            edited.rgba[3] = static_cast<uint8_t>(chosen.alpha());
+            store(state, "Edit Color");
+        }, QColorDialog::ShowAlphaChannel);
 }
 
 void PalettesPanel::removeColor()

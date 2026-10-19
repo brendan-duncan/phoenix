@@ -18,6 +18,9 @@ void HtmlView::answerDialog(const QString& kind, const QString& message, const Q
     const QString title = window() ? window()->windowTitle() : QString("Phoenix");
     if (kind == "alert")
         modal::information(this, title, message);
+    // The page waits for its answer; where nothing can wait, it is canceled.
+    else if (modal::cannotWait())
+        accepted = false;
     else if (kind == "confirm")
         accepted = QMessageBox::question(this, title, message, QMessageBox::Ok | QMessageBox::Cancel) == QMessageBox::Ok;
     else
