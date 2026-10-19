@@ -10391,7 +10391,10 @@ QJsonObject MainWindow::currentWorkspace() const
     QJsonObject workspace;
     workspace["phoenixWorkspace"] = 1;
     workspace["layoutVersion"] = kLayoutVersion;
-    workspace["docks"] = QString::fromLatin1(saveState(kLayoutVersion).toBase64());
+    // In Canvas Only, the panels as they will come back.
+    const QByteArray docks =
+        _canvasOnly && _canvasOnly->isOn() ? _canvasOnly->savedState() : saveState(kLayoutVersion);
+    workspace["docks"] = QString::fromLatin1(docks.toBase64());
     if (_toolbox)
         workspace["tools"] = _toolbox->layout().toJson();
     if (_timelineView)
@@ -10401,6 +10404,8 @@ QJsonObject MainWindow::currentWorkspace() const
 
 bool MainWindow::applyWorkspace(const QJsonObject& workspace)
 {
+    if (_canvasOnly)
+        _canvasOnly->leave();
     // A workspace from a newer Phoenix may name panels this one does not
     // have; Qt passes over those. One whose dock layout cannot be read
     // keeps the docks as they are and still takes the rest.
@@ -10420,6 +10425,8 @@ bool MainWindow::applyWorkspace(const QJsonObject& workspace)
 
 void MainWindow::applyBuiltInWorkspace(const QString& name)
 {
+    if (_canvasOnly)
+        _canvasOnly->leave();
     // Each starts from Phoenix's own layout, in the window as it is.
     const QByteArray window = saveGeometry();
     restoreState(_defaultLayout, kLayoutVersion);

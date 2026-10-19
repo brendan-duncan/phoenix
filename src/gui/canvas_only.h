@@ -25,6 +25,8 @@ public:
     /// View > Canvas Only, checked while it is on.
     QAction* action() const { return _action; }
     bool isOn() const { return _on; }
+    /// While it is on, the window's layout as it will come back.
+    QByteArray savedState() const { return _state; }
 
     void enter();
     /// Brings everything back; nothing happens when it is off.
