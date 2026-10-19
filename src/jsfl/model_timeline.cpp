@@ -778,14 +778,14 @@ const ClassInfo& Timeline::classInfo() const
                 if (std::find(layers.begin(), layers.end(), range.layer) == layers.end())
                     layers.push_back(range.layer);
             }
-            // As clicking them does: the playhead goes to the first frame,
-            // and what is there on the frames' layers is selected.
+            // As dragging over them does: the playhead goes to the last
+            // frame, and what is there on the frames' layers is selected.
             Host& host = t.session.host();
             if (!selected.empty() && host.editedTimeline(t.document) == &timeline)
             {
-                const int frame = selected.front().first;
+                const int frame = selected.back().last;
                 host.setCurrentFrame(t.document, frame);
-                host.setCurrentLayer(t.document, selected.front().layer);
+                host.setCurrentLayer(t.document, selected.back().layer);
                 std::vector<fla::DOMElement*> chosen;
                 for (const FrameRange& range : selected)
                 {

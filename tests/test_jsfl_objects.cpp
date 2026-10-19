@@ -107,11 +107,13 @@ TEST(jsfl_tools_and_zoom)
                 "fl.trace(fl.tools.toolObjs.length + ' ' + (fl.tools.activeTool !== null) + ' ' + fl.tools.activeTool.position);\n"
                 "fl.selectTool('Paint Bucket');\n"
                 "if (!fl.selectTool('teleporter')) fl.trace('no teleporter');\n"
+                // Without Shift down a point is not constrained.
                 "var p = fl.tools.constrainPoint({x: 0, y: 0}, {x: 10, y: 1}); fl.trace(p.x + ',' + p.y);\n"
+                "p = fl.Math.transformPoint({a: 2, b: 0, c: 0, d: 3, tx: 5, ty: 7}, {x: 1, y: 1}); fl.trace(p.x + ',' + p.y);\n"
                 "var d = fl.getDocumentDOM(); fl.trace(d.zoomFactor); d.zoomFactor = 2; fl.trace(d.zoomFactor);\n"
                 "try { d.zoomFactor = 0; } catch (e) { fl.trace('no zero'); }\n")
               .ok);
-    expectOutput(f, "6 true 3\nno teleporter\n10,0\n1\n2\nno zero\n");
+    expectOutput(f, "6 true 3\nno teleporter\n10,1\n7,10\n1\n2\nno zero\n");
     CHECK(f.host.tool == "Paint Bucket");
     CHECK(f.host.zoomFactor == 2.0);
 }
@@ -238,7 +240,8 @@ TEST(jsfl_document_publish_profiles)
                 "d.asVersion = 2; d.docClass = 'com.studio.Main';\n"
                 "fl.trace(d.asVersion + ' ' + d.docClass);\n"
                 "var xml = d.exportPublishProfileString();\n"
-                "fl.trace(xml.indexOf('<flash_profiles>') >= 0 && xml.indexOf('name=\"Web\"') >= 0);\n"
+                // The profile itself at the root, as scripts edit it with E4X.
+                "var x = new XML(xml); fl.trace(x.name() == 'flash_profile' && x.@name == 'Web' && xml.indexOf('current=') < 0);\n"
                 "d.exportPublishProfile('" + base + "web.xml', 'Web');\n"
                 "fl.trace(d.renamePublishProfile('Web 2') + ' ' + d.publishProfiles.join(','));\n"
                 "fl.trace(d.importPublishProfile('" + base + "web.xml') + ' ' + d.publishProfiles.join(',') + ' ' + d.currentPublishProfile);\n"
@@ -250,6 +253,25 @@ TEST(jsfl_document_publish_profiles)
               .ok);
     expectOutput(f, "Default Default 3\n1 Web\n2 com.studio.Main\ntrue\ntrue Default,Web 2\n2 Default,Web 2,Web Web\n"
                     "2 com.studio.Main\n3 \n0 Web 2,Web\n-1\nno Nope\n");
+}
+
+TEST(jsfl_publish_profile_copied_through_a_string)
+{
+    // A temporary profile made from the first, changed and put back by
+    // name, then deleted, leaving the first as it was.
+    Fixture f;
+    CHECK(f.run("var d = fl.getDocumentDOM();\n"
+                "d.currentPublishProfile = d.publishProfiles[0];\n"
+                "var profile = new XML(d.exportPublishProfileString());\n"
+                "d.addNewPublishProfile('@temp'); d.currentPublishProfile = '@temp';\n"
+                "profile.@name = '@temp';\n"
+                "profile.PublishFlashProperties.InvisibleLayer = '0';\n"
+                "fl.trace(d.importPublishProfileString(profile) + ' ' + d.publishProfiles.join(',') + ' ' + d.currentPublishProfile);\n"
+                "fl.trace(new XML(d.exportPublishProfileString()).PublishFlashProperties.InvisibleLayer);\n"
+                "d.deletePublishProfile();\n"
+                "fl.trace(d.publishProfiles.join(',') + ' ' + d.currentPublishProfile);\n")
+              .ok);
+    expectOutput(f, "1 Default,@temp @temp\n0\nDefault Default\n");
 }
 
 TEST(jsfl_document_more_members)

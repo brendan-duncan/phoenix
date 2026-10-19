@@ -506,6 +506,9 @@ const char* const kPrelude = R"JS(
         pointDistance: function (p, q) {
             var dx = q.x - p.x, dy = q.y - p.y;
             return Math.sqrt(dx * dx + dy * dy);
+        },
+        transformPoint: function (m, p) {
+            return {x: p.x * m.a + p.y * m.c + m.tx, y: p.x * m.b + p.y * m.d + m.ty};
         }
     };
     fl.fileExists = function (uri) { return FLfile.exists(uri); };
@@ -553,7 +556,10 @@ const char* const kPrelude = R"JS(
             getKeyDown: function () { return 0; },
             setCursor: function () {},
             snapPoint: function (point) { return {x: point.x, y: point.y}; },
+            // Held to the nearest of the eight directions while Shift is down.
             constrainPoint: function (from, to) {
+                if (!this.shiftIsDown)
+                    return {x: to.x, y: to.y};
                 var dx = to.x - from.x, dy = to.y - from.y;
                 var step = Math.PI / 4;
                 var angle = Math.round(Math.atan2(dy, dx) / step) * step;
@@ -1308,9 +1314,12 @@ const char* const kToolPrelude = R"JS(
         getKeyDown: function () { return this.__key; },
         setCursor: function (cursor) { this.__cursor = Number(cursor) || 0; },
         snapPoint: function (point) { return { x: point.x, y: point.y }; },
-        // The second point moved to the nearest of the eight directions
-        // from the first, keeping its distance along that direction.
+        // While Shift is down, the second point moved to the nearest of
+        // the eight directions from the first, keeping its distance along
+        // that direction.
         constrainPoint: function (from, to) {
+            if (!this.shiftIsDown)
+                return { x: to.x, y: to.y };
             var dx = to.x - from.x, dy = to.y - from.y;
             var step = Math.PI / 4;
             var angle = Math.round(Math.atan2(dy, dx) / step) * step;
@@ -1502,6 +1511,9 @@ struct ToolScript::Impl
     std::unique_ptr<Binding> binding;
     std::atomic<bool> stop{false};
     Guard guard;
+    /// A call is running: what it sets off (its own selectTool, a frame it
+    /// moves to) comes back while it runs.
+    bool busy = false;
 
     Impl(Host& host, std::string path)
         : host(host)
@@ -1690,6 +1702,10 @@ std::string ToolScript::call(const std::string& function, const State& state)
     Impl& d = *_impl;
     if (!d.ctx || !has(function))
         return {};
+    // A call made while another runs (deactivate, when the script picks
+    // another tool) is part of that one, which settles once at its end.
+    const bool nested = d.busy;
+    d.busy = true;
     std::string failed = d.eval("fl.tools.__set(" + numberText(state.penX) + "," + numberText(state.penY) + "," +
             numberText(state.downX) + "," + numberText(state.downY) + "," + (state.mouseDown ? "true" : "false") + "," +
             (state.alt ? "true" : "false") + "," + (state.ctrl ? "true" : "false") + "," + (state.shift ? "true" : "false") +
@@ -1697,14 +1713,19 @@ std::string ToolScript::call(const std::string& function, const State& state)
         "<tool>");
     if (failed.empty())
         failed = d.eval(function + "({x:" + numberText(state.penX) + ",y:" + numberText(state.penY) + "})", d.path);
-    d.settle();
+    if (!nested)
+    {
+        d.busy = false;
+        d.settle();
+    }
     return failed;
 }
 
 std::string ToolScript::dispatch(const std::string& type)
 {
     Impl& d = *_impl;
-    if (!d.ctx)
+    // The events a call sets off are its own doing, not news to it.
+    if (!d.ctx || d.busy)
         return {};
     std::string errors;
     std::string failed = d.eval("fl.__dispatch(" + quoted(type) + ")", d.path, &errors);

@@ -76,6 +76,9 @@ public:
 
     /// Every frame of every layer shown (Select All Frames).
     void selectAll();
+    /// Selects the frames \a selection holds, as a script's
+    /// setSelectedFrames does; layers not shown are left out.
+    void setSelection(const FrameSelection& selection);
 
     /// How many frames the shown timeline has: where its last frame ends.
     int frameCount() const;
@@ -292,6 +295,7 @@ public:
     FrameSelection selection() const { return _gridContainer->selection(); }
     void clearSelection() { _gridContainer->clearSelection(); }
     void selectAll() { _gridContainer->selectAll(); }
+    void setSelection(const FrameSelection& selection) { _gridContainer->setSelection(selection); }
 
     /// Redraws the grid after frames were edited.
     void refreshFrames();

@@ -29,6 +29,7 @@ void Session::finish()
         return;
     _finished = true;
     closeSteps();
+    showFrameSelections();
     forgetShapes(*this);
     _host.refresh();
 }
@@ -36,13 +37,37 @@ void Session::finish()
 void Session::settle()
 {
     closeSteps();
+    showFrameSelections();
     for (auto& [document, state] : _documents)
     {
         state.reachableValid = false;
         state.reachable.clear();
+        // The person may pick other frames and layers before the next call.
+        state.frames.clear();
+        state.layers.clear();
     }
     forgetShapes(*this);
     _host.refresh();
+}
+
+void Session::showFrameSelections()
+{
+    for (auto& [document, state] : _documents)
+    {
+        auto* open = const_cast<fla::FLADocument*>(document);
+        if (!isOpen(open))
+            continue;
+        const auto found = state.frames.find(_host.editedTimeline(open));
+        if (found == state.frames.end())
+            continue;
+        // Only frames the script chose: one it only read stays as it was.
+        const std::vector<FrameRange> shown = _host.selectedFrames(open);
+        const auto same = [](const FrameRange& a, const FrameRange& b) {
+            return a.layer == b.layer && a.first == b.first && a.last == b.last;
+        };
+        if (!std::equal(shown.begin(), shown.end(), found->second.begin(), found->second.end(), same))
+            _host.setSelectedFrames(open, found->second);
+    }
 }
 
 bool Session::isOpen(const fla::FLADocument* document) const

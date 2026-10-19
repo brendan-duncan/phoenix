@@ -45,6 +45,8 @@ public:
 
     /// Select All Frames.
     void selectAllFrames();
+    /// Selects the frames \a selection holds.
+    void setFrameSelection(const FrameSelection& selection);
 
     /// Makes \a layer the current one, as selecting something on it does.
     void setCurrentLayer(const fla::Layer* layer);

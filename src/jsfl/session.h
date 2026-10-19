@@ -119,6 +119,8 @@ private:
     };
     DocumentState& state(fla::FLADocument* document);
     void closeSteps();
+    /// The frames the run selected, shown in the timeline.
+    void showFrameSelections();
 
     Host& _host;
     std::string _undoName;

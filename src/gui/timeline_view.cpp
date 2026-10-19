@@ -159,6 +159,11 @@ void TimelineView::selectAllFrames()
     _timelinesPanel->selectAll();
 }
 
+void TimelineView::setFrameSelection(const FrameSelection& selection)
+{
+    _timelinesPanel->setSelection(selection);
+}
+
 void TimelineView::setCurrentLayer(const fla::Layer* layer)
 {
     const auto* timeline = layer ? dynamic_cast<const fla::Timeline*>(layer->parent) : nullptr;

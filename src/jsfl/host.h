@@ -147,6 +147,13 @@ public:
         (void)document;
         return {};
     }
+    /// Shows \a ranges as the frames selected in the timeline, once a script
+    /// has selected others.
+    virtual void setSelectedFrames(fla::FLADocument* document, const std::vector<FrameRange>& ranges)
+    {
+        (void)document;
+        (void)ranges;
+    }
 
     // Drawing.
     /// The fill and stroke new shapes get, and whether they are drawing

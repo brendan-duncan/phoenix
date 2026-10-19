@@ -932,6 +932,51 @@ void TimelineGrid::selectAll()
     update();
 }
 
+void TimelineGrid::setSelection(const FrameSelection& selection)
+{
+    const auto rowOf = [this](const fla::Layer* layer) {
+        for (size_t i = 0; i < _rows.size(); ++i)
+            if (_rows[i].layer == layer)
+                return static_cast<int>(i);
+        return -1;
+    };
+    _hasSelection = false;
+    _cells.clear();
+    int top = -1;
+    int bottom = -1;
+    for (const fla::Layer* layer : selection.layers)
+    {
+        const int row = rowOf(layer);
+        if (row < 0)
+            continue;
+        top = top < 0 ? row : std::min(top, row);
+        bottom = std::max(bottom, row);
+    }
+    if (top >= 0)
+    {
+        _hasSelection = true;
+        _anchorRow = top;
+        _focusRow = bottom;
+        _anchorFrame = selection.first;
+        _focusFrame = selection.last;
+    }
+    for (const auto& [layer, frame] : selection.cells)
+    {
+        const int row = rowOf(layer);
+        if (row < 0)
+            continue;
+        if (!_hasSelection)
+        {
+            _hasSelection = true;
+            _anchorRow = _focusRow = row;
+            _anchorFrame = _focusFrame = frame;
+        }
+        else
+            _cells.push_back({row, frame});
+    }
+    update();
+}
+
 void TimelineGrid::toggleCell(int row, int frame)
 {
     const std::pair<int, int> cell(row, frame);

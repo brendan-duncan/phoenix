@@ -127,8 +127,10 @@ int indexOf(const std::string& xml, const std::string& name)
     return -1;
 }
 
-/// The profile \a name (or the current one) alone, in a file of its own.
-std::string exportProfile(Document& d, const std::string& name)
+/// The profile \a name (or the current one) alone: in a file of its own,
+/// or with \a bare as the string scripts get, the profile itself at the
+/// root, without saying whether it is current.
+std::string exportProfile(Document& d, const std::string& name, bool bare = false)
 {
     XMLDocument settings;
     const std::string xml = settingsOf(d);
@@ -138,6 +140,13 @@ std::string exportProfile(Document& d, const std::string& name)
     if (!profile)
         throw Error("There is no publish profile called " + name + ".");
     XMLDocument out;
+    if (bare)
+    {
+        XMLElement* copy = profile->DeepClone(&out)->ToElement();
+        copy->DeleteAttribute("current");
+        out.InsertEndChild(copy);
+        return printed(out);
+    }
     out.InsertEndChild(out.NewDeclaration());
     XMLElement* root = out.NewElement("flash_profiles");
     out.InsertEndChild(root);
@@ -292,7 +301,7 @@ void describeDocumentProfiles(ClassDef<Document>& def)
         return Value(indexOf(written, fla::publish::currentProfile(written)));
     });
     def.method("exportPublishProfileString", 1, [](Document& d, const Args& args) {
-        return Value(exportProfile(d, given(args, 0) ? arg(args, 0).toString() : std::string()));
+        return Value(exportProfile(d, given(args, 0) ? arg(args, 0).toString() : std::string(), true));
     });
     def.method("importPublishProfileString", 1, [](Document& d, const Args& args) {
         return Value(importProfiles(d, arg(args, 0).toString()));

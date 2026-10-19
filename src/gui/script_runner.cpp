@@ -445,10 +445,13 @@ public:
             if (_window._phoenixView)
                 _window._phoenixView->exitToDepth(0);
             const int index = static_cast<int>(scene - data.timelines.begin());
+            const bool current = index == data.currentSceneIndex();
             // Already current after a change to the scenes, but not shown yet.
-            if (index == data.currentSceneIndex() && _window._shownScene != timeline)
+            // Back in the scene shown, nothing more: the instance left stays
+            // selected, as leaving it does.
+            if (current && _window._shownScene && _window._shownScene != timeline)
                 _window.goToScene(-1);
-            else
+            else if (!current)
                 _window.goToScene(index);
         }
         else if (auto* symbol = dynamic_cast<fla::Symbol*>(timeline ? timeline->parent : nullptr))
@@ -529,6 +532,35 @@ public:
                 ranges.push_back({static_cast<int>(at - timeline->layers.begin()), cell.second, cell.second});
         }
         return ranges;
+    }
+    void setSelectedFrames(fla::FLADocument* document, const std::vector<jsfl::FrameRange>& ranges) override
+    {
+        fla::Timeline* timeline = editedTimeline(document);
+        if (document != _window._flaDocument || !_window._timelineView || !timeline)
+            return;
+        const auto layerAt = [timeline](int index) -> const fla::Layer* {
+            return index >= 0 && index < static_cast<int>(timeline->layers.size()) ? timeline->layers[static_cast<size_t>(index)]
+                                                                                    : nullptr;
+        };
+        // The ranges over the first one's frames make the block; the rest
+        // are single frames beside it.
+        FrameSelection chosen;
+        for (const jsfl::FrameRange& range : ranges)
+        {
+            const fla::Layer* layer = layerAt(range.layer);
+            if (!layer)
+                continue;
+            if (chosen.layers.empty() || (range.first == chosen.first && range.last == chosen.last))
+            {
+                chosen.first = range.first;
+                chosen.last = range.last;
+                chosen.layers.push_back(layer);
+            }
+            else
+                for (int frame = range.first; frame <= range.last; ++frame)
+                    chosen.cells.push_back({layer, frame});
+        }
+        _window._timelineView->setFrameSelection(chosen);
     }
 
     // Drawing.

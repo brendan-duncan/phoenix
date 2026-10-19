@@ -2,14 +2,17 @@
 
 What changed in each release of Phoenix, newest first.
 
-## Unreleased
+## 0.21.2
 
 - Inserting a keyframe inside a classic or shape tween puts the in-between pose on it and keeps both halves tweened with the same ease
 - Publish Settings has Include hidden layers for the SWF movie and Test Movie, on unless a file's settings turn it off
-- JSFL: `document.viewMatrix`, `document.canTestMovie()`, `fl.reloadTools()` and `enterEditMode('inPlace')`
+- JSFL: `document.viewMatrix`, `document.canTestMovie()`, `fl.reloadTools()`, `fl.Math.transformPoint` and `enterEditMode('inPlace')`
 - JSFL: `fl.selectTool` says whether the tool was there, and finds a script tool by its full name, such as "Rig Tool"
 - JSFL: `testMovie()` plays the document as the script has it then, and the script goes on once Test Movie is closed
-- JSFL: `setSelectedFrames` moves the playhead to the frames and selects what is on them, as clicking them does
+- JSFL: `setSelectedFrames` moves the playhead to the last of the frames, selects what is there, and shows the frames selected in the timeline
+- JSFL: leaving a symbol with `exitEditMode()` keeps its instance selected
+- JSFL: a shape's `x` and `y` are the middle of its box, and `exportPublishProfileString` gives the profile itself, so scripts can copy a profile and put it back
+- JSFL tools get Ctrl instead of switching to the Selection tool, `fl.tools.constrainPoint` keeps to 45° only while Shift is held, and a tool no longer freezes Phoenix when it moves the playhead
 
 ## 0.21.1
 

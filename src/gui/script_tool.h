@@ -38,6 +38,9 @@ public:
     bool keyPress(PhoenixView& view, QKeyEvent* event) override;
     void paintOverlay(PhoenixView& view, QPainter& painter, double scale) override;
     bool showsSelectionBounds() const override { return false; }
+    /// Ctrl goes to the script (fl.tools.ctlIsDown) rather than reaching
+    /// for the selection tool.
+    bool usesControlKey() const override { return true; }
 
     /// Tells the tool's listeners (fl.addEventListener) of an event.
     void dispatch(const char* type);

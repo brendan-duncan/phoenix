@@ -541,16 +541,47 @@ void describeElement(ClassDef<Element>& def)
             return Value("shape");
         }
     });
-    def.prop("x", [](Element& e) { return Value(e.get().transform.tx); },
-        [](Element& e, const Value& v) {
+    // A shape's x and y are the middle of its box, as its matrix says
+    // nothing of where its lines are; anything else's are its matrix's.
+    const auto isShape = [](Element& e) { return e.get().elementType() == fla::Element::Type::Shape; };
+    def.prop("x",
+        [isShape](Element& e) {
+            if (isShape(e))
+            {
+                const Rect box = e.session.host().bounds(e.document, &e.get());
+                return Value((box.left + box.right) / 2);
+            }
+            return Value(e.get().transform.tx);
+        },
+        [isShape](Element& e, const Value& v) {
             fla::Transform after = e.get().transform;
-            after.tx = v.toNumber();
+            if (isShape(e))
+            {
+                const Rect box = e.session.host().bounds(e.document, &e.get());
+                after = compose(fla::Transform::fromTranslate(v.toNumber() - (box.left + box.right) / 2, 0.0), after);
+            }
+            else
+                after.tx = v.toNumber();
             setTransform(e.session, e.document, e.element, after, "Move");
         });
-    def.prop("y", [](Element& e) { return Value(e.get().transform.ty); },
-        [](Element& e, const Value& v) {
+    def.prop("y",
+        [isShape](Element& e) {
+            if (isShape(e))
+            {
+                const Rect box = e.session.host().bounds(e.document, &e.get());
+                return Value((box.top + box.bottom) / 2);
+            }
+            return Value(e.get().transform.ty);
+        },
+        [isShape](Element& e, const Value& v) {
             fla::Transform after = e.get().transform;
-            after.ty = v.toNumber();
+            if (isShape(e))
+            {
+                const Rect box = e.session.host().bounds(e.document, &e.get());
+                after = compose(fla::Transform::fromTranslate(0.0, v.toNumber() - (box.top + box.bottom) / 2), after);
+            }
+            else
+                after.ty = v.toNumber();
             setTransform(e.session, e.document, e.element, after, "Move");
         });
     def.prop("left", [](Element& e) { return Value(e.session.host().bounds(e.document, &e.get()).left); },
