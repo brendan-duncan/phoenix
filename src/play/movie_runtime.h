@@ -460,6 +460,9 @@ private:
     void enter(std::vector<Clip*>& entered);
     void runClipEvent(Clip& clip, const std::string& event);
     void runButtonEvent(Clip& button, const std::string& event);
+    /// An ActionScript 1 or 2 handler set on \a clip's object by a script
+    /// (onEnterFrame, onRelease...), when it has one.
+    void runObjectHandler(Clip& clip, const std::string& name);
     /// A button's on() handlers, by event, gathered the first time.
     std::map<std::string, as3::ValuePtr>& buttonHandlers(Clip& button);
     /// Sends an ActionScript 3 event of \a type to \a target's listeners,

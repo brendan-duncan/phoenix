@@ -31,6 +31,7 @@
 #include <tinyxml2.h>
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
@@ -351,6 +352,23 @@ bool keyPressMatches(const std::string& named, int code, int character)
     return named.size() == 1 && character != 0 && static_cast<unsigned char>(named[0]) == character;
 }
 
+/// What createEmptyMovieClip makes a clip of: a movie clip of one empty
+/// frame.
+const Symbol& emptySymbol()
+{
+    static const std::unique_ptr<Symbol> symbol = []() {
+        auto made = std::make_unique<Symbol>(nullptr);
+        made->symbolType = SymbolType::MovieClip;
+        Timeline* timeline = new Timeline(made.get());
+        made->timelines.push_back(timeline);
+        Layer* layer = new Layer(timeline);
+        timeline->layers.push_back(layer);
+        layer->frames.push_back(new Frame(layer));
+        return made;
+    }();
+    return *symbol;
+}
+
 } // namespace
 
 bool Clip::listensFor(const std::string& type) const
@@ -370,6 +388,12 @@ bool Clip::wantsMouse() const
     for (const auto& [type, list] : listeners)
         if (!list.empty() && isMouseEvent(type))
             return true;
+    // Or with handlers a script set on it (clip.onRelease = function...).
+    if (object)
+        for (const char* name : {"onPress", "onRelease", "onReleaseOutside", "onRollOver", "onRollOut", "onDragOver",
+                 "onDragOut"})
+            if (const as3::Val* found = object->properties.lookup(name); found && found->isFunction())
+                return true;
     if (display)
         for (const char* type : {"click", "mouseDown", "mouseUp", "mouseOver", "mouseOut", "rollOver", "rollOut",
                  "doubleClick"})
@@ -2782,6 +2806,8 @@ void MovieRuntime::step()
             runClipEvent(clip, "enterFrame");
         if (_actions && !_as3)
             _actions->callHandler(clip, "onEnterFrame");
+        else if (!_as3)
+            runObjectHandler(clip, "onEnterFrame");
         if (clip.listensFor("enterFrame"))
             dispatch(clip, "enterFrame", false);
     });
@@ -2870,8 +2896,43 @@ void MovieRuntime::keyUp(int code, int character, bool shift, bool ctrl, bool al
     settle();
 }
 
+namespace {
+
+/// The handler property an AS2 script sets for a pointer event, or empty.
+std::string pointerHandler(const std::string& event)
+{
+    for (const char* each : {"press", "release", "releaseOutside", "rollOver", "rollOut", "dragOver", "dragOut"})
+        if (event == each)
+            return "on" + std::string(1, static_cast<char>(std::toupper(static_cast<unsigned char>(event[0])))) +
+                event.substr(1);
+    return std::string();
+}
+
+} // namespace
+
+void MovieRuntime::runObjectHandler(Clip& clip, const std::string& name)
+{
+    if (_as3 || !clip.object || name.empty())
+        return;
+    const as3::Val* found = clip.object->properties.lookup(name);
+    if (!found || !found->isFunction())
+        return;
+    const as3::ValuePtr function = *found;
+    Clip* was = _current;
+    const DOMElement* wasSource = _source;
+    _current = &clip;
+    _source = clip.placed;
+    _vm->call(function, {}, objectFor(clip), objectFor(clip));
+    report((clip.name.empty() ? clip.key : clip.name) + ", " + name);
+    _current = was;
+    _source = wasSource;
+}
+
 void MovieRuntime::runClipEvent(Clip& clip, const std::string& event)
 {
+    runObjectHandler(clip, pointerHandler(event));
+    if (clip.gone)
+        return;
     const auto found = clip.clipEvents.find(event);
     if (found == clip.clipEvents.end())
         return;
@@ -2923,6 +2984,9 @@ std::map<std::string, as3::ValuePtr>& MovieRuntime::buttonHandlers(Clip& button)
 
 void MovieRuntime::runButtonEvent(Clip& button, const std::string& event)
 {
+    runObjectHandler(button, pointerHandler(event));
+    if (button.gone)
+        return;
     if (!button.placed || !button.parent)
         return;
     std::map<std::string, as3::ValuePtr>& handlers = buttonHandlers(button);
@@ -3435,6 +3499,18 @@ as3::ValuePtr MovieRuntime::property(Clip& clip, const std::string& name)
                 for (const auto& [key, value] : args[3]->properties)
                     object->setProperty(key, value);
             return object;
+        });
+    }
+    if (name == "createEmptyMovieClip")
+    {
+        return Value::makeNativeFunction([this, life](const std::vector<as3::ValuePtr>& args) {
+            Clip* self = *life;
+            if (!self || self->gone)
+                return Value::makeUndefined();
+            const std::string newName = args.empty() ? std::string() : args[0]->toString();
+            if (Clip* old = self->named(newName); old && old->made)
+                takeOff(*old, false);
+            return objectFor(*makeClip(self, emptySymbol(), newName));
         });
     }
     if (name == "duplicateMovieClip")

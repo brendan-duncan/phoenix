@@ -1070,3 +1070,32 @@ TEST(movie_runtime_puts_timeline_and_script_children_on_the_display_list)
         CHECK(again->scriptedX().value_or(0) == 42.0);
     }
 }
+
+TEST(movie_runtime_creates_empty_clips_that_hear_each_frame)
+{
+    // createEmptyMovieClip: a clip with nothing in it, whose onEnterFrame
+    // runs each frame however the timeline it is on goes.
+    Movie movie;
+    movie.root->name = "Scene 1";
+    fla::Layer* actions = movie.layer(*movie.root, "actions");
+    movie.frame(*actions, 0, 1,
+        "var ticks = 0;\n"
+        "var made = this.createEmptyMovieClip(\"ticker\", 1000);\n"
+        "trace(made._name + ' ' + (ticker == made));\n"
+        "ticker.onEnterFrame = function () { ticks++; trace('tick ' + ticks); };\n"
+        "stop();\n");
+    std::vector<std::string> traced;
+    std::vector<std::string> errors;
+    fla::play::MovieRuntime runtime(*movie.root, 12.0);
+    runtime.setActionScriptVersion(2);
+    runtime.trace = [&traced](const std::string& line) { traced.push_back(line); };
+    runtime.error = [&errors](const std::string& line) { errors.push_back(line); };
+    runtime.start();
+    for (int i = 0; i < 5; ++i)
+        runtime.step();
+    CHECK(traced.size() == 6 && traced[0] == "ticker true" && traced.back() == "tick 5");
+    CHECK(runtime.root().named("ticker") != nullptr);
+    for (const std::string& error : errors)
+        std::printf("    %s\n", error.c_str());
+    CHECK(errors.empty());
+}
