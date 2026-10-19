@@ -709,20 +709,14 @@ void BrushTool::finish(PhoenixView& view)
         swept.addPolygon(ring);
         swept.closeSubpath();
     }
-    swept = drawaids::withCopies(swept, copies);
-    fla::Shape* shape = outlineShape(swept.simplified(), tolerance, frame, _style, true);
     _samples.clear();
     // Lock Fill: a gradient or bitmap over the whole stage, not the stroke.
-    if (shape && _style.lockFill)
-    {
+    const auto lockFill = [&view, this](fla::Shape* painted) {
+        if (!painted || !_style.lockFill)
+            return;
         const QRectF stage = view.stageInScope();
-        fla::DrawingStyle::fitFillsTo(*shape, stage.left(), stage.top(), stage.right(), stage.bottom());
-    }
-    if (!shape)
-    {
-        view.update();
-        return;
-    }
+        fla::DrawingStyle::fitFillsTo(*painted, stage.left(), stage.top(), stage.right(), stage.bottom());
+    };
 
     // A textured stroke keeps its grain as its own object, so merging never
     // spreads the grain to other paint or takes it away.
@@ -737,10 +731,21 @@ void BrushTool::finish(PhoenixView& view)
         fla::texture::set(painted->extraAttributes, spec);
         painted->isDrawingObject = true;
     };
-    texture(shape);
 
     using BrushMode = fla::DrawingStyle::BrushMode;
     const BrushMode mode = _style.brushMode;
+
+    // The stroke and its copies across the symmetry axis are one shape, so
+    // they merge, and move while still selected, together.
+    fla::Shape* shape =
+        outlineShape(drawaids::withCopies(swept, copies), tolerance, frame, _style, true);
+    lockFill(shape);
+    if (!shape)
+    {
+        view.update();
+        return;
+    }
+    texture(shape);
 
     if (mode == BrushMode::Normal || mode == BrushMode::Fills)
     {
@@ -1149,8 +1154,8 @@ void BrushTool::paintOverlay(PhoenixView& view, QPainter& painter, double scale)
         painter.setBrush(QColor(_style.fillColor[0], _style.fillColor[1],
             _style.fillColor[2], _style.fillColor[3]));
         const std::vector<fla::BrushSample> samples = drawaids::snapped(view, _samples);
-        painter.drawPath(drawaids::withCopies(sweptOutline(fla::BrushStroke::dabs(samples, brush, zoom, false), zoom, false),
-            drawaids::copiesInScope(view)));
+        drawaids::drawWithCopies(painter, sweptOutline(fla::BrushStroke::dabs(samples, brush, zoom, false), zoom, false),
+            drawaids::copiesInScope(view));
         paintTrail(view, painter, samples, brush.stabilizer, scale);
     }
 
@@ -1321,7 +1326,7 @@ void EraserTool::finish(PhoenixView& view)
     const std::vector<fla::BrushDab> dabs = fla::BrushStroke::dabs(_samples, nib(), zoom, true);
     std::unique_ptr<fla::Shape> cutter(dabs.empty()
             ? brushOutlineShape(_points, _style.eraserSize, false, nullptr, _style, false)
-            : outlineShape(drawaids::withCopies(sweptOutline(dabs, zoom, false), copies).simplified(), 0.3 / zoom,
+            : outlineShape(drawaids::withCopies(sweptOutline(dabs, zoom, false), copies), 0.3 / zoom,
                   nullptr, _style, false));
     _points.clear();
     _samples.clear();
@@ -1450,8 +1455,8 @@ void EraserTool::paintOverlay(PhoenixView& view, QPainter& painter, double scale
         painter.setBrush(QColor(255, 255, 255, 200));
         const double zoom = std::max(view.zoom(), 1.0e-6);
         const std::vector<fla::BrushSample> samples = drawaids::snapped(view, _samples);
-        painter.drawPath(drawaids::withCopies(sweptOutline(fla::BrushStroke::dabs(samples, eraser, zoom, false), zoom, false),
-            drawaids::copiesInScope(view)));
+        drawaids::drawWithCopies(painter, sweptOutline(fla::BrushStroke::dabs(samples, eraser, zoom, false), zoom, false),
+            drawaids::copiesInScope(view));
         paintTrail(view, painter, samples, eraser.stabilizer, scale);
     }
 

@@ -35,8 +35,11 @@ QTransform toQt(const fla::Transform& transform);
 /// tools draw in; none while symmetry is off.
 std::vector<QTransform> copiesInScope(const PhoenixView& view);
 
-/// \a path and its copies, one path.
+/// The area \a path and its copies cover, as one path.
 QPainterPath withCopies(const QPainterPath& path, const std::vector<QTransform>& copies);
+
+/// Draws \a path and its copies, for a stroke's preview.
+void drawWithCopies(QPainter& painter, const QPainterPath& path, const std::vector<QTransform>& copies);
 
 /// A stroke's points, in the tools' space, pulled onto the drawing guide
 /// it keeps to.

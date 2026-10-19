@@ -456,7 +456,7 @@ void PencilTool::paintOverlay(PhoenixView& view, QPainter& painter, double scale
                 to.position.x, to.position.y);
     }
     painter.setPen(QPen(QColor(0, 170, 255), 1.0 * scale));
-    painter.drawPath(drawaids::withCopies(fitPath, drawaids::copiesInScope(view)));
+    drawaids::drawWithCopies(painter, fitPath, drawaids::copiesInScope(view));
 }
 
 void PencilTool::deactivate(PhoenixView& view)

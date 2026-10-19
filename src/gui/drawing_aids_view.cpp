@@ -9,6 +9,7 @@
 #include <QEvent>
 #include <QPainter>
 #include <QPointer>
+#include <QPolygonF>
 #include <QWidget>
 
 #include <algorithm>
@@ -353,10 +354,19 @@ std::vector<QTransform> copiesInScope(const PhoenixView& view)
 
 QPainterPath withCopies(const QPainterPath& path, const std::vector<QTransform>& copies)
 {
-    QPainterPath all = path;
+    // Joined as areas rather than added as outlines: a mirrored copy winds
+    // the other way, and added it would cut holes where it overlaps.
+    QPainterPath all = path.simplified();
     for (const QTransform& copy : copies)
-        all.addPath(copy.map(path));
+        all = all.united(copy.map(path).simplified());
     return all;
+}
+
+void drawWithCopies(QPainter& painter, const QPainterPath& path, const std::vector<QTransform>& copies)
+{
+    painter.drawPath(path);
+    for (const QTransform& copy : copies)
+        painter.drawPath(copy.map(path));
 }
 
 double stagePixel(const PhoenixView& view)
