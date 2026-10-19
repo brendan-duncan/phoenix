@@ -2,7 +2,7 @@
 
 What changed in each release of Phoenix, newest first.
 
-## Unreleased
+## 0.21.1
 
 - Clicking a fill or stroke swatch (toolbox or Properties) opens a swatch pop-up: the document's colors, a row of gradients, recent colors, hex and alpha fields, No Color and the full color picker
 - Pick a gradient from the pop-up to fill the selected shape with it, fitted to the shape, or to draw new shapes with it
