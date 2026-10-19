@@ -240,7 +240,7 @@ struct PaintBucketTool::Target
 
     void take(int face, bool onlyEmpty)
     {
-        if (face < 0 || (onlyEmpty && regions->faceFill(face) != -1) || !taken.insert(face).second)
+        if (face < 0 || (onlyEmpty && regions->faceFill(face) > 0) || !taken.insert(face).second)
             return;
         faces.push_back(face);
         outlines[face] = outlinePath(*regions, face, toStage);
@@ -569,7 +569,7 @@ void PaintBucketTool::lassoTo(PhoenixView& view, const QPointF& documentPos)
             for (const int face : target->regions->boundedFaces())
             {
                 fla::Point inside;
-                if (target->regions->faceInterior(face, inside))
+                if (fla::regionfill::regionMiddle(*target->regions, face, inside))
                     target->interiors.emplace_back(face, target->toStage.map(QPointF(inside.x, inside.y)));
             }
         }

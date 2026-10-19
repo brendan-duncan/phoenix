@@ -33,7 +33,13 @@ bool inverse(const Transform& t, Transform& result);
 /// the order it reaches them, the path sampled every \a step units.
 std::vector<int> facesAlong(const RegionSplitter& regions, const std::vector<Point>& path, double step);
 
-/// Every enclosed region of \a regions lying inside the closed \a loop.
+/// The point a loop must take in for region \a face to count as inside it:
+/// the middle of its area, or for a region curled round so that its middle
+/// lies outside it, some point within it. False for no such region.
+bool regionMiddle(const RegionSplitter& regions, int face, Point& point);
+
+/// Every enclosed region of \a regions whose middle lies inside the closed
+/// \a loop.
 std::vector<int> facesInside(const RegionSplitter& regions, const std::vector<Point>& loop);
 
 /// Whether \a point is inside the closed polygon \a loop (even-odd).

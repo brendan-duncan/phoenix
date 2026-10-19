@@ -120,6 +120,14 @@ bool insideLoop(const std::vector<Point>& loop, const Point& point)
     return inside;
 }
 
+bool regionMiddle(const RegionSplitter& regions, int face, Point& point)
+{
+    point = regions.faceCentroid(face);
+    if (regions.faceAt(point) == face)
+        return true;
+    return regions.faceInterior(face, point);
+}
+
 std::vector<int> facesInside(const RegionSplitter& regions, const std::vector<Point>& loop)
 {
     std::vector<int> faces;
@@ -128,7 +136,7 @@ std::vector<int> facesInside(const RegionSplitter& regions, const std::vector<Po
     for (const int face : regions.boundedFaces())
     {
         Point point;
-        if (regions.faceInterior(face, point) && insideLoop(loop, point))
+        if (regionMiddle(regions, face, point) && insideLoop(loop, point))
             faces.push_back(face);
     }
     return faces;

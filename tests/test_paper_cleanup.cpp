@@ -2,6 +2,7 @@
 
 #include "../src/data/shape.h"
 #include "../src/edit/paper_cleanup.h"
+#include "../src/edit/region_split.h"
 #include "../src/geom/shape_geometry.h"
 
 #include <algorithm>
@@ -212,6 +213,18 @@ TEST(paper_cleanup_closes_gaps_and_vectorizes_in_place)
     // Where the lines are, a pixel or two either way.
     CHECK(std::abs(minX - left) <= 2.0 && std::abs(maxX - (right + 1)) <= 2.0);
     CHECK(std::abs(minY - top) <= 2.0 && std::abs(maxY - (bottom + 1)) <= 2.0);
+
+    // The traced lines enclose regions the Paint Bucket can fill: the ball's
+    // two halves are empty regions (no fill, which a trace writes as 0).
+    {
+        fla::RegionSplitter regions(*shape);
+        const double ballX = (0.25 + 0.17) * w;
+        const double ballY = (0.30 + 0.13) * h;
+        const int top = regions.faceAt(fla::Point(ballX, ballY - 0.06 * w));
+        const int under = regions.faceAt(fla::Point(ballX, ballY + 0.06 * w));
+        CHECK(top >= 0 && under >= 0 && top != under);
+        CHECK(regions.faceFill(top) <= 0 && regions.faceFill(under) <= 0);
+    }
 
     // Nothing to trace on a blank page.
     std::vector<uint8_t> blank(static_cast<size_t>(w) * h * 4, 0);
