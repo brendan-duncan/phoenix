@@ -37,6 +37,8 @@ set(TEST_SOURCES
     test_shape_merge.cpp
     test_shape_transform.cpp
     test_shape_tween.cpp
+    test_inbetween.cpp
+    test_share_formats.cpp
     test_frame_commands.cpp
     test_layer_commands.cpp
     test_timeline_edit.cpp
@@ -140,6 +142,7 @@ if(PHOENIX_TESTS_HAVE_PARSER)
         test_node_graph.cpp
         test_paint_brushes.cpp
         test_bone_corrections.cpp
+        test_view_options.cpp
     )
 endif()
 
@@ -164,6 +167,10 @@ endif()
 
 add_executable(phoenix_tests ${TEST_SOURCES})
 target_link_libraries(phoenix_tests PRIVATE ${TEST_CORE})
+# The Share formats ffmpeg writes are checked with the ffmpeg Phoenix ships.
+if(PHOENIX_FFMPEG_PROGRAM)
+    target_compile_definitions(phoenix_tests PRIVATE PHOENIX_TEST_FFMPEG="${PHOENIX_FFMPEG_PROGRAM}")
+endif()
 if(PHOENIX_TESTS_HAVE_JSFL)
     target_compile_definitions(phoenix_tests PRIVATE PHOENIX_TEST_DATA="${CMAKE_CURRENT_SOURCE_DIR}/data")
     if(MSVC)

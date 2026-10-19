@@ -74,6 +74,7 @@ set(PHOENIX_CORE_SOURCES
     edit/find_replace.cpp
     edit/frame_actions.cpp
     edit/frame_bake.cpp
+    edit/inbetween.cpp
     edit/frame_commands.cpp
     edit/frame_sound.cpp
     edit/function_curves.cpp
@@ -97,6 +98,8 @@ set(PHOENIX_CORE_SOURCES
     edit/review_notes.cpp
     edit/onion_shift.cpp
     edit/safe_zones.cpp
+    edit/reference_board.cpp
+    edit/stage_view.cpp
     edit/scene_commands.cpp
     edit/script_edit.cpp
     edit/selection.cpp
@@ -133,7 +136,9 @@ set(PHOENIX_CORE_SOURCES
     gui/audio_engine.cpp
     gui/miniaudio_impl.c
     parser/path_parser.cpp
+    util/apng_writer.cpp
     util/gif_writer.cpp
+    util/share_formats.cpp
     util/parallel.cpp
     util/sprite_sheet.cpp
     writer/edge_writer.cpp

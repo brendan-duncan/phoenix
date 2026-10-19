@@ -24,6 +24,7 @@
 #include "width_tool.h"
 #include "navigation_tools.h"
 #include "paint_tools.h"
+#include "reference_board_view.h"
 #include "pen_tool.h"
 #include "pencil_tool.h"
 #include "primitive_tool.h"
@@ -196,6 +197,9 @@ private slots:
 
     void exportSvg();
     void exportMovie();
+    /// File > Share: the movie for the web and social sites
+    /// (main_window_share.cpp).
+    void shareMovie();
     /// The frames of the scene, or of the library symbol \a symbol, on one
     /// image with a description beside it.
     void exportSpriteSheet(const QString& symbol = QString());
@@ -516,6 +520,13 @@ private slots:
     /// Modify > Timeline > Convert to Frame-by-Frame Animation and Reverse
     /// Frames.
     void convertToFrameByFrame();
+    /// Modify > Timeline > Insert Inbetween (a drawing \a t of the way
+    /// between the keys around the selection) and Fill Inbetweens (every
+    /// frame between, spaced as fla::inbetween::Spacing \a spacing), with
+    /// their menus (main_window_inbetween.cpp).
+    void insertInbetween(double t);
+    void fillInbetweens(int spacing);
+    void addInbetweenMenus(QMenu* timelineMenu, QMenu* framesMenu);
     /// Bake to Keyframes: the selected frames' behaviors left as keyframes
     /// (Modify > Timeline), or the whole runs of the selected instances
     /// (the Behaviors panel).
@@ -767,6 +778,26 @@ private:
     /// F4: hides every panel, or brings back the ones it hid.
     void togglePanels();
     QList<QDockWidget*> _hiddenByF4;
+
+    /// The view's own settings and helpers (main_window_view.cpp): Mirror
+    /// View, Grayscale, the reference board, Canvas Only and touch gestures,
+    /// put in the View menu after \a after and on the edit bar's \a controls.
+    void createViewExtras(QMenu* viewMenu, QAction* after, class StageControls* controls, int layoutVersion);
+    /// View > Reference Images > Add Reference Image.
+    void addReferenceImages();
+    /// Arrange Reference Images' menu for the picture under \a globalPos,
+    /// when that tool is in use; false when it is not.
+    bool showReferenceMenu(const QPoint& globalPos);
+    /// Image files dropped on the stage with Alt held become reference
+    /// images where they were dropped; false for any other drop.
+    bool dropReferenceImages(const QStringList& paths, const QPoint& windowPos, Qt::KeyboardModifiers modifiers);
+    std::unique_ptr<ReferenceBoardView> _referenceBoard;
+    std::unique_ptr<ReferenceTool> _referenceTool;
+    Tool* _toolBeforeReferences = nullptr;
+    class CanvasOnly* _canvasOnly = nullptr;
+    /// The last edit when fingers came down on the stage, so a pinch or a
+    /// two-finger tap can take back what the first finger began.
+    const fla::Command* _touchTop = nullptr;
 
     void rebuildBreadcrumb();
 

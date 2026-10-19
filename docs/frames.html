@@ -80,6 +80,36 @@
 
 <p>To turn a tween into drawings you can adjust one by one, use <strong>Convert to Frame-by-Frame Animation</strong> (see <a href="#frame-commands">Frame commands</a>). For animating a whole sequence with less drawing, see <a href="tweens.html">Tweens and easing</a>, and the <a href="tutorial-frame-by-frame.html">frame-by-frame lesson</a>.</p>
 
+<h3 id="inbetweens">Let Phoenix draw the inbetweens</h3>
+
+<p>You draw the important poses, the <em>keys</em>, and Phoenix can draw the drawings in between them for you. Each one is an ordinary keyframe drawing, so you can fix it up by hand afterward, like a rough inbetween from an assistant.</p>
+
+<div class="split">
+  <figure style="margin:0"><img src="assets/shots/menu-insert-inbetween.webp" alt="Modify, Timeline, Insert Inbetween submenu: Halfway, One Third, Two Thirds, Favor First Key and Favor Second Key" width="116" height="126"></figure>
+  <ol class="steps">
+    <li>Draw two keys on the same layer, with empty frames between them or right next to each other.</li>
+    <li>Click a frame between them, or select both keys.</li>
+    <li>Choose <span class="menu-path">Modify &rsaquo; Timeline &rsaquo; Insert Inbetween</span> (or right-click the frames) and pick where the new drawing goes.</li>
+  </ol>
+</div>
+
+<dl class="defs">
+  <dt>Halfway</dt><dd>A drawing exactly between the two keys.</dd>
+  <dt>One Third, Two Thirds</dt><dd>A drawing a third or two thirds of the way from the first key.</dd>
+  <dt>Favor First Key, Favor Second Key</dt><dd>A drawing a quarter of the way along, close to one key, for a move that eases in or out of it.</dd>
+</dl>
+
+<p>The new keyframe goes on the frame that far between the keys. If the keys are on frames next to each other, Phoenix makes room by adding a frame after the first. Undo takes it away in one step.</p>
+
+<p><span class="menu-path">Modify &rsaquo; Timeline &rsaquo; Fill Inbetweens</span> draws <em>every</em> empty frame between two keys at once. Choose how the drawings are spaced: <strong>Even</strong> steps the same size, <strong>Ease In</strong> starts slowly with the drawings close together near the first key, and <strong>Ease Out</strong> slows to a stop near the second key. A tween on the first key is taken off, since every frame now has its own drawing.</p>
+
+<figure>
+  <img src="assets/shots/inbetweens-filled.webp" alt="A blob changing shape over seven frames, each frame a keyframe after Fill Inbetweens, with onion skinning showing the drawings before and after the current one" width="660" height="520">
+  <figcaption>Fill Inbetweens between two drawings: every frame is now a keyframe of its own, seen here with onion skinning on.</figcaption>
+</figure>
+
+<p>Phoenix morphs each shape into the matching shape on the other key the way a <a href="tweens.html#shape-tweens">shape tween</a> does, colors and line widths included. If the drawings turn or twist the wrong way, add <a href="tweens.html#shape-hints">shape hints</a> to the first key (make a shape tween between the keys to place them), and the inbetweens follow them. Symbols, groups and text that are on both keys move, turn, scale and change color part way. Anything that is only on one key, with nothing to turn into, stays as the nearer key draws it, and the status bar says how many such things there were: a vector drawing can't fade from one picture to another, so draw those parts yourself.</p>
+
 <h2>What the timeline shows</h2>
 
 <table>

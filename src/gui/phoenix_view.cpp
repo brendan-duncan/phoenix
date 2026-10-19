@@ -9,6 +9,8 @@
 #include "../edit/text_animators.h"
 #include "../edit/vector_import.h"
 #include "../edit/paint_brushes.h"
+#include "../edit/stage_view.h"
+#include "reference_board_view.h"
 #include "../jsfl/behavior_frames.h"
 #include "theme.h"
 #include "../play/movie_runtime.h"
@@ -974,7 +976,33 @@ void PhoenixView::paintEvent(QPaintEvent *event)
         emit zoomChanged();
     }
 
-    QPainter painter(this);
+    // A value check: the stage is drawn into a picture first and turned
+    // gray, then the tools' handles go over it in their own colors.
+    if (_grayscale && !_grayPass)
+    {
+        const qreal ratio = devicePixelRatioF();
+        QImage gray(size() * ratio, QImage::Format_ARGB32_Premultiplied);
+        if (!gray.isNull())
+        {
+            gray.setDevicePixelRatio(ratio);
+            _grayPass = &gray;
+            paintEvent(event);
+            _grayPass = nullptr;
+            fla::stageview::grayscale(reinterpret_cast<uint32_t*>(gray.bits()),
+                static_cast<size_t>(gray.width()) * static_cast<size_t>(gray.height()));
+            QPainter painter(this);
+            painter.drawImage(0, 0, gray);
+            if (_flaDocument && _flaDocument->document)
+            {
+                painter.setRenderHint(QPainter::Antialiasing, true);
+                painter.setTransform(documentToWidget());
+                drawToolOverlay(painter);
+            }
+            return;
+        }
+    }
+
+    QPainter painter(_grayPass ? static_cast<QPaintDevice*>(_grayPass) : this);
     painter.setRenderHint(QPainter::Antialiasing, true);
     painter.setRenderHint(QPainter::TextAntialiasing, true);
     painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
@@ -1026,7 +1054,7 @@ void PhoenixView::paintEvent(QPaintEvent *event)
         widgetRect.width() * invScale,
         widgetRect.height() * invScale
     );
-    if (_rotation != 0.0)
+    if (_rotation != 0.0 || _mirrored)
     {
         // Turned, the view sees a turned rectangle of the stage; its bounds
         // are what can show.
@@ -1078,7 +1106,8 @@ void PhoenixView::paintEvent(QPaintEvent *event)
         // supersampled buffer, so handles stay crisp.
         painter.save();
         painter.setTransform(documentToWidget(), true);
-        drawToolOverlay(painter);
+        if (!_grayPass)
+            drawToolOverlay(painter);
         painter.restore();
     }
     else
@@ -1120,6 +1149,7 @@ void PhoenixView::paintEvent(QPaintEvent *event)
             key.grid = _showGrid;
             key.rotation = _rotation;
             key.pivot = _rotationPivot;
+            key.mirrored = _mirrored;
             key.moving = moving;
 
             if (!_staticValid || !(_staticKey == key))
@@ -1161,7 +1191,8 @@ void PhoenixView::paintEvent(QPaintEvent *event)
         }
         _moving = nullptr;
         painter.setTransform(documentToWidget(), false);
-        drawToolOverlay(painter);
+        if (!_grayPass)
+            drawToolOverlay(painter);
         painter.restore();
     }
 
@@ -1207,6 +1238,11 @@ void PhoenixView::paintEvent(QPaintEvent *event)
     // Safe zones and aspect-ratio frames, over the art and the dimming.
     if (_showSafeZones && !_exporting)
         drawSafeZones(painter, rootToWidget(), document);
+
+    // The reference board, over the art and on the pasteboard: the view's
+    // alone, never an export's.
+    if (_referenceBoard && !_exporting)
+        _referenceBoard->paint(painter, rootToWidget());
 
     // Draw visible rect if debug mode is enabled
     if (_showBounds)
@@ -9270,7 +9306,7 @@ void PhoenixView::mouseMoveEvent(QMouseEvent *event)
         return;
     }
     // The cursor says a guide can be picked up.
-    if (_showGuides && _rotation == 0.0 && !(event->buttons() & Qt::LeftButton) && _activeTool == _modifierTool)
+    if (_showGuides && _rotation == 0.0 && !_mirrored && !(event->buttons() & Qt::LeftButton) && _activeTool == _modifierTool)
     {
         const QTransform toWidget = rootToWidget();
         bool overGuide = false;
@@ -11680,7 +11716,7 @@ void PhoenixView::drawSliceGuides(QPainter& painter)
 
 bool PhoenixView::beginGuideDrag(const QPointF& widgetPos)
 {
-    if (!_flaDocument || !_flaDocument->document || _rotation != 0.0)
+    if (!_flaDocument || !_flaDocument->document || _rotation != 0.0 || _mirrored)
         return false;
     bool invertible = false;
     const QTransform toWidget = rootToWidget();
@@ -11771,7 +11807,7 @@ void PhoenixView::drawRulersAndGuides(QPainter& painter)
             drawGuide(_guideDrag, std::round(_guideValue));
     }
 
-    if (_showRulers && _rotation == 0.0)
+    if (_showRulers && _rotation == 0.0 && !_mirrored)
     {
         const QColor back = theme::color("stage.ruler");
         const QColor ink = theme::color("stage.rulerText");
@@ -12031,21 +12067,40 @@ QTransform PhoenixView::rootToWidget() const
 
     // The stage sits centered in whatever space the widget has, so the centering
     // offset is part of the mapping and not just a painting detail.
-    const double centerX = (width() - docWidth * _zoom) / 2.0;
-    const double centerY = (height() - docHeight * _zoom) / 2.0;
+    // The turn and the mirror go inside the pan, so panning stays in screen
+    // directions (fla::stageview).
+    fla::stageview::Placement placement;
+    placement.viewWidth = width();
+    placement.viewHeight = height();
+    placement.stageWidth = docWidth;
+    placement.stageHeight = docHeight;
+    placement.zoom = _zoom;
+    placement.panX = _panX;
+    placement.panY = _panY;
+    placement.rotation = _rotation;
+    placement.pivotX = _rotationPivot.x();
+    placement.pivotY = _rotationPivot.y();
+    placement.mirrored = _mirrored;
+    const fla::stageview::Affine m = fla::stageview::stageToView(placement);
+    return QTransform(m.a, m.b, m.c, m.d, m.tx, m.ty);
+}
 
-    QTransform transform;
-    transform.translate(_panX + centerX, _panY + centerY);
-    transform.scale(_zoom, _zoom);
-    if (_rotation != 0.0)
-    {
-        // Turned about the pivot, inside the pan, so panning stays in
-        // screen directions.
-        transform.translate(_rotationPivot.x(), _rotationPivot.y());
-        transform.rotate(_rotation);
-        transform.translate(-_rotationPivot.x(), -_rotationPivot.y());
-    }
-    return transform;
+void PhoenixView::setMirrored(bool on)
+{
+    if (on == _mirrored)
+        return;
+    _mirrored = on;
+    _staticValid = false;
+    emit mirroredChanged(_mirrored);
+    update();
+}
+
+void PhoenixView::setGrayscale(bool on)
+{
+    if (on == _grayscale)
+        return;
+    _grayscale = on;
+    update();
 }
 
 void PhoenixView::setRotation(double degrees)

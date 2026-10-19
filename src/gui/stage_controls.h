@@ -3,6 +3,8 @@
 #include <QWidget>
 
 #include <functional>
+#include <utility>
+#include <vector>
 
 class PhoenixView;
 class QAction;
@@ -29,6 +31,11 @@ public:
     /// Shows the view's zoom and rotation as they are now.
     void refresh();
 
+    /// Another view setting as a button before the zoom box, following
+    /// \a action; \a icon draws its icon in a color, again when the theme
+    /// changes.
+    void addToggle(QAction* action, const QString& objectName, std::function<QIcon(const QColor&)> icon);
+
 protected:
     void changeEvent(QEvent* event) override;
 
@@ -47,4 +54,5 @@ private:
     QToolButton* _safeZonesButton = nullptr;
     HotDoubleSpinBox* _zoom = nullptr;
     QToolButton* _zoomMenu = nullptr;
+    std::vector<std::pair<QAction*, std::function<QIcon(const QColor&)>>> _toggles;
 };

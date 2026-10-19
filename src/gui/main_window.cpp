@@ -5,6 +5,7 @@
 #include "new_document_dialog.h"
 #include "start_dialog.h"
 #include "stage_controls.h"
+#include "canvas_only.h"
 #include "safe_zones_dialog.h"
 #include "../edit/canvas_document.h"
 #include "../edit/depth_sort.h"
@@ -806,6 +807,8 @@ void MainWindow::dropEvent(QDropEvent* event)
     if (media.isEmpty() || !_flaDocument || !_flaDocument->document)
         return;
     event->acceptProposedAction();
+    if (dropReferenceImages(media, event->position().toPoint(), event->modifiers()))
+        return;
 
     // Files dropped on the stage land where they were dropped; anywhere else
     // in the window they go into the library.
@@ -6879,6 +6882,9 @@ void MainWindow::setupMenus()
             [this](const QString& text) { statusBar()->showMessage(text, 8000); });
     });
 
+    QAction* shareAction = fileMenu->addAction("S&hare...");
+    shareAction->setStatusTip("Save the animation as a GIF, WebP, animated PNG, MP4 or WebM, sized for the web and social sites");
+    connect(shareAction, &QAction::triggered, this, &MainWindow::shareMovie);
     QMenu* exportMenu = fileMenu->addMenu("Export");
 
     QAction* exportBakedAction = new QAction("Export FLA for Other &Apps...", this);
@@ -7469,6 +7475,7 @@ void MainWindow::setupMenus()
     QAction* splitAudioAction = modifyTimelineMenu->addAction("Split &Audio");
     splitAudioAction->setStatusTip("Cut the stream sound on the current layer at the playhead into two keyframes");
     connect(splitAudioAction, &QAction::triggered, this, &MainWindow::splitAudio);
+    addInbetweenMenus(modifyTimelineMenu, _framesMenu);
 
     // Modify > Shape.
     QMenu* shapeMenu = modifyMenu->addMenu("S&hape");
@@ -8169,9 +8176,11 @@ void MainWindow::setupMenus()
     _safeZonesAction = safeZonesAction;
 
     // The common view controls on the edit bar, at its right.
+    StageControls* stageControls = nullptr;
     if (_breadcrumbRow)
-        _breadcrumbRow->layout()->addWidget(new StageControls(_phoenixView, clipAction, dimOutsideDocumentAction,
-            [this]() { chooseTool(_rotationTool.get()); }, safeZonesAction, _breadcrumbRow));
+        _breadcrumbRow->layout()->addWidget(stageControls = new StageControls(_phoenixView, clipAction,
+            dimOutsideDocumentAction, [this]() { chooseTool(_rotationTool.get()); }, safeZonesAction, _breadcrumbRow));
+    createViewExtras(viewMenu, straightenAction, stageControls, kLayoutVersion);
 
     // Help menu
     // Control menu: playback. They act while the stage
@@ -9143,6 +9152,18 @@ int MainWindow::renderCommand(const QString& source, const QStringList& options)
             settings.gifColors = std::clamp(value.toInt(), 2, 256);
             ++i;
         }
+        else if (name == "--quality" && !value.isEmpty())
+        {
+            settings.quality = std::clamp(value.toInt(), 1, 100);
+            ++i;
+        }
+        else if (name == "--fps" && !value.isEmpty())
+        {
+            settings.outputRate = std::clamp(value.toDouble(), 1.0, 120.0);
+            ++i;
+        }
+        else if (name == "--fit")
+            settings.letterbox = true;
         else if (name == "--layers" && !value.isEmpty())
         {
             settings.layers = value.split(',', Qt::SkipEmptyParts);
@@ -9164,6 +9185,14 @@ int MainWindow::renderCommand(const QString& source, const QStringList& options)
     else if (suffix == "mp4" || suffix == "mov" || suffix == "gif")
     {
         settings.format = suffix == "gif" ? MovieExportSettings::Format::Gif : MovieExportSettings::Format::Video;
+        QDir().mkpath(QFileInfo(out).absolutePath());
+    }
+    else if (suffix == "webp" || suffix == "webm" || suffix == "apng")
+    {
+        // The Share formats: an animated WebP or PNG, a WebM video.
+        settings.format = suffix == "webp"   ? MovieExportSettings::Format::WebP
+                          : suffix == "webm" ? MovieExportSettings::Format::WebM
+                                             : MovieExportSettings::Format::Apng;
         QDir().mkpath(QFileInfo(out).absolutePath());
     }
     else if (suffix == "svg")
@@ -10404,7 +10433,10 @@ QJsonObject MainWindow::currentWorkspace() const
     QJsonObject workspace;
     workspace["phoenixWorkspace"] = 1;
     workspace["layoutVersion"] = kLayoutVersion;
-    workspace["docks"] = QString::fromLatin1(saveState(kLayoutVersion).toBase64());
+    // In Canvas Only, the panels as they will come back.
+    const QByteArray docks =
+        _canvasOnly && _canvasOnly->isOn() ? _canvasOnly->savedState() : saveState(kLayoutVersion);
+    workspace["docks"] = QString::fromLatin1(docks.toBase64());
     if (_toolbox)
         workspace["tools"] = _toolbox->layout().toJson();
     if (_timelineView)
@@ -10414,6 +10446,8 @@ QJsonObject MainWindow::currentWorkspace() const
 
 bool MainWindow::applyWorkspace(const QJsonObject& workspace)
 {
+    if (_canvasOnly)
+        _canvasOnly->leave();
     // A workspace from a newer Phoenix may name panels this one does not
     // have; Qt passes over those. One whose dock layout cannot be read
     // keeps the docks as they are and still takes the rest.
@@ -10433,6 +10467,8 @@ bool MainWindow::applyWorkspace(const QJsonObject& workspace)
 
 void MainWindow::applyBuiltInWorkspace(const QString& name)
 {
+    if (_canvasOnly)
+        _canvasOnly->leave();
     // Each starts from Phoenix's own layout, in the window as it is.
     const QByteArray window = saveGeometry();
     restoreState(_defaultLayout, kLayoutVersion);
@@ -16568,6 +16604,8 @@ void MainWindow::showStageMenu(const QPoint& globalPos, const QPointF& documentP
 {
     if (!_phoenixView || !_flaDocument || !_flaDocument->document)
         return;
+    if (showReferenceMenu(globalPos))
+        return;
     // A right-click on a bone of an armature on show: what the bone does.
     if (const PhoenixView::IKBoneHit bone = _phoenixView->ikBoneAt(documentPos); bone && !bone.locked)
     {
@@ -17846,6 +17884,9 @@ void MainWindow::saveSettings()
     if (_secondary)
         return;
     settings.setValue("window/geometry", saveGeometry());
+    // Canvas Only is put away first, so the panels are saved as they were.
+    if (_canvasOnly)
+        _canvasOnly->leave();
     if (_layoutRestored)
     {
         expandCollapsedPanels();

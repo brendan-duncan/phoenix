@@ -89,6 +89,8 @@ const std::vector<Feature>& all()
         {"layer-transparency", "Layer transparency", "the layers drawn solid", {"phoenixTransparency"}},
         {"see-through-stage", "See-through stage", "an opaque stage color", {"phoenixStageAlpha"}},
         {"safe-zones", "Safe zones and aspect-ratio guides", "the stage without them", {"phoenixSafeZones"}},
+        {"reference-board", "Reference images", "the document without its pinned reference images",
+            {"phoenixReferences"}},
     };
     return list;
 }
