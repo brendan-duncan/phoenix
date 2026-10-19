@@ -2,6 +2,15 @@
 
 What changed in each release of Phoenix, newest first.
 
+## Unreleased
+
+- View > Mirror View (Shift+M, or the mirror button on the edit bar) flips the view of the stage left to right to check a drawing; every tool still works, and the art is not changed
+- View > Grayscale shows the stage in shades of gray to check light and dark values; the colors, color pickers and exports are not changed
+- Reference images: pin pictures beside or over the stage (View > Reference Images, or Alt-drop picture files on the stage); move, size, turn, fade, lock and hide them, and pick their colors with the Eyedropper
+- Reference images are saved with the document, the same in every scene, and never exported or published
+- View > Canvas Only (Tab) puts away every panel and toolbar to leave the stage alone; Tab again brings them back as they were
+- Touch screens: pinch to zoom, twist two fingers to turn the view, and tap with two fingers to undo
+
 ## 0.20.0
 
 - A boned shape whose last points are bound to no bone keeps the binding of its other points when posed or rebound

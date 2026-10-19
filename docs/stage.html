@@ -63,6 +63,7 @@
 <dl class="defs">
   <dt>Center Stage</dt><dd>Brings the stage to the middle of the view, keeping the zoom.</dd>
   <dt>Rotation</dt><dd>Picks the <a href="#rotate-the-view">Rotation tool</a>. While the view is turned, the button shows the angle beside its icon, and clicking it sets the view straight again.</dd>
+  <dt>Mirror View</dt><dd>Flips the view left to right, and back. See <a href="#mirror-the-view">Mirror the view</a>.</dd>
   <dt>Content outside the stage</dt><dd>The button's icon shows the current mode; click it to choose <strong>Show</strong>, <strong>Dim</strong> or <strong>Clip Content Outside Stage</strong> for artwork on the pasteboard. These are the same settings as <strong>Dim Outside Document</strong> and <strong>Clip Content Outside Stage</strong> in the View menu, and Phoenix remembers them. Exports are not affected.</dd>
   <dt>Zoom box</dt><dd>Shows the current zoom and follows every other way of zooming. Type a percentage, or use its arrows (or the <kbd>Up</kbd> and <kbd>Down</kbd> keys) to step through 8%, 25%, 50%, 100%, 200%, 400%, 800%, 1600% and 3200%. The arrow button beside it opens a menu with <strong>Fit in Window</strong> and <strong>Show Frame</strong> (both fit the stage in the view), <strong>Show All</strong>, and 25% to 800%.</dd>
 </dl>
@@ -90,6 +91,98 @@
 </ul>
 
 <p>Rotating the view never rotates your artwork. Rulers are hidden while the view is turned.</p>
+
+<h2>Mirror the view</h2>
+
+<p>After a while you stop seeing your own drawing: a face that leans or eyes that do not line up look right because you have looked at them too long. Flipping the picture shows it with fresh eyes, and the mistakes jump out.</p>
+
+<p>Choose <span class="menu-path">View &rsaquo; Mirror View</span>, press <kbd>Shift</kbd>+<kbd>M</kbd>, or click the mirror button on the edit bar. The stage flips left to right about its middle; do it again to flip it back.</p>
+
+<figure>
+  <img src="assets/shots/mirror-view.webp" alt="The stage flipped left to right: the half-drawn head on the stage and the reference picture beside it both face the other way, and the mirror button on the edit bar is lit" width="1262" height="378">
+  <figcaption>Mirror View flips only what you see. The button on the edit bar is lit while it is on.</figcaption>
+</figure>
+
+<ul>
+  <li>Only your view is flipped. The artwork, the file and everything you export stay as they were.</li>
+  <li>Keep drawing while the view is mirrored: every tool works as usual, and what you draw lands where you put it. Flip back and it faces the right way.</li>
+  <li>Mirror View and the <a href="#rotate-the-view">Rotation tool</a> work together. Rulers are hidden while the view is mirrored.</li>
+  <li>The setting belongs to the window, not the document, and is not saved.</li>
+</ul>
+
+<h2>Check values in grayscale</h2>
+
+<p>A design reads well when its lights and darks are clear, whatever the colors. To check, choose <span class="menu-path">View &rsaquo; Grayscale</span>: the stage shows how light or dark each color is, in shades of gray. Choose it again to see the colors.</p>
+
+<figure>
+  <img src="assets/shots/grayscale-view.webp" alt="The same stage in shades of gray: the dark hair, the lighter face and the pale cheeks show how far apart their values are" width="1262" height="378">
+  <figcaption>In grayscale, colors that look different but share a value turn the same gray.</figcaption>
+</figure>
+
+<p>It changes only what you see. Your colors, the color pickers and the <a href="color.html#the-eyedropper">Eyedropper</a> still use the real colors, and exports are in color.</p>
+
+<h2>Reference images</h2>
+
+<p>Pin pictures beside or over the stage to draw from: a model sheet, a color key, a photo, a storyboard frame. Reference images are only for you to look at. They are never part of the animation: they do not show in the timeline or the library, and they are left out of every export, published file and test movie.</p>
+
+<figure>
+  <img src="assets/shots/reference-images.webp" alt="A finished character pinned beside the stage as a reference image, selected with square handles at its corners and a round turning handle above it, while the head on the stage is still being drawn" width="1262" height="378">
+  <figcaption>A model sheet pinned on the pasteboard, selected for arranging.</figcaption>
+</figure>
+
+<h3>Add a reference image</h3>
+
+<ul>
+  <li>Choose <span class="menu-path">View &rsaquo; Reference Images &rsaquo; Add Reference Image</span> and pick one or more pictures. They are placed beside the stage, and the view moves back to show them if it has to.</li>
+  <li>Or hold <kbd>Alt</kbd> while you drop picture files from your computer onto the stage. They land where you drop them. (Dropping without <kbd>Alt</kbd> imports them as artwork, as usual.)</li>
+</ul>
+
+<p>PNG, JPEG, GIF, BMP, WebP and TIFF pictures work. The picture is kept inside your document, so it travels with the file.</p>
+
+<figure class="narrow">
+  <img src="assets/shots/reference-images-menu.webp" alt="The Reference Images menu: Add Reference Image, Arrange Reference Images, Hide Reference Images and Remove All Reference Images" width="203" height="105">
+</figure>
+
+<h3>Move, size and turn them</h3>
+
+<p>Choose <span class="menu-path">View &rsaquo; Reference Images &rsaquo; Arrange Reference Images</span>. While it is on:</p>
+
+<ul>
+  <li>Drag a picture to move it.</li>
+  <li>Drag a corner handle to make it bigger or smaller.</li>
+  <li>Drag the round handle above it to turn it. Hold <kbd>Shift</kbd> to turn in 15&deg; steps.</li>
+  <li>Right-click a picture for its <strong>Opacity</strong> (100%, 75%, 50% or 25%, handy for tracing over the stage), <strong>Lock</strong> (so it cannot be moved by accident), <strong>Bring to Front</strong>, <strong>Send to Back</strong>, <strong>Reset Size and Turn</strong>, and <strong>Remove Reference Image</strong>.</li>
+  <li>Press <kbd>Delete</kbd> to remove the selected picture.</li>
+  <li>Drag empty space to pan the view.</li>
+  <li>Press <kbd>Esc</kbd>, or pick any tool, when you are done.</li>
+</ul>
+
+<p>Each change can be undone with <kbd>Ctrl</kbd>+<kbd>Z</kbd>.</p>
+
+<h3>Hide, show and remove</h3>
+
+<p><span class="menu-path">View &rsaquo; Reference Images &rsaquo; Hide Reference Images</span> hides them all at once; choose it again to show them. <strong>Remove All Reference Images</strong> takes them out of the document.</p>
+
+<h3>Things to know</h3>
+
+<ul>
+  <li>Reference images are drawn over the artwork. Lower their opacity, or move them off the stage, to see what is underneath.</li>
+  <li>They stay put in every scene, and while you edit a symbol.</li>
+  <li>The <a href="color.html#the-eyedropper">Eyedropper</a> picks colors from them.</li>
+  <li>They are saved with the document, in FLA, XFL and Phoenix's own .phx files. Other apps that open the FLA ignore them, and they are lost if another app saves it.</li>
+</ul>
+
+<h2>Touch gestures</h2>
+
+<p>On a touch screen, and on a trackpad that reports gestures, you can move around the stage with two fingers:</p>
+
+<ul>
+  <li><strong>Pinch</strong> to zoom in and out, about the point between your fingers.</li>
+  <li><strong>Twist</strong> two fingers to turn the view, like the <a href="#rotate-the-view">Rotation tool</a>. A small twist is ignored, so a pinch does not tilt the view.</li>
+  <li><strong>Tap with two fingers</strong> to undo.</li>
+</ul>
+
+<p>One finger, the mouse and a pen work as always. If the first finger of a pinch or tap left a mark, Phoenix takes it back.</p>
 
 <h2>Scrub through time on the stage</h2>
 
