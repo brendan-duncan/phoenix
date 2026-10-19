@@ -236,7 +236,8 @@ const char* loopTypeName(LoopType type)
     case LoopType::PingPong: return "ping pong";
     case LoopType::LoopReverse: return "loop reverse";
     case LoopType::PlayOnceReverse: return "play once reverse";
-    case LoopType::PlayOnce: break;
+    case LoopType::PlayOnce:
+    case LoopType::None: break;
     }
     return "play once";
 }

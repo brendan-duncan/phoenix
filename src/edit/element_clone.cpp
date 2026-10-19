@@ -264,6 +264,7 @@ void applyColorTransform(Element& element, const ColorTransform& transform)
         break;
     case Element::Type::SymbolInstance:
     case Element::Type::BitmapInstance:
+    case Element::Type::Raw:
         break;
     }
 }

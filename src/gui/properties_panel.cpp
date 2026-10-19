@@ -3577,6 +3577,9 @@ void PropertiesPanel::rebuildObjectTab()
         addPositionAndSize(page, elements);
         break;
     }
+    // Content Phoenix keeps as read but does not model: nothing to set.
+    case fla::Element::Type::Raw:
+        break;
     }
 }
 

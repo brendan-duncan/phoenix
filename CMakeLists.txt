@@ -1,5 +1,12 @@
 cmake_minimum_required(VERSION 3.16)
 
+# Visual Studio builds a project's files one at a time unless the compiler
+# is given /MP; make and Ninja already run as many compiles as they may.
+# Set before any target, so the fetched libraries get it too.
+if(CMAKE_GENERATOR MATCHES "Visual Studio")
+    add_compile_options($<$<COMPILE_LANG_AND_ID:CXX,MSVC>:/MP> $<$<COMPILE_LANG_AND_ID:C,MSVC>:/MP>)
+endif()
+
 include(FetchContent)
 # libas3, the ActionScript parser and VM, is developed alongside Phoenix:
 # a checkout beside this one (../libas3), or the one PHOENIX_LIBAS3_SOURCE
@@ -107,6 +114,16 @@ FetchContent_Declare(
     EXCLUDE_FROM_ALL
 )
 FetchContent_MakeAvailable(quickjs)
+# Its own code: MSVC's warnings about it are for its authors, not ours. Its
+# -Wall (all of MSVC's warnings) goes, or it would outrank /w.
+if(MSVC)
+    get_target_property(_qjs_options qjs COMPILE_OPTIONS)
+    if(_qjs_options)
+        list(REMOVE_ITEM _qjs_options -Wall)
+        set_target_properties(qjs PROPERTIES COMPILE_OPTIONS "${_qjs_options}")
+    endif()
+    target_compile_options(qjs PRIVATE /w)
+endif()
 
 # Add tinyxml2 from third_party
 set(tinyxml2_SHARED_LIBS OFF CACHE BOOL "Don't build tinyxml2 as a shared library")

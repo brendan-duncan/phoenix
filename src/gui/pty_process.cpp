@@ -278,8 +278,10 @@ bool PtyProcess::start(const QString& program, const QStringList& arguments, con
     }
     if (child == 0)
     {
-        if (!folder.isEmpty())
-            (void)chdir(folder.constData());
+        if (!folder.isEmpty() && chdir(folder.constData()) != 0)
+        {
+            // The shell starts where Phoenix is instead.
+        }
         setenv("TERM", "xterm-256color", 1);
         setenv("COLORTERM", "truecolor", 1);
         execvp(argv[0], argv.data());

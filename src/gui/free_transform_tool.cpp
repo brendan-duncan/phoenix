@@ -710,6 +710,10 @@ QTransform FreeTransformTool::adjustForDrag(const QPointF& documentPos,
         return aroundAnchor(anchor, toBox * shear * fromBox);
     }
 
+    // Distort and Envelope warp the geometry as the mouse moves instead:
+    // no one transform says what they do.
+    case Grip::Distort:
+    case Grip::Envelope:
     case Grip::Pivot:
     case Grip::None:
         break;
@@ -1280,6 +1284,7 @@ void FreeTransformTool::commit(PhoenixView& view)
     case Grip::Skew:   gestureName = "Skew"; break;
     case Grip::Distort: gestureName = "Distort"; break;
     case Grip::Envelope: gestureName = "Envelope"; break;
+    case Grip::Pivot:
     case Grip::None:   break;
     }
 

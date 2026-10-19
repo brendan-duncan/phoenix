@@ -1710,8 +1710,10 @@ void LayersPanel::showLayerMenu(QTreeWidgetItem* item, const QPoint& globalPos)
                     if (each.layer == other->name)
                         current = fla::compositing::maskCombineName(each.mode);
                 QMenu* otherMenu = moreMenu->addMenu(QString::fromStdString(other->name));
-                for (const auto& [mode, label] : modes)
+                for (const auto& entry : modes)
                 {
+                    const auto& mode = entry.first;
+                    const auto& label = entry.second;
                     QAction* choice = otherMenu->addAction(label, this, [=]() {
                         emit compositingRequested(layer, QString("maskwith:%1:%2").arg(i).arg(mode));
                     });

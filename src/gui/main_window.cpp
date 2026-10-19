@@ -4321,8 +4321,10 @@ void MainWindow::importAnimatic()
     std::map<int, std::vector<fla::editlist::Event>> tracks;
     for (const auto& sound : sounds)
         tracks[sound.track].push_back(sound);
-    for (auto& [track, events] : tracks)
+    for (auto& entry : tracks)
     {
+        const int track = entry.first;
+        std::vector<fla::editlist::Event>& events = entry.second;
         std::sort(events.begin(), events.end(), [](const auto& a, const auto& b) { return a.start < b.start; });
         std::vector<std::pair<int, int>> spans;
         for (const auto& event : events)
@@ -17062,8 +17064,9 @@ void MainWindow::motionSketch()
         // Recorded Motion behavior, which replaces one recorded before.
         std::string dx;
         std::string dy;
-        for (const auto& [frame, at] : points)
+        for (const auto& [frameAt, at] : points)
         {
+            const int frame = frameAt;
             const auto add = [frame](std::string& keys, double value) {
                 char text[64];
                 std::snprintf(text, sizeof(text), "%s%d=%.2f", keys.empty() ? "@" : ";", frame, value);

@@ -40,8 +40,8 @@ TEST(linked_palettes_recolor_what_is_linked_and_swap_whole)
     document->timelines.push_back(scene);
 
     fla::palettes::Palettes palettes;
-    fla::palettes::Palette day{"Day", {{"Skin", {240, 200, 160, 255}}, {"Line", {0, 0, 0, 255}}}};
-    fla::palettes::Palette night{"Night", {{"Skin", {90, 80, 140, 255}}, {"Line", {20, 20, 60, 255}}}};
+    fla::palettes::Palette day{"Day", {{"Skin", {240, 200, 160, 255}}, {"Line", {0, 0, 0, 255}}}, ""};
+    fla::palettes::Palette night{"Night", {{"Skin", {90, 80, 140, 255}}, {"Line", {20, 20, 60, 255}}}, ""};
     palettes.list = {day, night};
     palettes.active = "Day";
     document->extraAttributes = fla::palettes::saved(*document, palettes);

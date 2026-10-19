@@ -41,12 +41,6 @@ std::vector<uint8_t> readFile(const std::string& path)
     return std::vector<uint8_t>(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>());
 }
 
-void writeFile(const std::string& path, const std::vector<uint8_t>& data)
-{
-    std::ofstream file(path, std::ios::binary);
-    file.write(reinterpret_cast<const char*>(data.data()), static_cast<std::streamsize>(data.size()));
-}
-
 /// Every edge's original text dropped, so both sides of a comparison write
 /// their edges from the geometry (a .phx keeps geometry, not the text).
 void dropEdgeText(fla::Element& element)

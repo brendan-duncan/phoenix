@@ -52,7 +52,8 @@ bool deflateBuffer(const uint8_t* data, size_t size, std::vector<uint8_t>& out)
     if (result != Z_STREAM_END)
         return false;
 
-    out.resize(produced);
+    // Shrunk without resize, which the compiler cannot see never grows here.
+    out.erase(out.begin() + static_cast<std::ptrdiff_t>(produced), out.end());
     return produced < size;
 }
 

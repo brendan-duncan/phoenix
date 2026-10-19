@@ -323,6 +323,10 @@ private:
             check(oa.innerRadius == ob.innerRadius, where + " innerRadius");
             break;
         }
+
+        // Kept as read: the writer copies it, so there is nothing to compare.
+        case fla::Element::Type::Raw:
+            break;
         }
     }
 

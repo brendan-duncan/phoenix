@@ -19,11 +19,6 @@ public:
         , bottomRight(bottomRight)
     {}
 
-    Rect(const Rect& other)
-        : topLeft(other.topLeft)
-        , bottomRight(other.bottomRight)
-    {}
-
     double width() const { return bottomRight.x - topLeft.x; }
 
     double height() const { return bottomRight.y - topLeft.y; }

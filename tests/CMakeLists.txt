@@ -206,8 +206,15 @@ endif()
 
 if(MSVC)
     target_compile_options(phoenix_tests PRIVATE /W3)
+    # The tests read their settings with getenv, which is fine here.
+    target_compile_definitions(phoenix_tests PRIVATE _CRT_SECURE_NO_WARNINGS)
 else()
     target_compile_options(phoenix_tests PRIVATE -Wall -Wextra)
+endif()
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    # GCC 11's libstdc++ reports byte vectors grown from small literals as
+    # reading or writing past an empty region; the test helpers do it often.
+    target_compile_options(phoenix_tests PRIVATE -Wno-stringop-overread -Wno-stringop-overflow)
 endif()
 
 enable_testing()

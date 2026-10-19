@@ -13,10 +13,6 @@ public:
         : m11(m11), m12(m12), m21(m21), m22(m22), tx(tx), ty(ty)
     {}
 
-    Transform(const Transform& other)
-        : m11(other.m11), m12(other.m12), m21(other.m21), m22(other.m22), tx(other.tx), ty(other.ty)
-    {}
-
     void reset()
     {
         m11 = 1.0;

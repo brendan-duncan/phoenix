@@ -611,7 +611,7 @@ TEST(binary_fla_reads_flash_5_layers_frames_and_actions)
         b.push_back(static_cast<uint8_t>(s.size()));
         b.insert(b.end(), s.begin(), s.end());
     };
-    const auto declare = [&text](std::vector<uint8_t>& b, const std::string& cls) {
+    const auto declare = [](std::vector<uint8_t>& b, const std::string& cls) {
         b.insert(b.end(), {0xFF, 0xFF, 1, 0, static_cast<uint8_t>(cls.size()), 0});
         b.insert(b.end(), cls.begin(), cls.end());
     };

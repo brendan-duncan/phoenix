@@ -67,9 +67,10 @@ void MainWindow::createDrawingAids(QMenu* viewMenu)
         {"&Radial", aids::SymmetryMode::Radial},
     };
     std::vector<std::pair<QAction*, aids::SymmetryMode>> modeActions;
-    for (const auto& [name, mode] : modeNames)
+    for (const auto& entry : modeNames)
     {
-        QAction* action = symmetryMenu->addAction(name);
+        const auto mode = entry.second;
+        QAction* action = symmetryMenu->addAction(entry.first);
         action->setCheckable(true);
         modes->addAction(action);
         modeActions.emplace_back(action, mode);
