@@ -212,12 +212,10 @@ NewDocumentDialog::NewDocumentDialog(QWidget* parent)
     // A double-click on a tile creates the document straight away.
     connect(_tiles, &QListWidget::itemDoubleClicked, this, [this]() { accept(); });
     connect(_swatch, &QToolButton::clicked, this, [this]() {
-        const QColor chosen = SwatchPopup::getColor(_swatch, nullptr, _stageColor, "Stage Color", false);
-        if (chosen.isValid())
-        {
+        SwatchPopup::getColor(_swatch, nullptr, _stageColor, "Stage Color", false, [this](const QColor& chosen) {
             _stageColor = chosen;
             updateSwatch();
-        }
+        });
     });
     const auto edited = [this]() {
         if (!_applying)

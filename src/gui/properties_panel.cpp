@@ -16,6 +16,8 @@
 #include "../edit/color_art.h"
 
 #include "swatch_popup.h"
+#include "file_pick.h"
+#include "modal.h"
 #include "color_panel.h"
 #include "ease_curve_dialog.h"
 #include "hot_text.h"
@@ -74,6 +76,7 @@
 #include <QMenu>
 #include <QPainter>
 #include <QPainterPath>
+#include <QPointer>
 #include "brush_library_store.h"
 #include "stroke_style_dialog.h"
 #include <QPushButton>
@@ -1604,69 +1607,71 @@ std::vector<std::pair<QWidget*, QWidget*>> PropertiesPanel::addStrokeLookFields(
                                                 _links.style->strokeColor[2])
                                           : QColor(Qt::black);
         const double shownWeight = forTool && _links.style ? _links.style->strokeWeight : weight;
-        StrokeStyleDialog dialog(*current, shownWeight, color, document(), this);
-        if (dialog.exec() != QDialog::Accepted)
-            return;
-        fla::StrokeLook chosen = dialog.look();
-        fla::Document* doc = document();
-        fla::CommandStack* stack = _links.editContext ? &_links.editContext->commandStack() : nullptr;
-        if (stack)
-            stack->beginMacro("Stroke Style");
-        if (dialog.brushEdited() && doc && stack)
-        {
-            // The brush's options: the document's copy takes them, or with
-            // Keep as a New Brush, a copy of the brush of their own.
-            fla::PaintBrushDefinition edited = dialog.brush();
-            std::map<int, int> indexes;
-            if (dialog.keepAsNewBrush())
+        StrokeStyleDialog* dialog = new StrokeStyleDialog(*current, shownWeight, color, document(), this);
+        modal::open(dialog, [=](int result) {
+            if (result != QDialog::Accepted)
+                return;
+            fla::StrokeLook chosen = dialog->look();
+            fla::Document* doc = document();
+            fla::CommandStack* stack = _links.editContext ? &_links.editContext->commandStack() : nullptr;
+            if (stack)
+                stack->beginMacro("Stroke Style");
+            if (dialog->brushEdited() && doc && stack)
             {
-                edited = fla::withParam(edited, "guid", fla::newPaintBrushGuid());
-                edited = fla::withParam(edited, "name", edited.name + " copy");
-                edited.index = -1;
-                if (fla::CommandPtr command = fla::adoptPaintBrushes(*doc, {edited}, indexes, "Add Brush"))
-                    stack->push(std::move(command));
-                chosen.paintBrush = indexes[-1];
-            }
-            else
-            {
-                const auto own = fla::paintBrushesOf(*doc);
-                std::vector<fla::PaintBrushDefinition> definitions =
-                    own ? own->definitions : std::vector<fla::PaintBrushDefinition>();
-                bool found = false;
-                for (fla::PaintBrushDefinition& definition : definitions)
+                // The brush's options: the document's copy takes them, or with
+                // Keep as a New Brush, a copy of the brush of their own.
+                fla::PaintBrushDefinition edited = dialog->brush();
+                std::map<int, int> indexes;
+                if (dialog->keepAsNewBrush())
                 {
-                    const bool same = edited.guid().empty() ? definition.index == chosen.paintBrush
-                                                            : definition.guid() == edited.guid();
-                    if (!same)
-                        continue;
-                    const int index = definition.index;
-                    definition = edited;
-                    definition.index = index;
-                    chosen.paintBrush = index;
-                    found = true;
-                }
-                if (found)
-                {
-                    if (fla::CommandPtr command = fla::setPaintBrushDefinitions(*doc, definitions, "Brush Options"))
-                        stack->push(std::move(command));
-                }
-                else
-                {
+                    edited = fla::withParam(edited, "guid", fla::newPaintBrushGuid());
+                    edited = fla::withParam(edited, "name", edited.name + " copy");
                     edited.index = -1;
                     if (fla::CommandPtr command = fla::adoptPaintBrushes(*doc, {edited}, indexes, "Add Brush"))
                         stack->push(std::move(command));
                     chosen.paintBrush = indexes[-1];
                 }
+                else
+                {
+                    const auto own = fla::paintBrushesOf(*doc);
+                    std::vector<fla::PaintBrushDefinition> definitions =
+                        own ? own->definitions : std::vector<fla::PaintBrushDefinition>();
+                    bool found = false;
+                    for (fla::PaintBrushDefinition& definition : definitions)
+                    {
+                        const bool same = edited.guid().empty() ? definition.index == chosen.paintBrush
+                                                                : definition.guid() == edited.guid();
+                        if (!same)
+                            continue;
+                        const int index = definition.index;
+                        definition = edited;
+                        definition.index = index;
+                        chosen.paintBrush = index;
+                        found = true;
+                    }
+                    if (found)
+                    {
+                        if (fla::CommandPtr command = fla::setPaintBrushDefinitions(*doc, definitions, "Brush Options"))
+                            stack->push(std::move(command));
+                    }
+                    else
+                    {
+                        edited.index = -1;
+                        if (fla::CommandPtr command = fla::adoptPaintBrushes(*doc, {edited}, indexes, "Add Brush"))
+                            stack->push(std::move(command));
+                        chosen.paintBrush = indexes[-1];
+                    }
+                }
+                chosen.paintBrushGuid = edited.guid();
             }
-            chosen.paintBrushGuid = edited.guid();
-        }
-        if (applyWeight && dialog.weight() != shownWeight)
-            applyWeight(dialog.weight());
-        *current = chosen;
-        apply(chosen);
-        if (stack)
-            stack->endMacro();
-        emit documentEdited();
+            if (applyWeight && dialog->weight() != shownWeight)
+                applyWeight(dialog->weight());
+            *current = chosen;
+            apply(chosen);
+            if (stack)
+                stack->endMacro();
+            emit documentEdited();
+        });
     });
     add("Style", styleRow);
 
@@ -2496,38 +2501,38 @@ void PropertiesPanel::editLightsAndDepth(fla::Document* document)
 {
     // Up to four lights, each on or off; the first as one light was kept.
     constexpr int kLights = 4;
-    std::vector<fla::threed::Light> lights = fla::threed::lightsOf(*document);
-    lights.resize(kLights);
-    if (!lights.front().on)
-        lights.front() = fla::threed::Light();
+    auto lights = std::make_shared<std::vector<fla::threed::Light>>(fla::threed::lightsOf(*document));
+    lights->resize(kLights);
+    if (!lights->front().on)
+        lights->front() = fla::threed::Light();
     for (int i = 1; i < kLights; ++i)
-        if (!lights[static_cast<size_t>(i)].on)
+        if (!(*lights)[static_cast<size_t>(i)].on)
         {
             // A light more starts from the other side, with no light of
             // its own everywhere.
-            lights[static_cast<size_t>(i)] = fla::threed::Light();
-            lights[static_cast<size_t>(i)].azimuth = i % 2 ? 60.0 : 180.0;
-            lights[static_cast<size_t>(i)].ambient = 0.0;
-            lights[static_cast<size_t>(i)].intensity = 0.6;
+            (*lights)[static_cast<size_t>(i)] = fla::threed::Light();
+            (*lights)[static_cast<size_t>(i)].azimuth = i % 2 ? 60.0 : 180.0;
+            (*lights)[static_cast<size_t>(i)].ambient = 0.0;
+            (*lights)[static_cast<size_t>(i)].intensity = 0.6;
         }
     const fla::threed::Shadows shadows = fla::threed::shadowsOf(*document);
     const fla::threed::DepthOfField depth = fla::threed::depthOfFieldOf(*document);
-    QDialog dialog(this);
-    dialog.setWindowTitle("3D Lights and Depth of Field");
-    auto* form = new QFormLayout(&dialog);
-    const auto spin = [&dialog](double low, double high, double value, const QString& suffix, int decimals = 0) {
-        auto* box = new HotDoubleSpinBox(&dialog);
+    QDialog* dialog = new QDialog(this);
+    dialog->setWindowTitle("3D Lights and Depth of Field");
+    auto* form = new QFormLayout(dialog);
+    const auto spin = [dialog](double low, double high, double value, const QString& suffix, int decimals = 0) {
+        auto* box = new HotDoubleSpinBox(dialog);
         box->setRange(low, high);
         box->setDecimals(decimals);
         box->setValue(value);
         box->setSuffix(suffix);
         return box;
     };
-    auto* which = new QComboBox(&dialog);
+    auto* which = new QComboBox(dialog);
     for (int i = 0; i < kLights; ++i)
         which->addItem(QString("Light %1").arg(i + 1));
     which->setToolTip("The light to set: each shades 3D movie clips by how squarely they face it, in its color");
-    auto* lightOn = new QCheckBox("On", &dialog);
+    auto* lightOn = new QCheckBox("On", dialog);
     HotDoubleSpinBox* azimuth = spin(-180, 180, 0, QString::fromUtf8("\u00b0"));
     azimuth->setToolTip(QString::fromUtf8("Where the light comes from, round from above: 90\u00b0 from the right, -90\u00b0 from the left"));
     HotDoubleSpinBox* elevation = spin(-90, 90, 0, QString::fromUtf8("\u00b0"));
@@ -2536,11 +2541,11 @@ void PropertiesPanel::editLightsAndDepth(fla::Document* document)
     ambient->setToolTip("Light everywhere: how bright a clip turned away from the light still is");
     HotDoubleSpinBox* intensity = spin(0, 1000, 0, "%");
     intensity->setToolTip("How strong the light is");
-    auto* color = new QLineEdit(&dialog);
+    auto* color = new QLineEdit(dialog);
     color->setToolTip("The light's color as #RRGGBB");
     // The fields show the light picked and change it as they are edited.
-    const auto show = [&]() {
-        const fla::threed::Light& light = lights[static_cast<size_t>(which->currentIndex())];
+    const auto show = [lights, which, lightOn, azimuth, elevation, ambient, intensity, color]() {
+        const fla::threed::Light& light = (*lights)[static_cast<size_t>(which->currentIndex())];
         lightOn->setChecked(light.on);
         azimuth->setValue(light.azimuth);
         elevation->setValue(light.elevation);
@@ -2548,8 +2553,8 @@ void PropertiesPanel::editLightsAndDepth(fla::Document* document)
         intensity->setValue(light.intensity * 100.0);
         color->setText(QColor(light.color[0], light.color[1], light.color[2]).name().toUpper());
     };
-    const auto keep = [&](int index) {
-        fla::threed::Light& light = lights[static_cast<size_t>(index)];
+    const auto keep = [lights, lightOn, azimuth, elevation, ambient, intensity, color](int index) {
+        fla::threed::Light& light = (*lights)[static_cast<size_t>(index)];
         light.on = lightOn->isChecked();
         light.azimuth = azimuth->value();
         light.elevation = elevation->value();
@@ -2563,20 +2568,20 @@ void PropertiesPanel::editLightsAndDepth(fla::Document* document)
             light.color[2] = static_cast<unsigned char>(picked.blue());
         }
     };
-    int shownLight = 0;
-    connect(which, QOverload<int>::of(&QComboBox::currentIndexChanged), &dialog, [&](int index) {
-        keep(shownLight);
-        shownLight = index;
+    auto shownLight = std::make_shared<int>(0);
+    connect(which, QOverload<int>::of(&QComboBox::currentIndexChanged), dialog, [keep, show, shownLight](int index) {
+        keep(*shownLight);
+        *shownLight = index;
         show();
     });
     show();
-    auto* shadowsOn = new QCheckBox("Clips cast shadows on turned clips behind them", &dialog);
+    auto* shadowsOn = new QCheckBox("Clips cast shadows on turned clips behind them", dialog);
     shadowsOn->setChecked(shadows.on);
     HotDoubleSpinBox* strength = spin(0, 100, shadows.strength * 100.0, "%");
     strength->setToolTip("How dark the shadows are");
     HotDoubleSpinBox* softness = spin(0, 1000, shadows.softness, " px per 100", 1);
     softness->setToolTip("How soft a shadow is for each hundred pixels between the clip that casts it and the one it falls on");
-    auto* depthOn = new QCheckBox("Blur 3D movie clips away from a focus depth", &dialog);
+    auto* depthOn = new QCheckBox("Blur 3D movie clips away from a focus depth", dialog);
     depthOn->setChecked(depth.on);
     HotDoubleSpinBox* focus = spin(-10000, 10000, depth.focus, " Z");
     focus->setToolTip("The depth (Z) that is sharp");
@@ -2595,41 +2600,45 @@ void PropertiesPanel::editLightsAndDepth(fla::Document* document)
     form->addRow(depthOn);
     form->addRow("Focus", focus);
     form->addRow("Blur", aperture);
-    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
-    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
-    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, dialog);
+    connect(buttons, &QDialogButtonBox::accepted, dialog, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, dialog, &QDialog::reject);
     form->addRow(buttons);
-    if (dialog.exec() != QDialog::Accepted)
-        return;
-    keep(shownLight);
-    fla::threed::Shadows afterShadows;
-    afterShadows.on = shadowsOn->isChecked();
-    afterShadows.strength = strength->value() / 100.0;
-    afterShadows.softness = softness->value();
-    fla::threed::DepthOfField afterDepth;
-    afterDepth.on = depthOn->isChecked();
-    afterDepth.focus = focus->value();
-    afterDepth.aperture = aperture->value();
-    using Attributes = std::vector<std::pair<std::string, std::string>>;
-    // The lights' attributes, with the shadows' and the depth of field's
-    // put in.
-    Attributes changed = fla::threed::withLights(*document, lights);
-    const auto put = [&changed](const Attributes& from, const char* name) {
-        changed.erase(std::remove_if(changed.begin(), changed.end(), [name](const auto& each) { return each.first == name; }),
-            changed.end());
-        for (const auto& each : from)
-            if (each.first == name)
-                changed.push_back(each);
-    };
-    put(fla::threed::withShadows(*document, afterShadows), "phoenixShadows");
-    put(fla::threed::withDepthOfField(*document, afterDepth), "phoenixDepthOfField");
-    if (changed == document->extraAttributes)
-        return;
-    push(std::make_unique<fla::SetPropertyCommand<Attributes>>(document->extraAttributes, document->extraAttributes,
-        changed, "3D Lights and Depth"));
-    if (_links.view)
-        _links.view->clearCaches();
-    emit documentEdited();
+    modal::open(dialog, [this, document, lights, shownLight, keep, shadowsOn, strength, softness, depthOn, focus,
+                            aperture](int result) {
+        // The document has to be the one still open.
+        if (result != QDialog::Accepted || document != this->document())
+            return;
+        keep(*shownLight);
+        fla::threed::Shadows afterShadows;
+        afterShadows.on = shadowsOn->isChecked();
+        afterShadows.strength = strength->value() / 100.0;
+        afterShadows.softness = softness->value();
+        fla::threed::DepthOfField afterDepth;
+        afterDepth.on = depthOn->isChecked();
+        afterDepth.focus = focus->value();
+        afterDepth.aperture = aperture->value();
+        using Attributes = std::vector<std::pair<std::string, std::string>>;
+        // The lights' attributes, with the shadows' and the depth of field's
+        // put in.
+        Attributes changed = fla::threed::withLights(*document, *lights);
+        const auto put = [&changed](const Attributes& from, const char* name) {
+            changed.erase(std::remove_if(changed.begin(), changed.end(), [name](const auto& each) { return each.first == name; }),
+                changed.end());
+            for (const auto& each : from)
+                if (each.first == name)
+                    changed.push_back(each);
+        };
+        put(fla::threed::withShadows(*document, afterShadows), "phoenixShadows");
+        put(fla::threed::withDepthOfField(*document, afterDepth), "phoenixDepthOfField");
+        if (changed == document->extraAttributes)
+            return;
+        push(std::make_unique<fla::SetPropertyCommand<Attributes>>(document->extraAttributes, document->extraAttributes,
+            changed, "3D Lights and Depth"));
+        if (_links.view)
+            _links.view->clearCaches();
+        emit documentEdited();
+    });
 }
 
 void PropertiesPanel::addInstanceSections(QVBoxLayout* layout, fla::SymbolInstance* instance)
@@ -2724,14 +2733,14 @@ void PropertiesPanel::addColorEffectSection(QVBoxLayout* layout, const QString& 
         QToolButton* swatch = makeSwatch(color.tintColor, "Tint color");
         connect(swatch, &QToolButton::clicked, this, [=]() {
             const fla::ColorTransform before = get();
-            const QColor chosen = SwatchPopup::getColor(swatch, document(), toQColor(before.tintColor), "Tint Color", false);
-            if (!chosen.isValid())
-                return;
-            fla::ColorTransform after = before;
-            applyColor(chosen, after.tintColor);
-            after.tintColor[3] = 255;
-            commit(before, after, "Tint");
-            emit documentEdited();
+            SwatchPopup::getColor(swatch, document(), toQColor(before.tintColor), "Tint Color", false,
+                [=](const QColor& chosen) {
+                    fla::ColorTransform after = before;
+                    applyColor(chosen, after.tintColor);
+                    after.tintColor[3] = 255;
+                    commit(before, after, "Tint");
+                    emit documentEdited();
+                });
         });
         effect->addField(row, 0, "Tint", swatch);
         HotText* amount = makeHotText(0, 100, 0, "%");
@@ -3009,11 +3018,11 @@ void PropertiesPanel::addTemplateSection(QVBoxLayout* layout, fla::SymbolInstanc
             connect(edit, &QLineEdit::editingFinished, this, [set, name, edit]() { set(name, edit->text().toStdString()); });
             QPushButton* pick = new QPushButton("Pick...", holder);
             connect(pick, &QPushButton::clicked, this, [this, set, name, edit, pick]() {
-                const QColor color = SwatchPopup::getColor(pick, document(), QColor(edit->text()), "Color", false);
-                if (!color.isValid())
-                    return;
-                edit->setText(color.name().toUpper());
-                set(name, edit->text().toStdString());
+                SwatchPopup::getColor(pick, document(), QColor(edit->text()), "Color", false,
+                    [set, name, edit](const QColor& color) {
+                        edit->setText(color.name().toUpper());
+                        set(name, edit->text().toStdString());
+                    });
             });
             line->addWidget(edit, 1);
             line->addWidget(pick);
@@ -3082,15 +3091,20 @@ void PropertiesPanel::addTemplateSection(QVBoxLayout* layout, fla::SymbolInstanc
                 const fla::FLADocument* document = _links.view ? _links.view->flaDocument() : nullptr;
                 const QDir folder = document && !document->filepath.empty()
                     ? QFileInfo(QString::fromStdString(document->filepath)).absoluteDir() : QDir::current();
-                const QString file = QFileDialog::getOpenFileName(this, "Image", folder.absolutePath(),
-                    "Images (*.png *.jpg *.jpeg *.gif *.bmp *.webp);;All files (*)");
-                if (file.isEmpty())
-                    return;
-                // Kept from the document's folder when it is inside it, so
-                // the document and its images move together.
-                const QString relative = folder.relativeFilePath(file);
-                edit->setText(relative.startsWith("..") ? file : relative);
-                set(name, edit->text().toStdString());
+                // The field goes when the panel is rebuilt, which can happen
+                // before a browser's picker answers.
+                QPointer<QLineEdit> target(edit);
+                file_pick::open(this, "Image", folder.absolutePath(),
+                    "Images (*.png *.jpg *.jpeg *.gif *.bmp *.webp);;All files (*)",
+                    [set, name, target, folder](const QString& file) {
+                        if (!target)
+                            return;
+                        // Kept from the document's folder when it is inside it, so
+                        // the document and its images move together.
+                        const QString relative = folder.relativeFilePath(file);
+                        target->setText(relative.startsWith("..") ? file : relative);
+                        set(name, target->text().toStdString());
+                    });
             });
             line->addWidget(edit, 1);
             line->addWidget(browse);
@@ -3137,12 +3151,14 @@ void PropertiesPanel::addFilterSection(QVBoxLayout* layout, fla::SymbolInstance*
     const auto colorButton = [&](size_t index, uint8_t (fla::Filter::*member)[4], const char* title) {
         QToolButton* swatch = makeSwatch((*filters)[index].*member, title);
         connect(swatch, &QToolButton::clicked, this, [=]() {
-            const QColor chosen = SwatchPopup::getColor(swatch, document(), toQColor((*filters)[index].*member), title, true);
-            if (!chosen.isValid())
-                return;
-            std::vector<fla::Filter> after = *filters;
-            applyColor(chosen, after[index].*member);
-            change(after, "Filter Color", true);
+            SwatchPopup::getColor(swatch, document(), toQColor((*filters)[index].*member), title, true,
+                [=](const QColor& chosen) {
+                    if (index >= filters->size())
+                        return;
+                    std::vector<fla::Filter> after = *filters;
+                    applyColor(chosen, after[index].*member);
+                    change(after, "Filter Color", true);
+                });
         });
         return swatch;
     };
@@ -3298,10 +3314,8 @@ void PropertiesPanel::addFilterSection(QVBoxLayout* layout, fla::SymbolInstance*
                 const auto& current = bar->stops();
                 if (index < 0 || index >= static_cast<int>(current.size()))
                     return;
-                const QColor chosen = SwatchPopup::getColor(bar, document(), toQColor(current[static_cast<size_t>(index)].color),
-                    "Gradient Color", true);
-                if (chosen.isValid())
-                    bar->setCurrentColor(chosen);
+                SwatchPopup::getColor(bar, document(), toQColor(current[static_cast<size_t>(index)].color),
+                    "Gradient Color", true, [bar](const QColor& chosen) { bar->setCurrentColor(chosen); });
             });
             section->addWide(row++, bar);
         }
@@ -3347,12 +3361,12 @@ void PropertiesPanel::addFilterSection(QVBoxLayout* layout, fla::SymbolInstance*
         QAction* save = presetMenu->addAction("Save As...");
         save->setEnabled(!filters->empty());
         connect(save, &QAction::triggered, this, [this, filters]() {
-            bool ok = false;
-            const QString name = QInputDialog::getText(this, "Save Filter Preset", "Preset name:", QLineEdit::Normal,
-                QString(), &ok).trimmed().replace('/', '-');
-            if (ok && !name.isEmpty())
-                QSettings().setValue("filterPresets/" + name,
-                    QString::fromStdString(fla::filterpresets::toText(*filters)));
+            const QString text = QString::fromStdString(fla::filterpresets::toText(*filters));
+            modal::getText(this, "Save Filter Preset", "Preset name:", QString(), [text](const QString& typed) {
+                const QString name = typed.trimmed().replace('/', '-');
+                if (!name.isEmpty())
+                    QSettings().setValue("filterPresets/" + name, text);
+            });
         });
         if (!names.isEmpty())
             presetMenu->addSeparator();
@@ -3626,11 +3640,10 @@ void PropertiesPanel::addTextSections(QVBoxLayout* page, const fla::StaticText& 
     color->setObjectName("propertiesTextColor");
     const QColor current(run.fillColor[0], run.fillColor[1], run.fillColor[2], run.fillColor[3]);
     connect(color, &QToolButton::clicked, this, [this, request, current, color]() {
-        const QColor chosen = SwatchPopup::getColor(color, document(), current, "Text Color", true);
-        if (chosen.isValid())
+        SwatchPopup::getColor(color, document(), current, "Text Color", true, [request](const QColor& chosen) {
             request("fillColor", QString("#%1%2%3%4").arg(chosen.red(), 2, 16, QChar('0')).arg(chosen.green(), 2, 16, QChar('0'))
                                      .arg(chosen.blue(), 2, 16, QChar('0')).arg(chosen.alpha(), 2, 16, QChar('0')));
-        (void)color;
+        });
     });
     character->addField(1, 1, "Color", color);
     QWidget* styleRow = new QWidget(this);
@@ -4099,16 +4112,18 @@ void PropertiesPanel::rebuildFrameTab()
             std::vector<QPointF> points;
             for (const fla::Point& p : frame->customEase)
                 points.emplace_back(p.x, p.y);
-            EaseCurveDialog dialog(points, this);
-            if (dialog.exec() != QDialog::Accepted)
-            {
-                QTimer::singleShot(0, this, [this]() { refresh(); });
-                return;
-            }
-            std::vector<fla::Point> curve;
-            for (const QPointF& p : dialog.points())
-                curve.emplace_back(p.x(), p.y());
-            setEase(true, std::string(), curve, dialog.presetName().toStdString(), "Custom Ease");
+            EaseCurveDialog* dialog = new EaseCurveDialog(points, this);
+            modal::open(dialog, [this, setEase, dialog](int result) {
+                if (result != QDialog::Accepted)
+                {
+                    QTimer::singleShot(0, this, [this]() { refresh(); });
+                    return;
+                }
+                std::vector<fla::Point> curve;
+                for (const QPointF& p : dialog->points())
+                    curve.emplace_back(p.x(), p.y());
+                setEase(true, std::string(), curve, dialog->presetName().toStdString(), "Custom Ease");
+            });
         };
         connect(easeKind, &QComboBox::activated, this, [=](int index) {
             if (index == 1)
@@ -4446,14 +4461,17 @@ void PropertiesPanel::rebuildDocTab()
     connect(stage, &QToolButton::clicked, this, [this, doc, stage]() {
         // Its alpha makes the stage see-through: exports keep it, as an image
         // or movie with a part-clear background.
-        const QColor chosen = SwatchPopup::getColor(stage, document(), toQColor(doc->backgroundColor), "Stage Color", true);
-        if (!chosen.isValid())
-            return;
-        uint8_t after[4];
-        applyColor(chosen, after);
-        push(std::unique_ptr<fla::Command>(new fla::SetColorCommand(
-            doc->backgroundColor, doc->backgroundColor, after, "Stage Color")));
-        emit documentEdited();
+        SwatchPopup::getColor(stage, document(), toQColor(doc->backgroundColor), "Stage Color", true,
+            [this, doc](const QColor& chosen) {
+                // The document has to be the one still open.
+                if (doc != document())
+                    return;
+                uint8_t after[4];
+                applyColor(chosen, after);
+                push(std::unique_ptr<fla::Command>(new fla::SetColorCommand(
+                    doc->backgroundColor, doc->backgroundColor, after, "Stage Color")));
+                emit documentEdited();
+            });
     });
     settings->addField(1, 1, "Stage", stage);
 

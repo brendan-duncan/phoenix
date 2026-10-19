@@ -2,6 +2,7 @@
 
 #include "hot_text.h"
 
+#include "modal.h"
 #include "phoenix_view.h"
 #include "tool_icons.h"
 
@@ -191,9 +192,9 @@ void ScriptTool::showOptions(QWidget* parent)
     const std::vector<jsfl::ToolScript::Option> options = _script->options();
     if (options.empty())
         return;
-    QDialog dialog(parent);
-    dialog.setWindowTitle("Tool Settings");
-    auto* form = new QFormLayout(&dialog);
+    QDialog* dialog = new QDialog(parent);
+    dialog->setWindowTitle("Tool Settings");
+    auto* form = new QFormLayout(dialog);
     std::vector<std::function<std::pair<std::string, std::string>()>> readers;
     for (const jsfl::ToolScript::Option& option : options)
     {
@@ -201,7 +202,7 @@ void ScriptTool::showOptions(QWidget* parent)
         const std::string variable = option.variable;
         if (option.type == "Strings" || !option.list.empty())
         {
-            auto* box = new QComboBox(&dialog);
+            auto* box = new QComboBox(dialog);
             for (const std::string& item : option.list)
                 box->addItem(QString::fromStdString(item));
             box->setCurrentIndex(std::max(0, std::atoi(option.value.c_str())));
@@ -210,14 +211,14 @@ void ScriptTool::showOptions(QWidget* parent)
         }
         else if (option.type == "Boolean")
         {
-            auto* box = new QCheckBox(&dialog);
+            auto* box = new QCheckBox(dialog);
             box->setChecked(option.value == "true" || option.value == "1");
             form->addRow(label, box);
             readers.push_back([box, variable]() { return std::make_pair(variable, std::string(box->isChecked() ? "true" : "false")); });
         }
         else if (option.type == "Number")
         {
-            auto* box = new HotDoubleSpinBox(&dialog);
+            auto* box = new HotDoubleSpinBox(dialog);
             // Whole numbers stay whole (a count of sides); a fraction gets
             // two places.
             const bool whole = option.value.find('.') == std::string::npos;
@@ -234,21 +235,23 @@ void ScriptTool::showOptions(QWidget* parent)
         }
         else
         {
-            auto* edit = new QLineEdit(QString::fromStdString(option.value), &dialog);
+            auto* edit = new QLineEdit(QString::fromStdString(option.value), dialog);
             form->addRow(label, edit);
             readers.push_back([edit, variable]() { return std::make_pair(variable, edit->text().toStdString()); });
         }
     }
-    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
-    QObject::connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
-    QObject::connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, dialog);
+    QObject::connect(buttons, &QDialogButtonBox::accepted, dialog, &QDialog::accept);
+    QObject::connect(buttons, &QDialogButtonBox::rejected, dialog, &QDialog::reject);
     form->addRow(buttons);
-    if (dialog.exec() != QDialog::Accepted)
-        return;
-    std::vector<std::pair<std::string, std::string>> values;
-    for (const auto& read : readers)
-        values.push_back(read());
-    const std::string error = _script->setOptions(values);
-    if (!error.empty())
-        _host.trace(error);
+    modal::open(dialog, [this, readers](int result) {
+        if (result != QDialog::Accepted)
+            return;
+        std::vector<std::pair<std::string, std::string>> values;
+        for (const auto& read : readers)
+            values.push_back(read());
+        const std::string error = _script->setOptions(values);
+        if (!error.empty())
+            _host.trace(error);
+    });
 }

@@ -1,4 +1,6 @@
 #include "publish_dialog.h"
+#include "file_pick.h"
+#include "modal.h"
 
 #include <QCheckBox>
 #include <QComboBox>
@@ -92,9 +94,10 @@ PublishSettingsDialog::PublishSettingsDialog(const std::string& xml, const QStri
                                     : "The folder the published files go in, or their publish folder is made in");
     QPushButton* browse = new QPushButton("Browse...", location);
     connect(browse, &QPushButton::clicked, this, [this]() {
-        const QString chosen = QFileDialog::getExistingDirectory(this, "Parent Folder", parentFolder());
-        if (!chosen.isEmpty())
-            _parentFolder->setText(QDir::toNativeSeparators(chosen));
+        file_pick::directory(this, "Parent Folder", parentFolder(), [this](const QString& chosen) {
+            if (!chosen.isEmpty())
+                _parentFolder->setText(QDir::toNativeSeparators(chosen));
+        });
     });
     QHBoxLayout* parentRow = new QHBoxLayout;
     parentRow->addWidget(_parentFolder, 1);
@@ -313,53 +316,56 @@ void PublishSettingsDialog::profileChosen()
 
 void PublishSettingsDialog::newProfile()
 {
-    bool ok = false;
-    const QString name = QInputDialog::getText(this, "New Configuration", "Name:", QLineEdit::Normal,
-        _profile->currentText() + " copy", &ok).trimmed();
-    if (!ok || name.isEmpty())
-        return;
-    if (_profile->findText(name) >= 0)
-    {
-        QMessageBox::information(this, "New Configuration", QString("There is a configuration named %1.").arg(name));
-        return;
-    }
-    _xml = fla::publish::write(_xml, settings(), _name.toStdString());
-    _xml = fla::publish::addProfile(_xml, name.toStdString(), _settings.profile, _name.toStdString());
-    load(fla::publish::read(_xml, _name.toStdString(), name.toStdString()));
-    listProfiles(name.toStdString());
+    modal::getText(this, "New Configuration", "Name:", _profile->currentText() + " copy", [this](const QString& value) {
+        const QString name = value.trimmed();
+        if (name.isEmpty())
+            return;
+        if (_profile->findText(name) >= 0)
+        {
+            modal::information(this, "New Configuration", QString("There is a configuration named %1.").arg(name));
+            return;
+        }
+        _xml = fla::publish::write(_xml, settings(), _name.toStdString());
+        _xml = fla::publish::addProfile(_xml, name.toStdString(), _settings.profile, _name.toStdString());
+        load(fla::publish::read(_xml, _name.toStdString(), name.toStdString()));
+        listProfiles(name.toStdString());
+    });
 }
 
 void PublishSettingsDialog::renameProfile()
 {
-    bool ok = false;
-    const QString name = QInputDialog::getText(this, "Rename Configuration", "Name:", QLineEdit::Normal,
-        _profile->currentText(), &ok).trimmed();
-    if (!ok || name.isEmpty() || name == _profile->currentText())
-        return;
-    if (_profile->findText(name) >= 0)
-    {
-        QMessageBox::information(this, "Rename Configuration", QString("There is a configuration named %1.").arg(name));
-        return;
-    }
-    // A document with no settings yet has its one configuration written
-    // first, so there is one to rename.
-    _xml = fla::publish::write(_xml, settings(), _name.toStdString());
-    _xml = fla::publish::renameProfile(_xml, _settings.profile, name.toStdString());
-    _settings.profile = name.toStdString();
-    listProfiles(_settings.profile);
+    modal::getText(this, "Rename Configuration", "Name:", _profile->currentText(), [this](const QString& value) {
+        const QString name = value.trimmed();
+        if (name.isEmpty() || name == _profile->currentText())
+            return;
+        if (_profile->findText(name) >= 0)
+        {
+            modal::information(this, "Rename Configuration", QString("There is a configuration named %1.").arg(name));
+            return;
+        }
+        // A document with no settings yet has its one configuration written
+        // first, so there is one to rename.
+        _xml = fla::publish::write(_xml, settings(), _name.toStdString());
+        _xml = fla::publish::renameProfile(_xml, _settings.profile, name.toStdString());
+        _settings.profile = name.toStdString();
+        listProfiles(_settings.profile);
+    });
 }
 
 void PublishSettingsDialog::deleteProfile()
 {
     if (_profile->count() < 2)
         return;
-    if (QMessageBox::question(this, "Delete Configuration",
-            QString("Delete the configuration %1?").arg(_profile->currentText())) != QMessageBox::Yes)
-        return;
-    _xml = fla::publish::removeProfile(_xml, _settings.profile);
-    const std::string shown = fla::publish::currentProfile(_xml);
-    load(fla::publish::read(_xml, _name.toStdString(), shown));
-    listProfiles(shown);
+    modal::ask(this, QMessageBox::Question, "Delete Configuration",
+        QString("Delete the configuration %1?").arg(_profile->currentText()), QMessageBox::Yes | QMessageBox::No,
+        QMessageBox::NoButton, [this](QMessageBox::StandardButton answer) {
+            if (answer != QMessageBox::Yes || _profile->count() < 2)
+                return;
+            _xml = fla::publish::removeProfile(_xml, _settings.profile);
+            const std::string shown = fla::publish::currentProfile(_xml);
+            load(fla::publish::read(_xml, _name.toStdString(), shown));
+            listProfiles(shown);
+        });
 }
 
 std::string PublishSettingsDialog::xml() const

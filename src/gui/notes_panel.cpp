@@ -1,4 +1,5 @@
 #include "notes_panel.h"
+#include "modal.h"
 
 #include "text_layout.h"
 
@@ -138,48 +139,52 @@ void NotesPanel::addNote()
     fla::CommandStack* commands = _links.commands ? _links.commands() : nullptr;
     if (!timeline || !commands)
         return;
-    bool ok = false;
     const QString author = defaultAuthor();
     const int frameIndex = _links.currentFrame ? _links.currentFrame() : 0;
-    const QString body = QInputDialog::getMultiLineText(this, "Add Note",
-        QString("Note on frame %1%2:").arg(frameIndex + 1).arg(author.isEmpty() ? QString() : " by " + author), QString(), &ok)
-                             .trimmed();
-    if (!ok || body.isEmpty())
-        return;
+    modal::getMultiLineText(this, "Add Note",
+        QString("Note on frame %1%2:").arg(frameIndex + 1).arg(author.isEmpty() ? QString() : " by " + author), QString(),
+        [this, timeline, commands, author, frameIndex](const QString& text) {
+            const QString body = text.trimmed();
+            if (body.isEmpty())
+                return;
+            // The timeline may have changed while the note was written.
+            if (!_links.timeline || _links.timeline() != timeline || !_links.commands || _links.commands() != commands)
+                return;
 
-    commands->beginMacro("Add Note");
-    fla::Layer* layer = ensureLayer(*timeline);
-    // A keyframe of its own on the frame shown, so the note shows from
-    // there to the next note.
-    bool keyed = false;
-    for (const fla::Frame* frame : layer->frames)
-        keyed = keyed || (frame && frame->index == frameIndex);
-    if (!keyed)
-        commands->push(fla::CommandPtr(new fla::EditFramesCommand({layer}, "Add Note",
-            [layer, frameIndex](std::vector<fla::Frame*>&) { fla::timeline::insertKeyframe(*layer, frameIndex, true); })));
-    fla::Frame* target = nullptr;
-    for (fla::Frame* frame : layer->frames)
-        if (frame && frame->index == frameIndex)
-            target = frame;
-    if (target)
-    {
-        // Notes on the same frame stack down the stage's corner.
-        const QPointF corner = _links.corner ? _links.corner() : QPointF(20.0, 20.0);
-        const double y = corner.y() + 70.0 * static_cast<double>(target->elements.size());
-        fla::StaticText* note = fla::review::makeNote(author.toStdString(), body.toStdString(), corner.x(), y);
-        // Measured as the Text tool measures what is typed, so the stage
-        // knows where it is.
-        const QRectF bounds = TextLayout::localBounds(*note);
-        note->height = bounds.height();
-        note->localBounds = fla::Rect(fla::Point(bounds.left(), bounds.top()), fla::Point(bounds.right(), bounds.bottom()));
-        note->bounds = note->localBounds;
-        commands->push(fla::CommandPtr(new fla::AddElementCommand(target, note, "Add Note",
-            _links.selection ? _links.selection() : nullptr)));
-    }
-    commands->endMacro();
-    if (_links.changed)
-        _links.changed();
-    refresh();
+            commands->beginMacro("Add Note");
+            fla::Layer* layer = ensureLayer(*timeline);
+            // A keyframe of its own on the frame shown, so the note shows from
+            // there to the next note.
+            bool keyed = false;
+            for (const fla::Frame* frame : layer->frames)
+                keyed = keyed || (frame && frame->index == frameIndex);
+            if (!keyed)
+                commands->push(fla::CommandPtr(new fla::EditFramesCommand({layer}, "Add Note",
+                    [layer, frameIndex](std::vector<fla::Frame*>&) { fla::timeline::insertKeyframe(*layer, frameIndex, true); })));
+            fla::Frame* target = nullptr;
+            for (fla::Frame* frame : layer->frames)
+                if (frame && frame->index == frameIndex)
+                    target = frame;
+            if (target)
+            {
+                // Notes on the same frame stack down the stage's corner.
+                const QPointF corner = _links.corner ? _links.corner() : QPointF(20.0, 20.0);
+                const double y = corner.y() + 70.0 * static_cast<double>(target->elements.size());
+                fla::StaticText* note = fla::review::makeNote(author.toStdString(), body.toStdString(), corner.x(), y);
+                // Measured as the Text tool measures what is typed, so the stage
+                // knows where it is.
+                const QRectF bounds = TextLayout::localBounds(*note);
+                note->height = bounds.height();
+                note->localBounds = fla::Rect(fla::Point(bounds.left(), bounds.top()), fla::Point(bounds.right(), bounds.bottom()));
+                note->bounds = note->localBounds;
+                commands->push(fla::CommandPtr(new fla::AddElementCommand(target, note, "Add Note",
+                    _links.selection ? _links.selection() : nullptr)));
+            }
+            commands->endMacro();
+            if (_links.changed)
+                _links.changed();
+            refresh();
+        });
 }
 
 void NotesPanel::setDone(bool done)

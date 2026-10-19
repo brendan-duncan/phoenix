@@ -1,4 +1,6 @@
 #include "shortcuts_dialog.h"
+#include "file_pick.h"
+#include "modal.h"
 
 #include <QAction>
 #include <QComboBox>
@@ -256,14 +258,15 @@ ShortcutsDialog::ShortcutsDialog(const std::vector<ShortcutEntry>& entries, QWid
         fill();
     });
     connect(saveAs, &QPushButton::clicked, this, [this]() {
-        bool ok = false;
-        const QString name = QInputDialog::getText(this, "Save Shortcut Set", "Name:", QLineEdit::Normal,
-            _sets->currentIndex() > 1 ? _sets->currentText() : QString(), &ok).trimmed();
-        if (!ok || name.isEmpty())
-            return;
-        QSettings().setValue("shortcuts/sets/" + name, Shortcuts::toJson(chosen()));
-        refreshSets();
-        _sets->setCurrentText(name);
+        modal::getText(this, "Save Shortcut Set", "Name:", _sets->currentIndex() > 1 ? _sets->currentText() : QString(),
+            [this](const QString& value) {
+                const QString name = value.trimmed();
+                if (name.isEmpty())
+                    return;
+                QSettings().setValue("shortcuts/sets/" + name, Shortcuts::toJson(chosen()));
+                refreshSets();
+                _sets->setCurrentText(name);
+            });
     });
     connect(remove, &QPushButton::clicked, this, [this]() {
         if (_sets->currentIndex() <= 1)
@@ -272,40 +275,39 @@ ShortcutsDialog::ShortcutsDialog(const std::vector<ShortcutEntry>& entries, QWid
         refreshSets();
     });
     connect(exportSet, &QPushButton::clicked, this, [this]() {
-        const QString path = QFileDialog::getSaveFileName(this, "Export Shortcuts", "shortcuts.json", "Shortcuts (*.json)");
-        if (path.isEmpty())
-            return;
-        QFile file(path);
-        if (file.open(QIODevice::WriteOnly))
-            file.write(Shortcuts::toJson(chosen()));
+        file_pick::save(this, "Export Shortcuts", "shortcuts.json", "Shortcuts (*.json)", [this](const QString& path) {
+            QFile file(path);
+            if (file.open(QIODevice::WriteOnly))
+                file.write(Shortcuts::toJson(chosen()));
+        });
     });
     connect(importSet, &QPushButton::clicked, this, [this]() {
-        const QString path = QFileDialog::getOpenFileName(this, "Import Shortcuts", QString(),
-            "Shortcut sets (*.json *.xml *.txt);;Phoenix sets (*.json);;Animate shortcut files (*.xml *.txt);;All files (*)");
-        if (path.isEmpty())
-            return;
-        QFile file(path);
-        if (!file.open(QIODevice::ReadOnly))
-            return;
-        const QByteArray data = file.readAll();
-        // A set Phoenix exported, or one from Animate.
-        const std::map<QString, QKeySequence> keys = Shortcuts::fromJson(data);
-        if (!keys.empty())
-        {
-            _keys = keys;
-            fill();
-            return;
-        }
-        std::vector<std::pair<std::string, std::string>> bindings;
-        for (const fla::shortcutsets::Binding& binding : fla::shortcutsets::read(data.toStdString()))
-            bindings.emplace_back(binding.command, binding.key);
-        if (bindings.empty())
-        {
-            QMessageBox::information(this, "Import Shortcuts", "No shortcuts were found in that file.");
-            return;
-        }
-        _keys.clear();
-        takeBindings(bindings, QFileInfo(path).fileName());
+        file_pick::open(this, "Import Shortcuts", QString(),
+            "Shortcut sets (*.json *.xml *.txt);;Phoenix sets (*.json);;Animate shortcut files (*.xml *.txt);;All files (*)",
+            [this](const QString& path) {
+                QFile file(path);
+                if (!file.open(QIODevice::ReadOnly))
+                    return;
+                const QByteArray data = file.readAll();
+                // A set Phoenix exported, or one from Animate.
+                const std::map<QString, QKeySequence> keys = Shortcuts::fromJson(data);
+                if (!keys.empty())
+                {
+                    _keys = keys;
+                    fill();
+                    return;
+                }
+                std::vector<std::pair<std::string, std::string>> bindings;
+                for (const fla::shortcutsets::Binding& binding : fla::shortcutsets::read(data.toStdString()))
+                    bindings.emplace_back(binding.command, binding.key);
+                if (bindings.empty())
+                {
+                    modal::information(this, "Import Shortcuts", "No shortcuts were found in that file.");
+                    return;
+                }
+                _keys.clear();
+                takeBindings(bindings, QFileInfo(path).fileName());
+            });
     });
 
     refreshSets();
@@ -349,7 +351,7 @@ void ShortcutsDialog::takeBindings(const std::vector<std::pair<std::string, std:
                        .arg(names.join("\n"))
                        .arg(unmatched.size() > 12 ? QString("\n...") : QString());
     }
-    QMessageBox::information(this, "Import Shortcuts", message);
+    modal::information(this, "Import Shortcuts", message);
 }
 
 void ShortcutsDialog::refreshSets()

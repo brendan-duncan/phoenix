@@ -1,4 +1,5 @@
 #include "behaviors_panel.h"
+#include "modal.h"
 
 #include "behavior_library.h"
 #include "hot_text.h"
@@ -51,6 +52,7 @@
 #include <algorithm>
 #include <cmath>
 #include <map>
+#include <memory>
 #include <set>
 
 namespace {
@@ -946,13 +948,13 @@ void BehaviorsPanel::fillSettings()
             });
             connect(swatch, &QToolButton::clicked, this, [this, row, name, field, swatch, label]() {
                 const QColor was(field->text().trimmed());
-                const QColor chosen = SwatchPopup::getColor(swatch, nullptr, was.isValid() ? was : QColor(Qt::white), label, false);
-                if (!chosen.isValid())
-                    return;
-                const QString hex = chosen.name().toUpper();
-                field->setText(hex);
-                swatch->setIcon(colorSwatch(chosen));
-                setParam(row, name, hex.toStdString(), false);
+                SwatchPopup::getColor(swatch, nullptr, was.isValid() ? was : QColor(Qt::white), label, false,
+                    [this, row, name, field, swatch](const QColor& chosen) {
+                        const QString hex = chosen.name().toUpper();
+                        field->setText(hex);
+                        swatch->setIcon(colorSwatch(chosen));
+                        setParam(row, name, hex.toStdString(), false);
+                    });
             });
             addRow(holder);
         }
@@ -1145,12 +1147,12 @@ void BehaviorsPanel::browsePresets()
                         : now == Mode::Adjustments ? fla::compositing::defaults(definition.id, 1)
                                                    : BehaviorLibrary::instance().engine().defaults(definition.id, 1)}});
 
-    QDialog dialog(this);
-    dialog.setWindowTitle(letters ? "Letter Animation Presets" : now == Mode::Shapes ? "Shape Operator Presets"
+    QDialog* dialog = new QDialog(this);
+    dialog->setWindowTitle(letters ? "Letter Animation Presets" : now == Mode::Shapes ? "Shape Operator Presets"
             : now == Mode::Adjustments                                             ? "Effect Presets"
                                                                                    : "Behavior Presets");
-    auto* layout = new QHBoxLayout(&dialog);
-    auto* list = new QListWidget(&dialog);
+    auto* layout = new QHBoxLayout(dialog);
+    auto* list = new QListWidget(dialog);
     list->setMinimumWidth(200);
     const auto heading = [list](const QString& text) {
         auto* item = new QListWidgetItem(text, list);
@@ -1179,26 +1181,28 @@ void BehaviorsPanel::browsePresets()
     }
     layout->addWidget(list);
     auto* side = new QVBoxLayout();
-    auto* preview = new PresetPreview(sample, &dialog);
+    auto* preview = new PresetPreview(sample, dialog);
     side->addWidget(preview, 1);
-    auto* about = new QLabel(&dialog);
+    auto* about = new QLabel(dialog);
     about->setWordWrap(true);
     about->setMinimumHeight(48);
     about->setAlignment(Qt::AlignTop | Qt::AlignLeft);
     side->addWidget(about);
-    auto* buttons = new QDialogButtonBox(&dialog);
+    auto* buttons = new QDialogButtonBox(dialog);
     QPushButton* apply = buttons->addButton(letters ? "Add to Text" : now == Mode::Adjustments ? "Add to Layer" : "Add to Selection",
         QDialogButtonBox::AcceptRole);
     buttons->addButton(QDialogButtonBox::Close);
     side->addWidget(buttons);
     layout->addLayout(side, 1);
-    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
-    connect(list, &QListWidget::currentItemChanged, &dialog, [&presets, preview, about, apply](QListWidgetItem* item) {
+    connect(buttons, &QDialogButtonBox::rejected, dialog, &QDialog::reject);
+    // Kept for as long as the dialog is up.
+    const auto browsed = std::make_shared<const std::vector<BrowsedPreset>>(std::move(presets));
+    connect(list, &QListWidget::currentItemChanged, dialog, [browsed, preview, about, apply](QListWidgetItem* item) {
         const QVariant index = item ? item->data(Qt::UserRole) : QVariant();
         apply->setEnabled(index.isValid());
         if (!index.isValid())
             return;
-        const BrowsedPreset& preset = presets[static_cast<size_t>(index.toInt())];
+        const BrowsedPreset& preset = (*browsed)[static_cast<size_t>(index.toInt())];
         preview->show(preset.list);
         about->setText(preset.description);
     });
@@ -1206,11 +1210,11 @@ void BehaviorsPanel::browsePresets()
     const char* stepName = letters ? "Add Letter Animation" : now == Mode::Shapes ? "Add Operator"
         : now == Mode::Adjustments                                               ? "Add Effect"
                                                                                  : "Add Behavior";
-    const auto addChosen = [this, &presets, list, stepName]() {
+    const auto addChosen = [this, browsed, list, stepName]() {
         const QVariant index = list->currentItem() ? list->currentItem()->data(Qt::UserRole) : QVariant();
         if (!index.isValid() || targets().empty())
             return;
-        std::vector<fla::behaviors::Applied> chosen = presets[static_cast<size_t>(index.toInt())].list;
+        std::vector<fla::behaviors::Applied> chosen = (*browsed)[static_cast<size_t>(index.toInt())].list;
         for (fla::behaviors::Applied& applied : chosen)
             if (applied.params.count("seed"))
                 applied.params["seed"] = std::to_string(newSeed());
@@ -1220,11 +1224,11 @@ void BehaviorsPanel::browsePresets()
         refresh();
         _list->setCurrentRow(_list->count() - 1);
     };
-    connect(apply, &QPushButton::clicked, &dialog, addChosen);
-    connect(list, &QListWidget::itemDoubleClicked, &dialog, addChosen);
+    connect(apply, &QPushButton::clicked, dialog, addChosen);
+    connect(list, &QListWidget::itemDoubleClicked, dialog, addChosen);
     list->setCurrentRow(made > 0 ? 1 : 0);
-    dialog.resize(640, 360);
-    dialog.exec();
+    dialog->resize(640, 360);
+    modal::open(dialog);
 }
 
 void BehaviorsPanel::move(int by)
@@ -1320,10 +1324,15 @@ int BehaviorsPanel::frame() const
 
 void BehaviorsPanel::newBehavior()
 {
-    bool ok = false;
-    const QString name = QInputDialog::getText(this, "New Behavior", "Name:", QLineEdit::Normal, "My Behavior", &ok).trimmed();
-    if (!ok || name.isEmpty())
-        return;
+    modal::getText(this, "New Behavior", "Name:", "My Behavior", [this](const QString& text) {
+        const QString name = text.trimmed();
+        if (!name.isEmpty())
+            writeBehavior(name);
+    });
+}
+
+void BehaviorsPanel::writeBehavior(const QString& name)
+{
     // The file is named after it, in letters and digits.
     QString base = name;
     base.remove(QRegularExpression("[^A-Za-z0-9_ -]"));
@@ -1357,7 +1366,7 @@ void BehaviorsPanel::newBehavior()
         QFile out(path);
         if (!out.open(QIODevice::WriteOnly | QIODevice::Truncate))
         {
-            QMessageBox::warning(this, "New Behavior", QString("Could not write %1.").arg(QDir::toNativeSeparators(path)));
+            modal::warning(this, "New Behavior", QString("Could not write %1.").arg(QDir::toNativeSeparators(path)));
             return;
         }
         out.write(source.toUtf8());

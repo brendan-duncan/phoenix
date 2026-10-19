@@ -1,6 +1,7 @@
 #include "document_brushes_dialog.h"
 
 #include "brush_library_store.h"
+#include "modal.h"
 
 #include "../data/document.h"
 #include "../edit/paint_brushes.h"
@@ -170,24 +171,28 @@ void DocumentBrushesDialog::rename()
     const fla::DocumentBrush* brush = chosen();
     if (!brush || !brush->paintBrush || !_hooks.push)
         return;
-    bool ok = false;
-    const QString name = QInputDialog::getText(this, "Rename Brush", "Name:", QLineEdit::Normal,
-        QString::fromStdString(brush->name), &ok).trimmed();
-    if (!ok || name.isEmpty() || name.toStdString() == brush->name)
-        return;
-    const auto library = fla::paintBrushesOf(_document);
-    if (!library)
-        return;
-    std::vector<fla::PaintBrushDefinition> definitions = library->definitions;
-    for (fla::PaintBrushDefinition& definition : definitions)
-        if (definition.index == brush->definition.index)
-        {
-            definition = fla::withParam(definition, "name", name.toStdString());
-            definition.index = brush->definition.index;
-        }
-    if (fla::CommandPtr command = fla::setPaintBrushDefinitions(_document, definitions, "Rename Brush"))
-        _hooks.push(std::move(command));
-    refill();
+    // What the callback needs of the brush, copied: the list is refilled
+    // as the document changes.
+    const std::string was = brush->name;
+    const auto index = brush->definition.index;
+    modal::getText(this, "Rename Brush", "Name:", QString::fromStdString(was), [this, was, index](const QString& text) {
+        const QString name = text.trimmed();
+        if (name.isEmpty() || name.toStdString() == was)
+            return;
+        const auto library = fla::paintBrushesOf(_document);
+        if (!library)
+            return;
+        std::vector<fla::PaintBrushDefinition> definitions = library->definitions;
+        for (fla::PaintBrushDefinition& definition : definitions)
+            if (definition.index == index)
+            {
+                definition = fla::withParam(definition, "name", name.toStdString());
+                definition.index = index;
+            }
+        if (fla::CommandPtr command = fla::setPaintBrushDefinitions(_document, definitions, "Rename Brush"))
+            _hooks.push(std::move(command));
+        refill();
+    });
 }
 
 void DocumentBrushesDialog::removeUnused()

@@ -1,4 +1,5 @@
 #include "node_graph_view.h"
+#include "modal.h"
 
 #include "node_graph_style.h"
 #include "node_search.h"
@@ -2101,7 +2102,7 @@ void NodeGraphView::contextMenuEvent(QContextMenuEvent* event)
     if (!_hasGraph)
         return;
     const Hit hit = hitAt(event->pos());
-    QMenu menu(this);
+    QMenu* menu = new QMenu(this);
     const Node* node = _graph.node(hit.node);
     if (node && (hit.kind == Hit::Node || hit.kind == Hit::Header || hit.kind == Hit::Eye))
     {
@@ -2112,35 +2113,35 @@ void NodeGraphView::contextMenuEvent(QContextMenuEvent* event)
             update();
         }
         if (hasOutput(*node) && !isDot(*node))
-            menu.addAction(_viewed == node->id ? "Show the Output on the Stage" : "Show on the Stage", this,
+            menu->addAction(_viewed == node->id ? "Show the Output on the Stage" : "Show on the Stage", this,
                 [this, id = node->id]() { emit viewRequested(_viewed == id ? 0 : id); })
                 ->setShortcut(QKeySequence(Qt::Key_V));
         if (node->type() != "output" && !isDot(*node))
-            menu.addAction(node->bypassed() ? "Turn On" : "Bypass", this, [this]() { toggleBypass(); })
+            menu->addAction(node->bypassed() ? "Turn On" : "Bypass", this, [this]() { toggleBypass(); })
                 ->setShortcut(QKeySequence(Qt::Key_D));
         if (!isDot(*node))
         {
-            menu.addAction(node->collapsed ? "Show Picture" : "Hide Picture", this, [this]() { toggleCollapsed(); })
+            menu->addAction(node->collapsed ? "Show Picture" : "Hide Picture", this, [this]() { toggleCollapsed(); })
                 ->setShortcut(QKeySequence(Qt::Key_H));
-            menu.addAction("Rename...", this, [this, id = node->id]() { startRename(id); });
+            menu->addAction("Rename...", this, [this, id = node->id]() { startRename(id); });
         }
-        menu.addSeparator();
-        menu.addAction("Duplicate", this, [this]() { duplicate(); })->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_D));
-        menu.addAction("Copy", this, [this]() { copy(); })->setShortcut(QKeySequence::Copy);
-        menu.addAction("Put Behind a Backdrop", this, [this]() { backdropSelection(); })->setShortcut(QKeySequence(Qt::Key_B));
-        menu.addAction("Unlink", this, [this, id = node->id]() {
+        menu->addSeparator();
+        menu->addAction("Duplicate", this, [this]() { duplicate(); })->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_D));
+        menu->addAction("Copy", this, [this]() { copy(); })->setShortcut(QKeySequence::Copy);
+        menu->addAction("Put Behind a Backdrop", this, [this]() { backdropSelection(); })->setShortcut(QKeySequence(Qt::Key_B));
+        menu->addAction("Unlink", this, [this, id = node->id]() {
             _graph.links.erase(std::remove_if(_graph.links.begin(), _graph.links.end(),
                                    [id](const fla::nodegraph::Link& l) { return l.from == id || l.to == id; }),
                 _graph.links.end());
             commit("Unlink Nodes");
         });
         if (node->type() != "output")
-            menu.addAction("Delete", this, [this]() { deleteSelection(); })->setShortcut(QKeySequence::Delete);
+            menu->addAction("Delete", this, [this]() { deleteSelection(); })->setShortcut(QKeySequence::Delete);
     }
     else if (hit.kind == Hit::Link)
     {
         const int index = hit.link;
-        menu.addAction("Add Reroute Point", this, [this, index, at = toGraph(event->pos())]() {
+        menu->addAction("Add Reroute Point", this, [this, index, at = toGraph(event->pos())]() {
             const fla::nodegraph::Link link = _graph.links[static_cast<size_t>(index)];
             addNode("dot", at);
             const int dot = currentNode();
@@ -2149,13 +2150,13 @@ void NodeGraphView::contextMenuEvent(QContextMenuEvent* event)
             _graph.connect(dot, link.to, link.input);
             commit("Add Reroute");
         });
-        menu.addAction("Delete Link", this, [this, index]() { deleteLink(index); });
+        menu->addAction("Delete Link", this, [this, index]() { deleteLink(index); });
     }
     else if (hit.kind == Hit::BackdropTitle || hit.kind == Hit::Backdrop || hit.kind == Hit::BackdropCorner)
     {
         const int id = hit.node;
-        menu.addAction("Rename...", this, [this, id]() { startRename(id); });
-        QMenu* colors = menu.addMenu("Color");
+        menu->addAction("Rename...", this, [this, id]() { startRename(id); });
+        QMenu* colors = menu->addMenu("Color");
         static const std::pair<const char*, uint32_t> named[] = {{"Blue", 0x5B8CFF}, {"Green", 0x46C27A},
             {"Orange", 0xE5A548}, {"Purple", 0xC86ADB}, {"Red", 0xE5564B}, {"Teal", 0x3FB8B0}, {"Gray", 0x8A8F9C}};
         for (const auto& [name, color] : named)
@@ -2170,7 +2171,7 @@ void NodeGraphView::contextMenuEvent(QContextMenuEvent* event)
                 }
             });
         }
-        menu.addAction("Delete Backdrop", this, [this, id]() {
+        menu->addAction("Delete Backdrop", this, [this, id]() {
             _graph.remove(id);
             _selected.remove(id);
             commit("Delete Backdrop");
@@ -2180,7 +2181,7 @@ void NodeGraphView::contextMenuEvent(QContextMenuEvent* event)
     {
         // Every kind of node, by category, to add where the menu opened.
         const QPointF at = toGraph(event->pos());
-        QMenu* add = menu.addMenu("Add Node");
+        QMenu* add = menu->addMenu("Add Node");
         for (const std::string& category : fla::nodegraph::categories())
         {
             QMenu* sub = nullptr;
@@ -2208,16 +2209,16 @@ void NodeGraphView::contextMenuEvent(QContextMenuEvent* event)
                 })->setStatusTip(QString::fromStdString(type.description));
             }
         }
-        menu.addAction("Search Nodes...", this, [this, pos = event->pos()]() { openSearch(pos, 0, 0, -1); })
+        menu->addAction("Search Nodes...", this, [this, pos = event->pos()]() { openSearch(pos, 0, 0, -1); })
             ->setShortcut(QKeySequence(Qt::Key_Tab));
-        menu.addSeparator();
-        QAction* pasteAction = menu.addAction("Paste", this, [this]() { paste(); });
+        menu->addSeparator();
+        QAction* pasteAction = menu->addAction("Paste", this, [this]() { paste(); });
         pasteAction->setShortcut(QKeySequence::Paste);
         pasteAction->setEnabled(QApplication::clipboard()->text().startsWith(kClipboardMark));
-        menu.addAction("Add Backdrop", this, [this]() { backdropSelection(); })->setShortcut(QKeySequence(Qt::Key_B));
-        menu.addSeparator();
-        menu.addAction("Frame All", this, [this]() { frameAll(); })->setShortcut(QKeySequence(Qt::Key_Home));
-        menu.addAction("Line Up Nodes", this, [this]() { tidy(); })->setShortcut(QKeySequence(Qt::Key_L));
+        menu->addAction("Add Backdrop", this, [this]() { backdropSelection(); })->setShortcut(QKeySequence(Qt::Key_B));
+        menu->addSeparator();
+        menu->addAction("Frame All", this, [this]() { frameAll(); })->setShortcut(QKeySequence(Qt::Key_Home));
+        menu->addAction("Line Up Nodes", this, [this]() { tidy(); })->setShortcut(QKeySequence(Qt::Key_L));
     }
-    menu.exec(event->globalPos());
+    modal::popup(menu, event->globalPos());
 }

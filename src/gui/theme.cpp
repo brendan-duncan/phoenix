@@ -1,4 +1,5 @@
 #include "theme.h"
+#include "web_page.h"
 
 #include <QAbstractButton>
 #include <QAction>
@@ -159,6 +160,47 @@ QString fileFor(const QString& name)
     return QDir(folder()).filePath(safe + ".phxtheme");
 }
 
+#ifdef PHOENIX_WEB
+namespace {
+
+/// The dark mode's palette in a browser, where the system has none to give.
+QPalette webDarkPalette()
+{
+    QPalette palette;
+    const QColor window(45, 45, 45);
+    const QColor base(30, 30, 30);
+    const QColor text(225, 225, 225);
+    const QColor dim(128, 128, 128);
+    palette.setColor(QPalette::Window, window);
+    palette.setColor(QPalette::WindowText, text);
+    palette.setColor(QPalette::Base, base);
+    palette.setColor(QPalette::AlternateBase, QColor(38, 38, 38));
+    palette.setColor(QPalette::ToolTipBase, QColor(55, 55, 55));
+    palette.setColor(QPalette::ToolTipText, text);
+    palette.setColor(QPalette::PlaceholderText, dim);
+    palette.setColor(QPalette::Text, text);
+    palette.setColor(QPalette::Button, QColor(55, 55, 55));
+    palette.setColor(QPalette::ButtonText, text);
+    palette.setColor(QPalette::BrightText, Qt::white);
+    palette.setColor(QPalette::Light, QColor(75, 75, 75));
+    palette.setColor(QPalette::Midlight, QColor(62, 62, 62));
+    palette.setColor(QPalette::Mid, QColor(40, 40, 40));
+    palette.setColor(QPalette::Dark, QColor(25, 25, 25));
+    palette.setColor(QPalette::Shadow, QColor(10, 10, 10));
+    palette.setColor(QPalette::Highlight, QColor(42, 130, 218));
+    palette.setColor(QPalette::Accent, QColor(42, 130, 218));
+    palette.setColor(QPalette::HighlightedText, Qt::white);
+    palette.setColor(QPalette::Link, QColor(100, 160, 255));
+    palette.setColor(QPalette::LinkVisited, QColor(160, 130, 255));
+    for (QPalette::ColorRole role : {QPalette::Text, QPalette::WindowText, QPalette::ButtonText})
+        palette.setColor(QPalette::Disabled, role, dim);
+    palette.setColor(QPalette::Disabled, QPalette::Button, window);
+    return palette;
+}
+
+} // namespace
+#endif
+
 void apply(const Theme& theme)
 {
     g_current = theme;
@@ -171,7 +213,13 @@ void apply(const Theme& theme)
         qApp->styleHints()->unsetColorScheme();
     else
         qApp->styleHints()->setColorScheme(theme.base == "Light" ? Qt::ColorScheme::Light : Qt::ColorScheme::Dark);
+#ifdef PHOENIX_WEB
+    // A browser gives Qt one palette, a light one, whatever the mode: the
+    // dark one is Phoenix's own.
+    QPalette palette = theme.base == "Light" ? QApplication::style()->standardPalette() : webDarkPalette();
+#else
     QPalette palette;
+#endif
     const auto set = [&](const char* key, std::initializer_list<QPalette::ColorRole> roles) {
         if (!theme.colors.contains(key))
             return;
@@ -192,6 +240,9 @@ void apply(const Theme& theme)
     if (theme.colors.contains("hotText"))
         palette.setColor(QPalette::Link, theme.colors.value("hotText"));
     qApp->setPalette(palette);
+#ifdef PHOENIX_WEB
+    web_page::setWindowColors(palette);
+#endif
 
     QFont font = qApp->font();
     static const int systemSize = font.pointSize();

@@ -1,4 +1,5 @@
 #include "claude_code.h"
+#include "modal.h"
 
 #include "mcp_server.h"
 
@@ -80,14 +81,15 @@ bool prepare(McpServer& server, QWidget* parent, QString& claude, QString& confi
     claude = find();
     if (claude.isEmpty())
     {
-        QMessageBox box(QMessageBox::Information, "Open Claude Code",
+        QMessageBox* box = new QMessageBox(QMessageBox::Information, "Open Claude Code",
             "Claude Code is not installed, or Phoenix cannot find it.<br><br>Install it, sign in once in a "
             "terminal, then choose <b>Open Claude Code</b> again.",
             QMessageBox::Close, parent);
-        QPushButton* install = box.addButton("How to Install", QMessageBox::ActionRole);
-        box.exec();
-        if (box.clickedButton() == install)
-            QDesktopServices::openUrl(QUrl(kInstallPage));
+        QPushButton* install = box->addButton("How to Install", QMessageBox::ActionRole);
+        modal::open(box, [box, install](QMessageBox::StandardButton) {
+            if (box->clickedButton() == install)
+                QDesktopServices::openUrl(QUrl(kInstallPage));
+        });
         return false;
     }
     QString token;
@@ -95,7 +97,7 @@ bool prepare(McpServer& server, QWidget* parent, QString& claude, QString& confi
     config = port > 0 ? writeConfig(port, token) : QString();
     if (config.isEmpty())
     {
-        QMessageBox::warning(parent, "Open Claude Code", "Phoenix could not get ready for Claude Code to connect.");
+        modal::warning(parent, "Open Claude Code", "Phoenix could not get ready for Claude Code to connect.");
         return false;
     }
     return true;

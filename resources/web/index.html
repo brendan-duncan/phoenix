@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en-us">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, height=device-height, user-scalable=0">
+<title>Phoenix</title>
+<link rel="icon" href="phoenix.png">
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; background: #2d2d2d; color: #e1e1e1;
+    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  #screen { width: 100%; height: 100%; }
+  #loading { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center;
+    justify-content: center; gap: 14px; text-align: center; padding: 16px; }
+  #loading img { width: 96px; height: 96px; }
+  #loading h1 { font-size: 22px; font-weight: 600; margin: 0; }
+  #status { color: #a0a0a0; max-width: 34em; }
+  #status.problem { color: #ff8a80; }
+  .bar { width: 220px; height: 4px; border-radius: 2px; background: #444; overflow: hidden; }
+  .bar div { width: 40%; height: 100%; background: #2a82da; animation: slide 1.2s ease-in-out infinite; }
+  .problem ~ .bar { display: none; }
+  @keyframes slide { from { margin-left: -40%; } to { margin-left: 100%; } }
+</style>
+</head>
+<body>
+<div id="loading">
+  <img src="phoenix.png" alt="">
+  <h1>Phoenix</h1>
+  <div id="status">Loading…</div>
+  <div class="bar"><div></div></div>
+  <noscript>Phoenix needs JavaScript.</noscript>
+</div>
+<div id="screen" hidden></div>
+<script>
+  // The page Phoenix's web build runs in. Phoenix's threads need the page
+  // to be cross-origin isolated (the server sends the COOP and COEP
+  // headers; tools/web/serve.py does).
+  const loading = document.getElementById("loading");
+  const screen = document.getElementById("screen");
+  const status = document.getElementById("status");
+
+  function problem(text) {
+    status.textContent = text;
+    status.className = "problem";
+    loading.hidden = false;
+    screen.hidden = true;
+  }
+
+  async function start() {
+    if (!window.crossOriginIsolated || typeof SharedArrayBuffer === "undefined") {
+      problem("This page is not cross-origin isolated, so Phoenix cannot use threads. The server has to send the "
+        + "Cross-Origin-Opener-Policy and Cross-Origin-Embedder-Policy headers (tools/web/serve.py does).");
+      return;
+    }
+    status.textContent = "Loading Phoenix…";
+    try {
+      await qtLoad({
+        qt: {
+          entryFunction: window.Phoenix_entry,
+          containerElements: [screen],
+          onLoaded: () => {
+            loading.hidden = true;
+            screen.hidden = false;
+          },
+          onExit: (exit) => {
+            problem("Phoenix stopped" + (exit.text ? ": " + exit.text : exit.code !== undefined ? " (" + exit.code + ")." : "."));
+          },
+        },
+      });
+    } catch (error) {
+      console.error(error);
+      problem("Phoenix could not start: " + error);
+    }
+  }
+</script>
+<script src="Phoenix.js"></script>
+<script src="qtloader.js" onload="start()"></script>
+</body>
+</html>

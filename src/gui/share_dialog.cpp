@@ -1,4 +1,6 @@
 #include "share_dialog.h"
+#include "file_pick.h"
+#include "modal.h"
 
 #include "new_document_dialog.h"
 
@@ -18,7 +20,7 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QMessageBox>
-#include <QProcess>
+#include "process.h"
 #include <QPushButton>
 #include <QSettings>
 #include <QSlider>
@@ -250,7 +252,7 @@ bool ShareDialog::available(share::Format format)
     const QString ffmpeg = MovieExport::ffmpegPath();
     if (!ffmpeg.isEmpty())
     {
-        QProcess process;
+        Process process;
         process.start(ffmpeg, {"-hide_banner", "-encoders"});
         if (process.waitForFinished(10000))
         {
@@ -397,7 +399,7 @@ void ShareDialog::estimate()
         for (const std::string& argument : share::encoderArguments(kind, chosen.quality, chosen.transparent, 0, false,
                  out.toStdString()))
             arguments << QString::fromStdString(argument);
-        QProcess process;
+        Process process;
         process.start(ffmpeg, arguments);
         if (!process.waitForStarted(5000))
             return -1.0;
@@ -437,10 +439,7 @@ void ShareDialog::save()
         folder = QStandardPaths::writableLocation(QStandardPaths::PicturesLocation);
     const QString suggested = QDir(folder).filePath(_baseName + "." + share::suffix(chosen));
     const QString filter = QString("%1 (*.%2)").arg(share::title(chosen), share::suffix(chosen));
-    const QString path = QFileDialog::getSaveFileName(this, "Share", suggested, filter);
-    if (path.isEmpty())
-        return;
-    saveTo(path);
+    file_pick::save(this, "Share", suggested, filter, [this](const QString& path) { saveTo(path); });
 }
 
 bool ShareDialog::saveTo(const QString& given)
@@ -462,7 +461,7 @@ bool ShareDialog::saveTo(const QString& given)
     if (!_hooks.write || !_hooks.write(chosenSettings, error))
     {
         if (!error.isEmpty())
-            QMessageBox::warning(this, "Share", error);
+            modal::warning(this, "Share", error);
         _result->setText(error.isEmpty() ? "Cancelled." : "Not saved.");
         return false;
     }

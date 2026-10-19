@@ -192,10 +192,6 @@ private slots:
     void newFile();
     /// The start screen: new from a preset, Open, or a recent file.
     void showStartDialog();
-    /// Offers back work a crash left in the recovery folder. True when it
-    /// opened some.
-    bool offerRecovery();
-
     void openFile();
 
     void saveFile();
@@ -290,8 +286,10 @@ private slots:
     void swapSymbol();
     /// The selected instances' template fields, filled in.
     void editTemplateFields();
-    /// File > Export > Render from Data.
+    /// File > Export > Render from Data, and the same once the CSV file
+    /// \a csv is chosen.
     void renderFromData();
+    void renderFromDataFile(const QString& csv);
     /// Each row of \a rows rendered to \a folder; false with \a error when
     /// one could not be.
     /// The rows of a CSV file of template values, image paths from its
@@ -586,7 +584,8 @@ private slots:
     void makeRoomForDocument();
     void activateTab(int index);
     /// Closes the tab, asking about unsaved changes first; false when the
-    /// person cancels.
+    /// person cancels, or, where nothing can wait for the answer (the web
+    /// build), while it is still being asked.
     bool closeTab(int index, bool ask = true);
     void refreshTabs();
     /// File > Revert: the saved file again, its changes dropped.
@@ -643,8 +642,23 @@ private:
     /// Rebuilds the title from the open file plus the modified marker.
     void updateWindowTitle();
 
-    /// Offers to abandon unsaved changes. Returns false if the user cancels.
-    bool confirmDiscardChanges();
+    /// Offers to abandon unsaved changes, calling \a proceed once they are
+    /// saved or discarded (at once when there are none), and not at all if
+    /// the user cancels.
+    void confirmDiscardChanges(std::function<void()> proceed);
+
+    /// Offers back work a crash left in the recovery folder; \a done is
+    /// told whether it opened some.
+    void offerRecovery(std::function<void(bool recovered)> done);
+
+    /// closeTab(), calling \a closed once the tab is gone, and not at all
+    /// when the person keeps it open.
+    void closeTab(int index, bool ask, std::function<void()> closed);
+
+    /// Save and Save As, calling \a saved once the document is written;
+    /// not at all when the save is canceled or fails.
+    void saveFileThen(std::function<void()> saved);
+    void saveFileAsThen(std::function<void()> saved);
 
     /// Lets go of the open document and deletes it, leaving nothing open.
     ///
@@ -661,16 +675,17 @@ private:
 
     /// Writes the document to \a filePath, as a .fla when the name ends in
     /// .fla and as an uncompressed XFL folder otherwise. Reports failures and
-    /// updates the saved state.
-    bool saveToPath(const QString& filePath);
+    /// updates the saved state; \a saved is called once it is written, and
+    /// not when a question about the format is declined or the write fails.
+    void saveToPath(const QString& filePath, std::function<void()> saved = {});
     /// Writes \a document to \a filePath in the format its name says (.phx,
     /// .fla, else an XFL folder), asking nothing; false with \a error when
     /// it could not.
     bool writeDocumentFile(const fla::Document& document, const QString& filePath, QString& error);
 
     /// Warns when saving would drop content the writer cannot represent yet.
-    /// Returns false if the user would rather not go ahead.
-    bool confirmLossySave();
+    /// Calls \a proceed unless the user would rather not go ahead.
+    void confirmLossySave(std::function<void()> proceed);
 
     void updateRecentFilesMenu();
 
@@ -764,8 +779,9 @@ private:
     QDockWidget* _toolsDock = nullptr;
     class Toolbox* _toolbox = nullptr;
     /// Saving as FLA or XFL: lists the Phoenix-only features the document
-    /// uses, kept in the file but left out by other FLA editors, and asks.
-    bool confirmPhoenixFeatures();
+    /// uses, kept in the file but left out by other FLA editors, and asks;
+    /// \a proceed is called when the save is to go ahead.
+    void confirmPhoenixFeatures(std::function<void()> proceed);
     /// Documents whose Phoenix features were acknowledged for the session.
     QSet<const fla::FLADocument*> _featuresAcknowledged;
     /// The lesson running, if one is (Help > Tutorials).
@@ -1022,9 +1038,9 @@ private:
     /// The right-click menu of the tab at \a index.
     void showTabMenu(int index, const QPoint& globalPos);
     /// Closes every tab but \a keep, or every tab, asking about unsaved
-    /// changes as each goes; false when the person cancels.
-    bool closeOtherTabs(int keep);
-    bool closeAllTabs();
+    /// changes first; nothing closes when the person cancels.
+    void closeOtherTabs(int keep);
+    void closeAllTabs();
     /// Shows \a path selected in Explorer or the Finder.
     static void revealInFileManager(const QString& path);
     /// Ctrl+Tab and Ctrl+Shift+Tab.
@@ -1051,12 +1067,16 @@ private:
     /// Quitting: every window's unsaved documents settled at once, then
     /// every window closed.
     static bool s_quitting;
+    /// Closing once the unsaved documents were settled, after the close
+    /// that asked about them was turned down to wait for the answers.
+    bool _unsavedSettled = false;
     void quitAll();
     /// Asks about the unsaved documents in \a windows: one at a time, or
-    /// Save All, Discard All or Cancel when there are several. False when
-    /// the person cancels.
-    static bool settleUnsaved(const QList<MainWindow*>& windows, QWidget* parent,
-        const DocumentTab* except = nullptr);
+    /// Save All, Discard All or Cancel when there are several. \a settled is
+    /// called once they are saved or discarded, and not when the person
+    /// cancels.
+    static void settleUnsaved(const QList<MainWindow*>& windows, QWidget* parent, const DocumentTab* except,
+        std::function<void()> settled);
     /// The documents open in every window, for Reopen documents from last
     /// time; and opening them again.
     static void saveSession(const QList<MainWindow*>& windows);
@@ -1108,6 +1128,8 @@ private:
     /// up to date (all of them when \a names is empty).
     void linkToMaster(const QString& name);
     void updateLinked(const QStringList& names);
+    /// Updates the linked symbols \a names, once the person agreed to.
+    void updateLinkedNow(const QStringList& names);
     void refreshHistory();
     /// Edit > Repeat: the last Insert, Modify or Timeline command run, to
     /// run again on what is selected now.
@@ -1343,8 +1365,9 @@ private:
     /// the folder the last Publish wrote into; and the unsaved document
     /// whose settings the first Publish already showed.
     QString publishDocumentFolder() const;
-    /// Edits the publish settings; true when closed with Publish.
-    bool editPublishSettings(bool fromPublish);
+    /// Edits the publish settings; \a done is told, once they are accepted,
+    /// whether they were closed with Publish.
+    void editPublishSettings(bool fromPublish, std::function<void(bool publish)> done);
     QString _publishedFolder;
     const fla::Document* _publishAskedFor = nullptr;
     /// What the last SWF export could not put in as it is.

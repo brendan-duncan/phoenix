@@ -1,6 +1,7 @@
 #include "toolbox.h"
 
 #include "color_well.h"
+#include "modal.h"
 #include "toolbox_flow.h"
 
 #include <QAction>
@@ -428,10 +429,12 @@ void Toolbox::rebuild()
 
 void Toolbox::contextMenuEvent(QContextMenuEvent* event)
 {
-    QMenu menu(this);
-    QAction* edit = menu.addAction("Edit Toolbar...");
-    if (menu.exec(event->globalPos()) == edit)
-        emit editRequested();
+    QMenu* menu = new QMenu(this);
+    QAction* edit = menu->addAction("Edit Toolbar...");
+    modal::popup(menu, event->globalPos(), [this, edit](QAction* chosen) {
+        if (chosen == edit)
+            emit editRequested();
+    });
 }
 
 DockGrip::DockGrip(QWidget* parent)

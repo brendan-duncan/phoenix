@@ -132,12 +132,10 @@ PreferencesDialog::PreferencesDialog(QWidget* parent)
     _highlightColor->setEnabled(!Preferences::layerHighlight());
     connect(_highlight, &QComboBox::currentIndexChanged, this, [this](int index) { _highlightColor->setEnabled(index == 1); });
     connect(_highlightColor, &QToolButton::clicked, this, [this]() {
-        const QColor chosen = SwatchPopup::getColor(_highlightColor, nullptr, _color, "Highlight Color", false);
-        if (chosen.isValid())
-        {
+        SwatchPopup::getColor(_highlightColor, nullptr, _color, "Highlight Color", false, [this](const QColor& chosen) {
             _color = chosen;
             _highlightColor->setIcon(colorIcon(_color));
-        }
+        });
     });
     highlightLayout->addWidget(_highlight, 1);
     highlightLayout->addWidget(_highlightColor);

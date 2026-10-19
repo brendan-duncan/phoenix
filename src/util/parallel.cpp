@@ -26,6 +26,13 @@ public:
         int threads = static_cast<int>(std::thread::hardware_concurrency());
         if (const char* asked = std::getenv("PHOENIX_THREADS"))
             threads = std::atoi(asked);
+#ifdef __EMSCRIPTEN__
+        // In a browser a thread is a web worker, of which the page makes a
+        // few when it loads (QT_WASM_PTHREAD_POOL_SIZE in CMakeLists.txt);
+        // more would wait on the page's own thread to be made. Some are
+        // left for autosave and audio.
+        threads = std::min(threads, 6);
+#endif
         _threads = std::clamp(threads, 1, 64);
         for (int i = 1; i < _threads; ++i)
             _workers.emplace_back([this]() { work(); });

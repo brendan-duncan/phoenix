@@ -1,6 +1,6 @@
 #include "output_panel.h"
+#include "file_pick.h"
 
-#include <QFileDialog>
 #include <QFile>
 #include <QFontDatabase>
 #include <QHBoxLayout>
@@ -39,12 +39,11 @@ OutputPanel::OutputPanel(QWidget* parent)
     QPushButton* saveButton = new QPushButton("Save...", this);
     saveButton->setToolTip("Write what the panel shows to a text file");
     connect(saveButton, &QPushButton::clicked, this, [this]() {
-        const QString path = QFileDialog::getSaveFileName(this, "Save Output", "output.txt", "Text files (*.txt)");
-        if (path.isEmpty())
-            return;
-        QFile file(path);
-        if (file.open(QIODevice::WriteOnly | QIODevice::Text))
-            file.write(text().toUtf8());
+        file_pick::save(this, "Save Output", "output.txt", "Text files (*.txt)", [this](const QString& path) {
+            QFile file(path);
+            if (file.open(QIODevice::WriteOnly | QIODevice::Text))
+                file.write(text().toUtf8());
+        });
     });
 
     QHBoxLayout* buttons = new QHBoxLayout();

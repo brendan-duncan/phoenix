@@ -1,4 +1,6 @@
 #include "ease_curve_dialog.h"
+#include "file_pick.h"
+#include "modal.h"
 #include "theme.h"
 
 #include <QComboBox>
@@ -308,20 +310,21 @@ EaseCurveDialog::EaseCurveDialog(const std::vector<QPointF>& points, QWidget* pa
         _presetName = preset["name"].toString();
     });
     connect(save, &QPushButton::clicked, this, [this]() {
-        bool ok = false;
-        const QString name = QInputDialog::getText(this, "Save Ease", "Name:", QLineEdit::Normal, _presetName, &ok).trimmed();
-        if (!ok || name.isEmpty())
-            return;
-        QJsonArray all = QJsonDocument::fromJson(QSettings().value("easePresets").toByteArray()).array();
-        for (int i = all.size() - 1; i >= 0; --i)
-        {
-            if (all.at(i).toObject()["name"].toString() == name)
-                all.removeAt(i);
-        }
-        all.append(QJsonObject{{"name", name}, {"points", toJson(_editor->points())}});
-        QSettings().setValue("easePresets", QJsonDocument(all).toJson(QJsonDocument::Compact));
-        _presetName = name;
-        loadPresets();
+        modal::getText(this, "Save Ease", "Name:", _presetName, [this](const QString& value) {
+            const QString name = value.trimmed();
+            if (name.isEmpty())
+                return;
+            QJsonArray all = QJsonDocument::fromJson(QSettings().value("easePresets").toByteArray()).array();
+            for (int i = all.size() - 1; i >= 0; --i)
+            {
+                if (all.at(i).toObject()["name"].toString() == name)
+                    all.removeAt(i);
+            }
+            all.append(QJsonObject{{"name", name}, {"points", toJson(_editor->points())}});
+            QSettings().setValue("easePresets", QJsonDocument(all).toJson(QJsonDocument::Compact));
+            _presetName = name;
+            loadPresets();
+        });
     });
     connect(remove, &QPushButton::clicked, this, [this]() {
         const int index = _presets->currentIndex();
@@ -338,31 +341,29 @@ EaseCurveDialog::EaseCurveDialog(const std::vector<QPointF>& points, QWidget* pa
     });
     // Shared as a file: the saved eases, to give to someone else.
     connect(exportButton, &QPushButton::clicked, this, [this]() {
-        const QString path = QFileDialog::getSaveFileName(this, "Export Eases", "eases.json", "Eases (*.json)");
-        if (path.isEmpty())
-            return;
-        QFile file(path);
-        if (file.open(QIODevice::WriteOnly))
-            file.write(QSettings().value("easePresets").toByteArray());
+        file_pick::save(this, "Export Eases", "eases.json", "Eases (*.json)", [](const QString& path) {
+            QFile file(path);
+            if (file.open(QIODevice::WriteOnly))
+                file.write(QSettings().value("easePresets").toByteArray());
+        });
     });
     connect(importButton, &QPushButton::clicked, this, [this]() {
-        const QString path = QFileDialog::getOpenFileName(this, "Import Eases", QString(), "Eases (*.json)");
-        if (path.isEmpty())
-            return;
-        QFile file(path);
-        if (!file.open(QIODevice::ReadOnly))
-            return;
-        const QJsonArray incoming = QJsonDocument::fromJson(file.readAll()).array();
-        QJsonArray all = QJsonDocument::fromJson(QSettings().value("easePresets").toByteArray()).array();
-        for (const QJsonValue& value : incoming)
-        {
-            const QJsonObject preset = value.toObject();
-            if (preset["name"].toString().isEmpty() || !validCurve(fromJson(preset["points"].toArray())))
-                continue;
-            all.append(preset);
-        }
-        QSettings().setValue("easePresets", QJsonDocument(all).toJson(QJsonDocument::Compact));
-        loadPresets();
+        file_pick::open(this, "Import Eases", QString(), "Eases (*.json)", [this](const QString& path) {
+            QFile file(path);
+            if (!file.open(QIODevice::ReadOnly))
+                return;
+            const QJsonArray incoming = QJsonDocument::fromJson(file.readAll()).array();
+            QJsonArray all = QJsonDocument::fromJson(QSettings().value("easePresets").toByteArray()).array();
+            for (const QJsonValue& value : incoming)
+            {
+                const QJsonObject preset = value.toObject();
+                if (preset["name"].toString().isEmpty() || !validCurve(fromJson(preset["points"].toArray())))
+                    continue;
+                all.append(preset);
+            }
+            QSettings().setValue("easePresets", QJsonDocument(all).toJson(QJsonDocument::Compact));
+            loadPresets();
+        });
     });
 
     QHBoxLayout* presetRow = new QHBoxLayout();

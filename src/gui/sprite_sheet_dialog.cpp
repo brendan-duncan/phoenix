@@ -1,4 +1,6 @@
 #include "sprite_sheet_dialog.h"
+#include "web_files.h"
+#include "file_pick.h"
 
 #include <QCheckBox>
 #include <QComboBox>
@@ -261,9 +263,8 @@ void SpriteSheetDialog::relayout()
 
 void SpriteSheetDialog::browse()
 {
-    const QString chosen = QFileDialog::getSaveFileName(this, "Export Sprite Sheet", _path->text(), "PNG Image (*.png)");
-    if (!chosen.isEmpty())
-        _path->setText(chosen);
+    file_pick::save(this, "Export Sprite Sheet", _path->text(), "PNG Image (*.png)",
+        [this](const QString& chosen) { _path->setText(chosen); });
 }
 
 bool SpriteSheetDialog::write(QString& error)
@@ -301,7 +302,13 @@ bool SpriteSheetDialog::write(QString& error)
             error = QString("Could not write %1.").arg(QDir::toNativeSeparators(dataPath));
             return false;
         }
+#ifdef PHOENIX_WEB
+        web_files::download(dataPath);
+#endif
     }
+#ifdef PHOENIX_WEB
+    web_files::download(path);
+#endif
     QSettings settings;
     settings.setValue("spriteSheet/scale", _scale->value());
     settings.setValue("spriteSheet/layout", _layout->currentIndex());

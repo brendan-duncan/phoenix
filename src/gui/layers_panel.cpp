@@ -1,4 +1,5 @@
 #include "layers_panel.h"
+#include "modal.h"
 #include "../edit/depth_sort.h"
 #include "../edit/motion_blur.h"
 #include "../edit/adjustments.h"
@@ -48,6 +49,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <functional>
+#include <memory>
 
 namespace {
 
@@ -1577,17 +1579,17 @@ void LayersPanel::showLayerMenu(QTreeWidgetItem* item, const QPoint& globalPos)
     const fla::LayerSnapshot now = fla::snapshotLayers(*timeline);
     const fla::layers::Kind kind = fla::layers::kindOf(now, layer);
 
-    QMenu menu(this);
+    QMenu* menu = new QMenu(this);
     // The commands that add or remove act at the row clicked.
     const auto atRow = [this, timeline, layerIndex, folder]() {
         if (!folder)
             setCurrentLayer(timeline, layerIndex);
     };
-    menu.addAction("Insert Layer", this, [=]() { atRow(); emit addLayerRequested(false); });
-    menu.addAction("Insert Folder", this, [=]() { atRow(); emit addLayerRequested(true); });
-    QAction* remove = menu.addAction("Delete Layer", this, [=]() { atRow(); emit deleteLayerRequested(); });
+    menu->addAction("Insert Layer", this, [=]() { atRow(); emit addLayerRequested(false); });
+    menu->addAction("Insert Folder", this, [=]() { atRow(); emit addLayerRequested(true); });
+    QAction* remove = menu->addAction("Delete Layer", this, [=]() { atRow(); emit deleteLayerRequested(); });
     remove->setEnabled(!folder || timeline->layers.size() > 1);
-    menu.addSeparator();
+    menu->addSeparator();
     // On the layers picked, or this one.
     const auto onPicked = [this, item](int action) {
         if (!item->isSelected())
@@ -1597,15 +1599,15 @@ void LayersPanel::showLayerMenu(QTreeWidgetItem* item, const QPoint& globalPos)
         }
         emit layerClipboardRequested(action);
     };
-    menu.addAction("Cut Layers", this, [=]() { onPicked(0); });
-    menu.addAction("Copy Layers", this, [=]() { onPicked(1); });
-    menu.addAction("Paste Layers", this, [=]() { atRow(); emit layerClipboardRequested(2); });
-    menu.addAction("Duplicate Layers", this, [=]() { onPicked(3); });
-    menu.addSeparator();
+    menu->addAction("Cut Layers", this, [=]() { onPicked(0); });
+    menu->addAction("Copy Layers", this, [=]() { onPicked(1); });
+    menu->addAction("Paste Layers", this, [=]() { atRow(); emit layerClipboardRequested(2); });
+    menu->addAction("Duplicate Layers", this, [=]() { onPicked(3); });
+    menu->addSeparator();
 
     if (!folder)
     {
-        QAction* guide = menu.addAction("Guide", this, [=]() {
+        QAction* guide = menu->addAction("Guide", this, [=]() {
             fla::LayerSnapshot after = fla::snapshotLayers(*timeline);
             fla::layers::setKind(after, layer,
                 kind == fla::layers::Kind::Guide ? fla::layers::Kind::Normal : fla::layers::Kind::Guide);
@@ -1614,7 +1616,7 @@ void LayersPanel::showLayerMenu(QTreeWidgetItem* item, const QPoint& globalPos)
         guide->setCheckable(true);
         guide->setChecked(kind == fla::layers::Kind::Guide);
 
-        QAction* mask = menu.addAction("Mask", this, [=]() {
+        QAction* mask = menu->addAction("Mask", this, [=]() {
             fla::LayerSnapshot after = fla::snapshotLayers(*timeline);
             if (kind == fla::layers::Kind::Mask)
             {
@@ -1653,10 +1655,10 @@ void LayersPanel::showLayerMenu(QTreeWidgetItem* item, const QPoint& globalPos)
         mask->setChecked(kind == fla::layers::Kind::Mask);
 
         if (fla::effects::isEffect(*layer))
-            menu.addAction("Effect Settings...", this, [=]() { emit effectSettingsRequested(layer); });
+            menu->addAction("Effect Settings...", this, [=]() { emit effectSettingsRequested(layer); });
 
         // Compositing: shown through the layer above, or changing all below.
-        QMenu* matteMenu = menu.addMenu("Track Matte");
+        QMenu* matteMenu = menu->addMenu("Track Matte");
         const fla::compositing::Matte matte = fla::compositing::matteOf(*layer);
         const std::pair<fla::compositing::Matte, const char*> mattes[] = {{fla::compositing::Matte::None, "None"},
             {fla::compositing::Matte::Alpha, "Alpha Matte (the layer above)"},
@@ -1670,13 +1672,13 @@ void LayersPanel::showLayerMenu(QTreeWidgetItem* item, const QPoint& globalPos)
             choice->setCheckable(true);
             choice->setChecked(kind == matte);
         }
-        QAction* adjustment = menu.addAction("Adjustment Layer", this, [=]() {
+        QAction* adjustment = menu->addAction("Adjustment Layer", this, [=]() {
             emit compositingRequested(layer, fla::compositing::isAdjustment(*layer) ? "adjustment:off" : "adjustment:on");
         });
         adjustment->setCheckable(true);
         adjustment->setChecked(fla::compositing::isAdjustment(*layer));
         adjustment->setStatusTip("Blur, color-correct or tint everything below this layer; its settings are in the Behaviors panel");
-        QMenu* modeMenu = menu.addMenu("Layer Mode");
+        QMenu* modeMenu = menu->addMenu("Layer Mode");
         const fla::compositing::LayerMode mode = fla::compositing::layerModeOf(*layer);
         const std::pair<fla::compositing::LayerMode, const char*> modes[] = {{fla::compositing::LayerMode::Normal, "Normal"},
             {fla::compositing::LayerMode::Stencil, "Stencil (show what is under only where this has art)"},
@@ -1690,13 +1692,13 @@ void LayersPanel::showLayerMenu(QTreeWidgetItem* item, const QPoint& globalPos)
             choice->setChecked(kind == mode);
         }
         if (layer->layerType == fla::Layer::Type::Mask)
-            menu.addAction("Mask Edge...", this, [=]() { emit compositingRequested(layer, "maskedge"); })
+            menu->addAction("Mask Edge...", this, [=]() { emit compositingRequested(layer, "maskedge"); })
                 ->setStatusTip("Feather, grow or shrink this mask's edge, or invert it; or feather the selected objects on it");
         // Several masks: the other mask layers of the timeline, each added
         // to the layer's own mask, cut out of it or overlapped with it.
         if (layer->layerType == fla::Layer::Type::Masked)
         {
-            QMenu* moreMenu = menu.addMenu("Also Masked By");
+            QMenu* moreMenu = menu->addMenu("Also Masked By");
             const std::vector<fla::compositing::MoreMask> more = fla::compositing::moreMasksOf(*layer);
             const std::pair<const char*, const char*> modes[] = {{"none", "None"}, {"add", "Add (shows where either mask is)"},
                 {"subtract", "Subtract (cut out where it is)"}, {"intersect", "Intersect (only where both are)"}};
@@ -1725,15 +1727,15 @@ void LayersPanel::showLayerMenu(QTreeWidgetItem* item, const QPoint& globalPos)
                 moreMenu->addAction("No other mask layers")->setEnabled(false);
             moreMenu->setStatusTip("Mask this layer by other mask layers too, added, subtracted or intersected");
         }
-        menu.addAction("Echo and Posterize Time...", this, [=]() { emit compositingRequested(layer, "time"); })
+        menu->addAction("Echo and Posterize Time...", this, [=]() { emit compositingRequested(layer, "time"); })
             ->setStatusTip("A trail of earlier poses behind the layer, or each pose held for some frames");
-        QAction* blur = menu.addAction("Motion Blur", this, [=]() {
+        QAction* blur = menu->addAction("Motion Blur", this, [=]() {
             emit compositingRequested(layer, fla::motionblur::on(*layer) ? "motionblur:off" : "motionblur:on");
         });
         blur->setCheckable(true);
         blur->setChecked(fla::motionblur::on(*layer));
         blur->setStatusTip("Smear what moves fast on this layer along its path; the shutter is on the Properties panel's Doc tab");
-        QAction* depth = menu.addAction("Sort by Depth", this, [=]() {
+        QAction* depth = menu->addAction("Sort by Depth", this, [=]() {
             emit compositingRequested(layer, fla::depthsort::sorts(*layer) ? "depthsort:off" : "depthsort:on");
         });
         depth->setCheckable(true);
@@ -1742,7 +1744,7 @@ void LayersPanel::showLayerMenu(QTreeWidgetItem* item, const QPoint& globalPos)
 
         // Layer parenting: the layer follows another's object, as a forearm
         // its arm.
-        QMenu* parentMenu = menu.addMenu("Parent Layer");
+        QMenu* parentMenu = menu->addMenu("Parent Layer");
         const fla::Layer* current = parentLayerOf(*layer);
         QAction* none = parentMenu->addAction("None", this, [=]() { emit parentLayerRequested(timeline, layer, nullptr); });
         none->setCheckable(true);
@@ -1763,7 +1765,7 @@ void LayersPanel::showLayerMenu(QTreeWidgetItem* item, const QPoint& globalPos)
             choice->setChecked(other == current);
             choice->setEnabled(!loops);
         }
-        menu.addSeparator();
+        menu->addSeparator();
     }
 
     // View state, as the column toggles are.
@@ -1777,12 +1779,12 @@ void LayersPanel::showLayerMenu(QTreeWidgetItem* item, const QPoint& globalPos)
             refreshRow(*it);
         emit layersChanged();
     };
-    menu.addAction("Show All", this, [=]() { everyOther([](fla::Layer& l, bool) { l.visible = true; }); });
-    menu.addAction("Hide Others", this, [=]() { everyOther([](fla::Layer& l, bool self) { l.visible = self; }); });
-    menu.addAction("Lock Others", this, [=]() { everyOther([](fla::Layer& l, bool self) { l.locked = !self; }); });
-    menu.addSeparator();
-    menu.addAction("Properties...", this, [=]() { showLayerProperties(item); });
-    menu.exec(globalPos);
+    menu->addAction("Show All", this, [=]() { everyOther([](fla::Layer& l, bool) { l.visible = true; }); });
+    menu->addAction("Hide Others", this, [=]() { everyOther([](fla::Layer& l, bool self) { l.visible = self; }); });
+    menu->addAction("Lock Others", this, [=]() { everyOther([](fla::Layer& l, bool self) { l.locked = !self; }); });
+    menu->addSeparator();
+    menu->addAction("Properties...", this, [=]() { showLayerProperties(item); });
+    modal::popup(menu, globalPos);
 }
 
 void LayersPanel::showLayerProperties(QTreeWidgetItem* item)
@@ -1794,14 +1796,14 @@ void LayersPanel::showLayerProperties(QTreeWidgetItem* item)
     const fla::LayerSnapshot now = fla::snapshotLayers(*timeline);
     const fla::layers::Kind kind = fla::layers::kindOf(now, layer);
 
-    QDialog dialog(this);
-    dialog.setWindowTitle("Layer Properties");
-    QFormLayout* form = new QFormLayout(&dialog);
-    QLineEdit* name = new QLineEdit(QString::fromStdString(layer->name), &dialog);
+    QDialog* dialog = new QDialog(this);
+    dialog->setWindowTitle("Layer Properties");
+    QFormLayout* form = new QFormLayout(dialog);
+    QLineEdit* name = new QLineEdit(QString::fromStdString(layer->name), dialog);
     form->addRow("Name:", name);
-    QCheckBox* show = new QCheckBox("Show", &dialog);
+    QCheckBox* show = new QCheckBox("Show", dialog);
     show->setChecked(layer->visible);
-    QCheckBox* lock = new QCheckBox("Lock", &dialog);
+    QCheckBox* lock = new QCheckBox("Lock", dialog);
     lock->setChecked(layer->locked);
     QHBoxLayout* flags = new QHBoxLayout();
     flags->addWidget(show);
@@ -1810,8 +1812,8 @@ void LayersPanel::showLayerProperties(QTreeWidgetItem* item)
     form->addRow("", flags);
     // Transparent: shown faded while editing, so what is under shows.
     QHBoxLayout* fadeRow = new QHBoxLayout();
-    QCheckBox* fade = new QCheckBox("Transparent, shown at", &dialog);
-    HotSpinBox* fadePercent = new HotSpinBox(&dialog);
+    QCheckBox* fade = new QCheckBox("Transparent, shown at", dialog);
+    HotSpinBox* fadePercent = new HotSpinBox(dialog);
     fadePercent->setRange(5, 95);
     fadePercent->setSuffix("%");
     const int transparency = fla::layers::transparencyOf(*layer);
@@ -1832,7 +1834,7 @@ void LayersPanel::showLayerProperties(QTreeWidgetItem* item)
     QVBoxLayout* typeLayout = new QVBoxLayout();
     for (const auto& [value, label] : kinds)
     {
-        QRadioButton* button = new QRadioButton(label, &dialog);
+        QRadioButton* button = new QRadioButton(label, dialog);
         button->setChecked(value == kind);
         const bool folderEither = value == fla::layers::Kind::Folder || kind == fla::layers::Kind::Folder;
         button->setEnabled(value == kind || !folderEither);
@@ -1841,33 +1843,34 @@ void LayersPanel::showLayerProperties(QTreeWidgetItem* item)
     }
     form->addRow("Type:", typeLayout);
 
-    QColor color(layer->color[0], layer->color[1], layer->color[2]);
-    QPushButton* colorButton = new QPushButton(&dialog);
+    // Shared with the dialog's answer, which comes after this function has
+    // returned where nothing can wait for it.
+    const auto color = std::make_shared<QColor>(layer->color[0], layer->color[1], layer->color[2]);
+    QPushButton* colorButton = new QPushButton(dialog);
     const auto showColor = [colorButton](const QColor& c) {
         colorButton->setStyleSheet(QString("background-color: %1; min-width: 48px;").arg(c.name()));
     };
-    showColor(color);
-    connect(colorButton, &QPushButton::clicked, &dialog, [&]() {
-        const QColor chosen = SwatchPopup::getColor(colorButton, nullptr, color, "Outline Color", false);
-        if (chosen.isValid())
-        {
-            color = chosen;
-            showColor(color);
-        }
+    showColor(*color);
+    connect(colorButton, &QPushButton::clicked, dialog, [colorButton, color, showColor]() {
+        SwatchPopup::getColor(colorButton, nullptr, *color, "Outline Color", false,
+            [color, showColor](const QColor& chosen) {
+                *color = chosen;
+                showColor(*color);
+            });
     });
     form->addRow("Outline color:", colorButton);
-    QCheckBox* outline = new QCheckBox("View layer as outlines", &dialog);
+    QCheckBox* outline = new QCheckBox("View layer as outlines", dialog);
     outline->setChecked(layer->outline);
     form->addRow("", outline);
 
     // Layer parenting: the parts of the parent's transform this layer takes
     // on. Position and rotation always do.
     const fla::layers::ParentPropagation propagation = fla::layers::propagationOf(*layer);
-    QCheckBox* parentScale = new QCheckBox("Scale", &dialog);
+    QCheckBox* parentScale = new QCheckBox("Scale", dialog);
     parentScale->setChecked(propagation.scale);
-    QCheckBox* parentSkew = new QCheckBox("Skew", &dialog);
+    QCheckBox* parentSkew = new QCheckBox("Skew", dialog);
     parentSkew->setChecked(propagation.skew);
-    QCheckBox* parentFlip = new QCheckBox("Flip", &dialog);
+    QCheckBox* parentFlip = new QCheckBox("Flip", dialog);
     parentFlip->setChecked(propagation.flip);
     QHBoxLayout* propagationRow = new QHBoxLayout();
     for (QCheckBox* check : {parentScale, parentSkew, parentFlip})
@@ -1879,50 +1882,51 @@ void LayersPanel::showLayerProperties(QTreeWidgetItem* item)
     propagationRow->addStretch();
     form->addRow("Follow parent's:", propagationRow);
 
-    QDialogButtonBox* box = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
-    connect(box, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
-    connect(box, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    QDialogButtonBox* box = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, dialog);
+    connect(box, &QDialogButtonBox::accepted, dialog, &QDialog::accept);
+    connect(box, &QDialogButtonBox::rejected, dialog, &QDialog::reject);
     form->addRow(box);
-    if (dialog.exec() != QDialog::Accepted)
-        return;
-
-    fla::LayerSnapshot after = now;
-    fla::layers::Kind chosenKind = kind;
-    for (const auto& [value, button] : buttons)
-    {
-        if (button->isChecked())
-            chosenKind = value;
-    }
-    if (!fla::layers::setKind(after, layer, chosenKind))
-    {
-        QMessageBox::information(this, "Layer Properties",
-            chosenKind == fla::layers::Kind::Masked ? "There is no mask layer above this one to mask it."
-            : chosenKind == fla::layers::Kind::Guided ? "There is no guide layer above this one to guide it."
-            : "A layer cannot become a folder, or a folder a layer.");
-        return;
-    }
-    for (fla::LayerState& state : after)
-    {
-        if (state.layer != layer)
-            continue;
-        const std::string typed = name->text().trimmed().toStdString();
-        if (!typed.empty() && typed != state.name)
+    modal::open(dialog, [=](int result) {
+        if (result != QDialog::Accepted)
+            return;
+        fla::LayerSnapshot after = now;
+        fla::layers::Kind chosenKind = kind;
+        for (const auto& [value, button] : buttons)
         {
-            state.name = typed;
-            state.autoNamed = false;
+            if (button->isChecked())
+                chosenKind = value;
         }
-        state.visible = show->isChecked();
-        state.locked = lock->isChecked();
-        state.outline = outline->isChecked();
-        state.color[0] = static_cast<uint8_t>(color.red());
-        state.color[1] = static_cast<uint8_t>(color.green());
-        state.color[2] = static_cast<uint8_t>(color.blue());
-        fla::layers::ParentPropagation follows;
-        follows.scale = parentScale->isChecked();
-        follows.skew = parentSkew->isChecked();
-        follows.flip = parentFlip->isChecked();
-        state.extraAttributes = fla::layers::withPropagation(
-            fla::layers::withTransparency(*layer, fade->isChecked() ? fadePercent->value() : 0), follows);
-    }
-    emit layerEditRequested(timeline, after, "Layer Properties");
+        if (!fla::layers::setKind(after, layer, chosenKind))
+        {
+            modal::information(this, "Layer Properties",
+                chosenKind == fla::layers::Kind::Masked ? "There is no mask layer above this one to mask it."
+                : chosenKind == fla::layers::Kind::Guided ? "There is no guide layer above this one to guide it."
+                : "A layer cannot become a folder, or a folder a layer.");
+            return;
+        }
+        for (fla::LayerState& state : after)
+        {
+            if (state.layer != layer)
+                continue;
+            const std::string typed = name->text().trimmed().toStdString();
+            if (!typed.empty() && typed != state.name)
+            {
+                state.name = typed;
+                state.autoNamed = false;
+            }
+            state.visible = show->isChecked();
+            state.locked = lock->isChecked();
+            state.outline = outline->isChecked();
+            state.color[0] = static_cast<uint8_t>(color->red());
+            state.color[1] = static_cast<uint8_t>(color->green());
+            state.color[2] = static_cast<uint8_t>(color->blue());
+            fla::layers::ParentPropagation follows;
+            follows.scale = parentScale->isChecked();
+            follows.skew = parentSkew->isChecked();
+            follows.flip = parentFlip->isChecked();
+            state.extraAttributes = fla::layers::withPropagation(
+                fla::layers::withTransparency(*layer, fade->isChecked() ? fadePercent->value() : 0), follows);
+        }
+        emit layerEditRequested(timeline, after, "Layer Properties");
+    });
 }

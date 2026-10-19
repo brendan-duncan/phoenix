@@ -1,4 +1,6 @@
 #include "swatches_panel.h"
+#include "file_pick.h"
+#include "modal.h"
 
 #include "swatch_popup.h"
 
@@ -218,14 +220,15 @@ SwatchesPanel::SwatchesPanel(QWidget* parent)
     _gradientGrid->rightClicked = [this](int index, const QPoint& where) {
         // The default gradients become the document's own when one goes
         // or is copied.
-        QMenu menu(this);
-        QAction* duplicate = menu.addAction("Duplicate Swatch");
-        QAction* remove = menu.addAction("Delete Swatch");
-        QAction* chosen = menu.exec(where);
-        if (chosen == remove)
-            emit gradientRemoveRequested(index);
-        else if (chosen == duplicate)
-            emit gradientDuplicateRequested(index);
+        QMenu* menu = new QMenu(this);
+        QAction* duplicate = menu->addAction("Duplicate Swatch");
+        QAction* remove = menu->addAction("Delete Swatch");
+        modal::popup(menu, where, [this, index, duplicate, remove](QAction* chosen) {
+            if (chosen == remove)
+                emit gradientRemoveRequested(index);
+            else if (chosen == duplicate)
+                emit gradientDuplicateRequested(index);
+        });
     };
 
     _grid->clicked = [this](int index) {
@@ -239,26 +242,29 @@ SwatchesPanel::SwatchesPanel(QWidget* parent)
         // palette is not saved anywhere.
         if (!_ownColors)
             return;
-        QMenu menu(this);
-        QAction* duplicate = menu.addAction("Duplicate Swatch");
-        QAction* remove = menu.addAction("Delete Swatch");
-        menu.addSeparator();
+        QMenu* menu = new QMenu(this);
+        QAction* duplicate = menu->addAction("Duplicate Swatch");
+        QAction* remove = menu->addAction("Delete Swatch");
+        menu->addSeparator();
         const bool tagged = index < static_cast<int>(_tags.size()) && !_tags[static_cast<size_t>(index)].empty();
-        QAction* tag = tagged ? nullptr : menu.addAction("Convert to Tagged Swatch...");
-        QAction* edit = tagged ? menu.addAction("Edit Tagged Swatch...") : nullptr;
-        QAction* chosen = menu.exec(where);
-        if (tag && chosen == tag)
-            emit tagRequested(index);
-        else if (edit && chosen == edit)
-            emit palettesRequested();
-        if (chosen == remove)
-            emit removeRequested(index);
-        else if (chosen == duplicate)
-        {
-            std::vector<fla::swatches::Color> colors = _shown;
-            colors.insert(colors.begin() + index + 1, colors[static_cast<size_t>(index)]);
-            emit colorsEditRequested(colors, "Duplicate Swatch");
-        }
+        QAction* tag = tagged ? nullptr : menu->addAction("Convert to Tagged Swatch...");
+        QAction* edit = tagged ? menu->addAction("Edit Tagged Swatch...") : nullptr;
+        modal::popup(menu, where, [this, index, duplicate, remove, tag, edit](QAction* chosen) {
+            if (!chosen)
+                return;
+            if (tag && chosen == tag)
+                emit tagRequested(index);
+            else if (edit && chosen == edit)
+                emit palettesRequested();
+            if (chosen == remove)
+                emit removeRequested(index);
+            else if (chosen == duplicate && index >= 0 && index < static_cast<int>(_shown.size()))
+            {
+                std::vector<fla::swatches::Color> colors = _shown;
+                colors.insert(colors.begin() + index + 1, colors[static_cast<size_t>(index)]);
+                emit colorsEditRequested(colors, "Duplicate Swatch");
+            }
+        });
     };
 
     _stroke = new QCheckBox("Stroke", this);
@@ -363,87 +369,87 @@ std::vector<fla::swatches::Color> savedDefaults()
 
 void SwatchesPanel::showMenu(const QPoint& where)
 {
-    QMenu menu(this);
-    QAction* sort = menu.addAction("Sort by Color");
-    QAction* clear = menu.addAction("Clear Colors");
+    QMenu* menu = new QMenu(this);
+    QAction* sort = menu->addAction("Sort by Color");
+    QAction* clear = menu->addAction("Clear Colors");
     clear->setToolTip("Leaves black and white");
-    menu.addSeparator();
-    QAction* loadDefault = menu.addAction("Load Default Colors");
-    QAction* saveDefault = menu.addAction("Save as Default");
-    QAction* web = menu.addAction("Web 216");
-    menu.addSeparator();
-    QAction* addColors = menu.addAction("Add Colors...");
-    QAction* replaceColors = menu.addAction("Replace Colors...");
-    QAction* saveColors = menu.addAction("Save Colors...");
-    QAction* chosen = menu.exec(where);
-    if (!chosen)
-        return;
-    if (chosen == sort)
-        emit colorsEditRequested(fla::swatches::sortedByColor(_shown), "Sort by Color");
-    else if (chosen == clear)
-        emit colorsEditRequested({{0, 0, 0, 255}, {255, 255, 255, 255}}, "Clear Colors");
-    else if (chosen == loadDefault)
-        emit colorsEditRequested(savedDefaults(), "Load Default Colors");
-    else if (chosen == saveDefault)
-    {
-        QStringList names;
-        for (const auto& c : _shown)
-            names << QColor(c[0], c[1], c[2], c[3]).name(QColor::HexArgb);
-        QSettings().setValue("swatches/default", names);
-    }
-    else if (chosen == web)
-    {
-        // The web-safe cube alone, from the built-in palette's end.
-        const std::vector<fla::swatches::Color> all = fla::swatches::defaults();
-        emit colorsEditRequested(std::vector<fla::swatches::Color>(all.end() - 216, all.end()), "Web 216");
-    }
-    else if (chosen == addColors)
-        importColors(false);
-    else if (chosen == replaceColors)
-        importColors(true);
-    else if (chosen == saveColors)
-        exportColors();
+    menu->addSeparator();
+    QAction* loadDefault = menu->addAction("Load Default Colors");
+    QAction* saveDefault = menu->addAction("Save as Default");
+    QAction* web = menu->addAction("Web 216");
+    menu->addSeparator();
+    QAction* addColors = menu->addAction("Add Colors...");
+    QAction* replaceColors = menu->addAction("Replace Colors...");
+    QAction* saveColors = menu->addAction("Save Colors...");
+    modal::popup(menu, where,
+        [this, sort, clear, loadDefault, saveDefault, web, addColors, replaceColors, saveColors](QAction* chosen) {
+        if (!chosen)
+            return;
+        if (chosen == sort)
+            emit colorsEditRequested(fla::swatches::sortedByColor(_shown), "Sort by Color");
+        else if (chosen == clear)
+            emit colorsEditRequested({{0, 0, 0, 255}, {255, 255, 255, 255}}, "Clear Colors");
+        else if (chosen == loadDefault)
+            emit colorsEditRequested(savedDefaults(), "Load Default Colors");
+        else if (chosen == saveDefault)
+        {
+            QStringList names;
+            for (const auto& c : _shown)
+                names << QColor(c[0], c[1], c[2], c[3]).name(QColor::HexArgb);
+            QSettings().setValue("swatches/default", names);
+        }
+        else if (chosen == web)
+        {
+            // The web-safe cube alone, from the built-in palette's end.
+            const std::vector<fla::swatches::Color> all = fla::swatches::defaults();
+            emit colorsEditRequested(std::vector<fla::swatches::Color>(all.end() - 216, all.end()), "Web 216");
+        }
+        else if (chosen == addColors)
+            importColors(false);
+        else if (chosen == replaceColors)
+            importColors(true);
+        else if (chosen == saveColors)
+            exportColors();
+    });
 }
 
 void SwatchesPanel::importColors(bool replace)
 {
-    const QString path = QFileDialog::getOpenFileName(this, replace ? "Replace Colors" : "Add Colors", QString(),
-        "Color tables (*.act *.gpl);;Adobe Color Table (*.act);;GIMP Palette (*.gpl)");
-    if (path.isEmpty())
-        return;
-    QFile file(path);
-    if (!file.open(QIODevice::ReadOnly))
-        return;
-    const QByteArray bytes = file.readAll();
-    std::vector<fla::swatches::Color> read = path.endsWith(".gpl", Qt::CaseInsensitive)
-        ? fla::swatches::readGpl(bytes.toStdString())
-        : fla::swatches::readAct(std::vector<uint8_t>(bytes.begin(), bytes.end()));
-    if (read.empty())
-    {
-        QMessageBox::information(this, "Swatches", "No colors could be read from that file.");
-        return;
-    }
-    std::vector<fla::swatches::Color> colors = replace ? std::vector<fla::swatches::Color>() : _shown;
-    colors.insert(colors.end(), read.begin(), read.end());
-    emit colorsEditRequested(colors, replace ? "Replace Colors" : "Add Colors");
+    file_pick::open(this, replace ? "Replace Colors" : "Add Colors", QString(),
+        "Color tables (*.act *.gpl);;Adobe Color Table (*.act);;GIMP Palette (*.gpl)", [this, replace](const QString& path) {
+            QFile file(path);
+            if (!file.open(QIODevice::ReadOnly))
+                return;
+            const QByteArray bytes = file.readAll();
+            std::vector<fla::swatches::Color> read = path.endsWith(".gpl", Qt::CaseInsensitive)
+                ? fla::swatches::readGpl(bytes.toStdString())
+                : fla::swatches::readAct(std::vector<uint8_t>(bytes.begin(), bytes.end()));
+            if (read.empty())
+            {
+                modal::information(this, "Swatches", "No colors could be read from that file.");
+                return;
+            }
+            std::vector<fla::swatches::Color> colors = replace ? std::vector<fla::swatches::Color>() : _shown;
+            colors.insert(colors.end(), read.begin(), read.end());
+            emit colorsEditRequested(colors, replace ? "Replace Colors" : "Add Colors");
+        });
 }
 
 void SwatchesPanel::exportColors()
 {
-    QString path = QFileDialog::getSaveFileName(this, "Save Colors", "Swatches.act",
-        "Adobe Color Table (*.act);;GIMP Palette (*.gpl)");
-    if (path.isEmpty())
-        return;
-    QFile file(path);
-    if (!file.open(QIODevice::WriteOnly))
-        return;
-    if (path.endsWith(".gpl", Qt::CaseInsensitive))
-        file.write(QByteArray::fromStdString(fla::swatches::writeGpl(_shown, QFileInfo(path).completeBaseName().toStdString())));
-    else
-    {
-        const std::vector<uint8_t> bytes = fla::swatches::writeAct(_shown);
-        file.write(reinterpret_cast<const char*>(bytes.data()), static_cast<qint64>(bytes.size()));
-        if (_shown.size() > 256)
-            QMessageBox::information(this, "Save Colors", "A color table holds 256 colors; the first 256 were saved.");
-    }
+    file_pick::save(this, "Save Colors", "Swatches.act", "Adobe Color Table (*.act);;GIMP Palette (*.gpl)",
+        [this](const QString& path) {
+            QFile file(path);
+            if (!file.open(QIODevice::WriteOnly))
+                return;
+            if (path.endsWith(".gpl", Qt::CaseInsensitive))
+                file.write(QByteArray::fromStdString(fla::swatches::writeGpl(_shown, QFileInfo(path).completeBaseName().toStdString())));
+            else
+            {
+                const std::vector<uint8_t> bytes = fla::swatches::writeAct(_shown);
+                file.write(reinterpret_cast<const char*>(bytes.data()), static_cast<qint64>(bytes.size()));
+                if (_shown.size() > 256)
+                    modal::information(this, "Save Colors", "A color table holds 256 colors; the first 256 were saved.");
+            }
+        });
 }

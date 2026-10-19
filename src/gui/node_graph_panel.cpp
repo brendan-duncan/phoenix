@@ -498,9 +498,10 @@ void NodeGraphPanel::fillInspector()
                 button->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
                 button->setAutoRaise(true);
                 connect(button, &QToolButton::clicked, this, [this, id, name, value, button]() {
-                    const QColor chosen = SwatchPopup::getColor(button, nullptr, QColor(QString::fromStdString(value)), "Color", false);
-                    if (chosen.isValid())
-                        setSetting(id, name, chosen.name().toUpper().toStdString(), false);
+                    SwatchPopup::getColor(button, nullptr, QColor(QString::fromStdString(value)), "Color", false,
+                        [this, id, name](const QColor& chosen) {
+                            setSetting(id, name, chosen.name().toUpper().toStdString(), false);
+                        });
                 });
                 control = button;
             }

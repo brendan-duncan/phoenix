@@ -1,4 +1,6 @@
 #include "lip_sync_dialog.h"
+#include "file_pick.h"
+#include "modal.h"
 
 #include "audio_engine.h"
 #include "media_import.h"
@@ -20,7 +22,7 @@
 #include <QLineEdit>
 #include <QMessageBox>
 #include <QPlainTextEdit>
-#include <QProcess>
+#include "process.h"
 #include <QProgressDialog>
 #include <QPushButton>
 #include <QRadioButton>
@@ -163,29 +165,24 @@ LipSyncDialog::LipSyncDialog(const QString& mouthName, const std::map<std::strin
     layout->addWidget(buttons);
 
     connect(audioBrowse, &QPushButton::clicked, this, [this]() {
-        const QString file = QFileDialog::getOpenFileName(this, "Recording", _audio->text(), "Audio (*.wav *.ogg);;All files (*)");
-        if (!file.isEmpty())
-        {
+        file_pick::open(this, "Recording", _audio->text(), "Audio (*.wav *.ogg);;All files (*)", [this](const QString& file) {
             _audio->setText(file);
             _fromAudio->setChecked(true);
-        }
+        });
     });
     connect(rhubarbBrowse, &QPushButton::clicked, this, [this]() {
-        const QString file = QFileDialog::getOpenFileName(this, "Rhubarb Lip Sync", _rhubarb->text(), "rhubarb (rhubarb*);;All files (*)");
-        if (!file.isEmpty())
-        {
-            _rhubarb->setText(file);
-            QSettings().setValue("lipsync/rhubarb", file);
-        }
+        file_pick::open(this, "Rhubarb Lip Sync", _rhubarb->text(), "rhubarb (rhubarb*);;All files (*)",
+            [this](const QString& file) {
+                _rhubarb->setText(file);
+                QSettings().setValue("lipsync/rhubarb", file);
+            });
     });
     connect(cueBrowse, &QPushButton::clicked, this, [this]() {
-        const QString file = QFileDialog::getOpenFileName(this, "Cue File", _cueFile->text(),
-            "Mouth cues (*.tsv *.txt *.dat);;All files (*)");
-        if (!file.isEmpty())
-        {
-            _cueFile->setText(file);
-            _fromCues->setChecked(true);
-        }
+        file_pick::open(this, "Cue File", _cueFile->text(), "Mouth cues (*.tsv *.txt *.dat);;All files (*)",
+            [this](const QString& file) {
+                _cueFile->setText(file);
+                _fromCues->setChecked(true);
+            });
     });
     connect(readButton, &QPushButton::clicked, this, [this]() { read(); });
     connect(buttons, &QDialogButtonBox::accepted, this, [this]() {
@@ -208,13 +205,13 @@ bool LipSyncDialog::runRhubarb(std::string& text)
         pcm = _soundOf(library);
         if (!pcm || pcm->samples.empty())
         {
-            QMessageBox::information(this, "Lip Sync", QString("Phoenix cannot read the sound %1.").arg(library));
+            modal::information(this, "Lip Sync", QString("Phoenix cannot read the sound %1.").arg(library));
             return false;
         }
     }
     else if (audio.isEmpty() || !QFileInfo::exists(audio))
     {
-        QMessageBox::information(this, "Lip Sync", "Choose the recording of the line.");
+        modal::information(this, "Lip Sync", "Choose the recording of the line.");
         return false;
     }
     if ((rhubarb.isEmpty() || !QFileInfo::exists(rhubarb)) && pcm)
@@ -233,7 +230,7 @@ bool LipSyncDialog::runRhubarb(std::string& text)
         QString error;
         if (!MediaImport::loadSound(audio, sound, error))
         {
-            QMessageBox::warning(this, "Lip Sync", error);
+            modal::warning(this, "Lip Sync", error);
             return false;
         }
         text = fla::lipsync::tsvOf(fla::lipsync::listen(sound.samples, sound.channels, sound.rate, _frameRate));
@@ -247,7 +244,7 @@ bool LipSyncDialog::runRhubarb(std::string& text)
         QFile wav(folder.filePath("voice.wav"));
         if (!wav.open(QIODevice::WriteOnly) || !writeWav(wav, pcm->samples, PcmBuffer::kRate))
         {
-            QMessageBox::warning(this, "Lip Sync", "Phoenix could not hand the sound to Rhubarb.");
+            modal::warning(this, "Lip Sync", "Phoenix could not hand the sound to Rhubarb.");
             return false;
         }
         wav.close();
@@ -265,7 +262,7 @@ bool LipSyncDialog::runRhubarb(std::string& text)
         }
     }
     arguments << audio;
-    QProcess process;
+    Process process;
     process.start(rhubarb, arguments);
     QProgressDialog progress("Listening to the recording...", "Cancel", 0, 0, this);
     progress.setWindowModality(Qt::WindowModal);
@@ -279,12 +276,12 @@ bool LipSyncDialog::runRhubarb(std::string& text)
             process.waitForFinished();
             return false;
         }
-        if (process.state() == QProcess::NotRunning)
+        if (process.state() == Process::NotRunning)
             break;
     }
-    if (process.exitStatus() != QProcess::NormalExit || process.exitCode() != 0)
+    if (process.exitStatus() != Process::NormalExit || process.exitCode() != 0)
     {
-        QMessageBox::warning(this, "Lip Sync", QString("Rhubarb could not read the recording:\n\n%1")
+        modal::warning(this, "Lip Sync", QString("Rhubarb could not read the recording:\n\n%1")
                                                    .arg(QString::fromLocal8Bit(process.readAllStandardError()).right(800)));
         return false;
     }
@@ -308,7 +305,7 @@ bool LipSyncDialog::read()
         QFile file(_cueFile->text());
         if (!file.open(QIODevice::ReadOnly))
         {
-            QMessageBox::information(this, "Lip Sync", "Choose the cue file.");
+            modal::information(this, "Lip Sync", "Choose the cue file.");
             return false;
         }
         text = file.readAll().toStdString();
@@ -316,7 +313,7 @@ bool LipSyncDialog::read()
     _cues = fla::lipsync::parse(text, _frameRate);
     if (_cues.empty())
     {
-        QMessageBox::information(this, "Lip Sync", "No mouth shapes were found in that.");
+        modal::information(this, "Lip Sync", "No mouth shapes were found in that.");
         return false;
     }
     const double seconds = _cues.back().time;

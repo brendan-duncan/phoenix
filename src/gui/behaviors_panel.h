@@ -105,6 +105,9 @@ private:
     void remove();
     /// A behavior file of one's own, from an example, opened to edit.
     void newBehavior();
+    /// Writes the example as the behavior \a name, unless its file is
+    /// there already, and opens the file.
+    void writeBehavior(const QString& name);
     void setParam(int row, const std::string& name, const std::string& value, bool merge);
     /// Keys the setting on the frame shown, or takes its key there away.
     void toggleKey(int row, const std::string& name);

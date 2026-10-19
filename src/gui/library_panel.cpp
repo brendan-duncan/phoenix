@@ -3,6 +3,7 @@
 #include <QToolButton>
 #include <QDateTime>
 #include "../edit/font_items.h"
+#include "modal.h"
 #include "theme.h"
 
 #include "../data/bitmap.h"
@@ -532,27 +533,28 @@ void LibraryPanel::showItemMenu(QTreeWidgetItem* item, const QPoint& globalPos)
     const QStringList chosenNames = selectedItems();
     if (_external)
     {
-        QMenu menu(this);
-        QAction* copyTo = menu.addAction("Copy to Document");
+        QMenu* menu = new QMenu(this);
+        QAction* copyTo = menu->addAction("Copy to Document");
         copyTo->setEnabled(!chosenNames.isEmpty());
-        QAction* copy = menu.addAction("Copy");
+        QAction* copy = menu->addAction("Copy");
         copy->setEnabled(!chosenNames.isEmpty());
-        menu.addSeparator();
-        QAction* expandAll = menu.addAction("Expand All Folders");
-        QAction* collapseAll = menu.addAction("Collapse All Folders");
-        QAction* chosen = menu.exec(globalPos);
-        if (chosen == copyTo)
-            emit copyToDocumentRequested(chosenNames);
-        else if (chosen == copy)
-            emit copyItemsRequested(chosenNames);
-        else if (chosen == expandAll || chosen == collapseAll)
-            setAllExpanded(chosen == expandAll);
+        menu->addSeparator();
+        QAction* expandAll = menu->addAction("Expand All Folders");
+        QAction* collapseAll = menu->addAction("Collapse All Folders");
+        modal::popup(menu, globalPos, [=](QAction* chosen) {
+            if (chosen == copyTo)
+                emit copyToDocumentRequested(chosenNames);
+            else if (chosen == copy)
+                emit copyItemsRequested(chosenNames);
+            else if (chosen == expandAll || chosen == collapseAll)
+                setAllExpanded(chosen == expandAll);
+        });
         return;
     }
     {
         const int kind = item ? item->data(0, KindRole).toInt() : -1;
         const QString name = item ? item->data(0, NameRole).toString() : QString();
-        QMenu menu(this);
+        QMenu* menu = new QMenu(this);
         QAction* rename = nullptr;
         QAction* duplicate = nullptr;
         QAction* remove = nullptr;
@@ -572,172 +574,181 @@ void LibraryPanel::showItemMenu(QTreeWidgetItem* item, const QPoint& globalPos)
             linked = std::find(names.begin(), names.end(), name.toStdString()) != names.end();
         }
         if (item)
-            rename = menu.addAction("Rename");
+            rename = menu->addAction("Rename");
         QAction* fontProperties = nullptr;
         QAction* useFont = nullptr;
         if (kind == static_cast<int>(Kind::Font))
         {
-            fontProperties = menu.addAction("Font Properties...");
-            useFont = menu.addAction("Use for Selected Text");
-            menu.addSeparator();
+            fontProperties = menu->addAction("Font Properties...");
+            useFont = menu->addAction("Use for Selected Text");
+            menu->addSeparator();
         }
         if (kind == static_cast<int>(Kind::Symbol))
         {
-            duplicate = menu.addAction("Duplicate");
-            symbolProperties = menu.addAction("Properties...");
-            linkage = menu.addAction("Linkage...");
-            spriteSheet = menu.addAction("Generate Sprite Sheet...");
-            menu.addSeparator();
-            linkMaster = menu.addAction(linked ? "Change Master File..." : "Link to Master File...");
+            duplicate = menu->addAction("Duplicate");
+            symbolProperties = menu->addAction("Properties...");
+            linkage = menu->addAction("Linkage...");
+            spriteSheet = menu->addAction("Generate Sprite Sheet...");
+            menu->addSeparator();
+            linkMaster = menu->addAction(linked ? "Change Master File..." : "Link to Master File...");
             if (linked)
             {
-                updateLinked = menu.addAction("Update from Master");
-                unlink = menu.addAction("Unlink from Master");
+                updateLinked = menu->addAction("Update from Master");
+                unlink = menu->addAction("Unlink from Master");
             }
-            menu.addSeparator();
+            menu->addSeparator();
         }
         if (!chosenItems.isEmpty())
-            remove = menu.addAction(chosenItems.size() == 1 ? QString("Delete") : QString("Delete %1 Items").arg(chosenItems.size()));
+            remove = menu->addAction(chosenItems.size() == 1 ? QString("Delete") : QString("Delete %1 Items").arg(chosenItems.size()));
         if (item)
-            menu.addSeparator();
+            menu->addSeparator();
         QAction* bitmapProperties = nullptr;
         QAction* updateBitmap = nullptr;
         QAction* editWith = nullptr;
         QAction* soundProperties = nullptr;
         if (kind == static_cast<int>(Kind::Bitmap))
         {
-            bitmapProperties = menu.addAction("Properties...");
-            updateBitmap = menu.addAction("Update");
-            editWith = menu.addAction("Edit With...");
-            menu.addSeparator();
+            bitmapProperties = menu->addAction("Properties...");
+            updateBitmap = menu->addAction("Update");
+            editWith = menu->addAction("Edit With...");
+            menu->addSeparator();
         }
         if (kind == static_cast<int>(Kind::Sound))
         {
-            soundProperties = menu.addAction("Properties...");
-            menu.addSeparator();
+            soundProperties = menu->addAction("Properties...");
+            menu->addSeparator();
         }
-        QAction* copyItems = menu.addAction("Copy");
+        QAction* copyItems = menu->addAction("Copy");
         copyItems->setEnabled(!chosenNames.isEmpty());
-        QAction* pasteItems = menu.addAction("Paste");
+        QAction* pasteItems = menu->addAction("Paste");
         pasteItems->setEnabled(_canPaste && _canPaste());
-        menu.addSeparator();
-        QAction* newSymbol = menu.addAction("New Symbol...");
-        QAction* folder = menu.addAction("New Folder");
-        QAction* newFont = menu.addAction("New Font...");
-        menu.addSeparator();
-        QAction* expandAll = menu.addAction("Expand All Folders");
-        QAction* collapseAll = menu.addAction("Collapse All Folders");
-        QAction* unused = menu.addAction("Select Unused Items");
+        menu->addSeparator();
+        QAction* newSymbol = menu->addAction("New Symbol...");
+        QAction* folder = menu->addAction("New Folder");
+        QAction* newFont = menu->addAction("New Font...");
+        menu->addSeparator();
+        QAction* expandAll = menu->addAction("Expand All Folders");
+        QAction* collapseAll = menu->addAction("Collapse All Folders");
+        QAction* unused = menu->addAction("Select Unused Items");
         QAction* updateAll = nullptr;
         if (anyLinked)
-            updateAll = menu.addAction("Update All Linked Items");
-        QAction* chosen = menu.exec(globalPos);
-        if (!chosen)
-            return;
-        if (chosen == expandAll || chosen == collapseAll)
-        {
-            setAllExpanded(chosen == expandAll);
-        }
-        else if (chosen == copyItems)
-        {
-            emit copyItemsRequested(chosenNames);
-        }
-        else if (chosen == pasteItems)
-        {
-            emit pasteItemsRequested();
-        }
-        else if (chosen == newSymbol)
-        {
-            emit newSymbolRequested();
-        }
-        else if (bitmapProperties && chosen == bitmapProperties)
-        {
-            emit bitmapPropertiesRequested(name);
-        }
-        else if (spriteSheet && chosen == spriteSheet)
-        {
-            emit spriteSheetRequested(name);
-        }
-        else if (updateBitmap && chosen == updateBitmap)
-        {
-            QStringList bitmaps;
-            for (QTreeWidgetItem* selected : _tree->selectedItems())
-                if (selected->data(0, KindRole).toInt() == static_cast<int>(Kind::Bitmap))
-                    bitmaps << selected->data(0, NameRole).toString();
-            if (bitmaps.isEmpty())
-                bitmaps << name;
-            emit updateBitmapsRequested(bitmaps);
-        }
-        else if (editWith && chosen == editWith)
-        {
-            emit editBitmapWithRequested(name);
-        }
-        else if (soundProperties && chosen == soundProperties)
-        {
-            emit soundPropertiesRequested(name);
-        }
-        else if (chosen == rename)
-        {
-            _tree->editItem(item, 0);
-        }
-        else if (chosen == newFont)
-        {
-            emit newFontRequested();
-        }
-        else if (fontProperties && chosen == fontProperties)
-        {
-            emit fontPropertiesRequested(name);
-        }
-        else if (useFont && chosen == useFont)
-        {
-            emit useFontRequested(name);
-        }
-        else if (chosen == duplicate)
-        {
-            emit duplicateSymbolRequested(name);
-        }
-        else if (chosen == remove)
-        {
-            emit deleteItemsRequested(chosenItems);
-        }
-        else if (chosen == linkage)
-        {
-            emit linkageRequested(name);
-        }
-        else if (chosen == symbolProperties)
-        {
-            emit symbolPropertiesRequested(name);
-        }
-        else if (chosen == unused)
-        {
-            selectUnused();
-        }
-        else if (chosen == linkMaster)
-        {
-            emit linkToMasterRequested(name);
-        }
-        else if (chosen == updateLinked)
-        {
-            emit updateLinkedRequested({name});
-        }
-        else if (chosen == unlink)
-        {
-            emit unlinkRequested(name);
-        }
-        else if (chosen == updateAll)
-        {
-            emit updateLinkedRequested({});
-        }
-        else if (chosen == folder)
-        {
-            // Inside the folder clicked, or the one holding the item.
-            QString parent;
-            if (kind == static_cast<int>(Kind::Folder))
-                parent = name;
-            else if (name.contains('/'))
-                parent = name.left(name.lastIndexOf('/'));
-            emit newFolderRequested(parent);
-        }
+            updateAll = menu->addAction("Update All Linked Items");
+        modal::popup(menu, globalPos, [=](QAction* chosen) {
+            if (!chosen)
+                return;
+            if (chosen == expandAll || chosen == collapseAll)
+            {
+                setAllExpanded(chosen == expandAll);
+            }
+            else if (chosen == copyItems)
+            {
+                emit copyItemsRequested(chosenNames);
+            }
+            else if (chosen == pasteItems)
+            {
+                emit pasteItemsRequested();
+            }
+            else if (chosen == newSymbol)
+            {
+                emit newSymbolRequested();
+            }
+            else if (bitmapProperties && chosen == bitmapProperties)
+            {
+                emit bitmapPropertiesRequested(name);
+            }
+            else if (spriteSheet && chosen == spriteSheet)
+            {
+                emit spriteSheetRequested(name);
+            }
+            else if (updateBitmap && chosen == updateBitmap)
+            {
+                QStringList bitmaps;
+                for (QTreeWidgetItem* selected : _tree->selectedItems())
+                    if (selected->data(0, KindRole).toInt() == static_cast<int>(Kind::Bitmap))
+                        bitmaps << selected->data(0, NameRole).toString();
+                if (bitmaps.isEmpty())
+                    bitmaps << name;
+                emit updateBitmapsRequested(bitmaps);
+            }
+            else if (editWith && chosen == editWith)
+            {
+                emit editBitmapWithRequested(name);
+            }
+            else if (soundProperties && chosen == soundProperties)
+            {
+                emit soundPropertiesRequested(name);
+            }
+            else if (chosen == rename)
+            {
+                // The item, if the list still holds it once the menu is answered.
+                for (QTreeWidgetItemIterator it(_tree); *it; ++it)
+                {
+                    if (*it == item)
+                    {
+                        _tree->editItem(item, 0);
+                        break;
+                    }
+                }
+            }
+            else if (chosen == newFont)
+            {
+                emit newFontRequested();
+            }
+            else if (fontProperties && chosen == fontProperties)
+            {
+                emit fontPropertiesRequested(name);
+            }
+            else if (useFont && chosen == useFont)
+            {
+                emit useFontRequested(name);
+            }
+            else if (chosen == duplicate)
+            {
+                emit duplicateSymbolRequested(name);
+            }
+            else if (chosen == remove)
+            {
+                emit deleteItemsRequested(chosenItems);
+            }
+            else if (chosen == linkage)
+            {
+                emit linkageRequested(name);
+            }
+            else if (chosen == symbolProperties)
+            {
+                emit symbolPropertiesRequested(name);
+            }
+            else if (chosen == unused)
+            {
+                selectUnused();
+            }
+            else if (chosen == linkMaster)
+            {
+                emit linkToMasterRequested(name);
+            }
+            else if (chosen == updateLinked)
+            {
+                emit updateLinkedRequested({name});
+            }
+            else if (chosen == unlink)
+            {
+                emit unlinkRequested(name);
+            }
+            else if (chosen == updateAll)
+            {
+                emit updateLinkedRequested({});
+            }
+            else if (chosen == folder)
+            {
+                // Inside the folder clicked, or the one holding the item.
+                QString parent;
+                if (kind == static_cast<int>(Kind::Folder))
+                    parent = name;
+                else if (name.contains('/'))
+                    parent = name.left(name.lastIndexOf('/'));
+                emit newFolderRequested(parent);
+            }
+        });
     }
 }
 

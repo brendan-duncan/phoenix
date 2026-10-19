@@ -1,5 +1,7 @@
 #include "xul_dialog.h"
 
+#include "file_pick.h"
+#include "modal.h"
 #include "test_movie_window.h"
 
 #include "../data/fla_document.h"
@@ -484,12 +486,11 @@ QWidget* XulDialog::makeControl(Control& control)
         auto* button = new QPushButton(this);
         button->setToolTip("Choose a color");
         connect(button, &QPushButton::clicked, this, [this, &dialog, c]() {
-            const QColor picked = QColorDialog::getColor(QColor(qtext(c->text.substr(0, 7))), this, "Color");
-            if (picked.isValid())
-            {
-                dialog.edit(*c, text(picked.name().toUpper()));
-                refresh(*c);
-            }
+            modal::getColor(QColor(qtext(c->text.substr(0, 7))), this, "Color",
+                [this, &dialog, c](const QColor& picked) {
+                    dialog.edit(*c, text(picked.name().toUpper()));
+                    refresh(*c);
+                });
         });
         widget = button;
         break;
@@ -519,14 +520,19 @@ QWidget* XulDialog::makeControl(Control& control)
         connect(edit, &QLineEdit::textEdited, this, [&dialog, c](const QString& typed) { dialog.edit(*c, text(typed)); });
         connect(browse, &QPushButton::clicked, this, [this, &dialog, c, edit]() {
             const bool save = c->node->attr("type") == "save";
-            const QString path = save ? QFileDialog::getSaveFileName(this) : QFileDialog::getOpenFileName(this);
-            if (path.isEmpty())
-                return;
-            const std::string chosen = c->node->attr("pathtype") == "absolute" || c->node->flag("literal")
-                ? text(path)
-                : jsfl::uri::fromPath(text(path));
-            dialog.edit(*c, chosen);
-            edit->setText(qtext(chosen));
+            const auto chosenPath = [&dialog, c, edit](const QString& path) {
+                if (path.isEmpty())
+                    return;
+                const std::string chosen = c->node->attr("pathtype") == "absolute" || c->node->flag("literal")
+                    ? text(path)
+                    : jsfl::uri::fromPath(text(path));
+                dialog.edit(*c, chosen);
+                edit->setText(qtext(chosen));
+            };
+            if (save)
+                file_pick::save(this, QString(), QString(), QString(), chosenPath);
+            else
+                file_pick::open(this, QString(), QString(), QString(), chosenPath);
         });
         widget = holder;
         break;

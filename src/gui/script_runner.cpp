@@ -1,4 +1,6 @@
 #include "script_runner.h"
+#include "file_pick.h"
+#include "modal.h"
 
 #include "autosave.h"
 #include "media_import.h"
@@ -163,12 +165,16 @@ public:
             trace(message);
             return;
         }
-        QMessageBox::information(&_window, "Phoenix", qtext(message));
+        modal::information(&_window, "Phoenix", qtext(message));
     }
+    // A script waits for these answers, which a browser cannot: there each
+    // is answered as if canceled.
     bool confirm(const std::string& message) override
     {
         if (noOneToAsk(_window))
             return true;
+        if (modal::cannotWait())
+            return false;
         return QMessageBox::question(&_window, "Phoenix", qtext(message), QMessageBox::Ok | QMessageBox::Cancel) ==
                QMessageBox::Ok;
     }
@@ -179,6 +185,8 @@ public:
             answer = initial;
             return true;
         }
+        if (modal::cannotWait())
+            return false;
         bool ok = false;
         const QString typed = QInputDialog::getText(&_window, "Phoenix", qtext(message), QLineEdit::Normal, qtext(initial), &ok);
         answer = text(typed);
@@ -188,6 +196,8 @@ public:
     {
         if (noOneToAsk(_window))
             return mode == "open" || mode == "select" ? text(fileAnswer) : std::string();
+        if (modal::cannotWait())
+            return {};
         const QString caption = title.empty() ? QString("Choose a File") : qtext(title);
         const QString path = mode == "save" ? QFileDialog::getSaveFileName(&_window, caption)
                                             : QFileDialog::getOpenFileName(&_window, caption);
@@ -195,13 +205,13 @@ public:
     }
     std::string browseForFolder(const std::string& title) override
     {
-        if (noOneToAsk(_window))
+        if (noOneToAsk(_window) || modal::cannotWait())
             return {};
         return text(QFileDialog::getExistingDirectory(&_window, title.empty() ? QString("Choose a Folder") : qtext(title)));
     }
     bool showDialog(jsfl::xul::Dialog& dialog) override
     {
-        if (noOneToAsk(_window))
+        if (noOneToAsk(_window) || modal::cannotWait())
             return false;
         // The run's wait cursor and its Stop dialog stay away while the
         // person works in the dialog.
@@ -1019,8 +1029,10 @@ void ScriptRunner::dispatchEvent(const char* type)
 {
     if (_engine)
         _engine->dispatch(type);
+#ifdef PHOENIX_PYTHON
     if (_python)
         _python->dispatch(type);
+#endif
     emit eventDispatched(QString::fromLatin1(type));
 }
 
@@ -1325,18 +1337,17 @@ void ScriptRunner::runCommand()
 #else
     const QString filter = "JSFL scripts (*.jsfl);;All files (*)";
 #endif
-    const QString path = QFileDialog::getOpenFileName(&_window, "Run Command", start, filter);
-    if (path.isEmpty())
-        return;
-    settings.setValue("scripts/lastFolder", QFileInfo(path).absolutePath());
-    runFile(path);
+    file_pick::open(&_window, "Run Command", start, filter, [this](const QString& path) {
+        QSettings().setValue("scripts/lastFolder", QFileInfo(path).absolutePath());
+        runFile(path);
+    });
 }
 
 void ScriptRunner::manageCommands()
 {
-    QDialog dialog(&_window);
-    dialog.setWindowTitle("Manage Saved Commands");
-    QListWidget* list = new QListWidget(&dialog);
+    QDialog* dialog = new QDialog(&_window);
+    dialog->setWindowTitle("Manage Saved Commands");
+    QListWidget* list = new QListWidget(dialog);
     const auto fill = [list]() {
         list->clear();
         const QFileInfoList scripts = QDir(commandsFolder()).entryInfoList(scriptPatterns(), QDir::Files, QDir::Name | QDir::IgnoreCase);
@@ -1347,38 +1358,44 @@ void ScriptRunner::manageCommands()
         }
     };
     fill();
-    QPushButton* rename = new QPushButton("&Rename...", &dialog);
-    QPushButton* remove = new QPushButton("&Delete", &dialog);
-    connect(rename, &QPushButton::clicked, &dialog, [&dialog, list, fill]() {
+    QPushButton* rename = new QPushButton("&Rename...", dialog);
+    QPushButton* remove = new QPushButton("&Delete", dialog);
+    connect(rename, &QPushButton::clicked, dialog, [dialog, list, fill]() {
         QListWidgetItem* item = list->currentItem();
         if (!item)
             return;
-        bool ok = false;
-        const QString name = QInputDialog::getText(&dialog, "Rename Command", "Name:", QLineEdit::Normal, item->text(), &ok).trimmed();
-        if (!ok || name.isEmpty() || name == item->text())
-            return;
-        if (name.contains('/') || name.contains('\\'))
-        {
-            QMessageBox::warning(&dialog, "Rename Command", "A command's name cannot hold a slash.");
-            return;
-        }
+        const QString was = item->text();
         const QString from = item->data(Qt::UserRole).toString();
-        const QString to = QDir(commandsFolder()).filePath(name + "." + QFileInfo(from).suffix());
-        if (QFileInfo::exists(to) || !QFile::rename(from, to))
-            QMessageBox::warning(&dialog, "Rename Command", QString("%1 could not be renamed to %2.").arg(item->text(), name));
-        fill();
+        modal::getText(dialog, "Rename Command", "Name:", was, [dialog, fill, was, from](const QString& typed) {
+            const QString name = typed.trimmed();
+            if (name.isEmpty() || name == was)
+                return;
+            if (name.contains('/') || name.contains('\\'))
+            {
+                modal::warning(dialog, "Rename Command", "A command's name cannot hold a slash.");
+                return;
+            }
+            const QString to = QDir(commandsFolder()).filePath(name + "." + QFileInfo(from).suffix());
+            if (QFileInfo::exists(to) || !QFile::rename(from, to))
+                modal::warning(dialog, "Rename Command", QString("%1 could not be renamed to %2.").arg(was, name));
+            fill();
+        });
     });
-    connect(remove, &QPushButton::clicked, &dialog, [&dialog, list, fill]() {
+    connect(remove, &QPushButton::clicked, dialog, [dialog, list, fill]() {
         QListWidgetItem* item = list->currentItem();
         if (!item)
             return;
-        if (QMessageBox::question(&dialog, "Delete Command", QString("Delete the command %1?").arg(item->text())) != QMessageBox::Yes)
-            return;
-        QFile::remove(item->data(Qt::UserRole).toString());
-        fill();
+        const QString path = item->data(Qt::UserRole).toString();
+        modal::ask(dialog, QMessageBox::Question, "Delete Command", QString("Delete the command %1?").arg(item->text()),
+            QMessageBox::Yes | QMessageBox::No, QMessageBox::NoButton, [fill, path](QMessageBox::StandardButton answer) {
+                if (answer != QMessageBox::Yes)
+                    return;
+                QFile::remove(path);
+                fill();
+            });
     });
-    QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Close, &dialog);
-    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Close, dialog);
+    connect(buttons, &QDialogButtonBox::rejected, dialog, &QDialog::reject);
     QVBoxLayout* side = new QVBoxLayout();
     side->addWidget(rename);
     side->addWidget(remove);
@@ -1386,11 +1403,11 @@ void ScriptRunner::manageCommands()
     QHBoxLayout* body = new QHBoxLayout();
     body->addWidget(list, 1);
     body->addLayout(side);
-    QVBoxLayout* layout = new QVBoxLayout(&dialog);
+    QVBoxLayout* layout = new QVBoxLayout(dialog);
     layout->addLayout(body);
     layout->addWidget(buttons);
-    dialog.resize(420, 320);
-    dialog.exec();
+    dialog->resize(420, 320);
+    modal::open(dialog);
 }
 
 QString ScriptRunner::extensionsFolder()
@@ -1409,7 +1426,7 @@ bool ScriptRunner::installExtension(const QString& path, QWidget* parent)
             extensionsFolder().toStdString(), installed, notes, error))
     {
         if (parent)
-            QMessageBox::warning(parent, "Install Extension", QString::fromStdString(error));
+            modal::warning(parent, "Install Extension", QString::fromStdString(error));
         else
             std::fprintf(stderr, "%s\n", error.c_str());
         return false;
@@ -1425,7 +1442,7 @@ bool ScriptRunner::installExtension(const QString& path, QWidget* parent)
     for (const std::string& note : notes)
         message += "\n\n" + QString::fromStdString(note);
     if (parent)
-        QMessageBox::information(parent, "Install Extension", message);
+        modal::information(parent, "Install Extension", message);
     else
         std::printf("%s\n", message.toStdString().c_str());
     return true;
@@ -1433,10 +1450,10 @@ bool ScriptRunner::installExtension(const QString& path, QWidget* parent)
 
 void ScriptRunner::manageExtensions()
 {
-    QDialog dialog(&_window);
-    dialog.setWindowTitle("Manage Extensions");
-    QListWidget* list = new QListWidget(&dialog);
-    QLabel* details = new QLabel(&dialog);
+    QDialog* dialog = new QDialog(&_window);
+    dialog->setWindowTitle("Manage Extensions");
+    QListWidget* list = new QListWidget(dialog);
+    QLabel* details = new QLabel(dialog);
     details->setWordWrap(true);
     details->setTextFormat(Qt::PlainText);
     details->setAlignment(Qt::AlignTop | Qt::AlignLeft);
@@ -1457,7 +1474,7 @@ void ScriptRunner::manageExtensions()
             new QListWidgetItem("No extensions installed", list);
         list->setCurrentRow(0);
     };
-    connect(list, &QListWidget::currentRowChanged, &dialog, [details, installed](int row) {
+    connect(list, &QListWidget::currentRowChanged, dialog, [details, installed](int row) {
         if (row < 0 || row >= static_cast<int>(installed->size()))
         {
             details->setText("Install an extension from a ZXP package, or from a folder holding one "
@@ -1495,50 +1512,48 @@ void ScriptRunner::manageExtensions()
             lines << "Adds " + adds.join(", ") + ".";
         details->setText(lines.join("\n\n"));
     });
-    QPushButton* installPackage = new QPushButton("Install &Package...", &dialog);
-    QPushButton* installFolder = new QPushButton("Install from &Folder...", &dialog);
-    QPushButton* remove = new QPushButton("&Remove", &dialog);
-    QPushButton* openFolder = new QPushButton("&Open Folder", &dialog);
+    QPushButton* installPackage = new QPushButton("Install &Package...", dialog);
+    QPushButton* installFolder = new QPushButton("Install from &Folder...", dialog);
+    QPushButton* remove = new QPushButton("&Remove", dialog);
+    QPushButton* openFolder = new QPushButton("&Open Folder", dialog);
     installPackage->setToolTip("Install a ZXP extension package");
     installFolder->setToolTip("Install an extension unpacked into a folder: one with an .mxi file or a CSXS folder");
-    connect(installPackage, &QPushButton::clicked, &dialog, [this, &dialog, fill]() {
-        QSettings settings;
-        const QString path = QFileDialog::getOpenFileName(&dialog, "Install Extension",
-            settings.value("extensions/lastFolder").toString(), "Extension packages (*.zxp *.zip);;All files (*)");
-        if (path.isEmpty())
-            return;
-        settings.setValue("extensions/lastFolder", QFileInfo(path).absolutePath());
-        installExtension(path, &dialog);
-        fill();
+    connect(installPackage, &QPushButton::clicked, dialog, [dialog, fill]() {
+        file_pick::open(dialog, "Install Extension", QSettings().value("extensions/lastFolder").toString(),
+            "Extension packages (*.zxp *.zip);;All files (*)", [dialog, fill](const QString& path) {
+                QSettings().setValue("extensions/lastFolder", QFileInfo(path).absolutePath());
+                installExtension(path, dialog);
+                fill();
+            });
     });
-    connect(installFolder, &QPushButton::clicked, &dialog, [this, &dialog, fill]() {
-        QSettings settings;
-        const QString path = QFileDialog::getExistingDirectory(&dialog, "Install Extension from Folder",
-            settings.value("extensions/lastFolder").toString());
-        if (path.isEmpty())
-            return;
-        settings.setValue("extensions/lastFolder", path);
-        installExtension(path, &dialog);
-        fill();
+    connect(installFolder, &QPushButton::clicked, dialog, [dialog, fill]() {
+        file_pick::directory(dialog, "Install Extension from Folder", QSettings().value("extensions/lastFolder").toString(),
+            [dialog, fill](const QString& path) {
+                QSettings().setValue("extensions/lastFolder", path);
+                installExtension(path, dialog);
+                fill();
+            });
     });
-    connect(remove, &QPushButton::clicked, &dialog, [&dialog, list, installed, fill]() {
+    connect(remove, &QPushButton::clicked, dialog, [dialog, list, installed, fill]() {
         const int row = list->currentRow();
         if (row < 0 || row >= static_cast<int>(installed->size()))
             return;
         const extensions::Installed each = (*installed)[static_cast<size_t>(row)];
-        if (QMessageBox::question(&dialog, "Remove Extension",
-                QString("Remove %1 and the commands and tools it added?").arg(QString::fromStdString(each.package.name))) !=
-            QMessageBox::Yes)
-            return;
-        std::string error;
-        if (!extensions::remove(each, configFolder().toStdString(), error))
-            QMessageBox::warning(&dialog, "Remove Extension", QString::fromStdString(error));
-        fill();
+        modal::ask(dialog, QMessageBox::Question, "Remove Extension",
+            QString("Remove %1 and the commands and tools it added?").arg(QString::fromStdString(each.package.name)),
+            QMessageBox::Yes | QMessageBox::No, QMessageBox::NoButton, [dialog, each, fill](QMessageBox::StandardButton answer) {
+                if (answer != QMessageBox::Yes)
+                    return;
+                std::string error;
+                if (!extensions::remove(each, configFolder().toStdString(), error))
+                    modal::warning(dialog, "Remove Extension", QString::fromStdString(error));
+                fill();
+            });
     });
-    connect(openFolder, &QPushButton::clicked, &dialog,
+    connect(openFolder, &QPushButton::clicked, dialog,
         []() { QDesktopServices::openUrl(QUrl::fromLocalFile(extensionsFolder())); });
-    QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Close, &dialog);
-    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Close, dialog);
+    connect(buttons, &QDialogButtonBox::rejected, dialog, &QDialog::reject);
     QVBoxLayout* side = new QVBoxLayout();
     side->addWidget(installPackage);
     side->addWidget(installFolder);
@@ -1551,10 +1566,10 @@ void ScriptRunner::manageExtensions()
     QHBoxLayout* body = new QHBoxLayout();
     body->addLayout(left, 1);
     body->addLayout(side);
-    QVBoxLayout* layout = new QVBoxLayout(&dialog);
+    QVBoxLayout* layout = new QVBoxLayout(dialog);
     layout->addLayout(body);
     layout->addWidget(buttons);
     fill();
-    dialog.resize(560, 420);
-    dialog.exec();
+    dialog->resize(560, 420);
+    modal::open(dialog);
 }

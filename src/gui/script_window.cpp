@@ -1,4 +1,6 @@
 #include "script_window.h"
+#include "file_pick.h"
+#include "modal.h"
 
 #include "../play/movie_runtime.h"
 
@@ -10,11 +12,14 @@
 #include <QLabel>
 #include <QMenuBar>
 #include <QMessageBox>
+#include <QPointer>
 #include <QSaveFile>
 #include <QStandardPaths>
 #include <QStatusBar>
 #include <QTabWidget>
 #include <QTextStream>
+
+#include <memory>
 
 namespace {
 
@@ -180,7 +185,7 @@ bool ScriptWindow::openFile(const QString& path)
     QFile file(path);
     if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
     {
-        QMessageBox::warning(this, "Open Script", QString("%1 could not be read.").arg(QDir::toNativeSeparators(path)));
+        modal::warning(this, "Open Script", QString("%1 could not be read.").arg(QDir::toNativeSeparators(path)));
         return false;
     }
     const QString text = QString::fromUtf8(file.readAll());
@@ -197,63 +202,101 @@ bool ScriptWindow::openFile(const QString& path)
 
 void ScriptWindow::askOpen()
 {
-    const QStringList paths = QFileDialog::getOpenFileNames(this, "Open Script", _folder, kFilter);
-    for (const QString& path : paths)
-        openFile(path);
+    file_pick::openMany(this, "Open Script", _folder, kFilter, [this](const QStringList& paths) {
+        for (const QString& path : paths)
+            openFile(path);
+    });
 }
 
-bool ScriptWindow::save(int tab, bool askForName)
+void ScriptWindow::save(int tab, bool askForName, std::function<void()> saved)
 {
     auto* view = qobject_cast<CodeView*>(_tabs->widget(tab));
     if (!view)
-        return false;
-    QString path = pathOf(tab);
-    if (path.isEmpty() || askForName)
+        return;
+    const QString path = pathOf(tab);
+    if (!path.isEmpty() && !askForName)
     {
-        const QString suggested =
-            path.isEmpty() ? QDir(_folder).filePath(view->property("untitledName").toString()) : path;
-        path = QFileDialog::getSaveFileName(this, "Save Script", suggested, kFilter);
-        if (path.isEmpty())
-            return false;
+        if (writeScript(view, path) && saved)
+            saved();
+        return;
     }
+    const QString suggested =
+        path.isEmpty() ? QDir(_folder).filePath(view->property("untitledName").toString()) : path;
+    const QPointer<CodeView> kept(view);
+    file_pick::save(this, "Save Script", suggested, kFilter, [this, kept, saved](const QString& chosen) {
+        if (kept && writeScript(kept, chosen) && saved)
+            saved();
+    });
+}
+
+bool ScriptWindow::writeScript(CodeView* view, const QString& path)
+{
     QSaveFile file(path);
     if (!file.open(QIODevice::WriteOnly | QIODevice::Text))
     {
-        QMessageBox::warning(this, "Save Script", QString("%1 could not be written.").arg(QDir::toNativeSeparators(path)));
+        modal::warning(this, "Save Script", QString("%1 could not be written.").arg(QDir::toNativeSeparators(path)));
         return false;
     }
     file.write(view->editor()->toPlainText().toUtf8());
     if (!file.commit())
     {
-        QMessageBox::warning(this, "Save Script", QString("%1 could not be written.").arg(QDir::toNativeSeparators(path)));
+        modal::warning(this, "Save Script", QString("%1 could not be written.").arg(QDir::toNativeSeparators(path)));
         return false;
     }
     view->editor()->document()->setModified(false);
     const CodeEditor::Language language = CodeEditor::languageFor(path);
     if (language != CodeEditor::Language::Plain)
         view->editor()->setLanguage(language);
-    setPath(tab, QFileInfo(path).absoluteFilePath());
+    setPath(_tabs->indexOf(view), QFileInfo(path).absoluteFilePath());
     _folder = QFileInfo(path).absolutePath();
     return true;
 }
 
-bool ScriptWindow::closeTab(int tab)
+void ScriptWindow::closeTab(int tab, std::function<void()> closed)
 {
     auto* view = qobject_cast<CodeView*>(_tabs->widget(tab));
     if (!view)
-        return true;
-    if (view->editor()->document()->isModified())
     {
-        _tabs->setCurrentIndex(tab);
-        const auto answer = QMessageBox::question(this, "Script Editor",
-            QString("Save the changes to %1?").arg(_tabs->tabText(tab).remove('*')),
-            QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel, QMessageBox::Save);
-        if (answer == QMessageBox::Cancel || (answer == QMessageBox::Save && !save(tab, false)))
-            return false;
+        if (closed)
+            closed();
+        return;
     }
-    _tabs->removeTab(tab);
-    view->deleteLater();
-    return true;
+    const auto drop = [this, view, closed]() {
+        _tabs->removeTab(_tabs->indexOf(view));
+        view->deleteLater();
+        if (closed)
+            closed();
+    };
+    if (!view->editor()->document()->isModified())
+    {
+        drop();
+        return;
+    }
+    _tabs->setCurrentIndex(tab);
+    const QPointer<CodeView> kept(view);
+    modal::ask(this, QMessageBox::Question, "Script Editor",
+        QString("Save the changes to %1?").arg(_tabs->tabText(tab).remove('*')),
+        QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel, QMessageBox::Save,
+        [this, kept, drop](QMessageBox::StandardButton answer) {
+            if (!kept || answer == QMessageBox::Cancel)
+                return;
+            if (answer == QMessageBox::Save)
+                save(_tabs->indexOf(kept), false, drop);
+            else
+                drop();
+        });
+}
+
+void ScriptWindow::closeTabs(int from, std::function<void()> closed)
+{
+    // From the tab \a from to the first, each asked about in turn.
+    if (from < 0)
+    {
+        if (closed)
+            closed();
+        return;
+    }
+    closeTab(from, [this, from, closed]() { closeTabs(from - 1, closed); });
 }
 
 void ScriptWindow::run()
@@ -269,7 +312,8 @@ void ScriptWindow::run()
         return;
     }
     QString path = pathOf(tab);
-    if (path.isEmpty())
+    const bool untitled = path.isEmpty();
+    if (untitled)
     {
         // An untitled script runs from a file of its own that is not kept.
         const QString folder = QStandardPaths::writableLocation(QStandardPaths::TempLocation);
@@ -282,12 +326,17 @@ void ScriptWindow::run()
         }
         file.write(view->editor()->toPlainText().toUtf8());
     }
-    else if (view->editor()->document()->isModified() && !save(tab, false))
-        return;
-    _status->setText(QString("Running %1...").arg(QFileInfo(path).fileName()));
-    const bool ran = _run && _run(path);
-    _status->setText(ran ? QString("Ran %1; anything it traced is in the Output panel.").arg(QFileInfo(path).fileName())
-                         : QString("%1 stopped on an error; see the Output panel.").arg(QFileInfo(path).fileName()));
+    const auto runPath = [this, path]() {
+        _status->setText(QString("Running %1...").arg(QFileInfo(path).fileName()));
+        const bool ran = _run && _run(path);
+        _status->setText(ran ? QString("Ran %1; anything it traced is in the Output panel.").arg(QFileInfo(path).fileName())
+                             : QString("%1 stopped on an error; see the Output panel.").arg(QFileInfo(path).fileName()));
+    };
+    // A saved script with changes runs once they are saved.
+    if (!untitled && view->editor()->document()->isModified())
+        save(tab, false, runPath);
+    else
+        runPath();
 }
 
 void ScriptWindow::check()
@@ -317,13 +366,22 @@ void ScriptWindow::check()
 
 void ScriptWindow::closeEvent(QCloseEvent* event)
 {
-    for (int tab = _tabs->count() - 1; tab >= 0; --tab)
+    // Every tab closed, the window closes; a tab kept open keeps it open. On
+    // the desktop the asking is over before this returns. Where nothing can
+    // wait, the answers come later, and the window closes itself once the
+    // last tab has.
+    const auto state = std::make_shared<int>(0); // 0 asking, 1 all closed, 2 returned
+    closeTabs(_tabs->count() - 1, [this, state]() {
+        if (*state == 2)
+            close();
+        else
+            *state = 1;
+    });
+    if (*state == 1)
+        event->accept();
+    else
     {
-        if (!closeTab(tab))
-        {
-            event->ignore();
-            return;
-        }
+        *state = 2;
+        event->ignore();
     }
-    event->accept();
 }

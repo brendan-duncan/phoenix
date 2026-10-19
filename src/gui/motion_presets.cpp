@@ -1,4 +1,6 @@
 #include "motion_presets.h"
+#include "file_pick.h"
+#include "modal.h"
 
 #include "../edit/motion_object.h"
 
@@ -106,19 +108,18 @@ void MotionPresetsDialog::saveCurrent()
     const std::string motion = _current ? _current() : std::string();
     if (motion.empty())
     {
-        QMessageBox::information(this, "Motion Presets", "Select an object with a motion tween to save its motion.");
+        modal::information(this, "Motion Presets", "Select an object with a motion tween to save its motion.");
         return;
     }
-    bool ok = false;
-    const QString name = QInputDialog::getText(this, "Save Motion Preset", "Preset name:", QLineEdit::Normal,
-        QString(), &ok);
-    if (!ok || name.trimmed().isEmpty())
-        return;
-    addPreset(name, motion);
-    reload();
-    const QList<QListWidgetItem*> found = _list->findItems(name.trimmed(), Qt::MatchExactly);
-    if (!found.isEmpty())
-        _list->setCurrentItem(found.front());
+    modal::getText(this, "Save Motion Preset", "Preset name:", QString(), [this, motion](const QString& name) {
+        if (name.trimmed().isEmpty())
+            return;
+        addPreset(name, motion);
+        reload();
+        const QList<QListWidgetItem*> found = _list->findItems(name.trimmed(), Qt::MatchExactly);
+        if (!found.isEmpty())
+            _list->setCurrentItem(found.front());
+    });
 }
 
 void MotionPresetsDialog::applySelected()
@@ -132,7 +133,7 @@ void MotionPresetsDialog::applySelected()
         settings.value(QString::fromUtf8(QUrl::toPercentEncoding(item->text()))).toString().toStdString();
     settings.endGroup();
     if (!_apply(motion))
-        QMessageBox::information(this, "Motion Presets",
+        modal::information(this, "Motion Presets",
             "A motion preset moves one symbol instance or text block. Select one alone on its frame.");
 }
 
@@ -150,37 +151,40 @@ void MotionPresetsDialog::removeSelected()
 
 void MotionPresetsDialog::importFiles()
 {
-    const QStringList files = QFileDialog::getOpenFileNames(this, "Import Motion Presets", QString(),
-        "Motion Presets (*.xml)");
-    QStringList failed;
-    for (const QString& path : files)
-    {
-        QFile file(path);
-        if (!file.open(QIODevice::ReadOnly) ||
-            !addPreset(QFileInfo(path).completeBaseName(), file.readAll().toStdString()))
-            failed << QFileInfo(path).fileName();
-    }
-    reload();
-    if (!failed.isEmpty())
-        QMessageBox::warning(this, "Motion Presets", "These hold no motion:\n" + failed.join("\n"));
+    file_pick::openMany(this, "Import Motion Presets", QString(), "Motion Presets (*.xml)",
+        [this](const QStringList& files) {
+            QStringList failed;
+            for (const QString& path : files)
+            {
+                QFile file(path);
+                if (!file.open(QIODevice::ReadOnly) ||
+                    !addPreset(QFileInfo(path).completeBaseName(), file.readAll().toStdString()))
+                    failed << QFileInfo(path).fileName();
+            }
+            reload();
+            if (!failed.isEmpty())
+                modal::warning(this, "Motion Presets", "These hold no motion:\n" + failed.join("\n"));
+        });
 }
 
 void MotionPresetsDialog::importFolder()
 {
-    const QString folder = QFileDialog::getExistingDirectory(this, "Import a Folder of Motion Presets");
-    if (folder.isEmpty())
-        return;
-    int count = 0;
-    QDirIterator it(folder, {"*.xml"}, QDir::Files, QDirIterator::Subdirectories);
-    while (it.hasNext())
-    {
-        const QString path = it.next();
-        QFile file(path);
-        if (file.open(QIODevice::ReadOnly) && addPreset(QFileInfo(path).completeBaseName(), file.readAll().toStdString()))
-            ++count;
-    }
-    reload();
-    QMessageBox::information(this, "Motion Presets", QString("Imported %1 presets.").arg(count));
+    file_pick::directory(this, "Import a Folder of Motion Presets", QString(), [this](const QString& folder) {
+        if (folder.isEmpty())
+            return;
+        int count = 0;
+        QDirIterator it(folder, {"*.xml"}, QDir::Files, QDirIterator::Subdirectories);
+        while (it.hasNext())
+        {
+            const QString path = it.next();
+            QFile file(path);
+            if (file.open(QIODevice::ReadOnly) &&
+                addPreset(QFileInfo(path).completeBaseName(), file.readAll().toStdString()))
+                ++count;
+        }
+        reload();
+        modal::information(this, "Motion Presets", QString("Imported %1 presets.").arg(count));
+    });
 }
 
 void MotionPresetsDialog::exportSelected()
@@ -188,21 +192,23 @@ void MotionPresetsDialog::exportSelected()
     QListWidgetItem* item = _list->currentItem();
     if (!item)
         return;
-    const QString path = QFileDialog::getSaveFileName(this, "Export Motion Preset", item->text() + ".xml",
-        "Motion Presets (*.xml)");
-    if (path.isEmpty())
-        return;
-    QSettings settings;
-    settings.beginGroup(kGroup);
-    const QString motion = settings.value(QString::fromUtf8(QUrl::toPercentEncoding(item->text()))).toString();
-    settings.endGroup();
-    // As a preset file keeps it: the AnimationCore on its own.
-    QString core = motion;
-    const int from = core.indexOf("<AnimationCore");
-    const int to = core.lastIndexOf("</motionObjectXML>");
-    if (from >= 0 && to > from)
-        core = core.mid(from, to - from);
-    QFile file(path);
-    if (!file.open(QIODevice::WriteOnly) || file.write(core.toUtf8()) < 0)
-        QMessageBox::warning(this, "Motion Presets", "Could not write " + QDir::toNativeSeparators(path) + ".");
+    const QString name = item->text();
+    file_pick::save(this, "Export Motion Preset", name + ".xml", "Motion Presets (*.xml)",
+        [this, name](const QString& path) {
+            if (path.isEmpty())
+                return;
+            QSettings settings;
+            settings.beginGroup(kGroup);
+            const QString motion = settings.value(QString::fromUtf8(QUrl::toPercentEncoding(name))).toString();
+            settings.endGroup();
+            // As a preset file keeps it: the AnimationCore on its own.
+            QString core = motion;
+            const int from = core.indexOf("<AnimationCore");
+            const int to = core.lastIndexOf("</motionObjectXML>");
+            if (from >= 0 && to > from)
+                core = core.mid(from, to - from);
+            QFile file(path);
+            if (!file.open(QIODevice::WriteOnly) || file.write(core.toUtf8()) < 0)
+                modal::warning(this, "Motion Presets", "Could not write " + QDir::toNativeSeparators(path) + ".");
+        });
 }

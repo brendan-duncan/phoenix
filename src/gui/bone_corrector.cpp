@@ -1,6 +1,7 @@
 #include "bone_corrector.h"
 
 #include "hot_text.h"
+#include "modal.h"
 #include "phoenix_view.h"
 #include "player.h"
 
@@ -30,6 +31,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <functional>
+#include <memory>
 #include <vector>
 
 namespace corrections = fla::corrections;
@@ -220,26 +223,27 @@ std::vector<std::pair<int, QString>> bonesOf(const fla::IKArmature& armature, co
     return bones;
 }
 
-/// Asks for a correction's angles and values. \a targets, when given, are
-/// what it may go on (\a chosen the one picked); \a frames the frames of
-/// each target's symbol for a drawing swap.
-bool askCorrection(QWidget* parent, const QString& title, corrections::Correction& c, const std::vector<Target>* targets,
-    int& chosen)
+/// Asks for a correction's angles and values, and calls \a done with them
+/// when accepted. \a targets, when there are any, are what it may go on
+/// (\a chosen the one picked, given back to \a done); the frames of each
+/// target's symbol bound a drawing swap.
+void askCorrection(QWidget* parent, const QString& title, corrections::Correction c, const std::vector<Target>& targets,
+    int chosen, std::function<void(const corrections::Correction& c, int chosen)> done)
 {
-    QDialog dialog(parent);
-    dialog.setWindowTitle(title);
-    QFormLayout* form = new QFormLayout(&dialog);
+    QDialog* dialog = new QDialog(parent);
+    dialog->setWindowTitle(title);
+    QFormLayout* form = new QFormLayout(dialog);
     QComboBox* target = nullptr;
-    if (targets)
+    if (!targets.empty())
     {
-        target = new QComboBox(&dialog);
-        for (const Target& each : *targets)
+        target = new QComboBox(dialog);
+        for (const Target& each : targets)
             target->addItem(each.label);
         target->setCurrentIndex(std::max(0, chosen));
         form->addRow(c.property == corrections::Property::Frame ? "Graphic" : "Instance", target);
     }
-    HotDoubleSpinBox* from = new HotDoubleSpinBox(&dialog);
-    HotDoubleSpinBox* to = new HotDoubleSpinBox(&dialog);
+    HotDoubleSpinBox* from = new HotDoubleSpinBox(dialog);
+    HotDoubleSpinBox* to = new HotDoubleSpinBox(dialog);
     for (HotDoubleSpinBox* box : {from, to})
     {
         box->setRange(-180.0, 180.0);
@@ -256,23 +260,23 @@ bool askCorrection(QWidget* parent, const QString& title, corrections::Correctio
     HotSpinBox* valueTo = nullptr;
     if (c.property != corrections::Property::Shape)
     {
-        valueFrom = new HotSpinBox(&dialog);
-        valueTo = new HotSpinBox(&dialog);
+        valueFrom = new HotSpinBox(dialog);
+        valueTo = new HotSpinBox(dialog);
         const bool frames = c.property == corrections::Property::Frame;
         const auto limit = [=]() {
             int most = 100;
             if (frames)
             {
                 const int at = target ? target->currentIndex() : -1;
-                most = targets && at >= 0 && static_cast<size_t>(at) < targets->size() && (*targets)[static_cast<size_t>(at)].instance->symbol
-                    ? symbolLength(*(*targets)[static_cast<size_t>(at)].instance->symbol) : 9999;
+                most = at >= 0 && static_cast<size_t>(at) < targets.size() && targets[static_cast<size_t>(at)].instance->symbol
+                    ? symbolLength(*targets[static_cast<size_t>(at)].instance->symbol) : 9999;
             }
             valueFrom->setRange(frames ? 1 : 0, most);
             valueTo->setRange(frames ? 1 : 0, most);
         };
         limit();
         if (target)
-            QObject::connect(target, &QComboBox::currentIndexChanged, &dialog, [=]() {
+            QObject::connect(target, &QComboBox::currentIndexChanged, dialog, [=]() {
                 limit();
                 if (frames)
                     valueTo->setValue(valueTo->maximum());
@@ -290,22 +294,24 @@ bool askCorrection(QWidget* parent, const QString& title, corrections::Correctio
         form->addRow(frames ? "Show frame" : "Alpha", valueFrom);
         form->addRow(frames ? "To frame" : "To alpha", valueTo);
     }
-    QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
-    QObject::connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
-    QObject::connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, dialog);
+    QObject::connect(buttons, &QDialogButtonBox::accepted, dialog, &QDialog::accept);
+    QObject::connect(buttons, &QDialogButtonBox::rejected, dialog, &QDialog::reject);
     form->addRow(buttons);
-    if (dialog.exec() != QDialog::Accepted)
-        return false;
-    c.from = from->value();
-    c.to = to->value();
-    if (valueFrom && valueTo)
-    {
-        c.valueFrom = valueFrom->value();
-        c.valueTo = valueTo->value();
-    }
-    if (target)
-        chosen = target->currentIndex();
-    return true;
+    modal::open(dialog, [c, chosen, target, from, to, valueFrom, valueTo, done](int result) mutable {
+        if (result != QDialog::Accepted)
+            return;
+        c.from = from->value();
+        c.to = to->value();
+        if (valueFrom && valueTo)
+        {
+            c.valueFrom = valueFrom->value();
+            c.valueTo = valueTo->value();
+        }
+        if (target)
+            chosen = target->currentIndex();
+        done(c, chosen);
+    });
 }
 
 } // namespace
@@ -335,7 +341,15 @@ void BoneCorrector::open(fla::Frame* pose, size_t child, int joint)
         _status("A shape correction is being drawn: leave the boned shape to keep it first.", 4000);
         return;
     }
-    fla::IKArmature armature;
+    // What the dialog's buttons share, kept for as long as it is up.
+    struct State
+    {
+        fla::IKArmature armature;
+        std::vector<Driven> shown;
+        int drawShape = -1;
+    };
+    const auto state = std::make_shared<State>();
+    fla::IKArmature& armature = state->armature;
     fla::Timeline* timeline = timelineOf(pose);
     if (!pose || !timeline || child >= pose->extraChildren.size() || !armature.parse(pose->extraChildren[child]))
         return;
@@ -346,16 +360,16 @@ void BoneCorrector::open(fla::Frame* pose, size_t child, int joint)
     const std::vector<fla::ArmatureJoint> joints = armature.symbolJoints();
     fla::SymbolInstance* container = corrections::containerOn(*pose);
 
-    QDialog dialog(_window);
-    dialog.setWindowTitle("Bone Corrections");
-    QVBoxLayout* layout = new QVBoxLayout(&dialog);
+    QDialog* dialog = new QDialog(_window);
+    dialog->setWindowTitle("Bone Corrections");
+    QVBoxLayout* layout = new QVBoxLayout(dialog);
     QLabel* intro = new QLabel("As a bone turns, it can correct the shape it bends, swap a graphic's drawing or fade an "
                                "instance. Turn the bone to where a correction is in full, then add it.",
-        &dialog);
+        dialog);
     intro->setWordWrap(true);
     layout->addWidget(intro);
     QFormLayout* form = new QFormLayout;
-    QComboBox* bone = new QComboBox(&dialog);
+    QComboBox* bone = new QComboBox(dialog);
     for (const auto& [index, label] : bones)
         bone->addItem(label, index);
     // Opened for the armature, the first bone that drives something.
@@ -369,31 +383,31 @@ void BoneCorrector::open(fla::Frame* pose, size_t child, int joint)
     const int start = bone->findData(joint);
     bone->setCurrentIndex(start >= 0 ? start : 0);
     form->addRow("Bone", bone);
-    QLabel* angle = new QLabel(&dialog);
+    QLabel* angle = new QLabel(dialog);
     form->addRow("Angle", angle);
     layout->addLayout(form);
-    QListWidget* list = new QListWidget(&dialog);
+    QListWidget* list = new QListWidget(dialog);
     list->setMinimumSize(460, 140);
     layout->addWidget(list);
     QHBoxLayout* row = new QHBoxLayout;
-    QPushButton* addShape = new QPushButton("Add Shape Correction", &dialog);
+    QPushButton* addShape = new QPushButton("Add Shape Correction", dialog);
     addShape->setToolTip(container ? "Draw how the boned shape looks with the bone turned as it is here"
                                    : "Shape corrections are for boned shapes; this armature joins symbols");
     addShape->setEnabled(container != nullptr);
-    QPushButton* addSwap = new QPushButton("Add Drawing Swap...", &dialog);
+    QPushButton* addSwap = new QPushButton("Add Drawing Swap...", dialog);
     addSwap->setToolTip("Show a graphic's frames in turn as the bone turns: a hand turning, a head turning");
-    QPushButton* addFade = new QPushButton("Add Fade...", &dialog);
+    QPushButton* addFade = new QPushButton("Add Fade...", dialog);
     addFade->setToolTip("Fade an instance in or out as the bone turns");
-    QPushButton* edit = new QPushButton("Edit...", &dialog);
-    QPushButton* remove = new QPushButton("Remove", &dialog);
+    QPushButton* edit = new QPushButton("Edit...", dialog);
+    QPushButton* remove = new QPushButton("Remove", dialog);
     for (QPushButton* button : {addShape, addSwap, addFade, edit, remove})
     {
         button->setAutoDefault(false);
         row->addWidget(button);
     }
     layout->addLayout(row);
-    QDialogButtonBox* close = new QDialogButtonBox(QDialogButtonBox::Close, &dialog);
-    connect(close, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    QDialogButtonBox* close = new QDialogButtonBox(QDialogButtonBox::Close, dialog);
+    connect(close, &QDialogButtonBox::rejected, dialog, &QDialog::reject);
     layout->addWidget(close);
 
     const int frame = _view->player() ? _view->player()->currentFrame() : 0;
@@ -402,22 +416,24 @@ void BoneCorrector::open(fla::Frame* pose, size_t child, int joint)
     const auto nodeOf = [=](int j) {
         return j >= 0 && static_cast<size_t>(j) < joints.size() ? joints[static_cast<size_t>(j)].node : std::string();
     };
-    const auto angleAt = [&](int at) { return corrections::jointAngle(corrections::jointsAt(armature, at), chosenJoint()); };
-    std::vector<Driven> shown;
-    const auto refresh = [&]() {
+    const auto angleAt = [state, chosenJoint](int at) {
+        return corrections::jointAngle(corrections::jointsAt(state->armature, at), chosenJoint());
+    };
+    const auto refresh = [this, state, list, angle, edit, remove, timeline, armatureName, into, angleAt, nodeOf,
+                             chosenJoint]() {
         const int at = list->currentRow();
         angle->setText(QString("%1 here, %2 on the armature's first frame").arg(degrees(angleAt(into)), degrees(angleAt(0))));
-        shown = drivenBy(*timeline, armatureName, nodeOf(chosenJoint()));
+        state->shown = drivenBy(*timeline, armatureName, nodeOf(chosenJoint()));
         list->clear();
-        for (const Driven& each : shown)
+        for (const Driven& each : state->shown)
             list->addItem(describe(each));
         list->setCurrentRow(std::min(at, list->count() - 1));
         edit->setEnabled(list->currentRow() >= 0);
         remove->setEnabled(list->currentRow() >= 0);
         _view->update();
     };
-    connect(bone, &QComboBox::currentIndexChanged, &dialog, refresh);
-    connect(list, &QListWidget::currentRowChanged, &dialog, [=](int at) {
+    connect(bone, &QComboBox::currentIndexChanged, dialog, refresh);
+    connect(list, &QListWidget::currentRowChanged, dialog, [=](int at) {
         edit->setEnabled(at >= 0);
         remove->setEnabled(at >= 0);
     });
@@ -432,7 +448,7 @@ void BoneCorrector::open(fla::Frame* pose, size_t child, int joint)
     };
     // A new correction's angles: from where the bone rests to where it is
     // turned now, or a quarter turn on when it is not turned.
-    const auto fresh = [&](corrections::Property property) {
+    const auto fresh = [armatureName, into, angleAt, nodeOf, chosenJoint](corrections::Property property) {
         corrections::Correction c;
         c.armature = armatureName;
         c.joint = nodeOf(chosenJoint());
@@ -442,7 +458,8 @@ void BoneCorrector::open(fla::Frame* pose, size_t child, int joint)
         c.to = std::fabs(now - c.from) >= 5.0 ? now : std::clamp(c.from + 90.0, -180.0, 180.0);
         return c;
     };
-    const auto addTo = [&](corrections::Property property, const char* title, const char* step) {
+    const auto addTo = [this, dialog, timeline, frame, list, fresh, store, refresh](corrections::Property property,
+                           const char* title, const char* step) {
         const std::vector<Target> targets = targetsAt(*timeline, frame, property == corrections::Property::Frame);
         if (targets.empty())
         {
@@ -453,48 +470,48 @@ void BoneCorrector::open(fla::Frame* pose, size_t child, int joint)
             return;
         }
         corrections::Correction c = fresh(property);
-        int chosen = 0;
         const fla::SymbolInstance* first = targets.front().instance;
         c.valueFrom = property == corrections::Property::Frame ? first->firstFrame + 1 : 100.0;
         c.valueTo = property == corrections::Property::Frame && first->symbol ? symbolLength(*first->symbol) : 0.0;
-        if (!askCorrection(&dialog, title, c, &targets, chosen) || chosen < 0 || static_cast<size_t>(chosen) >= targets.size())
-            return;
-        fla::SymbolInstance* instance = targets[static_cast<size_t>(chosen)].instance;
-        std::vector<corrections::Correction> now = corrections::of(*instance);
-        now.push_back(c);
-        store(instance, now, step);
-        refresh();
-        list->setCurrentRow(list->count() - 1);
+        askCorrection(dialog, title, c, targets, 0,
+            [targets, step, list, store, refresh](const corrections::Correction& asked, int chosen) {
+                if (chosen < 0 || static_cast<size_t>(chosen) >= targets.size())
+                    return;
+                fla::SymbolInstance* instance = targets[static_cast<size_t>(chosen)].instance;
+                std::vector<corrections::Correction> now = corrections::of(*instance);
+                now.push_back(asked);
+                store(instance, now, step);
+                refresh();
+                list->setCurrentRow(list->count() - 1);
+            });
     };
-    connect(addSwap, &QPushButton::clicked, &dialog,
-        [&]() { addTo(corrections::Property::Frame, "Add Drawing Swap", "Add Drawing Swap"); });
-    connect(addFade, &QPushButton::clicked, &dialog, [&]() { addTo(corrections::Property::Alpha, "Add Fade", "Add Fade"); });
-    int drawShape = -1;
-    connect(addShape, &QPushButton::clicked, &dialog, [&]() {
-        drawShape = chosenJoint();
-        dialog.accept();
+    connect(addSwap, &QPushButton::clicked, dialog,
+        [addTo]() { addTo(corrections::Property::Frame, "Add Drawing Swap", "Add Drawing Swap"); });
+    connect(addFade, &QPushButton::clicked, dialog, [addTo]() { addTo(corrections::Property::Alpha, "Add Fade", "Add Fade"); });
+    connect(addShape, &QPushButton::clicked, dialog, [state, dialog, chosenJoint]() {
+        state->drawShape = chosenJoint();
+        dialog->accept();
     });
-    connect(edit, &QPushButton::clicked, &dialog, [&]() {
+    connect(edit, &QPushButton::clicked, dialog, [state, dialog, list, store, refresh]() {
         const int at = list->currentRow();
-        if (at < 0 || static_cast<size_t>(at) >= shown.size())
+        if (at < 0 || static_cast<size_t>(at) >= state->shown.size())
             return;
-        Driven& driven = shown[static_cast<size_t>(at)];
-        corrections::Correction c = driven.correction;
-        int chosen = -1;
-        if (!askCorrection(&dialog, "Edit Bone Correction", c, nullptr, chosen))
-            return;
-        std::vector<corrections::Correction> now = corrections::of(*driven.instance);
-        if (driven.index >= now.size())
-            return;
-        now[driven.index] = c;
-        store(driven.instance, now, "Edit Bone Correction");
-        refresh();
+        const Driven driven = state->shown[static_cast<size_t>(at)];
+        askCorrection(dialog, "Edit Bone Correction", driven.correction, {}, -1,
+            [driven, store, refresh](const corrections::Correction& c, int) {
+                std::vector<corrections::Correction> now = corrections::of(*driven.instance);
+                if (driven.index >= now.size())
+                    return;
+                now[driven.index] = c;
+                store(driven.instance, now, "Edit Bone Correction");
+                refresh();
+            });
     });
-    connect(remove, &QPushButton::clicked, &dialog, [&]() {
+    connect(remove, &QPushButton::clicked, dialog, [state, list, store, refresh]() {
         const int at = list->currentRow();
-        if (at < 0 || static_cast<size_t>(at) >= shown.size())
+        if (at < 0 || static_cast<size_t>(at) >= state->shown.size())
             return;
-        const Driven& driven = shown[static_cast<size_t>(at)];
+        const Driven& driven = state->shown[static_cast<size_t>(at)];
         std::vector<corrections::Correction> now = corrections::of(*driven.instance);
         if (driven.index >= now.size())
             return;
@@ -504,9 +521,10 @@ void BoneCorrector::open(fla::Frame* pose, size_t child, int joint)
     });
     refresh();
     list->setCurrentRow(list->count() > 0 ? 0 : -1);
-    dialog.exec();
-    if (drawShape >= 0)
-        startShape(pose, child, drawShape);
+    modal::open(dialog, [this, state, pose, child](int) {
+        if (state->drawShape >= 0)
+            startShape(pose, child, state->drawShape);
+    });
 }
 
 void BoneCorrector::startShape(fla::Frame* pose, size_t child, int joint)

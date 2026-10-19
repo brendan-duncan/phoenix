@@ -1,4 +1,6 @@
 #include "brush_properties_dialog.h"
+#include "file_pick.h"
+#include "modal.h"
 
 #include "../edit/brush_texture.h"
 #include "../edit/drawing_style.h"
@@ -309,44 +311,44 @@ BrushPropertiesDialog::BrushPropertiesDialog(fla::DrawingStyle& style, const std
         const QStringList names = _library.bitmapNames ? _library.bitmapNames() : QStringList();
         if (names.isEmpty())
         {
-            QMessageBox::information(this, "Tip from Library Bitmap", "The library has no bitmaps.");
+            modal::information(this, "Tip from Library Bitmap", "The library has no bitmaps.");
             return;
         }
-        bool ok = false;
-        const QString name = QInputDialog::getItem(this, "Tip from Library Bitmap", "Bitmap", names, 0, false, &ok);
-        if (!ok || name.isEmpty())
-            return;
-        const QImage source = _library.bitmapImage ? _library.bitmapImage(name) : QImage();
-        if (source.isNull())
-            return;
-        // Coverage: the image's alpha where it has one, else its dark parts.
-        const QImage small = source.convertToFormat(QImage::Format_ARGB32).scaled(96, 96, Qt::KeepAspectRatio,
-            Qt::SmoothTransformation);
-        bool transparent = false;
-        for (int y = 0; y < small.height() && !transparent; ++y)
-            for (int x = 0; x < small.width() && !transparent; ++x)
-                transparent = qAlpha(small.pixel(x, y)) < 250;
-        std::vector<uint8_t> alpha(static_cast<size_t>(small.width()) * small.height());
-        for (int y = 0; y < small.height(); ++y)
-            for (int x = 0; x < small.width(); ++x)
+        modal::getItem(this, "Tip from Library Bitmap", "Bitmap", names, 0, false, [this](const QString& name) {
+            if (name.isEmpty())
+                return;
+            const QImage source = _library.bitmapImage ? _library.bitmapImage(name) : QImage();
+            if (source.isNull())
+                return;
+            // Coverage: the image's alpha where it has one, else its dark parts.
+            const QImage small = source.convertToFormat(QImage::Format_ARGB32).scaled(96, 96, Qt::KeepAspectRatio,
+                Qt::SmoothTransformation);
+            bool transparent = false;
+            for (int y = 0; y < small.height() && !transparent; ++y)
+                for (int x = 0; x < small.width() && !transparent; ++x)
+                    transparent = qAlpha(small.pixel(x, y)) < 250;
+            std::vector<uint8_t> alpha(static_cast<size_t>(small.width()) * small.height());
+            for (int y = 0; y < small.height(); ++y)
+                for (int x = 0; x < small.width(); ++x)
+                {
+                    const QRgb pixel = small.pixel(x, y);
+                    alpha[static_cast<size_t>(y) * small.width() + x] =
+                        static_cast<uint8_t>(transparent ? qAlpha(pixel) : 255 - qGray(pixel));
+                }
+            std::vector<fla::Point> outline = fla::traceTip(alpha, small.width(), small.height());
+            if (outline.size() < 3)
             {
-                const QRgb pixel = small.pixel(x, y);
-                alpha[static_cast<size_t>(y) * small.width() + x] =
-                    static_cast<uint8_t>(transparent ? qAlpha(pixel) : 255 - qGray(pixel));
+                modal::information(this, "Tip from Library Bitmap", "Nothing in that bitmap makes an outline.");
+                return;
             }
-        std::vector<fla::Point> outline = fla::traceTip(alpha, small.width(), small.height());
-        if (outline.size() < 3)
-        {
-            QMessageBox::information(this, "Tip from Library Bitmap", "Nothing in that bitmap makes an outline.");
-            return;
-        }
-        brush().customTip = outline;
-        brush().tipSource = name.toStdString();
-        brush().tip = fla::BrushSettings::Tip::Custom;
-        brush().roundness = 100.0;
-        _style.bitmapTip = name.toStdString();
-        refresh();
-        touched();
+            brush().customTip = outline;
+            brush().tipSource = name.toStdString();
+            brush().tip = fla::BrushSettings::Tip::Custom;
+            brush().roundness = 100.0;
+            _style.bitmapTip = name.toStdString();
+            refresh();
+            touched();
+        });
     });
     tip->addRow(QString(), fromBitmap);
     QPushButton* roundTip = new QPushButton("Plain Bitmap Tip", this);
@@ -502,32 +504,35 @@ BrushPropertiesDialog::BrushPropertiesDialog(fla::DrawingStyle& style, const std
         fillList();
     });
     connect(add, &QPushButton::clicked, this, [this]() {
-        bool ok = false;
-        const QString name = QInputDialog::getText(this, "New Preset", "Name", QLineEdit::Normal,
-            QString("Brush %1").arg(_presets->count() + 1), &ok).trimmed();
-        if (!ok || name.isEmpty())
-            return;
-        std::vector<fla::brushpresets::Preset> presets = loadList();
-        presets.push_back({name.toStdString(), fla::brushpresets::presetText(brush(), _style)});
-        saveList(presets);
-        fillList();
-        _refreshing = true;
-        _presets->setCurrentRow(_presets->count() - 1);
-        _refreshing = false;
+        modal::getText(this, "New Preset", "Name", QString("Brush %1").arg(_presets->count() + 1),
+            [this](const QString& typed) {
+                const QString name = typed.trimmed();
+                if (name.isEmpty())
+                    return;
+                std::vector<fla::brushpresets::Preset> presets = loadList();
+                presets.push_back({name.toStdString(), fla::brushpresets::presetText(brush(), _style)});
+                saveList(presets);
+                fillList();
+                _refreshing = true;
+                _presets->setCurrentRow(_presets->count() - 1);
+                _refreshing = false;
+            });
     });
     connect(rename, &QPushButton::clicked, this, [this]() {
         const int row = _presets->currentRow();
         std::vector<fla::brushpresets::Preset> presets = loadList();
         if (row < 0 || row >= static_cast<int>(presets.size()))
             return;
-        bool ok = false;
-        const QString name = QInputDialog::getText(this, "Rename Preset", "Name", QLineEdit::Normal,
-            QString::fromStdString(presets[static_cast<size_t>(row)].name), &ok).trimmed();
-        if (!ok || name.isEmpty())
-            return;
-        presets[static_cast<size_t>(row)].name = name.toStdString();
-        saveList(presets);
-        fillList();
+        modal::getText(this, "Rename Preset", "Name", QString::fromStdString(presets[static_cast<size_t>(row)].name),
+            [this, row](const QString& typed) {
+                const QString name = typed.trimmed();
+                std::vector<fla::brushpresets::Preset> latest = loadList();
+                if (name.isEmpty() || row >= static_cast<int>(latest.size()))
+                    return;
+                latest[static_cast<size_t>(row)].name = name.toStdString();
+                saveList(latest);
+                fillList();
+            });
     });
     connect(remove, &QPushButton::clicked, this, [this]() {
         const int row = _presets->currentRow();
@@ -539,34 +544,32 @@ BrushPropertiesDialog::BrushPropertiesDialog(fla::DrawingStyle& style, const std
         fillList();
     });
     connect(exportSet, &QPushButton::clicked, this, [this]() {
-        const QString path = QFileDialog::getSaveFileName(this, "Export Brush Presets",
-            QString::fromStdString(_list) + "-brushes.phxbrushes", "Brush Presets (*.phxbrushes)");
-        if (path.isEmpty())
-            return;
-        QFile file(path);
-        const std::string text = fla::brushpresets::toSetText(loadList());
-        if (!file.open(QIODevice::WriteOnly) || file.write(text.data(), static_cast<qint64>(text.size())) < 0)
-            QMessageBox::warning(this, "Export Brush Presets", "The presets could not be written.");
+        file_pick::save(this, "Export Brush Presets", QString::fromStdString(_list) + "-brushes.phxbrushes",
+            "Brush Presets (*.phxbrushes)", [this](const QString& path) {
+                QFile file(path);
+                const std::string text = fla::brushpresets::toSetText(loadList());
+                if (!file.open(QIODevice::WriteOnly) || file.write(text.data(), static_cast<qint64>(text.size())) < 0)
+                    modal::warning(this, "Export Brush Presets", "The presets could not be written.");
+            });
     });
     connect(importSet, &QPushButton::clicked, this, [this]() {
-        const QString path = QFileDialog::getOpenFileName(this, "Import Brush Presets", QString(),
-            "Brush Presets (*.phxbrushes);;All Files (*)");
-        if (path.isEmpty())
-            return;
-        QFile file(path);
-        if (!file.open(QIODevice::ReadOnly))
-            return;
-        const std::vector<fla::brushpresets::Preset> incoming =
-            fla::brushpresets::fromSetText(file.readAll().toStdString());
-        if (incoming.empty())
-        {
-            QMessageBox::information(this, "Import Brush Presets", "That file holds no brush presets.");
-            return;
-        }
-        std::vector<fla::brushpresets::Preset> presets = loadList();
-        presets.insert(presets.end(), incoming.begin(), incoming.end());
-        saveList(presets);
-        fillList();
+        file_pick::open(this, "Import Brush Presets", QString(), "Brush Presets (*.phxbrushes);;All Files (*)",
+            [this](const QString& path) {
+                QFile file(path);
+                if (!file.open(QIODevice::ReadOnly))
+                    return;
+                const std::vector<fla::brushpresets::Preset> incoming =
+                    fla::brushpresets::fromSetText(file.readAll().toStdString());
+                if (incoming.empty())
+                {
+                    modal::information(this, "Import Brush Presets", "That file holds no brush presets.");
+                    return;
+                }
+                std::vector<fla::brushpresets::Preset> presets = loadList();
+                presets.insert(presets.end(), incoming.begin(), incoming.end());
+                saveList(presets);
+                fillList();
+            });
     });
 
     refresh();

@@ -1,5 +1,6 @@
 #include "color_panel.h"
 #include "color_picker_widgets.h"
+#include "modal.h"
 #include "theme.h"
 
 #include "../data/bitmap.h"
@@ -353,13 +354,11 @@ ColorPanel::ColorPanel(fla::DrawingStyle* style, QWidget* parent)
     });
     _pages->addWidget(solid);
     connect(_solidSwatch, &QToolButton::clicked, this, [this]() {
-        const QColor chosen = QColorDialog::getColor(toQColor(_style->fillColor), this, "Fill Color",
-            QColorDialog::ShowAlphaChannel);
-        if (!chosen.isValid())
-            return;
-        fromQColor(chosen, _style->fillColor);
-        refresh();
-        emit styleChanged();
+        modal::getColor(toQColor(_style->fillColor), this, "Fill Color", [this](const QColor& chosen) {
+            fromQColor(chosen, _style->fillColor);
+            refresh();
+            emit styleChanged();
+        }, QColorDialog::ShowAlphaChannel);
     });
     connect(_solidHex, &QLineEdit::editingFinished, this, [this]() {
         QColor color(_solidHex->text());
@@ -423,10 +422,8 @@ ColorPanel::ColorPanel(fla::DrawingStyle* style, QWidget* parent)
         const int index = _bar->current();
         if (index < 0 || index >= static_cast<int>(_bar->stops().size()))
             return;
-        const QColor chosen = QColorDialog::getColor(toQColor(_bar->stops()[static_cast<size_t>(index)].color), this,
-            "Gradient Color", QColorDialog::ShowAlphaChannel);
-        if (chosen.isValid())
-            setStopColor(chosen);
+        modal::getColor(toQColor(_bar->stops()[static_cast<size_t>(index)].color), this, "Gradient Color",
+            [this](const QColor& chosen) { setStopColor(chosen); }, QColorDialog::ShowAlphaChannel);
     };
     connect(_stopSwatch, &QToolButton::clicked, this, pickStopColor);
     connect(_bar, &GradientBar::colorRequested, this, pickStopColor);

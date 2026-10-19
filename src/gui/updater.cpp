@@ -1,4 +1,5 @@
 #include "updater.h"
+#include "modal.h"
 #include "file_association.h"
 
 #include <mutex>
@@ -190,7 +191,7 @@ void Updater::checkForUpdates(bool userAsked)
 #else
     if (userAsked)
     {
-        QMessageBox::information(_window, "Check for Updates",
+        modal::information(_window, "Check for Updates",
             "This build of Phoenix was made without the updater.");
     }
 #endif
@@ -204,7 +205,7 @@ void Updater::onChecked(bool userAsked, const QString& version, const QString& e
     {
         if (userAsked)
         {
-            QMessageBox::information(_window, "Check for Updates",
+            modal::information(_window, "Check for Updates",
                 "Phoenix can only update itself when it was installed with its installer.\n\n" + error);
         }
         return;
@@ -213,7 +214,7 @@ void Updater::onChecked(bool userAsked, const QString& version, const QString& e
     if (!error.isEmpty())
     {
         if (userAsked)
-            QMessageBox::warning(_window, "Check for Updates", "Could not check for updates:\n\n" + error);
+            modal::warning(_window, "Check for Updates", "Could not check for updates:\n\n" + error);
         else
             emit statusMessage("Could not check for updates");
         return;
@@ -224,7 +225,7 @@ void Updater::onChecked(bool userAsked, const QString& version, const QString& e
         if (userAsked)
         {
             emit statusMessage(QString());
-            QMessageBox::information(_window, "Check for Updates",
+            modal::information(_window, "Check for Updates",
                 QString("Phoenix %1 is the latest version.").arg(currentVersion()));
         }
         return;

@@ -1,4 +1,5 @@
 #include "main_window.h"
+#include "modal.h"
 
 #include "phoenix_view.h"
 #include "share_dialog.h"
@@ -16,7 +17,7 @@ void MainWindow::shareMovie()
 {
     if (!_flaDocument || !_flaDocument->document || !_phoenixView)
     {
-        QMessageBox::information(this, "No Document", "No FLA document is currently loaded.");
+        modal::information(this, "No Document", "No FLA document is currently loaded.");
         return;
     }
     const fla::Document* document = _flaDocument->document;
@@ -34,7 +35,8 @@ void MainWindow::shareMovie()
         return written;
     };
     hooks.reveal = [](const QString& path) { revealInFileManager(path); };
-    ShareDialog dialog(QSize(static_cast<int>(std::lround(document->width)), static_cast<int>(std::lround(document->height))),
+    ShareDialog* dialog = new ShareDialog(
+        QSize(static_cast<int>(std::lround(document->width)), static_cast<int>(std::lround(document->height))),
         document->frameRate, std::max(1, _phoenixView->frameCount()), base, hooks, this);
-    dialog.exec();
+    modal::open(dialog);
 }

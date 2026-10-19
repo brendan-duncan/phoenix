@@ -1,6 +1,7 @@
 #include "actions_panel.h"
 
 #include "code_editor.h"
+#include "modal.h"
 
 #include "../data/action_script.h"
 #include "../data/document.h"
@@ -619,10 +620,10 @@ void ActionsPanel::insertTargetPath()
     const bool onScene = document && from &&
         std::find(document->timelines.begin(), document->timelines.end(), from) != document->timelines.end();
 
-    QDialog dialog(this);
-    dialog.setWindowTitle("Insert Target Path");
-    auto* layout = new QVBoxLayout(&dialog);
-    auto* tree = new QTreeWidget(&dialog);
+    QDialog* dialog = new QDialog(this);
+    dialog->setWindowTitle("Insert Target Path");
+    auto* layout = new QVBoxLayout(dialog);
+    auto* tree = new QTreeWidget(dialog);
     tree->setHeaderHidden(true);
     auto* here = new QTreeWidgetItem(tree, {"this"});
     here->setData(0, Qt::UserRole, QString());
@@ -633,11 +634,11 @@ void ActionsPanel::insertTargetPath()
     if (here->childCount() == 0)
         layout->addWidget(new QLabel("No movie clip or button here has an instance name yet: name one in the "
                                      "Properties panel to reach it from a script.",
-            &dialog));
+            dialog));
     // An HTML5 Canvas movie's main timeline is exportRoot.
     const QString root = canvas() ? "exportRoot" : "_root";
-    auto* relative = new QRadioButton("Relative (this.)", &dialog);
-    auto* absolute = new QRadioButton("Absolute (" + root + ".)", &dialog);
+    auto* relative = new QRadioButton("Relative (this.)", dialog);
+    auto* absolute = new QRadioButton("Absolute (" + root + ".)", dialog);
     relative->setChecked(true);
     absolute->setEnabled(onScene);
     if (!onScene)
@@ -647,51 +648,58 @@ void ActionsPanel::insertTargetPath()
     mode->addWidget(absolute);
     mode->addStretch();
     layout->addLayout(mode);
-    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
-    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
-    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
-    connect(tree, &QTreeWidget::itemDoubleClicked, &dialog, &QDialog::accept);
+    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, dialog);
+    connect(buttons, &QDialogButtonBox::accepted, dialog, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, dialog, &QDialog::reject);
+    connect(tree, &QTreeWidget::itemDoubleClicked, dialog, &QDialog::accept);
     layout->addWidget(buttons);
-    dialog.resize(360, 420);
-    if (dialog.exec() != QDialog::Accepted || !tree->currentItem())
-        return;
+    dialog->resize(360, 420);
+    modal::open(dialog, [this, tree, here, absolute, root](int result) {
+        if (result != QDialog::Accepted || !tree->currentItem())
+            return;
 
-    QStringList names;
-    for (QTreeWidgetItem* item = tree->currentItem(); item && item != here; item = item->parent())
-        names.prepend(item->data(0, Qt::UserRole).toString());
-    names.prepend(absolute->isChecked() ? root : "this");
-    _editor->insertPlainText(names.join('.'));
-    focusEditor();
+        QStringList names;
+        for (QTreeWidgetItem* item = tree->currentItem(); item && item != here; item = item->parent())
+            names.prepend(item->data(0, Qt::UserRole).toString());
+        names.prepend(absolute->isChecked() ? root : "this");
+        _editor->insertPlainText(names.join('.'));
+        focusEditor();
+    });
 }
 
 void ActionsPanel::insertSnippet(QString code)
 {
     if (_target.kind == Target::Kind::None)
         return;
+    // At the start of a line, indented as the line is.
+    const auto insert = [this](const QString& text) {
+        QTextCursor cursor = _editor->textCursor();
+        if (cursor.positionInBlock() > 0 && !cursor.block().text().trimmed().isEmpty())
+        {
+            cursor.movePosition(QTextCursor::EndOfBlock);
+            cursor.insertText("\n");
+        }
+        cursor.insertText(text);
+        _editor->setTextCursor(cursor);
+        focusEditor();
+    };
     if (code.contains("$instance"))
     {
         // The instance it works on, picked from those named here.
         const QStringList names = namesOn(_target.timeline);
-        QString name = "instance_name";
         if (!names.isEmpty())
         {
-            bool ok = false;
-            name = QInputDialog::getItem(this, "Code Snippet", "The instance it works on:", names, 0, true, &ok);
-            if (!ok || name.isEmpty())
-                return;
+            modal::getItem(this, "Code Snippet", "The instance it works on:", names, 0, true,
+                [this, code, insert](const QString& name) {
+                    if (name.isEmpty() || _target.kind == Target::Kind::None)
+                        return;
+                    insert(QString(code).replace("$instance", name));
+                });
+            return;
         }
-        code.replace("$instance", name);
+        code.replace("$instance", "instance_name");
     }
-    // At the start of a line, indented as the line is.
-    QTextCursor cursor = _editor->textCursor();
-    if (cursor.positionInBlock() > 0 && !cursor.block().text().trimmed().isEmpty())
-    {
-        cursor.movePosition(QTextCursor::EndOfBlock);
-        cursor.insertText("\n");
-    }
-    cursor.insertText(code);
-    _editor->setTextCursor(cursor);
-    focusEditor();
+    insert(code);
 }
 
 void ActionsPanel::setPinned(bool pinned)

@@ -109,4 +109,8 @@ private:
     QPoint _selectFrom{-1, -1};
     QPoint _selectTo{-1, -1};
     bool _selecting = false;
+#ifdef PHOENIX_WEB
+    // What showText last showed, in the web build's stand-in (terminal_view_web.cpp).
+    QString _webText;
+#endif
 };

@@ -4,7 +4,7 @@
 #include <QDir>
 #include <QElapsedTimer>
 #include <QFileInfo>
-#include <QProcess>
+#include "process.h"
 #include <QProgressDialog>
 #include <QRegularExpression>
 #include <QThread>
@@ -23,8 +23,8 @@ bool runFfmpeg(const QString& ffmpeg, const QStringList& arguments, QProgressDia
 {
     progress.setLabelText(label);
     progress.setValue(0);
-    QProcess process;
-    process.setProcessChannelMode(QProcess::SeparateChannels);
+    Process process;
+    process.setProcessChannelMode(Process::SeparateChannels);
     process.start(ffmpeg, arguments);
     if (!process.waitForStarted(10000))
     {
@@ -43,7 +43,7 @@ bool runFfmpeg(const QString& ffmpeg, const QStringList& arguments, QProgressDia
     QString log;
     while (!process.waitForFinished(100))
     {
-        if (process.state() == QProcess::NotRunning)
+        if (process.state() == Process::NotRunning)
             break;
         const QString chunk = QString::fromUtf8(process.readAllStandardError());
         log += chunk;
@@ -71,7 +71,7 @@ bool runFfmpeg(const QString& ffmpeg, const QStringList& arguments, QProgressDia
         }
     }
     log += QString::fromUtf8(process.readAllStandardError());
-    if (process.exitStatus() != QProcess::NormalExit || process.exitCode() != 0)
+    if (process.exitStatus() != Process::NormalExit || process.exitCode() != 0)
     {
         error = QString("ffmpeg could not read the video.\n\n%1").arg(log.right(1500).trimmed());
         return false;
