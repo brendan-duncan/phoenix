@@ -140,9 +140,13 @@ bool setField(QWidget* field, const QString& value)
     else if (auto* combo = qobject_cast<QComboBox*>(field))
     {
         const int index = combo->findText(value);
-        if (index < 0)
+        // One that can be typed in takes what is not on its list.
+        if (index < 0 && combo->isEditable())
+            combo->setEditText(value);
+        else if (index < 0)
             return false;
-        combo->setCurrentIndex(index);
+        else
+            combo->setCurrentIndex(index);
     }
     else if (auto* box = qobject_cast<QCheckBox*>(field))
         box->setChecked(value.toLower() == "on" || value == "1" || value.toLower() == "true");
