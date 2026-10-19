@@ -521,12 +521,15 @@ private:
         for (const char* declared : {"phxState:String", "phxInputs:Object", "phxTicks:int", "phxDone:Boolean",
                  "phxWait:String", "phxAt:int", "phxReady:Boolean", "phxKeys:Boolean"})
             line(std::string("var ") + declared + ";");
+        line("// Goes to a state: to its label, playing or held.");
         open("function phxGo(state:String):void {");
         goBody();
         close();
+        line("// Goes now, or once this state's animation has finished.");
         open("function phxTo(state:String, after:Boolean):void {");
         toBody();
         close();
+        line("// Listens to the named buttons and clips, again as they come back on the stage.");
         open("function phxHook():void {");
         line("var o:Object;");
         for (size_t i = 0; i < _hooks.size(); ++i)
@@ -557,15 +560,19 @@ private:
             line("phxEvent(\"key\", String(e.keyCode));");
             close();
         }
+        line("// Each frame: loops a state round, stops one played once at its end, and checks.");
         open("function phxFrame(e:*):void {");
         frameBody();
         close();
+        line("// A click or a key: the listeners set inputs, then a transition may go.");
         open("function phxEvent(target:String, what:String):void {");
         eventBody();
         close();
+        line("// The transitions that wait on an input, the animation's end or a timer.");
         open("function phxCheck():void {");
         checkBody();
         close();
+        line("// Starts in the first state, the first time this frame plays.");
         open("if (!phxReady) {");
         line("phxReady = true;");
         line("phxInputs = {};");
@@ -578,18 +585,22 @@ private:
 
     void writeAs2()
     {
+        line("// Starts in the first state, the first time this frame plays.");
         line("var phxT = this;");
         open("if (!phxT.phxReady) {");
         line("phxT.phxReady = true;");
         line("phxT.phxInputs = {};");
         for (const Input& each : _graph.inputs)
             line(input(each.name) + " = " + startValue(each) + ";");
+        line("// Goes to a state: to its label, playing or held.");
         open("phxT.phxGo = function (state) {");
         goBody();
         close("};");
+        line("// Goes now, or once this state's animation has finished.");
         open("phxT.phxTo = function (state, after) {");
         toBody();
         close("};");
+        line("// Listens to the named buttons and clips, again as they come back on the stage.");
         open("phxT.phxHook = function () {");
         line("var o;");
         for (size_t i = 0; i < _hooks.size(); ++i)
@@ -607,12 +618,15 @@ private:
             line("phxT.phxEvent(" + quoted(_hooks[i].first) + ", \"" + _hooks[i].second + "\");");
             close("};");
         }
+        line("// Each frame: loops a state round, stops one played once at its end, and checks.");
         open("phxT.phxFrame = function () {");
         frameBody();
         close("};");
+        line("// A click or a key: the listeners set inputs, then a transition may go.");
         open("phxT.phxEvent = function (target, what) {");
         eventBody();
         close("};");
+        line("// The transitions that wait on an input, the animation's end or a timer.");
         open("phxT.phxCheck = function () {");
         checkBody();
         close("};");

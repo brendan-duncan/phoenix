@@ -20,6 +20,7 @@ var phxWait:String;
 var phxAt:int;
 var phxReady:Boolean;
 var phxKeys:Boolean;
+// Goes to a state: to its label, playing or held.
 function phxGo(state:String):void {
 	phxState = state;
 	phxTicks = 0;
@@ -36,6 +37,7 @@ function phxGo(state:String):void {
 	phxAt = currentFrame;
 	phxHook();
 }
+// Goes now, or once this state's animation has finished.
 function phxTo(state:String, after:Boolean):void {
 	if (after &amp;&amp; !phxDone) {
 		phxWait = state;
@@ -43,6 +45,7 @@ function phxTo(state:String, after:Boolean):void {
 		phxGo(state);
 	}
 }
+// Listens to the named buttons and clips, again as they come back on the stage.
 function phxHook():void {
 	var o:Object;
 	o = getChildByName("feedBtn");
@@ -67,6 +70,7 @@ function phxOn1(e:*):void {
 function phxKey(e:*):void {
 	phxEvent("key", String(e.keyCode));
 }
+// Each frame: loops a state round, stops one played once at its end, and checks.
 function phxFrame(e:*):void {
 	phxTicks++;
 	phxHook();
@@ -91,6 +95,7 @@ function phxFrame(e:*):void {
 	phxAt = f;
 	phxCheck();
 }
+// A click or a key: the listeners set inputs, then a transition may go.
 function phxEvent(target:String, what:String):void {
 	if (target == "napBtn" &amp;&amp; what == "click") {
 		phxInputs["sleepy"] = true;
@@ -108,6 +113,7 @@ function phxEvent(target:String, what:String):void {
 	}
 	phxCheck();
 }
+// The transitions that wait on an input, the animation's end or a timer.
 function phxCheck():void {
 	if (phxWait != null) {
 		if (phxDone) {
@@ -132,6 +138,7 @@ function phxCheck():void {
 		}
 	}
 }
+// Starts in the first state, the first time this frame plays.
 if (!phxReady) {
 	phxReady = true;
 	phxInputs = {};
