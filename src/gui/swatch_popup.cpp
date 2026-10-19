@@ -9,6 +9,7 @@
 #include "../data/solid_color.h"
 
 #include <QColorDialog>
+#include <QCursor>
 #include <QGuiApplication>
 #include <QHBoxLayout>
 #include <QKeyEvent>
@@ -16,6 +17,7 @@
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
+#include <QPixmap>
 #include <QPointer>
 #include <QRegularExpression>
 #include <QScreen>
