@@ -34,7 +34,12 @@ struct MovieExportSettings
         /// One multi-layer OpenEXR a frame: the picture and the passes.
         Exr,
         /// One SVG a frame, numbered as a PNG sequence is.
-        SvgSequence
+        SvgSequence,
+        /// For File > Share (not in the Export Movie dialog's list): an
+        /// animated WebP, an animated PNG and a WebM (VP9) video.
+        WebP,
+        Apng,
+        WebM
     };
     /// The video's encoding.
     enum class Codec
@@ -73,6 +78,16 @@ struct MovieExportSettings
     bool gifDither = false;
     /// A looping GIF plays this many times after the first; 0 for ever.
     int gifRepeat = 0;
+    /// File > Share's quality, 1 to 100 (share::encoderArguments says
+    /// what it means for each format); -1 for Export Movie's own settings.
+    int quality = -1;
+    /// Each frame fitted inside the size, keeping the stage's shape, with
+    /// bars of the background color (or see-through) round it.
+    bool letterbox = false;
+    /// Frames a second to write at, when not the document's: frames are
+    /// skipped or shown again so the movie lasts as long. 0 for the
+    /// document's own.
+    double outputRate = 0.0;
     /// For a sequence per layer, the layers by name; empty for every
     /// visible one.
     QStringList layers;

@@ -17,7 +17,7 @@
 <meta property="og:image:alt" content="The Phoenix window with three flower characters on the stage, the timeline below and the Properties panel on the right">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:image" content="https://phoenixanimate.com/assets/shots/hero.webp">
-<meta name="keywords" content="export movie video mp4 mov h.264 prores 4444 alpha codec crf aac ffmpeg gif animated palette colors dither loop repeat transparency 8-bit png jpeg quality progressive webp png sequence per layer transparent background image jpeg svg wav audio size frame range matte render prores exr passes swf publish sprite sheet trim padding packed json render queue csv render from data shots publish settings configurations swf sound">
+<meta name="keywords" content="share social web animated webp apng animated png webm vp9 instagram tiktok youtube file size export movie video mp4 mov h.264 prores 4444 alpha codec crf aac ffmpeg gif animated palette colors dither loop repeat transparency 8-bit png jpeg quality progressive webp png sequence per layer transparent background image jpeg svg wav audio size frame range matte render prores exr passes swf publish sprite sheet trim padding packed json render queue csv render from data shots publish settings configurations swf sound">
 <link rel="icon" href="assets/img/logo.png">
 <link rel="stylesheet" href="assets/site.css">
 <script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
@@ -29,11 +29,12 @@
 
 <p class="eyebrow">Output</p>
 <h1>Exporting and Publishing</h1>
-<p class="lead">Exports render through the same drawing code as the stage, so what you see is what you get. All export commands are under <span class="menu-path">File &rsaquo; Export</span>, and <span class="menu-path">File &rsaquo; Publish</span> writes a set of formats at once.</p>
+<p class="lead">Exports render through the same drawing code as the stage, so what you see is what you get. All export commands are under <span class="menu-path">File &rsaquo; Export</span>, <span class="menu-path">File &rsaquo; Share</span> makes a file ready to post online, and <span class="menu-path">File &rsaquo; Publish</span> writes a set of formats at once.</p>
 
 <div class="split">
   <figure style="margin:0"><img src="assets/shots/menu-file-export.webp" alt="File, Export submenu: Export FLA for Other Apps, Render from Data, Export to SVG, Export Image, Export Movie, Export Sprite Sheet, Export Shots and Export SWF Movie" width="257" height="201"></figure>
   <dl class="defs" style="grid-template-columns:1fr">
+    <dt>To post online</dt><dd><a href="#share">Share</a>: an animated GIF, WebP or PNG, or an MP4 or WebM video, sized for social sites.</dd>
     <dt>One picture</dt><dd><a href="#export-image">Export Image</a> (PNG, JPEG, GIF) or <a href="#export-to-svg">Export to SVG</a>.</dd>
     <dt>Moving pictures</dt><dd><a href="#export-movie">Export Movie</a>: video, animated GIF, PNG, SVG and EXR sequences, compositing passes, or the sound alone.</dd>
     <dt>For players and the web</dt><dd><a href="#swf">Export SWF Movie</a>, and <a href="#publish">Publish</a> for HTML5 pages, SWF and images together.</dd>
@@ -41,6 +42,40 @@
     <dt>For the studio</dt><dd><a href="#export-shots">Export Shots</a>, <strong>Render from Data</strong> (a movie for each row of a CSV file; see <a href="symbols.html#templates">Templates</a>), and <strong>Export FLA for Other Apps</strong> (a copy with Phoenix's own motion baked in; see <a href="behaviors.html#bake">Bake to keyframes</a>).</dd>
   </dl>
 </div>
+
+<h2 id="share">Share</h2>
+
+<p>Choose <span class="menu-path">File &rsaquo; Share...</span> to save your animation as a file you can post, send in a chat, or put on a web page. Pick a format, pick a size, and click <strong>Save...</strong>.</p>
+
+<figure>
+  <img src="assets/shots/share.webp" alt="The Share dialog: five big format buttons (Animated GIF, Animated WebP, Animated PNG, MP4 Video, WebM Video) with Animated GIF chosen, then Size, Frame rate, Plays, a Quality slider from Smaller file to Better looking, Transparent background, Include sound, the file size guess, and the Show in Folder, Save and Close buttons" width="636" height="426">
+  <figcaption>The Share dialog. The line under the formats says what the chosen one is good for.</figcaption>
+</figure>
+
+<table>
+  <thead><tr><th>Format</th><th>Good for</th></tr></thead>
+  <tbody>
+    <tr><td>Animated GIF</td><td class="wrap">Plays everywhere: chats, forums, email. Up to 256 colors a frame, and see-through pixels are fully clear or fully solid.</td></tr>
+    <tr><td>Animated WebP</td><td class="wrap">Like a GIF, but much smaller and in full color, with soft see-through edges. Plays in web browsers and many apps.</td></tr>
+    <tr><td>Animated PNG</td><td class="wrap">Full color and soft see-through edges with nothing lost, for stickers and web pages. Bigger files. Saved with the <code>.png</code> ending, and plays in web browsers (other programs show its first frame).</td></tr>
+    <tr><td>MP4 Video</td><td class="wrap">The video every social site takes, with sound. The smallest file for a long clip.</td></tr>
+    <tr><td>WebM Video</td><td class="wrap">A web video that can have a see-through background, with sound. Plays in web browsers.</td></tr>
+  </tbody>
+</table>
+
+<dl class="defs">
+  <dt>Size</dt><dd>The stage's own size, half of it, a social site's size (Instagram, Instagram Story, TikTok, YouTube...), or <strong>Custom</strong>. When the site's shape is not your stage's shape, the whole stage still shows, with bars of the background color around it (clear bars with a transparent background).</dd>
+  <dt>Frame rate</dt><dd>Fewer frames a second make a smaller file. The animation still lasts as long: frames are skipped to keep time.</dd>
+  <dt>Plays</dt><dd>For GIF, WebP and animated PNG: forever, or a set number of times before it stops. Videos play once; sites loop them as they like.</dd>
+  <dt>Quality</dt><dd>Toward <strong>Smaller file</strong> or <strong>Better looking</strong>. For a GIF it sets how many colors a frame may use; for WebP, at the very top, every pixel is kept exactly. An animated PNG always keeps every pixel.</dd>
+  <dt>Transparent background</dt><dd>No stage color behind the art, for every format but MP4.</dd>
+  <dt>Include sound</dt><dd>For MP4 and WebM, the movie's sound.</dd>
+  <dt>File size</dt><dd>A guess at how big the file will be, worked out by saving a few frames. It updates as you change the settings, so you can aim for a site's size limit before you save.</dd>
+</dl>
+
+<p>Once the file is saved, the dialog says its name and size; <strong>Show in Folder</strong> opens the folder with the file selected, ready to drag into a browser or a chat. The dialog stays open, so you can save another format straight away. Share remembers the format, size and quality you used last.</p>
+
+<p>Share uses the same drawing as <a href="#export-movie">Export Movie</a>, through the scene's camera, over every frame of the current scene. WebP, MP4 and WebM are made with Phoenix's own copy of <a href="#about-ffmpeg">ffmpeg</a>; if a copy of Phoenix can't make one of them, its button is grayed out. GIF and animated PNG are made by Phoenix itself.</p>
 
 <h2>Export Movie</h2>
 
@@ -92,7 +127,7 @@
   </tbody>
 </table>
 
-<p>These codecs need an even width and height, so an odd size loses its last row or column of pixels. Sound is 44.1 kHz stereo; frames with no sound make a video with no audio track. Only H.264 MP4 or MOV and ProRes MOV are made; for another format, convert the MP4 or a PNG sequence with a video tool. See also <a href="video.html">Video</a>.</p>
+<p>These codecs need an even width and height, so an odd size loses its last row or column of pixels. Sound is 44.1 kHz stereo; frames with no sound make a video with no audio track. Export Movie makes H.264 MP4 or MOV and ProRes MOV; <a href="#share">Share</a> also makes WebM. For another format, convert the MP4 or a PNG sequence with a video tool. See also <a href="video.html">Video</a>.</p>
 
 <h3 id="animated-gif">Animated GIFs</h3>
 
