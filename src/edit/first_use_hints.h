@@ -45,7 +45,10 @@ public:
     /// The hint \a event earns, marked shown, or none when hints are off,
     /// it was shown before or the event does not call for one (drawing on a
     /// later frame, say).
-    std::optional<Hint> on(Event event, const Context& context = {});
+    std::optional<Hint> on(Event event, const Context& context);
+    // Not a default argument: a nested class's member initializers are not
+    // usable in one inside the enclosing class (Clang and GCC refuse it).
+    std::optional<Hint> on(Event event) { return on(event, Context()); }
 
     bool enabled() const { return _enabled; }
     void setEnabled(bool enabled) { _enabled = enabled; }
