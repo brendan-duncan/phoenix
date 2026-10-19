@@ -107,7 +107,7 @@ const std::map<std::string, Hint>& table()
         {"Eraser", {"Drag to erase", {}}},
         {"Paint Bucket", {"Click to fill, drag to set a gradient's direction", {}}},
         {"Ink Bottle", {"Click a line to restyle it, or a fill to outline it", {}}},
-        {"Eyedropper", {"Click a fill or a line to take its color and style", {}}},
+        {"Eyedropper", {"Click a fill or a line to take its color", {}}},
         {"Hand", {"Drag to pan the stage", {}}},
         {"Rotation",
             {"Click to set the pivot, drag to turn the view, double-click to set it straight",
