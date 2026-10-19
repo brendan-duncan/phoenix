@@ -1376,6 +1376,8 @@ std::string XFLWriter::writeDocument(const Document& document)
     setBool(root, "objectsSnapTo", document.objectsSnapTo, true);
     setBool(root, "guidesSnapTo", document.guidesSnapTo, true);
     setBool(root, "guidesLocked", document.guidesLocked, false);
+    setString(root, "phoenixDrawingGuides", document.drawingGuides);
+    setString(root, "phoenixSymmetry", document.symmetry);
     setInt(root, "snapAlignBorderSpacing", document.snapAlignBorderSpacing, 18);
     setColor(root, "guidesColor", nullptr, document.guidesColor);
     setDouble(root, "vanishingPoint3DX", document.vanishingPoint3DX, 0.0);

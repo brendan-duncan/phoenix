@@ -17,6 +17,7 @@
 #include "color_panel.h"
 #include "ease_curve_dialog.h"
 #include "hot_text.h"
+#include "drawing_aids_view.h"
 #include "phoenix_view.h"
 #include "player.h"
 #include "tool.h"
@@ -985,6 +986,10 @@ void PropertiesPanel::buildToolTab()
     const QString smoothingTip = "How much of the hand's wobble is taken out of the line";
     const QString precisionTip = "How closely the finished outline follows the stroke; lower is smoother "
         "with fewer points";
+    const QString stabilizerTip = "How far the pen leads the line, in screen pixels: the line follows on a "
+        "string, which takes out shake, and catches up when the pen lifts. 0 is off";
+    const auto stabilizerOf = [](const Brush& b) { return b.stabilizer; };
+    const auto setStabilizer = [](Brush& b, double v) { b.stabilizer = v; };
 
     // Brush (the Fluid Brush).
     const BrushMember fluid = &fla::DrawingStyle::fluidBrush;
@@ -1002,6 +1007,8 @@ void PropertiesPanel::buildToolTab()
         "How much of the stroke its end tapers over", taperEndOf, setTaperEnd);
     brushNumber(fluid, IconTool::FluidBrush, "Smoothing", 0.0, 100.0, 0, QString(), smoothingTip, smoothingOf,
         setSmoothing);
+    brushNumber(fluid, IconTool::FluidBrush, "Stabilizer", 0.0, 60.0, 0, " px", stabilizerTip, stabilizerOf,
+        setStabilizer);
     brushNumber(fluid, IconTool::FluidBrush, "Precision", 0.0, 100.0, 0, QString(), precisionTip, precisionOf,
         setPrecision);
     brushNumber(fluid, IconTool::FluidBrush, "Roundness", 1.0, 100.0, 0, " %",
@@ -1050,6 +1057,8 @@ void PropertiesPanel::buildToolTab()
         [](const Brush& b) { return b.useTilt; }, [](Brush& b, bool on) { b.useTilt = on; });
     brushNumber(classic, IconTool::Brush, "Smoothing", 0.0, 100.0, 0, QString(), smoothingTip, smoothingOf,
         setSmoothing);
+    brushNumber(classic, IconTool::Brush, "Stabilizer", 0.0, 60.0, 0, " px", stabilizerTip, stabilizerOf,
+        setStabilizer);
 
     // Ink Brush, Phoenix's own. Pressure is always on.
     const BrushMember ink = &fla::DrawingStyle::inkBrush;
@@ -1188,6 +1197,8 @@ void PropertiesPanel::buildToolTab()
     brushCheck(eraserNib, IconTool::Eraser, "Use pressure", "Let a pen's pressure vary the width", pressureOf, setPressure);
     brushCheck(eraserNib, IconTool::Eraser, "Use tilt", "Turn the nib to the direction the pen leans",
         [](const Brush& b) { return b.useTilt; }, [](Brush& b, bool on) { b.useTilt = on; });
+    brushNumber(eraserNib, IconTool::Eraser, "Stabilizer", 0.0, 60.0, 0, " px", stabilizerTip, stabilizerOf,
+        setStabilizer);
     QCheckBox* syncWithBrush = new QCheckBox("Sync with Nib Brush", this);
     syncWithBrush->setChecked(style.eraserSyncWithBrush);
     syncWithBrush->setToolTip("Erase with the Nib Brush's size, nib, pressure and tilt");
@@ -1277,6 +1288,18 @@ void PropertiesPanel::buildToolTab()
     connect(smoothing, &HotText::valueChanged, this, [this](double value, bool) { _links.style->pencilSmoothing = static_cast<int>(value); });
     addOption("Smoothing", smoothing, {IconTool::Pencil, IconTool::PaintBrush});
 
+    HotText* pencilStabilizer = makeHotText(0, 60, 0, " px");
+    pencilStabilizer->setValue(style.pencilStabilizer);
+    pencilStabilizer->setToolTip(stabilizerTip);
+    connect(pencilStabilizer, &HotText::valueChanged, this, [this](double value, bool) {
+        _links.style->pencilStabilizer = value;
+    });
+    _toolRefreshers.push_back([this, pencilStabilizer]() {
+        QSignalBlocker block(pencilStabilizer);
+        pencilStabilizer->setValue(_links.style->pencilStabilizer);
+    });
+    addOption("Stabilizer", pencilStabilizer, {IconTool::Pencil, IconTool::PaintBrush});
+
     QCheckBox* connectLines = new QCheckBox("Connect lines", this);
     connectLines->setChecked(style.connectLines);
     connectLines->setToolTip("In Straighten mode, close a pencil stroke whose ends nearly meet");
@@ -1288,6 +1311,8 @@ void PropertiesPanel::buildToolTab()
     recognizeShapes->setToolTip("In Straighten mode, turn a roughly drawn rectangle or oval into the real thing");
     connect(recognizeShapes, &QCheckBox::toggled, this, [this](bool on) { _links.style->recognizeShapes = on; });
     addOption(QString(), recognizeShapes, {IconTool::Pencil});
+
+    addDrawingAidOptions(addOption);
 
     // Text. The face is kept the way the FLA stores it, the family without
     // its spaces.

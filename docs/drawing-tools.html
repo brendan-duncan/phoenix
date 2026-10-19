@@ -4,11 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Drawing tools · Phoenix User Guide</title>
-<meta name="description" content="Every drawing and painting tool in Phoenix and its options: pen, anchor point tools, line, width tool, rectangle and oval with corner radius and angles, primitives, PolyStar, paint brush and making your own brushes, pencil modes, the Brush, Nib Brush and Ink Brush with brush modes and presets, eraser modes and faucet, paint bucket gap sizes, ink bottle and eyedropper.">
+<meta name="description" content="Every drawing and painting tool in Phoenix and its options: pen, anchor point tools, line, width tool, rectangle and oval with corner radius and angles, primitives, PolyStar, paint brush and making your own brushes, pencil modes, the Brush, Nib Brush and Ink Brush with brush modes and presets, eraser modes and faucet, paint bucket gap sizes, ink bottle and eyedropper, plus symmetry drawing, drawing guides with perspective, stabilizers and tool hints.">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Phoenix">
 <meta property="og:title" content="Drawing tools · Phoenix User Guide">
-<meta property="og:description" content="Every drawing and painting tool in Phoenix and its options: pen, anchor point tools, line, width tool, rectangle and oval with corner radius and angles, primitives, PolyStar, paint brush and making your own brushes, pencil modes, the Brush, Nib Brush and Ink Brush with brush modes and presets, eraser modes and faucet, paint bucket gap sizes, ink bottle and eyedropper.">
+<meta property="og:description" content="Every drawing and painting tool in Phoenix and its options: pen, anchor point tools, line, width tool, rectangle and oval with corner radius and angles, primitives, PolyStar, paint brush and making your own brushes, pencil modes, the Brush, Nib Brush and Ink Brush with brush modes and presets, eraser modes and faucet, paint bucket gap sizes, ink bottle and eyedropper, plus symmetry drawing, drawing guides with perspective, stabilizers and tool hints.">
 <meta property="og:url" content="https://phoenixanimate.com/drawing-tools.html">
 <meta property="og:image" content="https://phoenixanimate.com/assets/shots/hero.webp">
 <meta property="og:image:type" content="image/webp">
@@ -17,7 +17,7 @@
 <meta property="og:image:alt" content="The Phoenix window with three flower characters on the stage, the timeline below and the Properties panel on the right">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:image" content="https://phoenixanimate.com/assets/shots/hero.webp">
-<meta name="keywords" content="pen anchor point bezier line rectangle oval primitive polystar star pencil smooth straighten ink recognize shapes brush nib brush ink brush pressure tilt stabilizer taper eraser faucet paint bucket gap ink bottle eyedropper stroke style cap join width profile paint brush art brush pattern brush brush presets dynamics texture grain bitmap brush auto fill repaint lock fill fill all regions corner radius start angle end angle inner radius rectangle settings draw from center symbol brush custom brush convert anchor point pen preview snap faucet erase inside erase selected fills close gaps color art">
+<meta name="keywords" content="pen anchor point bezier line rectangle oval primitive polystar star pencil smooth straighten ink recognize shapes brush nib brush ink brush pressure tilt stabilizer taper eraser faucet paint bucket gap ink bottle eyedropper stroke style cap join width profile paint brush art brush pattern brush brush presets dynamics texture grain bitmap brush auto fill repaint lock fill fill all regions corner radius start angle end angle inner radius rectangle settings draw from center symbol brush custom brush convert anchor point pen preview snap faucet erase inside erase selected fills close gaps color art symmetry mirror radial kaleidoscope drawing guides ruler ellipse perspective vanishing point magnetism stabilizer status bar hints">
 <link rel="icon" href="assets/img/logo.png">
 <link rel="stylesheet" href="assets/site.css">
 <script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
@@ -200,6 +200,8 @@
       <dd><strong>Smooth</strong> rounds your line into flowing curves. <strong>Straighten</strong> turns it into straight segments and clean arcs. <strong>Ink</strong> keeps it close to exactly what you drew.</dd>
       <dt>Smoothing</dt>
       <dd>0 to 100. Higher values remove more wobble and use fewer points. Ink mode keeps close to your line whatever the smoothing.</dd>
+      <dt>Stabilizer</dt>
+      <dd>0 to 60 pixels; 0 is off. See <a href="#stabilizer">Steady lines with the stabilizer</a>. The Paint Brush shares it.</dd>
       <dt>Connect lines</dt>
       <dd>In Straighten mode, closes a stroke whose ends nearly meet. How near they must be is the <strong>Connect lines</strong> setting in <a href="preferences.html#drawing">Preferences</a>.</dd>
       <dt>Recognize shapes</dt>
@@ -232,20 +234,21 @@
   <dt>Velocity</dt><dd>None, Thin to thick, or Thick to thin: how drawing speed changes the width.</dd>
   <dt>Taper start / end</dt><dd>How far each end narrows to a point, 0 to 50%.</dd>
   <dt>Smoothing</dt><dd>How much hand wobble is removed.</dd>
+  <dt>Stabilizer</dt><dd>0 to 60 pixels: the line trails the cursor on a string for steady lines. See <a href="#stabilizer">Steady lines with the stabilizer</a>.</dd>
   <dt>Precision</dt><dd>How closely the final shape follows the stroke, against how many points it uses.</dd>
   <dt>Roundness and Angle</dt><dd>The shape of the tip: lower roundness gives a flat, calligraphic nib turned to the angle.</dd>
 </dl>
 
 <h3>Nib Brush</h3>
 
-<p>A brush with a shaped nib, set by <strong>Size</strong> and <strong>Nib shape</strong>: Round, Oval, Square, Rectangle, Vertical line, or one of two diagonals. <strong>Use pressure</strong> lets pen pressure vary the width, <strong>Use tilt</strong> turns the nib the way the pen leans, and <strong>Smoothing</strong> takes out hand wobble.</p>
+<p>A brush with a shaped nib, set by <strong>Size</strong> and <strong>Nib shape</strong>: Round, Oval, Square, Rectangle, Vertical line, or one of two diagonals. <strong>Use pressure</strong> lets pen pressure vary the width, <strong>Use tilt</strong> turns the nib the way the pen leans, <strong>Smoothing</strong> takes out hand wobble, and <strong>Stabilizer</strong> steadies the line as the Ink Brush's does.</p>
 
 <h3>Ink Brush</h3>
 
 <p>A brush for confident inked lines, unique to Phoenix. Besides <strong>Size</strong>, <strong>Smoothing</strong> and <strong>Precision</strong>, it has:</p>
 
 <dl class="defs">
-  <dt>Stabilizer</dt><dd>0 to 60 pixels. The line trails behind the cursor as if pulled on a string, which irons out shaky strokes. Higher values give smoother, slower lines.</dd>
+  <dt>Stabilizer</dt><dd>0 to 60 pixels. The line trails behind the cursor as if pulled on a string, which irons out shaky strokes. Higher values give smoother, slower lines. See <a href="#stabilizer">Steady lines with the stabilizer</a>.</dd>
   <dt>Pressure</dt><dd>Soft, Linear or Firm: how quickly the line reaches full width as you press harder.</dd>
   <dt>Min size</dt><dd>The width at the lightest pressure, as a percentage of the size.</dd>
   <dt>Tilt shading</dt><dd>Tilting the pen broadens the line, like the side of a brush.</dd>
@@ -329,7 +332,7 @@
   </tbody>
 </table>
 
-<p><strong>Eraser shape</strong> picks the nib: round, oval, square, rectangle, a vertical line or a diagonal, and <strong>Use pressure</strong> and <strong>Use tilt</strong> let a pen vary its width and turn it as the brushes do. <strong>Sync with Nib Brush</strong> erases with the Nib Brush's own size, nib, pressure and tilt, so the two stay matched as you switch between them.</p>
+<p><strong>Eraser shape</strong> picks the nib: round, oval, square, rectangle, a vertical line or a diagonal, and <strong>Use pressure</strong> and <strong>Use tilt</strong> let a pen vary its width and turn it as the brushes do. <strong>Sync with Nib Brush</strong> erases with the Nib Brush's own size, nib, pressure and tilt, so the two stay matched as you switch between them. <strong>Stabilizer</strong> steadies the Eraser's line as it does a brush's; the Eraser keeps its own setting even when it is synced.</p>
 
 <p>Erase Selected Fills works on fills you have selected first with a selection tool, and leaves everything else alone. Erase Inside keeps to the one fill where your drag begins; starting on empty stage erases nothing.</p>
 
@@ -355,6 +358,69 @@
 <p>The <strong>Ink Bottle</strong> (<kbd>S</kbd>), in the same slot, works on strokes. Click a fill, painted or just enclosed, to add an outline around it, or click a stroke to give it the current stroke color, size and style, including cap, join, width profile and brush. Its Tool tab shows only the stroke settings.</p>
 
 <p>On a <a href="ink-and-paint.html#line-and-color-art">color art layer</a>, the Paint Bucket fills the areas closed by the strokes of its line layer, even where the color layer has nothing yet, and puts the paint on the color art layer, under the lines.</p>
+
+<h2 id="stabilizer">Steady lines with the stabilizer</h2>
+
+<p>Every freehand tool has a <strong>Stabilizer</strong> on its Tool tab: the Pencil, the Paint Brush, the Brush, the Nib Brush, the Ink Brush and the Eraser. With it above 0, the line no longer sticks to the cursor. It follows behind on an invisible string that many pixels long, so small shakes of your hand never reach the line. While you draw, a dashed circle shows the string's length round the end of the line, with a line out to the cursor: move inside the circle and the line waits, move past its edge and the line is pulled along.</p>
+
+<p>When you let go, the line runs on to the point where you lifted the pen, so it ends where you meant it to. The string is measured in pixels on the screen, so it feels the same zoomed in or out. Try 10 to 20 pixels for clean inking; higher values give slow, very smooth curves. <strong>Smoothing</strong> still works alongside it, taking out the wobble that is left.</p>
+
+<h2 id="symmetry">Symmetry</h2>
+
+<figure>
+  <img src="assets/shots/symmetry-radial.webp" alt="The stage with radial symmetry: six pink spokes from the center, and brush and pencil strokes repeated and mirrored round it like a snowflake; the Drawing Guides tool shows a dot at the center and a square handle above it" width="570" height="420">
+  <figcaption>Radial symmetry with six copies, mirrored. A few strokes make the whole snowflake.</figcaption>
+</figure>
+
+<p>Turn on <strong>View &gt; Symmetry &gt; Symmetry Drawing</strong>, or click the symmetry button under Object Drawing in the toolbox, and every stroke you make with the Pencil, the Paint Brush, the Brush, the Nib Brush, the Ink Brush or the Eraser is copied across the symmetry axis as you draw. The axis is drawn on the stage as pink dashed lines. The copies are ordinary artwork: once drawn they are just shapes, and one <kbd>Ctrl</kbd>+<kbd>Z</kbd> takes away a stroke and all its copies.</p>
+
+<dl class="defs">
+  <dt>Mirror Left and Right</dt><dd>One upright axis, as for a face or a front view.</dd>
+  <dt>Mirror Top and Bottom</dt><dd>One level axis, as for a reflection in water.</dd>
+  <dt>Mirror Four Ways</dt><dd>Both axes, so each stroke is drawn four times.</dd>
+  <dt>Radial</dt><dd>Copies turned round the center like the spokes of a wheel. Choose how many under <strong>Radial Copies</strong>, and turn on <strong>Mirror Radial Copies</strong> to mirror each copy too, as a kaleidoscope does.</dd>
+</dl>
+
+<p>The same choices are on the Tool tab of each freehand tool: <strong>Symmetry</strong>, <strong>Copies</strong> and <strong>Mirror copies</strong>. To move the axis, pick the <a href="#drawing-guides">Drawing Guides tool</a> and drag the dot at the center; drag the square handle to turn the axis, holding <kbd>Shift</kbd> to turn it in 15&deg; steps. <strong>View &gt; Symmetry &gt; Center Axis on Stage</strong> puts it back in the middle, straight. The axis is saved with the document and never appears in exported pictures or movies.</p>
+
+<p>With Object Drawing off, a stroke and its copies merge into the artwork as one drawing. Many strokes of one color crossing in the same small area can occasionally merge with gaps; if that happens, undo the stroke and draw it again with Object Drawing on.</p>
+
+<h2 id="drawing-guides">Drawing guides</h2>
+
+<div class="split">
+  <figure style="margin:0"><img src="assets/shots/tool-drawing-guides.webp" alt="Tool tab for the Drawing Guides tool: Symmetry Off, Copies 6, Mirror copies, Add Ruler, Snap to drawing guides checked, Magnetism 100 %, Perspective grid checked, Hide drawing guides, and a Remove All Guides button" width="391" height="410"></figure>
+  <div>
+    <p>Drawing guides are rulers and templates laid on the stage that your freehand strokes snap to, so you can draw straight lines, clean ellipses and boxes in perspective with a loose hand. They work with the Pencil, the Paint Brush, the Brush, the Nib Brush, the Ink Brush and the Eraser. Guides are blue, are saved with the document, and are never drawn into your art or exported.</p>
+    <p>Pick the <strong>Drawing Guides</strong> tool from the toolbox, choose a guide under <strong>Add</strong> on its Tool tab, and click or drag on empty stage to place one. Or use <strong>View &gt; Drawing Guides &gt; Add</strong>, which puts one in the middle of the stage. With the tool, drag a guide to move it, drag its square handles to reshape it, and press <kbd>Delete</kbd> to remove the one you picked.</p>
+  </div>
+</div>
+
+<dl class="defs">
+  <dt>Ruler</dt><dd>A straight edge. A stroke you begin near it runs exactly along it.</dd>
+  <dt>Parallel Ruler</dt><dd>Strokes anywhere on the stage run in the ruler's direction, for hatching or rain.</dd>
+  <dt>Ellipse</dt><dd>A stroke begun near it runs round it. Drag the handles to size and turn it.</dd>
+  <dt>Concentric Ellipses</dt><dd>Strokes run round ellipses of the same shape and center, through wherever you begin: rings, wheels, ripples.</dd>
+  <dt>1-Point Perspective</dt><dd>Lines run toward the vanishing point, or level, or upright: a road or a corridor seen head on.</dd>
+  <dt>2-Point Perspective</dt><dd>Lines run toward either vanishing point on the horizon, or upright: a building seen from its corner.</dd>
+  <dt>3-Point Perspective</dt><dd>Lines run toward one of three vanishing points, for looking up at a tower or down from it.</dd>
+</dl>
+
+<figure>
+  <img src="assets/shots/drawing-guides-perspective.webp" alt="A 2-point perspective guide: a blue horizon with a vanishing point at each end, faint lines fanning out from both, and a box drawn with the Pencil whose edges run to the vanishing points" width="570" height="420">
+  <figcaption>A box drawn with the Pencil on a 2-point perspective guide. Each edge was drawn roughly; the guide made it true.</figcaption>
+</figure>
+
+<p>With perspective, Phoenix looks at the way your stroke sets off and picks the line that matches it best, so you draw as you normally would and the guide straightens the rest. Drag a vanishing point to move it, or drag the horizon to move the whole guide. <strong>Perspective grid</strong> shows the faint lines fanning out from the vanishing points.</p>
+
+<p><strong>Magnetism</strong>, on the tool's Tool tab and under <strong>View &gt; Drawing Guides</strong>, sets how firmly strokes keep to a guide: 100% puts them exactly on it, lower values let some of your hand's movement through. Turn off <strong>Snap to Drawing Guides</strong> to draw freely with the guides still showing, or hide them with <strong>Hide drawing guides</strong> (strokes do not snap to hidden guides). <strong>Remove All Guides</strong> clears them. Changes to guides are not steps to undo. Drawing guides are separate from the <a href="stage.html#rulers-and-guides">ruler guides</a> you drag from the rulers.</p>
+
+<h2 id="tool-hints">Tool hints</h2>
+
+<figure class="narrow">
+  <img src="assets/shots/status-tool-hint.webp" alt="The status bar reading: Drag to paint, Shift: straight across or down, Ctrl: Selection tool while held" width="560" height="20">
+</figure>
+
+<p>The status bar at the bottom of the window tells you what the tool in your hand does and what the <kbd>Shift</kbd>, <kbd>Alt</kbd> and <kbd>Ctrl</kbd> keys add. Hold a key and the hint changes to say just what that key does, so you can feel your way around a tool without looking anything up. Turn the hints off or on with <strong>View &gt; Tool Hints</strong>.</p>
 
 <h2>Eyedropper</h2>
 

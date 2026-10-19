@@ -1351,6 +1351,8 @@ fla::FLADocument* loadUnguarded(const std::string& path, std::string& error, std
         case s::Document::ObjectsSnapTo: document->objectsSnapTo = r.boolean(); break;
         case s::Document::GuidesSnapTo: document->guidesSnapTo = r.boolean(); break;
         case s::Document::GuidesLocked: document->guidesLocked = r.boolean(); break;
+        case s::Document::DrawingGuides: document->drawingGuides = r.string(); break;
+        case s::Document::Symmetry: document->symmetry = r.string(); break;
         case s::Document::TimelineHeight: document->timelineHeight = r.int32(); break;
         case s::Document::TimelineLabelWidth: document->timelineLabelWidth = r.int32(); break;
         case s::Document::VanishingPointX: document->vanishingPoint3DX = r.real(); break;

@@ -55,6 +55,10 @@ public:
     /// View > Guides > Lock Guides, which the FLA also keeps; off unless the
     /// file says otherwise.
     bool guidesLocked = false;
+    /// Phoenix's drawing guides and symmetry axis, as text (see
+    /// edit/drawing_aids.h); empty for none. Never drawn into the art.
+    std::string drawingGuides;
+    std::string symmetry;
     int timelineHeight = 197;
     int timelineLabelWidth = 256;
     double vanishingPoint3DX = 400.0;

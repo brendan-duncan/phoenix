@@ -100,6 +100,8 @@ set(PHOENIX_CORE_SOURCES
     edit/safe_zones.cpp
     edit/reference_board.cpp
     edit/stage_view.cpp
+    edit/drawing_aids.cpp
+    edit/tool_hints.cpp
     edit/scene_commands.cpp
     edit/script_edit.cpp
     edit/selection.cpp

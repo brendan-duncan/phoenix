@@ -49,6 +49,8 @@ set(TEST_SOURCES
     test_document_tabs.cpp
     test_review_notes.cpp
     test_safe_zones.cpp
+    test_drawing_aids.cpp
+    test_tool_hints.cpp
     test_pegs.cpp
     test_controllers.cpp
     test_palettes.cpp

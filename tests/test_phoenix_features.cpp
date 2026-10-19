@@ -34,6 +34,7 @@ void writeSample(const fs::path& folder)
         "phoenixPalettes=\"Day~skin=FFCC99\" phoenixStageAlpha=\"0.5\" phoenixControllers=\"Smile\" "
         "phoenixPerspectiveAngle=\"60\" phoenixLight=\"-45,45,0.3,1,#FFFFFF\" phoenixDepthOfField=\"0,4\" phoenixSafeZones=\"title=1,90;frames=4:3,1,00BEFFFF,c,0\" "
         "phoenixReferences=\"hide=0;images=bin/phoenix_reference_1.png,0,0,1,0,1,,sheet\" "
+        "phoenixDrawingGuides=\"snap=1 hidden=0 magnetism=80;ruler a=0,0 b=100,0\" phoenixSymmetry=\"on=1 mode=radial x=275 y=200\" "
         "phoenixFutureThing=\"1\">"
         "<symbols><Include href=\"Peg.xml\"/></symbols>"
         "<timelines><DOMTimeline name=\"Scene 1\" phoenixNodeGraph=\"&lt;graph/&gt;\"><layers>"
@@ -138,4 +139,39 @@ TEST(phoenix_features_survive_xfl_and_phx)
         const std::set<std::string> listed(fromPhx->document->phxFeatures.begin(), fromPhx->document->phxFeatures.end());
         CHECK(listed == expected);
     }
+}
+
+TEST(drawing_guides_and_symmetry_survive_xfl_and_phx)
+{
+    const fs::path root = fs::temp_directory_path() / "phoenix_feature_tests";
+    writeSample(root / "sample");
+    FLAParser parser;
+    std::unique_ptr<fla::FLADocument> original(parser.parse((root / "sample").string()));
+    CHECK(original && original->document);
+    if (!original || !original->document)
+        return;
+    const std::string guides = original->document->drawingGuides;
+    const std::string symmetry = original->document->symmetry;
+    CHECK(guides == "snap=1 hidden=0 magnetism=80;ruler a=0,0 b=100,0");
+    CHECK(symmetry == "on=1 mode=radial x=275 y=200");
+    // Read into fields of their own, not kept as unknown attributes too.
+    for (const auto& attribute : original->document->extraAttributes)
+        CHECK(attribute.first != "phoenixDrawingGuides" && attribute.first != "phoenixSymmetry");
+
+    fs::remove_all(root / "aids_xfl");
+    fla::XFLFolderWriter writer;
+    CHECK(writer.write(*original->document, (root / "aids_xfl").string()));
+    FLAParser again;
+    std::unique_ptr<fla::FLADocument> fromXfl(again.parse((root / "aids_xfl").string()));
+    CHECK(fromXfl && fromXfl->document && fromXfl->document->drawingGuides == guides &&
+          fromXfl->document->symmetry == symmetry);
+
+    const std::string phxPath = (root / "aids.phx").string();
+    std::string error;
+    CHECK(phx::save(*original->document, phxPath, phx::SaveOptions(), error));
+    std::string warning;
+    bool readOnly = false;
+    std::unique_ptr<fla::FLADocument> fromPhx(phx::load(phxPath, error, warning, readOnly));
+    CHECK(fromPhx && fromPhx->document && fromPhx->document->drawingGuides == guides &&
+          fromPhx->document->symmetry == symmetry);
 }

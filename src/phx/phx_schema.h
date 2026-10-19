@@ -29,7 +29,7 @@ namespace Document { enum : uint32_t {
     GridSpacingY = 8, SnapAlignBorderSpacing = 9, ObjectsSnapTo = 10, GuidesSnapTo = 11, TimelineHeight = 12,
     TimelineLabelWidth = 13, VanishingPointX = 14, VanishingPointY = 15, ViewAngle3D = 16, NextSceneIdentifier = 17,
     PlayLoop = 18, PlayPages = 19, PlayFrameActions = 20, CurrentTimeline = 21, HasSymbolList = 22,
-    GuidesLocked = 23,
+    GuidesLocked = 23, DrawingGuides = 24, Symmetry = 25,
     Scenes = 30, Folders = 31, Bitmaps = 32, Sounds = 33, SymbolOrder = 34, SwatchLists = 35, PackageFiles = 36,
     Features = 40, RequiredFeatures = 41, Xfl = 50, Brushes = 60, Palettes = 61, Videos = 62,
 }; }

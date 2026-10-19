@@ -424,6 +424,7 @@ MainWindow::MainWindow(const QString& initialFile, QWidget* parent, bool startup
     setupMenus();
     setupToolBar();
     setupPropertiesPanel();
+    connectDrawingAidsPanel();
     createPanels();
     // The installed extensions' HTML panels, docked before the layout comes
     // back so one left open opens again.
@@ -613,6 +614,7 @@ MainWindow::MainWindow(const QString& initialFile, QWidget* parent, bool startup
     _penTool = std::make_unique<PenTool>(_selection, stack, _drawingStyle);
     _pencilTool = std::make_unique<PencilTool>(_selection, stack, _drawingStyle);
     _paintBrushTool = std::make_unique<PencilTool>(_selection, stack, _drawingStyle, "Paint Brush");
+    _drawingGuidesTool = std::make_unique<DrawingGuidesTool>(_drawingStyle);
     // A brush from the brush library comes into the document with the
     // first stroke any tool draws with it.
     _drawingStyle.paintBrushIndex = [this](const std::string& guid) {
@@ -975,6 +977,7 @@ void MainWindow::adoptDocument(fla::FLADocument* document, const QString& filePa
         _snapper.setGuideSnapEnabled(guides);
     }
     _phoenixView->setDocument(_flaDocument);
+    refreshDrawingAids();
     _documentView->setDocument(_flaDocument);
     if (_timelineAudio)
         _timelineAudio->setDocument(_flaDocument);
@@ -8171,6 +8174,7 @@ void MainWindow::setupMenus()
     connect(safeZoneSettingsAction, &QAction::triggered, this, [this]() { safeZoneSettings(); });
     viewMenu->addAction(safeZoneSettingsAction);
     _safeZonesAction = safeZonesAction;
+    createDrawingAids(viewMenu);
 
     // The common view controls on the edit bar, at its right.
     StageControls* stageControls = nullptr;
@@ -11153,6 +11157,9 @@ void MainWindow::setupToolBar()
     addSlot({makeTool(ToolIcons::Tool::Eraser, "Eraser", Qt::Key_E,
         "Erase fills and strokes along the drag from merge-drawn artwork.",
         [this]() -> Tool* { return _eraserTool.get(); })});
+    addSlot({makeTool(ToolIcons::Tool::DrawingGuides, "Drawing Guides", Qt::Key_unknown,
+        "Place rulers, ellipses and perspective guides that freehand strokes snap to, and move the symmetry axis.",
+        [this]() -> Tool* { return _drawingGuidesTool.get(); })});
 
     addLine();
 
@@ -11301,6 +11308,12 @@ void MainWindow::setupToolBar()
     objectDrawingButton->setIconSize(QSize(22, 22));
     objectDrawingButton->setDefaultAction(objectDrawingAction);
     addExtra(objectDrawingButton);
+    QToolButton* symmetryButton = new QToolButton(toolBar);
+    symmetryButton->setObjectName("toolboxSymmetry");
+    symmetryButton->setAutoRaise(true);
+    symmetryButton->setIconSize(QSize(22, 22));
+    symmetryButton->setDefaultAction(symmetryAction());
+    addExtra(symmetryButton);
     _toolbox->setExtras(extras);
 }
 
@@ -13205,6 +13218,7 @@ ToolIcons::Tool MainWindow::iconForTool(const Tool* tool) const
     if (tool == _translate3DTool.get()) return IconTool::Translate3D;
     if (tool == _widthTool.get()) return IconTool::Width;
     if (tool == _paintBrushTool.get()) return IconTool::PaintBrush;
+    if (tool == _drawingGuidesTool.get()) return IconTool::DrawingGuides;
     if (tool == _textTool.get()) return IconTool::Text;
     if (dynamic_cast<const ScriptTool*>(tool)) return IconTool::Script;
     return IconTool::Selection;

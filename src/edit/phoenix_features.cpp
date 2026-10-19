@@ -91,6 +91,8 @@ const std::vector<Feature>& all()
         {"safe-zones", "Safe zones and aspect-ratio guides", "the stage without them", {"phoenixSafeZones"}},
         {"reference-board", "Reference images", "the document without its pinned reference images",
             {"phoenixReferences"}},
+        {"drawing-aids", "Drawing guides and symmetry", "the art as drawn, without the guides or the symmetry axis",
+            {"phoenixDrawingGuides", "phoenixSymmetry"}},
     };
     return list;
 }
@@ -231,6 +233,11 @@ std::vector<Use> used(const Document& document)
     // the way in and out), so it is seen there.
     if (document.backgroundColor[3] != 255)
         note({{"phoenixStageAlpha", std::string()}}, "the document");
+    // So are the drawing guides and the symmetry axis, into fields of their own.
+    if (!document.drawingGuides.empty())
+        note({{"phoenixDrawingGuides", std::string()}}, "the document");
+    if (!document.symmetry.empty())
+        note({{"phoenixSymmetry", std::string()}}, "the document");
     for (const Timeline* scene : document.timelines)
         timeline(scene, scene ? scene->name : std::string());
     if (document.symbolList)
