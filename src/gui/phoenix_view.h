@@ -50,6 +50,7 @@
 #include <QImage>
 
 class QTimer;
+class ReferenceBoardView;
 
 #include "tool.h"
 #include "../edit/transform_blend.h"
@@ -206,6 +207,20 @@ public:
     QPointF rotationPivot() const { return _rotationPivot; }
     void setRotationPivot(const QPointF& stagePos);
 
+    /// Mirror View: the stage shown flipped left to right about its middle,
+    /// to check a drawing with fresh eyes. A view setting of the window's,
+    /// not an edit; every tool works through it.
+    bool mirrored() const { return _mirrored; }
+    void setMirrored(bool on);
+    /// Grayscale: the stage shown in the brightness of its colors, for a
+    /// value check. The tools and the color pickers still work on the real
+    /// colors.
+    bool grayscale() const { return _grayscale; }
+    void setGrayscale(bool on);
+    /// The reference board drawn over the stage, never exported; not owned.
+    void setReferenceBoard(ReferenceBoardView* board) { _referenceBoard = board; update(); }
+    ReferenceBoardView* referenceBoard() const { return _referenceBoard; }
+
     /// Between the widget and the stage's own coordinates (the scene's,
     /// whatever symbol is being edited).
     QPointF widgetToStage(const QPointF& widgetPos) const;
@@ -318,6 +333,8 @@ signals:
 
     /// The stage was turned with the Rotation tool or set straight.
     void rotationChanged(double degrees);
+    /// Mirror View was turned on or off.
+    void mirroredChanged(bool on);
 
     /// The zoom or the turn of the view changed, however it was done; told
     /// as the view next draws.
@@ -1193,12 +1210,13 @@ private:
         bool grid = false;
         double rotation = 0.0;
         QPointF pivot;
+        bool mirrored = false;
         std::vector<const fla::Element*> moving;
 
         bool operator==(const StaticKey& other) const
         {
             return zoom == other.zoom && panX == other.panX && panY == other.panY &&
-                rotation == other.rotation && pivot == other.pivot &&
+                rotation == other.rotation && pivot == other.pivot && mirrored == other.mirrored &&
                 size == other.size && frame == other.frame && revision == other.revision &&
                 scopeDepth == other.scopeDepth && grid == other.grid && moving == other.moving;
         }
@@ -1306,6 +1324,11 @@ private:
     double _pressure = 1.0;
     double _rotation = 0.0;
     QPointF _rotationPivot;
+    bool _mirrored = false;
+    bool _grayscale = false;
+    /// The picture a grayscale view draws the stage into first.
+    QImage* _grayPass = nullptr;
+    ReferenceBoardView* _referenceBoard = nullptr;
     /// The zoom and turn zoomChanged last told of.
     double _toldZoom = -1.0;
     double _toldRotation = 0.0;

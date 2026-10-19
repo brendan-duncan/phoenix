@@ -205,6 +205,9 @@ set(HEADERS
     src/gui/swf_export.h
     src/gui/render_queue.h
     src/gui/stage_controls.h
+    src/gui/reference_board_view.h
+    src/gui/stage_gestures.h
+    src/gui/canvas_only.h
     src/gui/app_identity.h
     src/gui/tutorial_lesson.h
     src/gui/tutorial_runner.h
@@ -348,6 +351,8 @@ set(HEADERS
     src/edit/linked_assets.h
     src/edit/review_notes.h
     src/edit/safe_zones.h
+    src/edit/reference_board.h
+    src/edit/stage_view.h
     src/edit/pegs.h
     src/edit/controllers.h
     src/edit/bone_corrections.h
@@ -511,6 +516,10 @@ set(SOURCES
     src/gui/swf_export.cpp
     src/gui/render_queue.cpp
     src/gui/stage_controls.cpp
+    src/gui/reference_board_view.cpp
+    src/gui/stage_gestures.cpp
+    src/gui/canvas_only.cpp
+    src/gui/main_window_view.cpp
     src/gui/app_identity.cpp
     src/gui/tutorial_lesson.cpp
     src/gui/tutorial_runner.cpp

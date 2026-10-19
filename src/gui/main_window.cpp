@@ -5,6 +5,7 @@
 #include "new_document_dialog.h"
 #include "start_dialog.h"
 #include "stage_controls.h"
+#include "canvas_only.h"
 #include "safe_zones_dialog.h"
 #include "../edit/canvas_document.h"
 #include "../edit/depth_sort.h"
@@ -794,6 +795,8 @@ void MainWindow::dropEvent(QDropEvent* event)
     if (media.isEmpty() || !_flaDocument || !_flaDocument->document)
         return;
     event->acceptProposedAction();
+    if (dropReferenceImages(media, event->position().toPoint(), event->modifiers()))
+        return;
 
     // Files dropped on the stage land where they were dropped; anywhere else
     // in the window they go into the library.
@@ -8151,9 +8154,11 @@ void MainWindow::setupMenus()
     _safeZonesAction = safeZonesAction;
 
     // The common view controls on the edit bar, at its right.
+    StageControls* stageControls = nullptr;
     if (_breadcrumbRow)
-        _breadcrumbRow->layout()->addWidget(new StageControls(_phoenixView, clipAction, dimOutsideDocumentAction,
-            [this]() { chooseTool(_rotationTool.get()); }, safeZonesAction, _breadcrumbRow));
+        _breadcrumbRow->layout()->addWidget(stageControls = new StageControls(_phoenixView, clipAction,
+            dimOutsideDocumentAction, [this]() { chooseTool(_rotationTool.get()); }, safeZonesAction, _breadcrumbRow));
+    createViewExtras(viewMenu, straightenAction, stageControls, kLayoutVersion);
 
     // Help menu
     // Control menu: playback. They act while the stage
@@ -16550,6 +16555,8 @@ void MainWindow::showStageMenu(const QPoint& globalPos, const QPointF& documentP
 {
     if (!_phoenixView || !_flaDocument || !_flaDocument->document)
         return;
+    if (showReferenceMenu(globalPos))
+        return;
     // A right-click on a bone of an armature on show: what the bone does.
     if (const PhoenixView::IKBoneHit bone = _phoenixView->ikBoneAt(documentPos); bone && !bone.locked)
     {
@@ -17828,6 +17835,9 @@ void MainWindow::saveSettings()
     if (_secondary)
         return;
     settings.setValue("window/geometry", saveGeometry());
+    // Canvas Only is put away first, so the panels are saved as they were.
+    if (_canvasOnly)
+        _canvasOnly->leave();
     if (_layoutRestored)
     {
         expandCollapsedPanels();

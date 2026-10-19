@@ -320,4 +320,18 @@ void StageControls::drawIcons()
     _rotation->setIcon(ToolIcons::icon(ToolIcons::Tool::Rotation));
     if (_safeZones)
         _safeZones->setIcon(safeZonesIcon(color));
+    for (const auto& [action, icon] : _toggles)
+        action->setIcon(icon(color));
+}
+
+void StageControls::addToggle(QAction* action, const QString& objectName, std::function<QIcon(const QColor&)> icon)
+{
+    QToolButton* button = new QToolButton(this);
+    button->setObjectName(objectName);
+    button->setAutoRaise(true);
+    button->setDefaultAction(action);
+    QHBoxLayout* row = static_cast<QHBoxLayout*>(layout());
+    row->insertWidget(row->indexOf(_zoom), button);
+    _toggles.emplace_back(action, std::move(icon));
+    action->setIcon(_toggles.back().second(palette().color(QPalette::ButtonText)));
 }
