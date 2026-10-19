@@ -134,6 +134,8 @@ set(HEADERS
     src/gui/node_graph_panel.h
     src/gui/node_graph_style.h
     src/gui/node_graph_view.h
+    src/gui/states_panel.h
+    src/gui/states_view.h
     src/gui/node_search.h
     src/gui/claude_code_panel.h
     src/gui/pty_process.h
@@ -440,6 +442,8 @@ set(SOURCES
     src/gui/node_graph_panel.cpp
     src/gui/node_graph_style.cpp
     src/gui/node_graph_view.cpp
+    src/gui/states_panel.cpp
+    src/gui/states_view.cpp
     src/gui/node_search.cpp
     src/gui/claude_code_panel.cpp
     src/gui/pty_process.cpp

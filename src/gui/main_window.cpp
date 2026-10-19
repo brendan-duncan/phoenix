@@ -66,6 +66,7 @@
 #include "controllers_panel.h"
 #include "function_curves_panel.h"
 #include "node_graph_panel.h"
+#include "states_panel.h"
 #include "../edit/palettes.h"
 #include "../edit/shape_recognition.h"
 #include <QButtonGroup>
@@ -2489,6 +2490,46 @@ void MainWindow::createPanels()
         });
     }
 
+    // States, closed until asked: interactivity without code.
+    if (!_statesDock)
+    {
+        StatesLinks links;
+        links.commands = [this]() { return &_editContext.commandStack(); };
+        links.document = [this]() -> fla::Document* { return _flaDocument ? _flaDocument->document : nullptr; };
+        links.timeline = [this]() { return editedTimeline(); };
+        links.currentFrame = [this]() { return _player ? _player->currentFrame() : 0; };
+        links.selectedInstance = [this]() {
+            for (fla::Element* element : selectedElements())
+                if (auto* instance = dynamic_cast<fla::SymbolInstance*>(element))
+                    if (!instance->name.empty())
+                        return QString::fromStdString(instance->name);
+            return QString();
+        };
+        links.changed = [this]() {
+            if (_timelineView)
+                _timelineView->refresh();
+        };
+        links.test = [this]() { testMovie(); };
+        _states = new StatesPanel(links);
+        _statesDock = new QDockWidget("States", this);
+        _statesDock->setObjectName("statesDock");
+        _statesDock->setAllowedAreas(Qt::AllDockWidgetAreas);
+        _states->setParent(_statesDock);
+        _statesDock->setWidget(_states);
+        addDockWidget(Qt::BottomDockWidgetArea, _statesDock);
+        if (_timelineDock)
+            tabifyDockWidget(_timelineDock, _statesDock);
+        _statesDock->hide();
+        connect(_statesDock, &QDockWidget::visibilityChanged, this, [this](bool shown) {
+            if (shown)
+                _states->refresh();
+        });
+        connect(_phoenixView, &PhoenixView::scopeChanged, _states, [this]() {
+            if (_statesDock->isVisible())
+                _states->refresh();
+        });
+    }
+
     // Palettes, closed until asked.
     if (!_palettesDock)
     {
@@ -2633,6 +2674,7 @@ void MainWindow::setupWindowMenu()
             {"Mo&vie Explorer", _movieExplorerDock, QKeySequence(Qt::ALT | Qt::Key_F3), "The whole document as a tree: scenes, layers, frames, objects and symbols"},
             {"F&unction Curves", _functionCurvesDock, QKeySequence(), "Any property of the current layer as a curve over time, its keyframes dragged up or down"},
             {"&Node Graph", _nodeGraphDock, QKeySequence(), "Composite the timeline's layers through a graph of nodes: effects, merges, mattes"},
+            {"Stat&es", _statesDock, QKeySequence(), "Interactive states without code: frame labels as states, and what sends the clip from one to another"},
             {"Pale&ttes", _palettesDock, QKeySequence(), "Linked palettes: named colors that recolor everything linked to them, swapped whole"},
         },
     };
@@ -10802,6 +10844,8 @@ void MainWindow::updateEditState()
         _behaviors->refresh();
     if (_nodeGraph && _nodeGraphDock && _nodeGraphDock->isVisible() && !_editContext.commandStack().isInMacro())
         _nodeGraph->refresh();
+    if (_states && _statesDock && _statesDock->isVisible() && !_editContext.commandStack().isInMacro())
+        _states->refresh();
     if (_palettes && _palettesDock && _palettesDock->isVisible() && !_editContext.commandStack().isInMacro())
         _palettes->refresh();
     if (_functionCurves && _functionCurvesDock && _functionCurvesDock->isVisible() && !_editContext.commandStack().isInMacro())

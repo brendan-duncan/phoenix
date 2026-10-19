@@ -973,7 +973,7 @@ std::string describe(const Graph& graph, const Transition& transition)
     if (text.empty())
         text = "(never)";
     if (transition.afterFinish && transition.when != When::Finished)
-        text += ", then at the end";
+        text += " (at its end)";
     return text;
 }
 
