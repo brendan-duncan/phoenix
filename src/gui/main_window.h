@@ -253,8 +253,6 @@ private slots:
 
     void showAbout();
     
-    void viewDocument();
-    
     void onVisibilityChanged();
 
     void onHighQualityAntiAliasingToggled(bool checked);

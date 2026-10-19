@@ -217,7 +217,6 @@
 #include <filesystem>
 #include <QAction>
 #include <QStatusBar>
-#include <QTextEdit>
 #include <QDialog>
 #include <QTabWidget>
 #include <QDialogButtonBox>
@@ -7878,13 +7877,6 @@ void MainWindow::setupMenus()
     });
     viewMenu->addSeparator();
 
-    QAction* viewDocumentAction = new QAction("View Document...", this);
-    viewDocumentAction->setStatusTip("View the current document source");
-    connect(viewDocumentAction, &QAction::triggered, this, &MainWindow::viewDocument);
-    viewMenu->addAction(viewDocumentAction);
-
-    viewMenu->addSeparator();
-
     // The View menu: Zoom In and Out step through the magnification
     // presets, and the presets sit in their own submenu with the same keys.
     QAction* zoomInAction = new QAction("Zoom &In", this);
@@ -10222,41 +10214,6 @@ void MainWindow::showAbout()
         QString("<b>Phoenix</b> %1<br><br>Vector Animation Production Software.<br><br>"
                 "<a href=\"https://github.com/brendan-duncan/phoenix\">github.com/brendan-duncan/phoenix</a>")
             .arg(Updater::currentVersion()));
-}
-
-void MainWindow::viewDocument()
-{
-    if (!_flaDocument || !_flaDocument->document)
-    {
-        QMessageBox::information(this, "No Document", "No FLA document is currently loaded.");
-        return;
-    }
-
-    QDialog* dialog = new QDialog(this);
-    dialog->setWindowTitle("Document Source");
-    dialog->resize(600, 400);
-
-    QTextEdit* textEdit = new QTextEdit(dialog);
-    textEdit->setReadOnly(true);
-
-    // DOMDocument.xml as saving would write it now. The text read from the
-    // file is not kept: on a production document it is many megabytes.
-    QString docText;
-    std::vector<fla::XFLEntry> entries;
-    std::vector<std::string> unsupported;
-    std::string problem;
-    if (fla::XFLContent::build(*_flaDocument->document, std::string(), entries, unsupported, problem))
-        for (const fla::XFLEntry& entry : entries)
-            if (entry.path == "DOMDocument.xml")
-                docText = QString::fromStdString(entry.text);
-
-    textEdit->setPlainText(docText);
-
-    QVBoxLayout* layout = new QVBoxLayout(dialog);
-    layout->addWidget(textEdit);
-    dialog->setLayout(layout);
-
-    dialog->exec();
 }
 
 void MainWindow::showFindReplace()

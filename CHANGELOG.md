@@ -4,6 +4,7 @@ What changed in each release of Phoenix, newest first.
 
 ## Unreleased
 
+- View > View Document... is gone from the View menu
 - Insert Inbetween (Modify > Timeline, or right-click the frames) draws a new keyframe between two drawings: halfway, a third, two thirds, or favoring either key
 - Fill Inbetweens draws every empty frame between two drawings, spaced evenly, easing in or easing out
 - Inbetweens follow shape hints, move symbols part way, and are ordinary keyframes you can touch up
