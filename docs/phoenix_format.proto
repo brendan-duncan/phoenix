@@ -144,6 +144,11 @@ message Document {
   optional string current_timeline = 21;
   // Whether the document has a symbol list at all (an FLA may have none).
   optional bool has_symbol_list = 22;
+  optional bool guides_locked = 23;
+  // Phoenix's drawing guides and symmetry axis, as text: on the stage while
+  // drawing, never drawn into the art.
+  optional string drawing_guides = 24;
+  optional string symmetry = 25;
 
   repeated Timeline scenes = 30;
   repeated LibraryFolder folders = 31;

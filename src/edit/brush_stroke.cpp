@@ -600,6 +600,11 @@ void fromText(const std::string& text, BrushSettings& into)
 
 namespace BrushStroke {
 
+std::vector<BrushSample> stabilized(const std::vector<BrushSample>& samples, double length, bool finished)
+{
+    return stabilize(samples, length, finished);
+}
+
 std::vector<BrushDab> dabs(const std::vector<BrushSample>& input, const BrushSettings& settings,
     double zoom, bool finished)
 {

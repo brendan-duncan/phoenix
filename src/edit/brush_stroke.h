@@ -209,6 +209,12 @@ void fromText(const std::string& text, BrushSettings& into);
 
 namespace BrushStroke {
 
+/// The stabilizer on its own: the line pulled along behind the pen on a
+/// string \a length long (in the samples' units), moving only once the pen
+/// is further away than that. With \a finished the line runs on to where
+/// the pen lifted. The tools without a brush's settings use it as it is.
+std::vector<BrushSample> stabilized(const std::vector<BrushSample>& samples, double length, bool finished);
+
 /// The dabs a stroke leaves: the samples stabilized and smoothed, their
 /// pressure and tilt filtered, spaced out evenly along the line, each with
 /// the tip's size and turn there. \a zoom is the view's, so the settings
