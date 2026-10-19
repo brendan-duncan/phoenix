@@ -14,10 +14,10 @@
 #include "../data/layer.h"
 #include "../data/static_text.h"
 #include "../data/shape.h"
+#include "swatch_popup.h"
 
 #include <QCache>
 #include <QCheckBox>
-#include <QColorDialog>
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QPainter>
@@ -946,7 +946,7 @@ void BehaviorsPanel::fillSettings()
             });
             connect(swatch, &QToolButton::clicked, this, [this, row, name, field, swatch, label]() {
                 const QColor was(field->text().trimmed());
-                const QColor chosen = QColorDialog::getColor(was.isValid() ? was : QColor(Qt::white), this, label);
+                const QColor chosen = SwatchPopup::getColor(swatch, nullptr, was.isValid() ? was : QColor(Qt::white), label, false);
                 if (!chosen.isValid())
                     return;
                 const QString hex = chosen.name().toUpper();

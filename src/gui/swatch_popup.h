@@ -53,6 +53,9 @@ public:
     {
         bool gradients = false;
         bool none = false;
+        /// Whether the color picked may be see-through; without it the
+        /// alpha field is hidden and every color comes back opaque.
+        bool alpha = true;
     };
 
     explicit SwatchPopup(QWidget* parent);
@@ -62,6 +65,13 @@ public:
     /// swatches of \a document (null for the defaults).
     static SwatchPopup* open(QWidget* anchor, const fla::Document* document, const QColor& current,
         const QString& title, const Offer& offer);
+
+    /// A color from a pop-up under \a anchor, solid colors only, waited
+    /// for as a color dialog is: the color picked, or an invalid one when
+    /// it closed without a pick. With \a alpha the color may be
+    /// see-through.
+    static QColor getColor(QWidget* anchor, const fla::Document* document, const QColor& current,
+        const QString& title, bool alpha);
 
     void setDocument(const fla::Document* document);
     void setOffer(const Offer& offer);
@@ -125,6 +135,7 @@ private:
     QColor _current;
     QBrush _currentBrush;
     bool _offersGradients = false;
+    bool _offersAlpha = true;
     QPointer<PhoenixView> _view;
     std::vector<fla::Shape*> _previewShapes;
     bool _previewStrokes = false;

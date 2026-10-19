@@ -18,10 +18,10 @@
 #include "../edit/selection.h"
 #include "../edit/timeline_edit.h"
 #include "../edit/trace_bitmap.h"
+#include "swatch_popup.h"
 
 #include <QApplication>
 #include <QCheckBox>
-#include <QColorDialog>
 #include <QComboBox>
 #include <QDialogButtonBox>
 #include <QFileDialog>
@@ -159,7 +159,7 @@ PaperImportDialog::PaperImportDialog(int currentFrame, QWidget* parent)
     _color->setIcon(swatch(_lineColor));
     _color->setToolTip("The color the traced lines are drawn in");
     connect(_color, &QPushButton::clicked, this, [this] {
-        const QColor chosen = QColorDialog::getColor(_lineColor, this, "Line Color");
+        const QColor chosen = SwatchPopup::getColor(_color, nullptr, _lineColor, "Line Color", false);
         if (!chosen.isValid())
             return;
         _lineColor = chosen;

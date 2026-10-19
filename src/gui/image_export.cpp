@@ -6,7 +6,6 @@
 #include "../util/gif_writer.h"
 
 #include <QCheckBox>
-#include <QColorDialog>
 #include <QComboBox>
 #include <QDialogButtonBox>
 #include <QDir>
@@ -22,6 +21,7 @@
 #include <QPainter>
 #include <QPushButton>
 #include "hot_text.h"
+#include "swatch_popup.h"
 #include <QToolButton>
 #include <QVBoxLayout>
 
@@ -156,7 +156,7 @@ ImageExportDialog::ImageExportDialog(const QSize& documentSize, int frameCount, 
     _matteSwatch->setIcon(colorIcon(_matteColor));
     _matteSwatch->setAutoRaise(true);
     connect(_matteSwatch, &QToolButton::clicked, this, [this]() {
-        const QColor chosen = QColorDialog::getColor(_matteColor, this, "Matte Color");
+        const QColor chosen = SwatchPopup::getColor(_matteSwatch, nullptr, _matteColor, "Matte Color", false);
         if (!chosen.isValid())
             return;
         _matteColor = chosen;

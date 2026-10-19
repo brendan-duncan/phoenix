@@ -1,9 +1,9 @@
 #include "safe_zones_dialog.h"
 
 #include "hot_text.h"
+#include "swatch_popup.h"
 
 #include <QCheckBox>
-#include <QColorDialog>
 #include <QComboBox>
 #include <QDialogButtonBox>
 #include <QFormLayout>
@@ -328,8 +328,7 @@ void SafeZonesDialog::fillFrames()
             if (i >= _settings.frames.size())
                 return;
             uint8_t* c = _settings.frames[i].color;
-            const QColor chosen = QColorDialog::getColor(QColor(c[0], c[1], c[2], c[3]), this, "Frame Color",
-                QColorDialog::ShowAlphaChannel);
+            const QColor chosen = SwatchPopup::getColor(color, nullptr, QColor(c[0], c[1], c[2], c[3]), "Frame Color", true);
             if (!chosen.isValid())
                 return;
             c[0] = static_cast<uint8_t>(chosen.red());

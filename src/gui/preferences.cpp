@@ -5,7 +5,6 @@
 
 #include <QCheckBox>
 #include "mcp_server.h"
-#include <QColorDialog>
 #include <QComboBox>
 #include <QDialogButtonBox>
 #include <QFormLayout>
@@ -17,6 +16,7 @@
 #include <QPixmap>
 #include <QSettings>
 #include "hot_text.h"
+#include "swatch_popup.h"
 #include <QToolButton>
 #include <QVBoxLayout>
 #include <algorithm>
@@ -132,7 +132,7 @@ PreferencesDialog::PreferencesDialog(QWidget* parent)
     _highlightColor->setEnabled(!Preferences::layerHighlight());
     connect(_highlight, &QComboBox::currentIndexChanged, this, [this](int index) { _highlightColor->setEnabled(index == 1); });
     connect(_highlightColor, &QToolButton::clicked, this, [this]() {
-        const QColor chosen = QColorDialog::getColor(_color, this, "Highlight Color");
+        const QColor chosen = SwatchPopup::getColor(_highlightColor, nullptr, _color, "Highlight Color", false);
         if (chosen.isValid())
         {
             _color = chosen;

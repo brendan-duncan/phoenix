@@ -6,9 +6,9 @@
 #include "../data/document.h"
 #include "../data/symbol.h"
 #include "../data/symbol_list.h"
+#include "swatch_popup.h"
 
 #include <QCheckBox>
-#include <QColorDialog>
 #include <QComboBox>
 #include <QDialogButtonBox>
 #include <QFontDatabase>
@@ -313,7 +313,7 @@ bool FindReplaceDialog::findNext()
 
 void FindReplaceDialog::pickColor(QPushButton* button, QColor& color)
 {
-    const QColor chosen = QColorDialog::getColor(color, this, "Color");
+    const QColor chosen = SwatchPopup::getColor(button, nullptr, color, "Color", false);
     if (!chosen.isValid())
         return;
     color = chosen;

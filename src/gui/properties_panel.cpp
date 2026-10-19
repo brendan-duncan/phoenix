@@ -62,7 +62,6 @@
 #include <QDialogButtonBox>
 #include <QDialog>
 #include <QDoubleSpinBox>
-#include <QColorDialog>
 #include <QComboBox>
 #include <QSettings>
 #include <QFontComboBox>
@@ -2722,7 +2721,7 @@ void PropertiesPanel::addColorEffectSection(QVBoxLayout* layout, const QString& 
         QToolButton* swatch = makeSwatch(color.tintColor, "Tint color");
         connect(swatch, &QToolButton::clicked, this, [=]() {
             const fla::ColorTransform before = get();
-            const QColor chosen = QColorDialog::getColor(toQColor(before.tintColor), this, "Tint Color");
+            const QColor chosen = SwatchPopup::getColor(swatch, document(), toQColor(before.tintColor), "Tint Color", false);
             if (!chosen.isValid())
                 return;
             fla::ColorTransform after = before;
@@ -3006,8 +3005,8 @@ void PropertiesPanel::addTemplateSection(QVBoxLayout* layout, fla::SymbolInstanc
             edit->setToolTip("A color as #RRGGBB that tints this part all over; empty for as drawn");
             connect(edit, &QLineEdit::editingFinished, this, [set, name, edit]() { set(name, edit->text().toStdString()); });
             QPushButton* pick = new QPushButton("Pick...", holder);
-            connect(pick, &QPushButton::clicked, this, [this, set, name, edit]() {
-                const QColor color = QColorDialog::getColor(QColor(edit->text()), this, "Color");
+            connect(pick, &QPushButton::clicked, this, [this, set, name, edit, pick]() {
+                const QColor color = SwatchPopup::getColor(pick, document(), QColor(edit->text()), "Color", false);
                 if (!color.isValid())
                     return;
                 edit->setText(color.name().toUpper());
@@ -3135,8 +3134,7 @@ void PropertiesPanel::addFilterSection(QVBoxLayout* layout, fla::SymbolInstance*
     const auto colorButton = [&](size_t index, uint8_t (fla::Filter::*member)[4], const char* title) {
         QToolButton* swatch = makeSwatch((*filters)[index].*member, title);
         connect(swatch, &QToolButton::clicked, this, [=]() {
-            const QColor chosen = QColorDialog::getColor(toQColor((*filters)[index].*member), this, title,
-                QColorDialog::ShowAlphaChannel);
+            const QColor chosen = SwatchPopup::getColor(swatch, document(), toQColor((*filters)[index].*member), title, true);
             if (!chosen.isValid())
                 return;
             std::vector<fla::Filter> after = *filters;
@@ -3297,8 +3295,8 @@ void PropertiesPanel::addFilterSection(QVBoxLayout* layout, fla::SymbolInstance*
                 const auto& current = bar->stops();
                 if (index < 0 || index >= static_cast<int>(current.size()))
                     return;
-                const QColor chosen = QColorDialog::getColor(toQColor(current[static_cast<size_t>(index)].color), this,
-                    "Gradient Color", QColorDialog::ShowAlphaChannel);
+                const QColor chosen = SwatchPopup::getColor(bar, document(), toQColor(current[static_cast<size_t>(index)].color),
+                    "Gradient Color", true);
                 if (chosen.isValid())
                     bar->setCurrentColor(chosen);
             });
@@ -3619,9 +3617,10 @@ void PropertiesPanel::addTextSections(QVBoxLayout* page, const fla::StaticText& 
     character->addLong(0, "Family", family);
     character->addField(1, 0, "Size", number("size", run.size > 0.0 ? run.size : 12.0, 1.0, 500.0, " pt", "Size in pixels"));
     QToolButton* color = makeSwatch(run.fillColor, "Text color");
+    color->setObjectName("propertiesTextColor");
     const QColor current(run.fillColor[0], run.fillColor[1], run.fillColor[2], run.fillColor[3]);
     connect(color, &QToolButton::clicked, this, [this, request, current, color]() {
-        const QColor chosen = QColorDialog::getColor(current, this, "Text Color", QColorDialog::ShowAlphaChannel);
+        const QColor chosen = SwatchPopup::getColor(color, document(), current, "Text Color", true);
         if (chosen.isValid())
             request("fillColor", QString("#%1%2%3%4").arg(chosen.red(), 2, 16, QChar('0')).arg(chosen.green(), 2, 16, QChar('0'))
                                      .arg(chosen.blue(), 2, 16, QChar('0')).arg(chosen.alpha(), 2, 16, QChar('0')));
@@ -4441,8 +4440,7 @@ void PropertiesPanel::rebuildDocTab()
     connect(stage, &QToolButton::clicked, this, [this, doc, stage]() {
         // Its alpha makes the stage see-through: exports keep it, as an image
         // or movie with a part-clear background.
-        const QColor chosen = QColorDialog::getColor(toQColor(doc->backgroundColor), this, "Stage Color",
-            QColorDialog::ShowAlphaChannel);
+        const QColor chosen = SwatchPopup::getColor(stage, document(), toQColor(doc->backgroundColor), "Stage Color", true);
         if (!chosen.isValid())
             return;
         uint8_t after[4];

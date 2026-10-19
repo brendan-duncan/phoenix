@@ -10,7 +10,6 @@
 
 #include <QCheckBox>
 #include <QColor>
-#include <QColorDialog>
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QDropEvent>
@@ -19,6 +18,7 @@
 #include <QMenu>
 #include <QMouseEvent>
 #include "hot_text.h"
+#include "swatch_popup.h"
 #include <cstdlib>
 #include <QMessageBox>
 #include <QPushButton>
@@ -1846,7 +1846,7 @@ void LayersPanel::showLayerProperties(QTreeWidgetItem* item)
     };
     showColor(color);
     connect(colorButton, &QPushButton::clicked, &dialog, [&]() {
-        const QColor chosen = QColorDialog::getColor(color, &dialog, "Outline Color");
+        const QColor chosen = SwatchPopup::getColor(colorButton, nullptr, color, "Outline Color", false);
         if (chosen.isValid())
         {
             color = chosen;

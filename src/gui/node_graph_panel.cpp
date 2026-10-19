@@ -7,9 +7,9 @@
 #include "../data/timeline.h"
 #include "../edit/command_stack.h"
 #include "../edit/property_command.h"
+#include "swatch_popup.h"
 
 #include <QCheckBox>
-#include <QColorDialog>
 #include <QComboBox>
 #include <QFrame>
 #include <QGridLayout>
@@ -498,7 +498,7 @@ void NodeGraphPanel::fillInspector()
                 button->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
                 button->setAutoRaise(true);
                 connect(button, &QToolButton::clicked, this, [this, id, name, value, button]() {
-                    const QColor chosen = QColorDialog::getColor(QColor(QString::fromStdString(value)), button, "Color");
+                    const QColor chosen = SwatchPopup::getColor(button, nullptr, QColor(QString::fromStdString(value)), "Color", false);
                     if (chosen.isValid())
                         setSetting(id, name, chosen.name().toUpper().toStdString(), false);
                 });

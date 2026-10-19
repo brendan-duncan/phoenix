@@ -4139,8 +4139,9 @@ void MainWindow::editEffect(fla::Layer* layer)
         color->setText(chosen.name().toUpper());
     };
     showColor();
-    connect(color, &QPushButton::clicked, &dialog, [&dialog, &chosen, showColor]() {
-        const QColor picked = QColorDialog::getColor(chosen, &dialog, "Effect Color");
+    connect(color, &QPushButton::clicked, &dialog, [this, color, &chosen, showColor]() {
+        const QColor picked =
+            SwatchPopup::getColor(color, _flaDocument ? _flaDocument->document : nullptr, chosen, "Effect Color", false);
         if (picked.isValid())
         {
             chosen = picked;
@@ -7877,7 +7878,7 @@ void MainWindow::setupMenus()
             QColor color(document->guidesColor[0], document->guidesColor[1], document->guidesColor[2]);
             QPushButton* colorButton = new QPushButton(color.name(), &dialog);
             connect(colorButton, &QPushButton::clicked, &dialog, [&]() {
-                const QColor chosen = QColorDialog::getColor(color, &dialog, "Guide Color");
+                const QColor chosen = SwatchPopup::getColor(colorButton, document, color, "Guide Color", false);
                 if (chosen.isValid())
                 {
                     color = chosen;
@@ -8045,7 +8046,7 @@ void MainWindow::setupMenus()
         QColor color(document->gridColor[0], document->gridColor[1], document->gridColor[2], document->gridColor[3]);
         QPushButton* colorButton = new QPushButton(color.name(), &dialog);
         connect(colorButton, &QPushButton::clicked, &dialog, [&]() {
-            const QColor chosen = QColorDialog::getColor(color, &dialog, "Grid Color");
+            const QColor chosen = SwatchPopup::getColor(colorButton, document, color, "Grid Color", false);
             if (chosen.isValid())
             {
                 color = chosen;
@@ -15976,8 +15977,9 @@ void MainWindow::editTemplateFields()
             auto* row = new QHBoxLayout();
             row->addWidget(edit, 1);
             auto* pick = new QPushButton("Pick...", &dialog);
-            connect(pick, &QPushButton::clicked, &dialog, [edit, &dialog]() {
-                const QColor color = QColorDialog::getColor(QColor(edit->text()), &dialog, "Color");
+            connect(pick, &QPushButton::clicked, &dialog, [this, edit, pick]() {
+                const QColor color =
+                    SwatchPopup::getColor(pick, _flaDocument ? _flaDocument->document : nullptr, QColor(edit->text()), "Color", false);
                 if (color.isValid())
                     edit->setText(color.name().toUpper());
             });

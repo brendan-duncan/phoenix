@@ -1,7 +1,6 @@
 #include "new_document_dialog.h"
 #include "theme.h"
 
-#include <QColorDialog>
 #include <QComboBox>
 #include <QDialogButtonBox>
 #include <QDoubleValidator>
@@ -15,6 +14,7 @@
 #include <QSettings>
 #include <QSignalBlocker>
 #include "hot_text.h"
+#include "swatch_popup.h"
 #include <QToolButton>
 #include <QVBoxLayout>
 
@@ -212,7 +212,7 @@ NewDocumentDialog::NewDocumentDialog(QWidget* parent)
     // A double-click on a tile creates the document straight away.
     connect(_tiles, &QListWidget::itemDoubleClicked, this, [this]() { accept(); });
     connect(_swatch, &QToolButton::clicked, this, [this]() {
-        const QColor chosen = QColorDialog::getColor(_stageColor, this, "Stage Color");
+        const QColor chosen = SwatchPopup::getColor(_swatch, nullptr, _stageColor, "Stage Color", false);
         if (chosen.isValid())
         {
             _stageColor = chosen;

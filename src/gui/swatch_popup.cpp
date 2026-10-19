@@ -15,6 +15,7 @@
 
 #include <QColorDialog>
 #include <QCursor>
+#include <QEventLoop>
 #include <QGuiApplication>
 #include <QHBoxLayout>
 #include <QKeyEvent>
@@ -405,6 +406,21 @@ SwatchPopup* SwatchPopup::open(QWidget* anchor, const fla::Document* document, c
     return popup;
 }
 
+QColor SwatchPopup::getColor(QWidget* anchor, const fla::Document* document, const QColor& current,
+    const QString& title, bool alpha)
+{
+    Offer offer;
+    offer.alpha = alpha;
+    SwatchPopup* popup = open(anchor, document, current, title, offer);
+    // Waited for until it is gone, the full picker it may open included.
+    QColor chosen;
+    QEventLoop loop;
+    connect(popup, &SwatchPopup::colorPicked, &loop, [&chosen](const QColor& color) { chosen = color; });
+    connect(popup, &QObject::destroyed, &loop, &QEventLoop::quit);
+    loop.exec();
+    return chosen;
+}
+
 void SwatchPopup::setDocument(const fla::Document* document)
 {
     // The document's own colors and gradients, or the defaults where it
@@ -441,6 +457,8 @@ void SwatchPopup::setDocument(const fla::Document* document)
 void SwatchPopup::setOffer(const Offer& offer)
 {
     _offersGradients = offer.gradients;
+    _offersAlpha = offer.alpha;
+    _alpha->setVisible(offer.alpha);
     _none->setVisible(offer.none);
 }
 
@@ -581,7 +599,9 @@ QColor SwatchPopup::withAlpha(QColor color) const
 {
     // A swatch saved with its own alpha keeps it; an opaque one takes the
     // alpha field's.
-    if (color.alpha() == 255)
+    if (!_offersAlpha)
+        color.setAlpha(255);
+    else if (color.alpha() == 255)
         color.setAlpha(qRound(_alpha->value() * 255.0 / 100.0));
     return color;
 }
@@ -627,10 +647,11 @@ void SwatchPopup::openPicker()
     QWidget* owner = parentWidget();
     const QColor start = _current.isValid() ? _current : QColor(Qt::black);
     const QString title = _title;
+    const QColorDialog::ColorDialogOptions options =
+        _offersAlpha ? QColorDialog::ShowAlphaChannel : QColorDialog::ColorDialogOptions();
     QPointer<SwatchPopup> self(this);
     hide();
-    const QColor chosen = QColorDialog::getColor(start, owner, title.isEmpty() ? QString("Color") : title,
-        QColorDialog::ShowAlphaChannel);
+    const QColor chosen = QColorDialog::getColor(start, owner, title.isEmpty() ? QString("Color") : title, options);
     if (!self)
         return;
     if (chosen.isValid())
