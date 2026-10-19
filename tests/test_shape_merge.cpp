@@ -9,6 +9,7 @@
 #include "../src/edit/combine_objects.h"
 #include "../src/edit/shape_transform.h"
 #include "../src/edit/editable_path.h"
+#include "../src/geom/intersect.h"
 #include "../src/geom/planar_map.h"
 #include "../src/geom/shape_geometry.h"
 #include "../src/parser/path_parser.h"
@@ -1359,4 +1360,344 @@ TEST(merging_along_a_nearly_shared_edge_leaves_no_gap)
     CHECK(regions.at(fillOfColor(*target, kBlue)).first == 1);
     CHECK(colorAt(*target, Point(50.0, -25.0)) == kBlue);
     CHECK(colorAt(*target, Point(50.0, 25.0)) == kRed);
+}
+
+namespace {
+
+/// A brush stroke's outline: a band \a width wide round the bent centerline
+/// from \a a through \a bend to \a b, with round caps. With \a curved its
+/// sides are cubic curves through points along it, as the brush fits them;
+/// otherwise the polyline itself.
+std::unique_ptr<Shape> curvedBand(Point a, Point bend, Point b, double width, int steps, bool curved)
+{
+    const auto along = [&](double t) {
+        const double u = 1.0 - t;
+        return Point(u * u * a.x + 2.0 * u * t * bend.x + t * t * b.x,
+            u * u * a.y + 2.0 * u * t * bend.y + t * t * b.y);
+    };
+    const auto normal = [&](double t) {
+        const double u = 1.0 - t;
+        const double dx = 2.0 * u * (bend.x - a.x) + 2.0 * t * (b.x - bend.x);
+        const double dy = 2.0 * u * (bend.y - a.y) + 2.0 * t * (b.y - bend.y);
+        const double length = std::hypot(dx, dy);
+        return Point(-dy / length, dx / length);
+    };
+
+    const double half = width / 2.0;
+    std::vector<Point> ring;
+    for (int i = 0; i <= steps; ++i)
+    {
+        const double t = static_cast<double>(i) / steps;
+        const Point p = along(t);
+        const Point n = normal(t);
+        ring.push_back(Point(p.x + n.x * half, p.y + n.y * half));
+    }
+    const double pi = 3.14159265358979323846;
+    const Point endNormal = normal(1.0);
+    const double endAngle = std::atan2(endNormal.y, endNormal.x);
+    for (int i = 1; i < 8; ++i)
+    {
+        const double angle = endAngle - pi * i / 8.0;
+        ring.push_back(Point(b.x + std::cos(angle) * half, b.y + std::sin(angle) * half));
+    }
+    for (int i = steps; i >= 0; --i)
+    {
+        const double t = static_cast<double>(i) / steps;
+        const Point p = along(t);
+        const Point n = normal(t);
+        ring.push_back(Point(p.x - n.x * half, p.y - n.y * half));
+    }
+    const Point startNormal = normal(0.0);
+    const double startAngle = std::atan2(startNormal.y, startNormal.x);
+    for (int i = 1; i < 8; ++i)
+    {
+        const double angle = startAngle + pi - pi * i / 8.0;
+        ring.push_back(Point(a.x + std::cos(angle) * half, a.y + std::sin(angle) * half));
+    }
+    // On the twip grid, without points closer together than a brush's
+    // fitted outline puts them.
+    std::vector<Point> spaced;
+    for (const Point& point : ring)
+    {
+        const Point snapped(std::round(point.x * 20.0) / 20.0, std::round(point.y * 20.0) / 20.0);
+        if (spaced.empty() || std::hypot(snapped.x - spaced.back().x, snapped.y - spaced.back().y) >= width / 8.0)
+            spaced.push_back(snapped);
+    }
+    ring = spaced;
+
+    double area = 0.0;
+    for (size_t i = 0; i < ring.size(); ++i)
+    {
+        const Point& p = ring[i];
+        const Point& q = ring[(i + 1) % ring.size()];
+        area += p.x * q.y - q.x * p.y;
+    }
+
+    std::vector<fla::Curve> curves;
+    const size_t count = ring.size();
+    for (size_t i = 0; i < count; ++i)
+    {
+        const Point& p0 = ring[(i + count - 1) % count];
+        const Point& p1 = ring[i];
+        const Point& p2 = ring[(i + 1) % count];
+        const Point& p3 = ring[(i + 2) % count];
+        if (!curved)
+        {
+            curves.push_back(fla::Curve::line(p1, p2));
+            continue;
+        }
+        // Catmull-Rom through the points, as cubic pieces.
+        curves.push_back(fla::Curve::cubic(p1,
+            Point(p1.x + (p2.x - p0.x) / 6.0, p1.y + (p2.y - p0.y) / 6.0),
+            Point(p2.x - (p3.x - p1.x) / 6.0, p2.y - (p3.y - p1.y) / 6.0), p2));
+    }
+    return filledCurves(curves, 0, 0, 255, area >= 0.0);
+}
+
+/// The parts of the strokes, sampled on a grid \a step apart, that \a result
+/// leaves unpainted: how many points lie well inside some stroke, and how
+/// many of those the result paints nothing at.
+std::pair<int, int> lostCoverage(const Shape& result, const std::vector<const Shape*>& strokes, double step,
+    const Shape* except = nullptr)
+{
+    fla::PlanarMap exceptMap;
+    if (except)
+    {
+        const std::vector<ShapeCurve> curves = fla::shapeCurves(*except);
+        for (size_t i = 0; i < curves.size(); ++i)
+            exceptMap.addCurve(curves[i].curve, static_cast<int>(i));
+        exceptMap.build();
+        fla::attributeFillsFromSource(exceptMap, curves);
+    }
+    const auto arrangeShape = [](const Shape& shape, fla::PlanarMap& map) {
+        const std::vector<ShapeCurve> curves = fla::shapeCurves(shape);
+        for (size_t i = 0; i < curves.size(); ++i)
+            map.addCurve(curves[i].curve, static_cast<int>(i));
+        map.build();
+        fla::attributeFillsFromSource(map, curves);
+    };
+
+    // What the result paints, read the way it is drawn: a fill covers a point
+    // when the edges with it on one side only cross a ray from there an odd
+    // number of times.
+    const std::vector<ShapeCurve> resultCurves = fla::shapeCurves(result);
+    const auto painted = [&](const Point& point) {
+        std::map<int, int> crossings;
+        for (const ShapeCurve& curve : resultCurves)
+        {
+            if (curve.fillStyle0 == curve.fillStyle1)
+                continue;
+            const int count = curve.curve.horizontalRayCrossings(point);
+            if (curve.fillStyle0 != -1)
+                crossings[curve.fillStyle0] += count;
+            if (curve.fillStyle1 != -1)
+                crossings[curve.fillStyle1] += count;
+        }
+        for (const auto& [fill, count] : crossings)
+        {
+            if (count % 2)
+                return true;
+        }
+        return false;
+    };
+
+    double left = 1.0e300, top = 1.0e300, right = -1.0e300, bottom = -1.0e300;
+    std::vector<std::unique_ptr<fla::PlanarMap>> maps;
+    for (const Shape* stroke : strokes)
+    {
+        maps.emplace_back(new fla::PlanarMap());
+        arrangeShape(*stroke, *maps.back());
+        for (const ShapeCurve& curve : fla::shapeCurves(*stroke))
+        {
+            double l, t, r, b;
+            curve.curve.controlBounds(l, t, r, b);
+            left = std::min(left, l);
+            top = std::min(top, t);
+            right = std::max(right, r);
+            bottom = std::max(bottom, b);
+        }
+    }
+
+    int inside = 0;
+    int lost = 0;
+    const double margin = 0.2;
+    for (double y = top + step * 0.37; y < bottom; y += step)
+    {
+        for (double x = left + step * 0.61; x < right; x += step)
+        {
+            bool within = false;
+            for (const auto& map : maps)
+            {
+                if (map->fillAt(Point(x, y)) != -1 && map->fillAt(Point(x - margin, y)) != -1 &&
+                    map->fillAt(Point(x + margin, y)) != -1 && map->fillAt(Point(x, y - margin)) != -1 &&
+                    map->fillAt(Point(x, y + margin)) != -1)
+                {
+                    within = true;
+                    break;
+                }
+            }
+            if (!within || (except && exceptMap.fillAt(Point(x, y)) != -1))
+                continue;
+            ++inside;
+            if (!painted(Point(x, y)))
+                ++lost;
+        }
+    }
+    return {inside, lost};
+}
+
+/// Draws the strokes one after another with Object Drawing off, as the
+/// drawing tools do: each cuts its hole in what it lands on, then is let go
+/// where it was drawn and merges in. \a uncut does that as the app does,
+/// merging into the artwork as it was before the cut; without it, the
+/// drawing merges into the hole it cut.
+std::unique_ptr<Shape> drawnInTurn(const std::vector<std::unique_ptr<Shape>>& strokes, bool uncut)
+{
+    std::unique_ptr<Shape> art(fla::cloneShape(*strokes.front(), nullptr));
+    fla::CommandStack stack;
+    for (size_t i = 1; i < strokes.size(); ++i)
+    {
+        const std::unique_ptr<Shape> before(fla::cloneShape(*art, nullptr));
+        stack.push(fla::CommandPtr(new fla::SubtractShapeCommand(art.get(), *strokes[i], "Brush")));
+        stack.push(fla::CommandPtr(new fla::MergeShapeCommand(art.get(), *strokes[i], "Merge Shape",
+            fla::MergeOptions(), uncut ? before.get() : nullptr)));
+    }
+    return art;
+}
+
+/// Sixteen strokes crossing in a small area, as a seed picks them, each
+/// repeated \a copies times round (50, 50) as radial symmetry draws it.
+std::vector<std::unique_ptr<Shape>> crossingStrokes(unsigned seed, bool curved, int copies = 1)
+{
+    uint32_t state = seed * 2654435761u;
+    const auto random = [&]() {
+        state = state * 1664525u + 1013904223u;
+        return (state >> 8) / 16777216.0;
+    };
+    const double pi = 3.14159265358979323846;
+    std::vector<std::unique_ptr<Shape>> strokes;
+    for (int i = 0; i < 16; ++i)
+    {
+        const double angle = random() * pi;
+        const double reach = 25.0 + random() * 20.0;
+        const Point center(50.0 + (random() - 0.5) * 24.0, 50.0 + (random() - 0.5) * 24.0);
+        const double sway = (random() - 0.5) * 20.0;
+        const double width = 4.0 + random() * 6.0;
+
+        // The stroke and its copies are one drawing, as the brush makes them.
+        std::unique_ptr<Shape> drawing;
+        for (int copy = 0; copy < copies; ++copy)
+        {
+            const double turn = 2.0 * pi * copy / copies;
+            const auto turned = [&](double x, double y) {
+                return Point(50.0 + (x - 50.0) * std::cos(turn) - (y - 50.0) * std::sin(turn),
+                    50.0 + (x - 50.0) * std::sin(turn) + (y - 50.0) * std::cos(turn));
+            };
+            const Point dir(std::cos(angle), std::sin(angle));
+            std::unique_ptr<Shape> stroke = curvedBand(
+                turned(center.x - dir.x * reach, center.y - dir.y * reach),
+                turned(center.x - dir.y * sway, center.y + dir.x * sway),
+                turned(center.x + dir.x * reach, center.y + dir.y * reach), width, 12, curved);
+            if (!drawing)
+                drawing = std::move(stroke);
+            else
+                ShapeMerger::merge(*drawing, *stroke);
+        }
+        strokes.push_back(std::move(drawing));
+    }
+    return strokes;
+}
+
+/// What drawing the strokes in turn leaves unpainted that they covered.
+int lostDrawingInTurn(const std::vector<std::unique_ptr<Shape>>& strokes, bool uncut, double step)
+{
+    std::vector<const Shape*> raw;
+    for (const auto& stroke : strokes)
+        raw.push_back(stroke.get());
+    const std::unique_ptr<Shape> art = drawnInTurn(strokes, uncut);
+    const auto [inside, lost] = lostCoverage(*art, raw, step);
+    CHECK(inside > 0);
+    return lost;
+}
+
+} // namespace
+
+TEST(sixteen_crossing_strokes_let_go_where_drawn_lose_nothing)
+{
+    // Same-color brush strokes crossing in a small area, Object Drawing off.
+    // Each drawing's hole had an outline a welded, refitted copy of the
+    // drawing's own; merging the drawing into it put the two in one
+    // arrangement, too nearly one curve to cut cleanly, and whole stretches
+    // of strokes came out empty. Let go untouched, it merges into the
+    // artwork as it was before the cut.
+    for (const bool curved : {false, true})
+    {
+        for (unsigned seed = 1; seed <= 4; ++seed)
+            CHECK(lostDrawingInTurn(crossingStrokes(seed, curved), true, 1.0) == 0);
+    }
+}
+
+TEST(radial_copies_crossing_let_go_where_drawn_lose_nothing)
+{
+    for (const bool curved : {false, true})
+        CHECK(lostDrawingInTurn(crossingStrokes(16, curved, 8), true, 1.0) == 0);
+}
+
+TEST(merging_into_the_hole_a_straight_sided_drawing_cut_loses_nothing)
+{
+    // A drawing moved away and back merges into its own hole after all. The
+    // arrangement copes with the near-coincident outlines where they are
+    // straight: two cuts welding to one vertex leave no zero-width loop with
+    // the face on both sides, and an outline passing within a twip of a
+    // vertex is cut there rather than crossed by the pieces welded onto it.
+    for (unsigned seed = 1; seed <= 6; ++seed)
+        CHECK(lostDrawingInTurn(crossingStrokes(seed, false), false, 1.0) == 0);
+}
+
+TEST(crossing_strokes_merged_in_turn_keep_every_fill)
+{
+    // Randomized crossing strokes, merged one after another. Where rounding
+    // leaves an edge whose sides cannot say which fill is on them, the
+    // others bordering the face outvote it.
+    for (const bool curved : {false, true})
+    {
+        // Curved, the seeds an edge read from the wrong side or a vertex
+        // welded across an outline used to empty.
+        for (const unsigned seed : curved ? std::vector<unsigned>{6, 8, 9, 11} : std::vector<unsigned>{5, 6, 7, 8, 9, 10, 11, 12})
+        {
+            std::vector<std::unique_ptr<Shape>> strokes = crossingStrokes(seed, curved);
+            std::vector<const Shape*> raw;
+            for (const auto& stroke : strokes)
+                raw.push_back(stroke.get());
+            std::unique_ptr<Shape> art(fla::cloneShape(*strokes.front(), nullptr));
+            for (size_t i = 1; i < strokes.size(); ++i)
+                ShapeMerger::merge(*art, *strokes[i]);
+            CHECK(lostCoverage(*art, raw, 1.0).second == 0);
+        }
+    }
+}
+
+TEST(a_merge_from_the_uncut_artwork_undoes_to_the_cut)
+{
+    std::unique_ptr<Shape> target = filledRectangle(0, 0, 2000, 2000, 255, 0, 0);
+    std::unique_ptr<Shape> addition = filledRectangle(1000, 1000, 3000, 3000, 0, 0, 255);
+    const std::unique_ptr<Shape> uncut(fla::cloneShape(*target, nullptr));
+
+    fla::CommandStack stack;
+    stack.push(fla::CommandPtr(new fla::SubtractShapeCommand(target.get(), *addition, "Brush")));
+    CHECK(colorAt(*target, Point(75.0, 75.0)) == -1);
+
+    stack.push(fla::CommandPtr(new fla::MergeShapeCommand(target.get(), *addition, "Merge Shape",
+        fla::MergeOptions(), uncut.get())));
+    CHECK(colorAt(*target, Point(75.0, 75.0)) == kBlue);
+    CHECK(colorAt(*target, Point(25.0, 25.0)) == kRed);
+    CHECK(colorAt(*target, Point(125.0, 125.0)) == kBlue);
+
+    // Undo puts back the cut, not the artwork the merge started from.
+    stack.undo();
+    CHECK(colorAt(*target, Point(75.0, 75.0)) == -1);
+    CHECK(colorAt(*target, Point(25.0, 25.0)) == kRed);
+
+    stack.redo();
+    CHECK(colorAt(*target, Point(75.0, 75.0)) == kBlue);
 }
