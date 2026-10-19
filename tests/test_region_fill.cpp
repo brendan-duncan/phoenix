@@ -279,3 +279,41 @@ TEST(region_fill_across_frames_follows_a_moving_region)
         regionfill::fillAcross(scene, *layer, regionfill::drawingsIn(scene, *layer, 0, 3), 3, settings);
     CHECK(backwards.fills.size() == 4 && backwards.missed.empty());
 }
+
+TEST(region_fill_follows_only_into_regions_painted_alike)
+{
+    // The square shrinks and moves right; just below where it was there is
+    // a black square, nearer in place and size but painted, as line art
+    // drawn as fills is. Following must not jump onto it.
+    fla::Timeline scene(nullptr);
+    fla::Layer* layer = new fla::Layer(&scene);
+    scene.layers.push_back(layer);
+    keyframe(layer, 0, 1, lineArt(nullptr, {{Point(0, 0), Point(100, 0), Point(100, 100), Point(0, 100), Point(0, 0)}}));
+    Shape* next = lineArt(nullptr, {{Point(100, 10), Point(180, 10), Point(180, 90), Point(100, 90), Point(100, 10)}});
+    fla::SolidColor* black = new fla::SolidColor(next);
+    next->fills.push_back(black);
+    next->fillsMap[1] = black;
+    PathParser parser;
+    fla::Edge* painted = parser.parse("!0 2040|2000 2040|2000 4040|0 4040|0 2040", next);
+    painted->fillStyle1 = 1;
+    painted->fillStyle0 = -1;
+    painted->strokeStyle = -1;
+    next->edges.push_back(painted);
+    keyframe(layer, 1, 1, next);
+
+    fla::DrawingStyle style = red();
+    regionfill::AcrossSettings settings;
+    settings.style = &style;
+    settings.stagePoint = Point(50, 50);
+    settings.follow = true;
+    const regionfill::AcrossResult result =
+        regionfill::fillAcross(scene, *layer, regionfill::drawingsIn(scene, *layer, 0, 1), 0, settings);
+    CHECK(result.fills.size() == 2 && result.missed.empty());
+    if (result.fills.size() == 2 && result.fills[1].after)
+    {
+        const Shape& after = *result.fills[1].after;
+        const int filled = fillAt(after, Point(140, 50));
+        CHECK(filled >= 1 && regionfill::paintKey(after, filled) == "#ff0000ff");
+        CHECK(regionfill::paintKey(after, fillAt(after, Point(50, 150))) == "#000000ff");
+    }
+}

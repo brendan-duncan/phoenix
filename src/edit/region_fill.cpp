@@ -17,6 +17,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <set>
 
 namespace fla {
@@ -131,6 +132,19 @@ std::vector<int> facesInside(const RegionSplitter& regions, const std::vector<Po
             faces.push_back(face);
     }
     return faces;
+}
+
+std::string paintKey(const Shape& shape, int fillIndex)
+{
+    const FillStyle* fill = fillIndex > 0 ? shape.getFillStyleByIndex(fillIndex) : nullptr;
+    if (!fill)
+        return std::string();
+    if (fill->type() != FillStyle::Type::SolidColor)
+        return "other";
+    const uint8_t* color = static_cast<const SolidColor*>(fill)->color;
+    char text[16];
+    std::snprintf(text, sizeof(text), "#%02x%02x%02x%02x", color[0], color[1], color[2], color[3]);
+    return text;
 }
 
 Footprint footprintOf(const RegionSplitter& regions, int face, const Transform& shapeToStage)
@@ -261,8 +275,13 @@ public:
             {
                 const RegionSplitter& divided = candidate->closed ? *candidate->closed : *candidate->open;
                 const int holding = divided.faceAt(follow->centroid.transformed(candidate->fromStage));
+                // Painted as the region was, or already in the new paint.
+                const int already = ensureFill(*candidate->working, *_settings.style);
                 for (const int each : divided.boundedFaces())
                 {
+                    const int fill = divided.faceFill(each);
+                    if (fill != already && paintKey(*candidate->working, fill) != follow->paint)
+                        continue;
                     const double score = matchScore(*follow, footprintOf(divided, each, candidate->toStage), each == holding);
                     if (score >= 0.0 && score < best)
                     {
@@ -298,6 +317,9 @@ public:
 
         found = footprintOf(*regions, face, chosen->toStage);
         const int fill = ensureFill(*chosen->working, *_settings.style);
+        // Followed from here as what it was, or for a drawing painted
+        // already, as what the first one was.
+        found.paint = follow && follow->valid ? follow->paint : paintKey(*chosen->working, regions->faceFill(face));
         if (fill < 0)
             return false;
         if (regions->faceFill(face) == fill)

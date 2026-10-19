@@ -4,6 +4,7 @@
 #include "../data/transform.h"
 
 #include <memory>
+#include <string>
 #include <vector>
 
 namespace fla {
@@ -44,8 +45,17 @@ struct Footprint
 {
     Point centroid;
     double area = 0.0;
+    /// What painted the region before: "" for nothing, else its color as
+    /// paintKey gives it. A region is followed only into regions painted
+    /// the same, so it never jumps onto the lines around it.
+    std::string paint;
     bool valid = false;
 };
+
+/// What paints fill \a fillIndex of \a shape, as text to compare across
+/// shapes: "" for none, "#rrggbbaa" for a solid color, "other" for a
+/// gradient or a bitmap.
+std::string paintKey(const Shape& shape, int fillIndex);
 
 /// The footprint of region \a face of a shape placed on the stage by
 /// \a shapeToStage.
