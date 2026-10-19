@@ -615,6 +615,7 @@ MainWindow::MainWindow(const QString& initialFile, QWidget* parent, bool startup
     _phoenixView->setModifierTool(_selectionTool.get());
     _phoenixView->setActiveTool(_selectionTool.get());
     updateSelectionState();
+    setupFriendly();
 
     setAcceptDrops(true);
 
@@ -2950,6 +2951,7 @@ bool MainWindow::offerRecovery()
 void MainWindow::showStartDialog()
 {
     StartDialog dialog(_recentFiles, this);
+    prepareStartDialog(dialog);
     // An update offer already up goes over the dialog rather than under it.
     QTimer::singleShot(0, &dialog, [this, &dialog]() {
         if (_updater)
@@ -2981,6 +2983,9 @@ void MainWindow::showStartDialog()
         break;
     case StartDialog::Choice::Tutorials:
         showTutorials();
+        break;
+    case StartDialog::Choice::StarterTemplate:
+        openStarterTemplate(dialog.starterTemplate());
         break;
     case StartDialog::Choice::None:
         break;
@@ -10314,7 +10319,7 @@ void MainWindow::restoreLayout()
 namespace {
 
 /// The workspaces Phoenix comes with.
-const QStringList kBuiltInWorkspaces = {"Essentials", "Animator", "Designer", "Classic"};
+const QStringList kBuiltInWorkspaces = {"Simple", "Essentials", "Animator", "Designer", "Classic"};
 
 QString workspaceKey(const QString& name)
 {
@@ -10502,6 +10507,8 @@ void MainWindow::applyBuiltInWorkspace(const QString& name)
         resizeDocks({_timelineDock}, {220}, Qt::Vertical);
     }
     _toolbox->setLayout(tools);
+    if (name == "Simple")
+        applySimpleWorkspace();
     resizeDocks({_toolsDock}, {_toolbox->widthFor(tools.columns)}, Qt::Horizontal);
     _timelineView->setLayersWidth(250);
     restoreGeometry(window);
@@ -10518,6 +10525,7 @@ void MainWindow::useWorkspace(const QString& name)
     else
         return;
     QSettings().setValue("workspace/current", name);
+    updateWorkspaceSwitch();
 }
 
 void MainWindow::saveWorkspaceAs(const QString& name)
@@ -16588,6 +16596,11 @@ void MainWindow::showStageMenu(const QPoint& globalPos, const QPointF& documentP
         return;
     if (showReferenceMenu(globalPos))
         return;
+    if (popupPaletteOnRightClick())
+    {
+        showPopupPalette(globalPos);
+        return;
+    }
     // A right-click on a bone of an armature on show: what the bone does.
     if (const PhoenixView::IKBoneHit bone = _phoenixView->ikBoneAt(documentPos); bone && !bone.locked)
     {

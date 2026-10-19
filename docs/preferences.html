@@ -36,7 +36,7 @@
 <p>Choose <span class="menu-path">Edit &rsaquo; Preferences</span> (<kbd>Ctrl</kbd>+<kbd>U</kbd>). The dialog is one page in four groups: <strong>General</strong>, <strong>Drawing</strong>, <strong>AI Assistants</strong> and <strong>ActionScript</strong>. Changes apply when you click <strong>OK</strong>; <strong>Cancel</strong> leaves everything as it was. Preferences belong to Phoenix, not to a document, so they hold for every file you open.</p>
 
 <div class="split">
-  <figure style="margin:0"><img src="assets/shots/preferences-dialog.webp" alt="The Preferences dialog: General with Undo levels 200, Auto-recovery every 2 minutes, Show the start screen, Reopen documents from last time and Highlight set to Layer color; Drawing with Click accuracy and Connect lines set to Normal, Show pen preview checked and Show solid points unchecked; AI Assistants with Let AI assistants connect unchecked and the port; ActionScript with Class paths" width="338" height="570"></figure>
+  <figure style="margin:0"><img src="assets/shots/preferences-dialog.webp" alt="The Preferences dialog: General with Undo levels 200, Auto-recovery every 2 minutes, Show the start screen, Reopen documents from last time and Highlight set to Layer color, Show first-use hints checked with Reset Hints beside it; Drawing with Click accuracy and Connect lines set to Normal, Show pen preview checked, Show solid points unchecked and the pop-up palette's right-click unchecked; AI Assistants with Let AI assistants connect unchecked and the port; ActionScript with Class paths" width="368" height="632"></figure>
   <div>
     <h3>General</h3>
     <dl class="defs" style="grid-template-columns:1fr">
@@ -44,6 +44,7 @@
       <dt>Auto-recovery</dt><dd>How often a recovery copy of unsaved work is written: every 1, 2, 5 or 10 minutes, or Off. The same setting as <span class="menu-path">File &rsaquo; Auto-Save</span>; see <a href="documents.html#auto-save-and-recovery">Auto-save and recovery</a>.</dd>
       <dt>At startup</dt><dd><strong>Show the start screen</strong>. Turn it off and Phoenix reopens your most recent file instead. <strong>Reopen documents from last time</strong>, on unless you turn it off, opens the saved documents that were open when you quit, each in its tab; the start screen then shows only when there were none.</dd>
       <dt>Highlight</dt><dd><strong>Layer color</strong> outlines a selection in its layer's color; <strong>One color</strong> outlines every selection in the color you pick with the button beside it.</dd>
+      <dt>Hints</dt><dd><strong>Show first-use hints</strong>, on unless you turn it off, shows a short tip the first time you draw, add a keyframe, make a symbol or make a tween. <strong>Reset Hints</strong> shows every tip again. See <a href="workspace.html#hints">First-use hints</a>.</dd>
     </dl>
   </div>
 </div>
@@ -56,6 +57,7 @@
   <dt>Click accuracy</dt><dd>How near a click must be to a line, a point or a handle to pick it: <strong>Strict</strong> (2 screen pixels), <strong>Normal</strong> (4) or <strong>Tolerant</strong> (8). Strict helps when lines lie close together; Tolerant makes thin lines easier to hit. It applies when you click with the selection tools, the Pen and anchor point tools, the Width tool, the Paint Bucket, Ink Bottle and Eyedropper, and to how near the cursor must come for snapping.</dd>
   <dt>Connect lines</dt><dd>How near the two ends of a Pencil line drawn in Straighten mode must be to be joined into a closed shape: <strong>Must be close</strong> (8 screen pixels), <strong>Normal</strong> (15) or <strong>Can be distant</strong> (30). It works when the Pencil's own <strong>Connect lines</strong> option is on.</dd>
   <dt>Pen</dt><dd><strong>Show pen preview</strong>, on by default, draws the next segment from the last point to the cursor before you click, so you can see the curve you are about to make. <strong>Show solid points</strong> draws the anchors of the path being drawn filled in blue instead of white. See <a href="drawing-tools.html#pen">Pen</a>.</dd>
+  <dt>Pop-up palette</dt><dd><strong>Right-click with a drawing tool opens it</strong>, off by default: a right-click on the stage opens the <a href="color.html#the-pop-up-palette">pop-up palette</a> instead of the stage menu while a drawing tool (a brush, the Pencil, Pen, Line, a shape tool, the Paint Bucket, Ink Bottle or Eraser) is in use. The <kbd>`</kbd> key opens it either way.</dd>
 </dl>
 
 <p>The Pencil's other tidying settings are on its Tool tab rather than here: <strong>Pencil mode</strong>, <strong>Smoothing</strong>, which sets how much the line is smoothed, and <strong>Recognize shapes</strong>, which turns a rough rectangle or oval into a true one. See <a href="drawing-tools.html#pencil">Pencil</a>. To smooth or straighten lines already drawn, use <span class="menu-path">Modify &rsaquo; Shape</span>; see <a href="selecting.html#shape-commands">Shape commands</a>.</p>

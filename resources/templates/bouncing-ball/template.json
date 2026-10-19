@@ -1,0 +1,6 @@
+{
+  "title": "Bouncing Ball",
+  "summary": "A ball bouncing in place, a one-second cycle: it eases into the floor, squashes, stretches as it leaves and slows at the top. Its shadow grows as it falls.",
+  "order": 1,
+  "thumbnailFrame": 11
+}

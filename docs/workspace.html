@@ -17,7 +17,7 @@
 <meta property="og:image:alt" content="The Phoenix window with three flower characters on the stage, the timeline below and the Properties panel on the right">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:image" content="https://phoenixanimate.com/assets/shots/hero.webp">
-<meta name="keywords" content="panels dock float toolbox outliner properties library color swatches align transform info frame picker motion editor actions output behaviors node graph menu bar status bar edit bar breadcrumb hot text window menu workspaces reset workspace theme dark light ui scale edit toolbar history undo levels repeat commands menu run command saved commands find and replace find next movie explorer context menus hide panels document tabs">
+<meta name="keywords" content="simple workspace beginner first-use hints tips reset hints panels dock float toolbox outliner properties library color swatches align transform info frame picker motion editor actions output behaviors node graph menu bar status bar edit bar breadcrumb hot text window menu workspaces reset workspace theme dark light ui scale edit toolbar history undo levels repeat commands menu run command saved commands find and replace find next movie explorer context menus hide panels document tabs">
 <link rel="icon" href="assets/img/logo.png">
 <link rel="stylesheet" href="assets/site.css">
 <script>try { const t = localStorage.getItem("phoenix-docs-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
@@ -164,9 +164,10 @@
 
 <h3>Workspaces</h3>
 
-<p>A workspace is a saved arrangement of the panels, the Tools panel's layout and the width of the layers list. Switch between them under <span class="menu-path">Window &rsaquo; Workspaces</span>. Phoenix comes with four:</p>
+<p>A workspace is a saved arrangement of the panels, the Tools panel's layout and the width of the layers list. Switch between them under <span class="menu-path">Window &rsaquo; Workspaces</span>. Phoenix comes with five:</p>
 
 <dl class="defs">
+  <dt>Simple</dt><dd>Just what a first drawing or animation needs: the stage, the timeline, the common tools, and Properties, Library and Color on the right. See <a href="#the-simple-workspace">The Simple workspace</a> below.</dd>
   <dt>Essentials</dt><dd>Phoenix's own layout: the tools on the left, the timeline below the stage, and Properties, Library, Color and Swatches as tabs on the right.</dd>
   <dt>Animator</dt><dd>A tall timeline with the Motion Editor and Layer Depth as tabs beside it, the Frame Picker among the panels, and the tools in two columns.</dd>
   <dt>Designer</dt><dd>Color, Swatches, Align, Transform and Info grouped under Properties, a short timeline, and the tools in two columns.</dd>
@@ -182,6 +183,22 @@
   <dt>Rename Workspace, Delete Workspace</dt><dd>Rename or delete one of your own workspaces. The built-in ones stay.</dd>
   <dt>Import Workspace..., Export Workspace...</dt><dd>Pass a workspace to another machine as a <code>.phxworkspace</code> file. An imported workspace never replaces one you have; it gets a number after its name instead.</dd>
 </dl>
+
+<h3 id="the-simple-workspace">The Simple workspace</h3>
+
+<p>New to animation, or just want a calm screen? The <strong>Simple</strong> workspace hides the panels you do not need yet and keeps the Tools panel short.</p>
+
+<figure>
+  <img src="assets/shots/workspace-simple.webp" alt="Phoenix in the Simple workspace: a short Tools panel on the left, the stage with a bouncing ball, the timeline below, Properties, Library and Color tabs on the right, and the Simple button lit on the edit bar" width="1400" height="860">
+  <figcaption>The Simple workspace, with a first-use hint at the bottom of the stage.</figcaption>
+</figure>
+
+<ul>
+  <li><strong>Tools</strong>: Selection, Free Transform, Brush, Pencil, Line, Rectangle and Oval, Text, Paint Bucket, Eyedropper, Eraser, Hand and Zoom. The other tools are only hidden: their keys still work, such as <kbd>P</kbd> for the Pen.</li>
+  <li><strong>Panels</strong>: the timeline, Properties, the Library and Color. The others are closed; open any of them from the Window menu when you want it.</li>
+</ul>
+
+<p>To switch, click <strong>Simple</strong> at the right end of the edit bar, above the stage. Click it again to go back to the full workspace you used last. The start screen has the same choice under <strong>Layout</strong>: the first time you start Phoenix it suggests Simple, and after you pick, it just shows which one you use.</p>
 
 <h3>Themes</h3>
 
@@ -277,6 +294,19 @@
 <h2>The outliner</h2>
 
 <p>Open the outliner with <span class="menu-path">Window &rsaquo; Outliner</span> (<kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>O</kbd>). It shows the whole document as a tree: scenes, layers, frames, and the elements on them, down to individual paths and edges in a shape. Select something in the outliner and it is selected on the stage too. It is a quick way to find a small or hidden element in a crowded scene.</p>
+
+<h2 id="hints">First-use hints</h2>
+
+<p>The first time you do a few key things, a small <strong>Tip</strong> appears at the bottom left of the stage with the next step to try. Each shows only once:</p>
+
+<dl class="defs">
+  <dt>Your first drawing on frame 1</dt><dd>Press <kbd>F6</kbd> for a keyframe that starts as a copy of it, or <kbd>F7</kbd> for a blank one, to draw the next drawing.</dd>
+  <dt>Your first new keyframe</dt><dd>Turn on <span class="menu-path">View &rsaquo; Onion Skin</span> (<kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>O</kbd>) to see the drawing before it, faded, and press <kbd>Enter</kbd> to play.</dd>
+  <dt>Your first symbol</dt><dd>Double-click it to draw inside it, and double-click an empty spot to come back out.</dd>
+  <dt>Your first tween</dt><dd>How to make it move: change the object on a later frame (a motion tween), or on the next keyframe (a classic or shape tween), then press <kbd>Enter</kbd>.</dd>
+</dl>
+
+<p>Click <strong>Got It</strong> to close a tip; it also goes away by itself after a little while. <strong>Don't Show Hints</strong> turns them all off. Turn them back on with <span class="menu-path">Help &rsaquo; Show Hints</span>, and choose <span class="menu-path">Help &rsaquo; Reset Hints</span> to see every one again. The same two settings are under <strong>Hints</strong> in <a href="preferences.html">Preferences</a>.</p>
 
 <h2>The status bar</h2>
 

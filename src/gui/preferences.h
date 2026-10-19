@@ -58,4 +58,6 @@ private:
     QCheckBox* _mcp;
     HotSpinBox* _mcpPort;
     QLineEdit* _classPaths;
+    QCheckBox* _hints;
+    QCheckBox* _popupRightClick;
 };

@@ -11,6 +11,7 @@
 #include <QFormLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
+#include <QPushButton>
 #include <QLineEdit>
 #include <QPainter>
 #include <QPixmap>
@@ -141,6 +142,23 @@ PreferencesDialog::PreferencesDialog(QWidget* parent)
     highlightLayout->addWidget(_highlight, 1);
     highlightLayout->addWidget(_highlightColor);
     generalForm->addRow("Highlight", highlightRow);
+    // First-use hints: on or off, or every one shown again.
+    QWidget* hintsRow = new QWidget(general);
+    QHBoxLayout* hintsLayout = new QHBoxLayout(hintsRow);
+    hintsLayout->setContentsMargins(0, 0, 0, 0);
+    _hints = new QCheckBox("Show first-use hints", hintsRow);
+    _hints->setChecked(QSettings().value("hints/enabled", true).toBool());
+    _hints->setToolTip("A short tip on what to try next, the first time you draw, add a keyframe, make a symbol "
+                       "or make a tween");
+    QPushButton* resetHints = new QPushButton("Reset Hints", hintsRow);
+    resetHints->setToolTip("Show every hint again");
+    connect(resetHints, &QPushButton::clicked, this, [this]() {
+        QSettings().remove("hints/shown");
+        _hints->setChecked(true);
+    });
+    hintsLayout->addWidget(_hints, 1);
+    hintsLayout->addWidget(resetHints);
+    generalForm->addRow("Hints", hintsRow);
     layout->addWidget(general);
 
     QGroupBox* drawing = new QGroupBox("Drawing", this);
@@ -166,6 +184,11 @@ PreferencesDialog::PreferencesDialog(QWidget* parent)
     _solidPoints->setChecked(Preferences::solidPoints());
     drawingForm->addRow("Pen", _penPreview);
     drawingForm->addRow(QString(), _solidPoints);
+    _popupRightClick = new QCheckBox("Right-click with a drawing tool opens it", drawing);
+    _popupRightClick->setChecked(QSettings().value("popupPalette/rightClick", false).toBool());
+    _popupRightClick->setToolTip("The pop-up palette opens on ` (the key left of 1); with this, a right-click on the "
+                                 "stage opens it too while a drawing tool is in use, instead of the stage menu");
+    drawingForm->addRow("Pop-up palette", _popupRightClick);
     layout->addWidget(drawing);
 
     // AI assistants (MCP clients) attaching to this Phoenix.
@@ -215,6 +238,8 @@ void PreferencesDialog::save()
     settings.setValue("preferences/connectPixels", _connectLines->currentData().toDouble());
     settings.setValue("preferences/penPreview", _penPreview->isChecked());
     settings.setValue("preferences/solidPoints", _solidPoints->isChecked());
+    settings.setValue("hints/enabled", _hints->isChecked());
+    settings.setValue("popupPalette/rightClick", _popupRightClick->isChecked());
     McpServer::setEnabled(_mcp->isChecked(), _mcpPort->value());
     QStringList paths;
     for (const QString& path : _classPaths->text().split(';', Qt::SkipEmptyParts))

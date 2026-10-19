@@ -1,0 +1,6 @@
+{
+  "title": "Walk Cycle",
+  "summary": "A character walking in place, a one-second cycle keyed every 6 frames. Each limb is its own layer parented to the one it hangs from: turn a thigh and the shin and shoe go with it.",
+  "order": 2,
+  "thumbnailFrame": 0
+}

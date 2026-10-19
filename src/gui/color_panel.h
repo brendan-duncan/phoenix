@@ -8,11 +8,14 @@ class QCheckBox;
 class QComboBox;
 class QLabel;
 class HotSpinBox;
+class HsvWheel;
+class RecentColorsBar;
 class QLineEdit;
 class QListWidget;
 class QPushButton;
 class QStackedWidget;
 class QToolButton;
+class QVBoxLayout;
 
 namespace fla {
 class FLADocument;
@@ -64,7 +67,8 @@ private:
 /// The Color panel, for what new art is filled with: a solid color,
 /// a linear or radial gradient with its stops, flow and blending, or a
 /// library bitmap; and Apply to Selection, which fills the selected shapes
-/// with it.
+/// with it. Under them, a color wheel and the colors drawn with lately,
+/// for the fill or the stroke.
 class ColorPanel : public QWidget
 {
     Q_OBJECT
@@ -84,6 +88,9 @@ signals:
     /// The selected shapes' strokes drawn with it: a gradient along a line.
     void applyToStrokesRequested();
     void importBitmapRequested();
+    /// A color picked from the wheel or the recent colors for the fill or
+    /// the stroke (\a stroke), done being dragged: the selection takes it.
+    void colorChosen(bool stroke);
 
 private:
     void showKind();
@@ -93,6 +100,10 @@ private:
     /// The channel fields shown as the solid color is: red, green and blue,
     /// or hue, saturation and brightness, and alpha.
     void updateChannels();
+    /// The wheel and recent colors: what they edit, the fill or stroke.
+    void setupWheel(QVBoxLayout* layout);
+    void updateWheel();
+    void pickColor(const QColor& color, bool done);
 
     fla::DrawingStyle* _style;
     const fla::FLADocument* _document = nullptr;
@@ -112,4 +123,10 @@ private:
     QComboBox* _flow = nullptr;
     QCheckBox* _linearRGB = nullptr;
     QListWidget* _bitmaps = nullptr;
+    HsvWheel* _wheel = nullptr;
+    RecentColorsBar* _recentColors = nullptr;
+    QToolButton* _wheelFill = nullptr;
+    QToolButton* _wheelStroke = nullptr;
+    bool _wheelEditsStroke = false;
+    bool _keepWheel = false;
 };

@@ -53,6 +53,7 @@
 #include "../edit/editable_path.h"
 #include "../edit/other_apps.h"
 #include "../edit/timeline_edit.h"
+#include "../edit/first_use_hints.h"
 #include "html5_publish.h"
 
 #include <functional>
@@ -69,6 +70,9 @@ class HotDoubleSpinBox;
 class BoneCorrector;
 
 class Updater;
+class PopupPalette;
+class HintBubble;
+class StartDialog;
 
 class MainWindow : public QMainWindow
 {
@@ -1322,4 +1326,32 @@ private:
     void createNewDocument(int width, int height, double frameRate, const QColor& stage, bool canvas = false);
     QString _lastDirectory;
     bool _highQualityAntiAliasing = true;
+
+    // Friendlier ways in (main_window_friendly.cpp): the pop-up palette,
+    // recent colors, the Simple workspace, first-use hints and starter
+    // templates.
+    void setupFriendly();
+    void showPopupPalette(const QPoint& globalPos);
+    /// Whether a right-click on the stage opens the pop-up palette rather
+    /// than the stage menu: asked for in Preferences, with a drawing tool.
+    bool popupPaletteOnRightClick() const;
+    /// The fill or \a stroke color set as a swatch would set it; \a done
+    /// when the pick is finished, which recolors the selection.
+    void setStyleColor(const QColor& color, bool stroke, bool done);
+    /// After each edit: notes the colors drawn with and shows a hint the
+    /// edit earns.
+    void noteFriendlyEdit();
+    void showFirstUseHint(int event, const std::string& tween = std::string());
+    /// The Simple workspace's docks and tools, over Phoenix's own layout.
+    void applySimpleWorkspace();
+    void updateWorkspaceSwitch();
+    void prepareStartDialog(StartDialog& dialog);
+    void openStarterTemplate(const QString& id);
+    PopupPalette* _popupPalette = nullptr;
+    HintBubble* _hintBubble = nullptr;
+    QToolButton* _workspaceSwitch = nullptr;
+    fla::FirstUseHints _hints;
+    const fla::Command* _friendlyTop = nullptr;
+    size_t _friendlyIndex = 0;
+    const void* _friendlyDocument = nullptr;
 };
