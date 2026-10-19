@@ -384,6 +384,7 @@ set(HEADERS
     src/edit/library_transfer.h
     src/edit/document_session.h
     src/edit/trace_bitmap.h
+    src/edit/paper_cleanup.h
     src/edit/edit_list.h
     src/edit/combine_objects.h
     src/edit/transform_parts.h

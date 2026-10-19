@@ -65,6 +65,7 @@ set(TEST_SOURCES
     test_three_d.cpp
     test_filter_presets.cpp
     test_trace_bitmap.cpp
+    test_paper_cleanup.cpp
     test_sprite_sheet.cpp
     test_stroke_width.cpp
     test_swatches.cpp

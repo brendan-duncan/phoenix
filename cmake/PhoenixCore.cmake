@@ -120,6 +120,7 @@ set(PHOENIX_CORE_SOURCES
     edit/other_apps.cpp
     edit/timeline_edit.cpp
     edit/trace_bitmap.cpp
+    edit/paper_cleanup.cpp
     edit/transform_blend.cpp
     edit/tween_ease.cpp
     geom/curve.cpp
