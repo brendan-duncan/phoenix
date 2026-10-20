@@ -20,8 +20,8 @@ Cross-Origin-Embedder-Policy headers. The package's .htaccess sends them when
 Apache lets the folder have one (AllowOverride) and mod_headers is on; after
 uploading, this checks the live page and says if they are missing.
 --configure-apache lets that folder have its .htaccess (a conf-available
-file) and enables what it uses (mod_headers, mod_rewrite for the compressed
-copies, mod_deflate), then reloads Apache; it needs sudo on the server, and
+file) and enables what it uses (mod_headers, mod_rewrite and mod_env for the
+compressed copies, mod_deflate), then reloads Apache; it needs sudo on the server, and
 is only needed once.
 """
 
@@ -158,7 +158,7 @@ def main():
         conf = "/etc/apache2/conf-available/phoenix-webeditor.conf"
         steps += [
             f"printf %s {q(APACHE_CONF.format(folder=site))} | sudo tee {conf} > /dev/null",
-            "sudo a2enmod -q headers deflate rewrite",
+            "sudo a2enmod -q headers deflate rewrite env",
             "sudo a2enconf -q phoenix-webeditor",
             "sudo apache2ctl configtest",
             "sudo systemctl reload apache2",

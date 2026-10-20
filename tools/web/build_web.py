@@ -75,15 +75,20 @@ AddType application/wasm .wasm
     RewriteEngine On
     RewriteCond %{HTTP:Accept-Encoding} \\bbr\\b
     RewriteCond %{REQUEST_FILENAME}.br -f
-    RewriteRule ^(.+\\.(wasm|js))$ $1.br [L,E=no-gzip:1]
+    RewriteRule ^(.+\\.(wasm|js))$ $1.br [L]
     RewriteCond %{HTTP:Accept-Encoding} \\bgzip\\b
     RewriteCond %{REQUEST_FILENAME}.gz -f
-    RewriteRule ^(.+\\.(wasm|js))$ $1.gz [L,E=no-gzip:1]
+    RewriteRule ^(.+\\.(wasm|js))$ $1.gz [L]
     <FilesMatch "\\.wasm\\.(br|gz)$">
         ForceType application/wasm
     </FilesMatch>
     <FilesMatch "\\.js\\.(br|gz)$">
         ForceType text/javascript
+    </FilesMatch>
+    # Already compressed: mod_deflate must not compress them again (set on
+    # the files, since a flag set by the rule above is renamed on the way).
+    <FilesMatch "\\.(br|gz)$">
+        SetEnv no-gzip 1
     </FilesMatch>
     <FilesMatch "\\.br$">
         Header set Content-Encoding br
