@@ -23,6 +23,7 @@
 #include "../src/data/shape.h"
 #include "../src/data/stroke_style.h"
 
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <map>

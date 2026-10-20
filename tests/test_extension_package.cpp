@@ -2,6 +2,7 @@
 
 #include "../src/parser/extension_package.h"
 
+#include <algorithm>
 #include <chrono>
 #include <filesystem>
 #include <fstream>
