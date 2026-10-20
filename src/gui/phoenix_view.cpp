@@ -36,6 +36,11 @@
 #include "../parser/ik_tree.h"
 #include "filters.h"
 #include "stroke_effects.h"
+#include <QElapsedTimer>
+#ifdef PHOENIX_GPU
+#include "../gpu/gpu_device.h"
+#include "../gpu/rive_canvas.h"
+#endif
 #include "library_panel.h"
 #include <QMimeData>
 #include <QDropEvent>
@@ -1087,12 +1092,20 @@ void PhoenixView::paintEvent(QPaintEvent *event)
     _overlayPen = QPen(QColor(0, 255, 255, 255), penWidth);
     _overlayBrush = QBrush(QColor(0, 255, 255, 150));
 
+    QElapsedTimer stageClock;
+    stageClock.start();
+    bool gpuDrawn = false;
+#ifdef PHOENIX_GPU
+    if (_stageRenderer == StageRenderer::Rive && !_grayPass)
+        gpuDrawn = drawStageOnGpu(painter, document, backgroundColor);
+#endif
+
     // Supersampling: render at 2x resolution and scale down for smoother
     // edges. The buffer is kept between paints (at 4K it is over 100 MB, too
     // much to allocate every time), and when there is no room for it the
     // stage is drawn straight to the window.
     bool supersampled = false;
-    if (_highQualityAntiAliasing && !_interacting)
+    if (!gpuDrawn && _highQualityAntiAliasing && !_interacting)
     {
         const QSize wanted(width() * supersampleFactor, height() * supersampleFactor);
         if (_supersample.size() != wanted)
@@ -1128,7 +1141,7 @@ void PhoenixView::paintEvent(QPaintEvent *event)
             drawToolOverlay(painter);
         painter.restore();
     }
-    else
+    else if (!gpuDrawn)
     {
         // While something is being dragged, the rest of the stage is drawn
         // once into an image and reused for every frame of the drag, and
@@ -1213,6 +1226,14 @@ void PhoenixView::paintEvent(QPaintEvent *event)
             drawToolOverlay(painter);
         painter.restore();
     }
+    if (!gpuDrawn)
+    {
+        _stageTimes = StageTimes();
+        _stageTimes.totalMs = stageClock.nsecsElapsed() / 1.0e6;
+        if (_showStageTiming)
+            _stageTiming =
+                QString("QPainter%1  %2 ms").arg(supersampled ? " 2x" : "").arg(_stageTimes.totalMs, 0, 'f', 1);
+    }
 
     // The grid over the art.
     if (_showGrid && _gridOver)
@@ -1286,7 +1307,125 @@ void PhoenixView::paintEvent(QPaintEvent *event)
     // Guides over the art, rulers over everything.
     drawSliceGuides(painter);
     drawRulersAndGuides(painter);
+
+    // How long the stage took, in the corner under the rulers.
+    if (_showStageTiming && !_stageTiming.isEmpty())
+    {
+        painter.save();
+        painter.resetTransform();
+        QFont font = painter.font();
+        font.setStyleHint(QFont::Monospace);
+        font.setFamily("Consolas");
+        painter.setFont(font);
+        const QRect box = painter.fontMetrics().boundingRect(QRect(0, 0, width(), height()), Qt::AlignLeft | Qt::AlignTop,
+            _stageTiming);
+        const QRect where = box.translated(28, 28).adjusted(-6, -4, 6, 4);
+        painter.fillRect(where, QColor(0, 0, 0, 170));
+        painter.setPen(QColor(235, 235, 235));
+        painter.drawText(where.adjusted(6, 4, -6, -4), Qt::AlignLeft | Qt::AlignTop, _stageTiming);
+        painter.restore();
+    }
 }
+
+void PhoenixView::setStageRenderer(StageRenderer renderer)
+{
+    if (renderer == StageRenderer::Rive && !gpuStageAvailable())
+        renderer = StageRenderer::QPainter;
+    if (_stageRenderer == renderer)
+        return;
+    _stageRenderer = renderer;
+    _staticValid = false;
+    update();
+}
+
+void PhoenixView::setShowStageTiming(bool on)
+{
+    _showStageTiming = on;
+    _stageTiming.clear();
+    update();
+}
+
+bool PhoenixView::gpuStageBuilt()
+{
+#ifdef PHOENIX_GPU
+    return true;
+#else
+    return false;
+#endif
+}
+
+bool PhoenixView::gpuStageAvailable(QString* why)
+{
+#ifdef PHOENIX_GPU
+    return GpuDevice::get(why) != nullptr;
+#else
+    if (why)
+        *why = "This build of Phoenix draws the stage with QPainter only.";
+    return false;
+#endif
+}
+
+#ifdef PHOENIX_GPU
+bool PhoenixView::drawStageOnGpu(QPainter& painter, const fla::Document* document, const QColor& background)
+{
+    if (_riveFailed)
+        return false;
+    if (!_riveCanvas)
+    {
+        GpuDevice* device = GpuDevice::get();
+        if (device)
+            _riveCanvas = std::make_unique<RiveCanvas>(*device);
+        if (!device || !_riveCanvas->valid())
+        {
+            _riveCanvas.reset();
+            _riveFailed = true;
+            return false;
+        }
+    }
+    QElapsedTimer clock;
+    clock.start();
+    const qreal ratio = devicePixelRatioF();
+    const QSize pixels(qCeil(width() * ratio), qCeil(height() * ratio));
+    // Masks as clip paths, as an export that writes vectors has them: Rive
+    // clips on the GPU, where a mask's picture would be drawn on the CPU.
+    const QImage stage = _riveCanvas->draw(pixels, ratio, background, [&](QPainter& into) {
+        into.setTransform(rootToWidget(), true);
+        const bool vectors = _vectorMasks;
+        _vectorMasks = true;
+        drawStageContents(into, document);
+        _vectorMasks = vectors;
+    });
+    if (stage.isNull())
+        return false;
+    painter.save();
+    painter.resetTransform();
+    painter.drawImage(0, 0, stage);
+    painter.setTransform(documentToWidget(), false);
+    drawToolOverlay(painter);
+    painter.restore();
+    const RiveCanvas::Timing& t = _riveCanvas->timing();
+    _stageTimes.totalMs = clock.nsecsElapsed() / 1.0e6;
+    _stageTimes.paintMs = t.paintMs;
+    _stageTimes.flushMs = t.flushMs;
+    _stageTimes.gpuMs = t.gpuMs;
+    _stageTimes.readMs = t.readMs;
+    _stageTimes.paths = t.paths;
+    _stageTimes.pathsMade = t.pathsMade;
+    _stageTimes.gpu = true;
+    if (_showStageTiming)
+    {
+        _stageTiming = QString("Rive  %1 ms\npaint %2  flush %3  gpu %4  read %5\n%6 paths, %7 new")
+                           .arg(_stageTimes.totalMs, 0, 'f', 1)
+                           .arg(t.paintMs, 0, 'f', 1)
+                           .arg(t.flushMs, 0, 'f', 1)
+                           .arg(t.gpuMs, 0, 'f', 1)
+                           .arg(t.readMs, 0, 'f', 1)
+                           .arg(t.paths)
+                           .arg(t.pathsMade);
+    }
+    return true;
+}
+#endif
 
 bool PhoenixView::editingTrackMattes(bool) const
 {

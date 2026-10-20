@@ -117,6 +117,10 @@ public:
     /// Phoenix render: frames of a document to a PNG sequence, a video or
     /// a GIF, with no window. See the command line help.
     int renderCommand(const QString& source, const QStringList& options);
+    /// Phoenix benchmark-stage: opens \a source, plays \a frames frames from \a start on
+    /// the stage at \a size and prints how long the stage took to draw.
+    /// With \a profile, where the time went is sampled and written there.
+    int stageBenchmarkCommand(const QString& source, int start, int frames, const QSize& size, const QString& profile);
 #ifdef PHOENIX_GPU
     /// Phoenix gpu-bakeoff: opens \a source and compares the stage's
     /// renderers on it (see gpu/gpu_bakeoff.h).

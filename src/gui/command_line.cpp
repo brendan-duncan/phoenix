@@ -1577,7 +1577,7 @@ int captureWindow(const QStringList& args)
 
 bool isCommand(const QString& name)
 {
-    return name == "capture-dialog" || name == "capture-window" || name == "play" || name == "display-check" || name == "benchmark" || name == "render" || name == "gpu-bakeoff" || name == "run-script" || name == "doctor" || name == "diff" || name == "batch" || name == "shots" || name == "links" || name == "shortcuts" || name == "lessons" || name == "help" ||
+    return name == "capture-dialog" || name == "capture-window" || name == "play" || name == "display-check" || name == "benchmark" || name == "benchmark-stage" || name == "render" || name == "gpu-bakeoff" || name == "run-script" || name == "doctor" || name == "diff" || name == "batch" || name == "shots" || name == "links" || name == "shortcuts" || name == "lessons" || name == "help" ||
            name == "--help";
 }
 
@@ -1705,6 +1705,20 @@ int run(const QStringList& arguments)
         return doctor(args);
     if (name == "benchmark")
         return benchmark(args);
+    if (name == "benchmark-stage")
+    {
+        if (args.isEmpty())
+        {
+            std::fprintf(stderr, "benchmark-stage: which file?\n");
+            return 1;
+        }
+        const int frames = option(args, "--frames").isEmpty() ? 48 : std::max(1, option(args, "--frames").toInt());
+        const QStringList wh = option(args, "--size").split('x');
+        const QSize size = wh.size() == 2 ? QSize(wh.at(0).toInt(), wh.at(1).toInt()) : QSize(1600, 1000);
+        MainWindow window(QString(), nullptr, false);
+        return window.stageBenchmarkCommand(args.at(0), option(args, "--start").toInt(), frames, size,
+            option(args, "--profile"));
+    }
     if (name == "play")
         return play(args);
     if (name == "display-check")

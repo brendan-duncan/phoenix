@@ -255,6 +255,7 @@ set(HEADERS
     src/gui/hot_text.h
     src/gui/convert_to_symbol_dialog.h
     src/gui/phoenix_view.h
+    src/gui/sample_profiler.h
     src/gui/behavior_library.h
     src/gui/behaviors_panel.h
     src/gui/tool.h
@@ -589,6 +590,7 @@ set(SOURCES
     src/gui/hot_text.cpp
     src/gui/convert_to_symbol_dialog.cpp
     src/gui/phoenix_view.cpp
+    src/gui/sample_profiler.cpp
     src/gui/behavior_library.cpp
     src/gui/behaviors_panel.cpp
     src/gui/selection_tool.cpp
@@ -707,9 +709,9 @@ endif()
 option(PHOENIX_GPU "Draw the stage on the GPU through WebGPU (Dawn)" OFF)
 if(PHOENIX_GPU)
     include(cmake/gpu.cmake)
-    list(APPEND SOURCES src/gpu/gpu_device.cpp src/gpu/thorvg_backend.cpp
+    list(APPEND SOURCES src/gpu/gpu_device.cpp src/gpu/thorvg_backend.cpp src/gpu/rive_canvas.cpp
         src/gpu/rive_backend.cpp src/gpu/gpu_bakeoff.cpp)
-    list(APPEND HEADERS src/gpu/gpu_device.h src/gpu/vector_backend.h
+    list(APPEND HEADERS src/gpu/gpu_device.h src/gpu/vector_backend.h src/gpu/rive_canvas.h
         src/gpu/gpu_bakeoff.h)
 endif()
 

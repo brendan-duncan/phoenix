@@ -52,6 +52,7 @@
 
 class QTimer;
 class ReferenceBoardView;
+class RiveCanvas;
 
 #include "tool.h"
 #include "../edit/transform_blend.h"
@@ -122,6 +123,39 @@ public:
     void safeZonesChanged();
 
     void setHighQualityAntiAliasing(bool on);
+
+    /// What draws the stage: QPainter on the CPU, or the Rive renderer on
+    /// the GPU (in builds with PHOENIX_GPU). The tools' handles, the grid and
+    /// the rulers are QPainter's either way.
+    enum class StageRenderer
+    {
+        QPainter,
+        Rive
+    };
+    void setStageRenderer(StageRenderer renderer);
+    StageRenderer stageRenderer() const { return _stageRenderer; }
+    /// Whether this build can draw the stage on the GPU (PHOENIX_GPU).
+    static bool gpuStageBuilt();
+    /// Whether it can, and the machine has a GPU for it (looked for the
+    /// first time this is asked); why not in \a why.
+    static bool gpuStageAvailable(QString* why = nullptr);
+    /// A line in the stage's corner saying how long drawing it took.
+    void setShowStageTiming(bool on);
+    bool showStageTiming() const { return _showStageTiming; }
+    /// How long the last paint took to draw the stage, in milliseconds;
+    /// with Rive, its parts too.
+    struct StageTimes
+    {
+        double totalMs = 0.0;
+        double paintMs = 0.0;
+        double flushMs = 0.0;
+        double gpuMs = 0.0;
+        double readMs = 0.0;
+        int paths = 0;
+        int pathsMade = 0;
+        bool gpu = false;
+    };
+    const StageTimes& stageTimes() const { return _stageTimes; }
 
     /// Maps document coordinates to widget coordinates: the pan, the zoom, and
     /// the centering that keeps the stage in the middle of the view.
@@ -895,6 +929,18 @@ private:
     Player* _player;
 
     bool _highQualityAntiAliasing;
+    StageRenderer _stageRenderer = StageRenderer::QPainter;
+    bool _showStageTiming = false;
+    /// The last paint's time to draw the stage, and as the corner shows it.
+    StageTimes _stageTimes;
+    QString _stageTiming;
+#ifdef PHOENIX_GPU
+    std::unique_ptr<RiveCanvas> _riveCanvas;
+    bool _riveFailed = false;
+    /// Draws the stage with Rive, and the tools over it; false when there
+    /// is no GPU for it (the stage is then drawn by QPainter).
+    bool drawStageOnGpu(QPainter& painter, const fla::Document* document, const QColor& background);
+#endif
 
     /// Whether the view is mid-gesture, and so should render for speed rather
     /// than for looks.

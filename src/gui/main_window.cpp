@@ -1,4 +1,5 @@
 #include "main_window.h"
+#include "sample_profiler.h"
 #ifdef PHOENIX_GPU
 #include "../gpu/gpu_bakeoff.h"
 #endif
@@ -8231,6 +8232,52 @@ void MainWindow::setupMenus()
     connect(highQualityAntialiasingAction, &QAction::toggled, this, &MainWindow::onHighQualityAntiAliasingToggled);
     viewMenu->addAction(highQualityAntialiasingAction);
 
+    // What draws the stage, to compare them: QPainter, or Rive on the GPU.
+    {
+        QMenu* rendererMenu = viewMenu->addMenu("Stage Renderer");
+        auto* group = new QActionGroup(this);
+        QAction* qpainterAction = rendererMenu->addAction("QPainter");
+        QAction* riveAction = rendererMenu->addAction("Rive (GPU)");
+        for (QAction* action : {qpainterAction, riveAction})
+        {
+            action->setCheckable(true);
+            group->addAction(action);
+        }
+        // The GPU is looked for only when Rive is chosen.
+        riveAction->setEnabled(PhoenixView::gpuStageBuilt());
+        if (!PhoenixView::gpuStageBuilt())
+            riveAction->setStatusTip("This build of Phoenix draws the stage with QPainter only.");
+        QSettings settings;
+        const auto choose = [this, qpainterAction, riveAction](bool rive) {
+            _phoenixView->setStageRenderer(rive ? PhoenixView::StageRenderer::Rive : PhoenixView::StageRenderer::QPainter);
+            const bool drawn = _phoenixView->stageRenderer() == PhoenixView::StageRenderer::Rive;
+            (drawn ? riveAction : qpainterAction)->setChecked(true);
+            if (rive && !drawn)
+            {
+                QString why;
+                PhoenixView::gpuStageAvailable(&why);
+                statusBar()->showMessage("The stage stays with QPainter: " + why, 8000);
+            }
+        };
+        // PHOENIX_STAGE_RENDERER=rive or qpainter picks it for this run alone.
+        const QString wanted = qEnvironmentVariableIsSet("PHOENIX_STAGE_RENDERER")
+            ? qEnvironmentVariable("PHOENIX_STAGE_RENDERER") : settings.value("view/stageRenderer").toString();
+        choose(PhoenixView::gpuStageBuilt() && wanted == "rive");
+        connect(group, &QActionGroup::triggered, this, [choose, riveAction](QAction* action) {
+            choose(action == riveAction);
+            QSettings().setValue("view/stageRenderer", action == riveAction ? "rive" : "qpainter");
+        });
+        rendererMenu->addSeparator();
+        QAction* timingAction = rendererMenu->addAction("Show Stage Timing");
+        timingAction->setCheckable(true);
+        timingAction->setChecked(settings.value("view/stageTiming", false).toBool());
+        _phoenixView->setShowStageTiming(timingAction->isChecked());
+        connect(timingAction, &QAction::toggled, this, [this](bool on) {
+            _phoenixView->setShowStageTiming(on);
+            QSettings().setValue("view/stageTiming", on);
+        });
+    }
+
     QAction* showBoundsAction = new QAction("Show Bounding Boxes", this);
     showBoundsAction->setCheckable(true);
     showBoundsAction->setChecked(false);
@@ -9703,6 +9750,73 @@ int MainWindow::gpuBakeoffCommand(const QString& source, const QStringList& opti
         _phoenixView->frameCount(), options);
 }
 #endif
+
+int MainWindow::stageBenchmarkCommand(const QString& source, int start, int frames, const QSize& size,
+    const QString& profile)
+{
+    loadFLAFile(source);
+    if (!_flaDocument || !_flaDocument->document || !_phoenixView)
+    {
+        std::fprintf(stderr, "benchmark-stage: could not open %s\n", qPrintable(source));
+        return 1;
+    }
+    resize(size);
+    show();
+    QCoreApplication::processEvents();
+    const bool gpu = _phoenixView->stageRenderer() == PhoenixView::StageRenderer::Rive;
+    std::printf("%s on %s, %dx%d stage\n", gpu ? "Rive" : "QPainter", qPrintable(QFileInfo(source).fileName()),
+        _phoenixView->width(), _phoenixView->height());
+    start = std::clamp(start, 0, std::max(0, _phoenixView->frameCount() - 1));
+    const int count = std::max(1, std::min(frames, _phoenixView->frameCount() - start));
+    PhoenixView::StageTimes sum;
+    std::vector<double> totals;
+    // Played, as the stage plays: each frame once, then the first again so
+    // nothing is drawn for the first time in the sums.
+    _player->setPlaying(true);
+    SampleProfiler profiler;
+    for (int pass = 0; pass < 2; ++pass)
+    {
+        if (pass == 1 && !profile.isEmpty() && !profiler.start())
+            std::fprintf(stderr, "benchmark-stage: cannot sample here\n");
+        for (int frame = start; frame < start + count; ++frame)
+        {
+            _player->setCurrentFrame(frame);
+            _phoenixView->repaint();
+            if (pass == 0)
+                continue;
+            const PhoenixView::StageTimes& t = _phoenixView->stageTimes();
+            totals.push_back(t.totalMs);
+            sum.totalMs += t.totalMs;
+            sum.paintMs += t.paintMs;
+            sum.flushMs += t.flushMs;
+            sum.gpuMs += t.gpuMs;
+            sum.readMs += t.readMs;
+            sum.paths += t.paths;
+            sum.pathsMade += t.pathsMade;
+        }
+    }
+    profiler.stop();
+    _player->setPlaying(false);
+    if (!profile.isEmpty())
+    {
+        QFile out(profile);
+        if (out.open(QIODevice::WriteOnly | QIODevice::Text))
+            out.write(profiler.report(60).toUtf8());
+    }
+    std::sort(totals.begin(), totals.end());
+    const double n = count;
+    std::printf("  stage      %7.2f ms a frame (median %.2f, slowest %.2f)\n", sum.totalMs / n, totals[totals.size() / 2],
+        totals.back());
+    if (gpu)
+    {
+        std::printf("  paint      %7.2f ms (Phoenix walking the document, Rive taking it in)\n", sum.paintMs / n);
+        std::printf("  flush      %7.2f ms (Rive preparing the frame)\n", sum.flushMs / n);
+        std::printf("  gpu        %7.2f ms\n", sum.gpuMs / n);
+        std::printf("  read back  %7.2f ms\n", sum.readMs / n);
+        std::printf("  paths      %7.0f a frame, %.0f converted\n", sum.paths / n, sum.pathsMade / n);
+    }
+    return 0;
+}
 
 bool MainWindow::benchmarkRender(const QString& path, int maxFrames, double& openMs, std::vector<double>& coldMs,
     std::vector<double>& warmMs, QSize& size)
