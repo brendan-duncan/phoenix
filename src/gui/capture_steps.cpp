@@ -440,6 +440,21 @@ bool runCaptureSteps(MainWindow& window, const QString& path, QString& error)
             else
                 return fail(target.problem.isEmpty() ? QString("no such target") : target.problem);
         }
+        else if (step == "view")
+        {
+            // Where later clicks and drags go: the movie a panel plays, by
+            // the dock's title or name, or "stage" for the window's own.
+            if (first.compare("stage", Qt::CaseInsensitive) == 0)
+                view = window.phoenixView();
+            else
+            {
+                QDockWidget* dock = dockNamed(window, words.mid(1).join(' '));
+                PhoenixView* inside = dock ? dock->findChild<PhoenixView*>() : nullptr;
+                if (!inside)
+                    return fail("no such panel playing");
+                view = inside;
+            }
+        }
         else if (step == "goto")
         {
             if (!view || !view->player() || first.toInt() < 1)

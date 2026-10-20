@@ -1112,6 +1112,8 @@ private:
     class ScriptRunner* _scripts = nullptr;
     /// The installed extensions' HTML panels.
     class CepPanels* _cepPanels = nullptr;
+    /// The SWF panels in Configuration/WindowSWF.
+    class SwfPanels* _swfPanels = nullptr;
     /// Edit > Find and Replace, made when first asked for.
     class FindReplaceDialog* _findReplace = nullptr;
     void showFindReplace();

@@ -339,7 +339,7 @@ Notes shown after installing:
 
 - the host list does not include `FLPR`: its panels may expect scripts Phoenix does not run;
 - panels ask for Node.js: which Node modules Phoenix provides and which it does not;
-- the package placed `.swf` files: SWF panels are kept but not run, JSFL commands and tools work;
+- the package placed `.swf` files: those in `WindowSWF` are panels under Window > Extensions; other movies (effects) are kept but not run;
 - some files were meant for places outside the Configuration folder;
 - a placed file under `Tools/`: the tools join the toolbox when Phoenix starts again (added by `installExtension`).
 

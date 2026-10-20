@@ -781,13 +781,25 @@ void installGlobals(JSContext* ctx, Binding& binding, Session& session, Host& ho
         return JS_NewStringLen(c, answer.data(), answer.size());
     });
 
-    // Handler code from XML dialogs runs here, beside the script's own
-    // functions; what it throws is reported, not passed on.
-    session.evaluate = [ctx](const std::string& code) -> std::string {
+    // Handler code from XML dialogs, and what their SWF panels give
+    // MMExecute, runs here, beside the script's own functions; what it
+    // throws is reported, not passed on.
+    session.evaluate = [ctx](const std::string& code, std::string* value) -> std::string {
         const std::string modern = Engine::modernize(code);
         JSValue ran = JS_Eval(ctx, modern.c_str(), modern.size(), "<dialog>", JS_EVAL_TYPE_GLOBAL);
         if (!JS_IsException(ran))
         {
+            if (value)
+            {
+                try
+                {
+                    *value = toStd(ctx, ran);
+                }
+                catch (const PendingException&)
+                {
+                    value->clear();
+                }
+            }
             JS_FreeValue(ctx, ran);
             return {};
         }

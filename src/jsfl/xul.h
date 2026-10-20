@@ -119,6 +119,9 @@ public:
     /// Runs handler code in the script's context; set by whoever shows the
     /// dialog.
     std::function<void(const std::string& code)> run;
+    /// MMExecute from the dialog's SWF panels: code run in the script's
+    /// context, and its value as text.
+    std::function<std::string(const std::string& code)> execute;
     /// Runs the script blocks, then each oncreate in order. Once, before
     /// the dialog is shown.
     void create();

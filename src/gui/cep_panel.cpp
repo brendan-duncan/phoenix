@@ -1027,9 +1027,8 @@ void CepPanels::refresh()
     }
 }
 
-void CepPanels::fillMenu(QMenu* menu)
+bool CepPanels::fillMenu(QMenu* menu)
 {
-    menu->clear();
     refresh();
     for (int i = 0; i < _panels.size(); ++i)
     {
@@ -1052,12 +1051,7 @@ void CepPanels::fillMenu(QMenu* menu)
                 open(id);
         });
     }
-    if (_panels.isEmpty())
-    {
-        QAction* none = menu->addAction("No Extension Panels");
-        none->setEnabled(false);
-        none->setStatusTip("Install extensions with HTML panels through Commands > Manage Extensions");
-    }
+    return !_panels.isEmpty();
 }
 
 bool CepPanels::open(const QString& id)

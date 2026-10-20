@@ -58,6 +58,12 @@ void connectMovie(fla::play::MovieRuntime& movie, const fla::FLADocument& docume
         return;
     const fla::Document& data = *document.document;
     movie.setActionScriptVersion(fla::play::actionScriptVersion(data));
+#ifndef __EMSCRIPTEN__
+    // The window's thread has 8 MB of stack (and macOS's and Linux's main
+    // threads as much): room for component code, such as a panel's
+    // buttons, that nests deep. A page in the browser has far less.
+    movie.setNativeStackLimit(size_t(6) * 1024 * 1024);
+#endif
     // An HTML5 Canvas document's scripts are JavaScript.
     movie.setJavaScript(fla::canvas::isCanvasDocument(data));
 

@@ -404,6 +404,21 @@ void Bindings::report(const as3::ScriptException& exception, const std::string& 
     {
         message = exception.value.toString();
     }
+    // An error that could not say itself: its name and message, read as
+    // they are.
+    if (message == "[object Error]" && exception.value.isObject())
+    {
+        try
+        {
+            const std::string name = vm.getProperty(exception.value, "name").toString();
+            const std::string text = vm.getProperty(exception.value, "message").toString();
+            if (!text.empty() && text != "undefined")
+                message = (name.empty() || name == "undefined" ? std::string("Error") : name) + ": " + text;
+        }
+        catch (...)
+        {
+        }
+    }
     if (stack == "undefined")
         stack.clear();
     // Where in the movie's compiled scripts it came from.

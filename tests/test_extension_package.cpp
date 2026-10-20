@@ -77,11 +77,13 @@ TEST(extension_packages_install_their_files_and_remove_them)
     std::vector<std::string> notes;
     CHECK(extensions::install(package.string(), config.string(), installedAt.string(), installed, notes, error));
     // Commands and tools where Phoenix looks for them; the SWF panel too,
-    // with a note that it does not run; the readme kept with the extension.
+    // with a note saying where it shows; the readme kept with the extension.
     CHECK(get(config / "Commands" / "Align Things.jsfl") == "fl.trace('align');");
     CHECK(fs::exists(config / "Tools" / "Nudge.jsfl") && fs::exists(config / "WindowSWF" / "Panel.swf"));
     CHECK(!fs::exists(config / "readme.txt") && installed.placed.size() == 3);
     CHECK(notes.size() == 2);
+    CHECK(std::any_of(notes.begin(), notes.end(),
+        [](const std::string& note) { return note.find("Window > Extensions") != std::string::npos; }));
     // Nothing climbed out of the package.
     CHECK(!fs::exists(config / "Commands" / "outside.jsfl"));
 

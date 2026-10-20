@@ -70,7 +70,7 @@
   <li>Installing an extension that is already there replaces it.</li>
 </ul>
 
-<p>Phoenix runs an extension's JSFL commands and tools, and shows its HTML panels (CEP panels). Panels made as SWF movies are installed and listed but do not show.</p>
+<p>Phoenix runs an extension's JSFL commands and tools, and shows its panels, whether made as HTML pages (CEP panels) or as SWF movies.</p>
 
 <h3 id="html-panels">HTML panels</h3>
 
@@ -95,6 +95,15 @@
     <tr><td>The rest</td><td class="wrap"><code>events</code>, <code>util</code> (<code>format</code>, <code>inspect</code>, <code>inherits</code>, <code>promisify</code>), <code>buffer</code>, <code>stream</code>, <code>string_decoder</code>, <code>url</code>, <code>querystring</code>, <code>zlib</code> (gzip and deflate, whole buffers), <code>crypto</code> (MD5, SHA-1 and SHA-256 hashes and HMACs, random bytes and UUIDs), <code>assert</code>, <code>timers</code>, <code>readline</code> and <code>vm.runInThisContext</code>. <code>net</code>, <code>tls</code>, <code>dgram</code>, <code>dns</code>, <code>worker_threads</code> and ciphers load but fail when used, with an error that says so.</td></tr>
   </tbody>
 </table>
+
+<h3 id="swf-panels">SWF panels</h3>
+
+<p>A panel made as an SWF movie goes in the <code>WindowSWF</code> folder of Phoenix's Configuration folder, where an extension package puts it. Phoenix lists each one under <b>Window &rsaquo; Extensions</b>, after the HTML panels, named after its file, and plays it in a dock the way Test Movie plays a movie, scaled to fit the dock.</p>
+
+<ul>
+  <li><b>Scripts.</b> A panel's buttons reach Phoenix with <code>MMExecute</code>, which runs JSFL and gives back its value as text. Each panel has a script context of its own, so what one call defines the next can use, and each call that changes a document is one undo step, named after the panel. What a panel traces, and the errors its scripts stop on, go to the Output panel.</li>
+  <li><b>ActionScript.</b> Panels written in ActionScript 3, as most are, work, interface components included. In ActionScript 1 and 2, <code>MMExecute</code> works in scripts Phoenix compiles, but not yet in movies compiled elsewhere.</li>
+</ul>
 
 <h2>The Output panel</h2>
 
@@ -235,7 +244,7 @@ fl.trace(cycle.layer + ": " + cycle.frames + " frames");</code></pre>
 if (result.dismiss == "accept")
     fl.trace(result.amount + " " + result.taper);</code></pre>
 
-<p>Layout: <code>vbox</code>, <code>hbox</code>, <code>grid</code> with <code>columns</code> and <code>rows</code>, <code>groupbox</code>, <code>spacer</code> and <code>separator</code>. Controls: <code>label</code>, <code>description</code>, <code>textbox</code> (<code>value</code>, <code>maxlength</code>, <code>multiline</code>, <code>size</code> or <code>width</code>), <code>checkbox</code>, <code>radiogroup</code> with <code>radio</code>, <code>menulist</code> with <code>menuitem</code> (<code>editable</code> too), <code>listbox</code> with <code>listitem</code>, <code>colorchip</code>, <code>popupslider</code>, <code>choosefile</code>, <code>targetlist</code>, <code>button</code>, and <code>property</code> for a value with no control. A <code>targetlist</code> offers the named movie clip and button instances of the timeline being edited, by their paths (<code>this.car.wheel</code>), and takes a path typed in too. An embedded SWF panel (<code>&lt;flash src="panel.swf"/&gt;</code>) plays in the dialog as Test Movie plays a movie; its ActionScript runs, but cannot call JSFL (<code>MMExecute</code>).</p>
+<p>Layout: <code>vbox</code>, <code>hbox</code>, <code>grid</code> with <code>columns</code> and <code>rows</code>, <code>groupbox</code>, <code>spacer</code> and <code>separator</code>. Controls: <code>label</code>, <code>description</code>, <code>textbox</code> (<code>value</code>, <code>maxlength</code>, <code>multiline</code>, <code>size</code> or <code>width</code>), <code>checkbox</code>, <code>radiogroup</code> with <code>radio</code>, <code>menulist</code> with <code>menuitem</code> (<code>editable</code> too), <code>listbox</code> with <code>listitem</code>, <code>colorchip</code>, <code>popupslider</code>, <code>choosefile</code>, <code>targetlist</code>, <code>button</code>, and <code>property</code> for a value with no control. A <code>targetlist</code> offers the named movie clip and button instances of the timeline being edited, by their paths (<code>this.car.wheel</code>), and takes a path typed in too. An embedded SWF panel (<code>&lt;flash src="panel.swf"/&gt;</code>) plays in the dialog as Test Movie plays a movie, and its <code>MMExecute</code> calls run in the script that opened the dialog, so <code>fl.xmlui</code> reaches the dialog's controls from it.</p>
 
 <p>Handlers run in the script's own context, so they can call its functions: <code>oncreate</code> as the dialog opens, <code>onchange</code> when a text box is edited, <code>oncommand</code> when a button, checkbox, radio button or menu item is used, and <code>&lt;script&gt;</code> blocks before the dialog appears. In a handler, <code>fl.xmlui</code> reads and changes the dialog: <code>get</code>, <code>set</code>, <code>getEnabled</code>, <code>setEnabled</code>, <code>getVisible</code>, <code>setVisible</code>, <code>getControlItemElements</code>, <code>setControlItemElements</code>, <code>accept</code> and <code>cancel</code>. An error in a handler is printed in the Output panel and the dialog stays open.</p>
 

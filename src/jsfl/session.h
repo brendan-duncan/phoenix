@@ -101,9 +101,10 @@ public:
     /// The script's own file, as a platform path (empty for a string).
     std::string scriptPath;
 
-    /// Runs code from an XML dialog's handlers in the script's context;
-    /// the error it threw, or empty. Set by the engine.
-    std::function<std::string(const std::string& code)> evaluate;
+    /// Runs code from an XML dialog (its handlers, its SWF panels) in the
+    /// script's context; the error it threw, or empty, and its value as
+    /// text in \a value when given. Set by the engine.
+    std::function<std::string(const std::string& code, std::string* value)> evaluate;
     /// The XML dialogs open, innermost last (fl.xmlui works on that one).
     std::vector<xul::Dialog*> dialogs;
 

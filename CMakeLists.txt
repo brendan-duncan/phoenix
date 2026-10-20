@@ -188,6 +188,7 @@ set(HEADERS
     src/gui/code_editor.h
     src/gui/script_window.h
     src/gui/cep_panel.h
+    src/gui/swf_panels.h
     src/gui/node_graph_panel.h
     src/gui/node_graph_style.h
     src/gui/node_graph_view.h
@@ -526,6 +527,7 @@ set(SOURCES
     src/gui/code_editor.cpp
     src/gui/script_window.cpp
     src/gui/cep_panel.cpp
+    src/gui/swf_panels.cpp
     src/gui/node_graph_panel.cpp
     src/gui/node_graph_style.cpp
     src/gui/node_graph_view.cpp

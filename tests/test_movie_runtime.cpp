@@ -349,6 +349,46 @@ TEST(movie_runtime_plays_scenes_in_turn_and_goes_to_them)
     CHECK(runtime.scene() == 1 && runtime.root().frame == 2);
 }
 
+TEST(movie_runtime_panels_reach_the_editor_through_mmexecute)
+{
+    // ActionScript 3 (adobe.utils) and 1/2 (a global function): the code
+    // goes to whoever holds the movie, and its value comes back.
+    const std::vector<std::pair<std::string, std::string>> scripts = {
+        {"as3", "import adobe.utils.MMExecute;\n"
+                "import flash.events.Event;\n"
+                "trace(MMExecute('fl.getDocumentDOM().name'));\n"
+                "stop();\n"},
+        {"as2", "trace(MMExecute('fl.getDocumentDOM().name'));\n"
+                "stop();\n"}};
+    for (const auto& [kind, script] : scripts)
+        for (const bool held : {true, false})
+        {
+            Movie movie;
+            movie.root->name = "Scene 1";
+            movie.frame(*movie.layer(*movie.root, "actions"), 0, 1, script);
+            fla::play::MovieRuntime runtime(*movie.root, 12.0);
+            std::vector<std::string> traced;
+            std::vector<std::string> errors;
+            std::vector<std::string> asked;
+            runtime.trace = [&traced](const std::string& line) { traced.push_back(line); };
+            runtime.error = [&errors](const std::string& line) { errors.push_back(line); };
+            if (held)
+                runtime.mmExecute = [&asked](const std::string& code) {
+                    asked.push_back(code);
+                    return std::string("shot.fla");
+                };
+            runtime.start();
+            CHECK(errors.empty());
+            for (const std::string& error : errors)
+                std::printf("    %s: %s\n", kind.c_str(), error.c_str());
+            // With no editor holding it, MMExecute gives back nothing.
+            CHECK(traced.size() == 1 && traced[0] == (held ? "shot.fla" : ""));
+            CHECK(asked.size() == (held ? 1u : 0u));
+            if (held && !asked.empty())
+                CHECK(asked[0] == "fl.getDocumentDOM().name");
+        }
+}
+
 TEST(movie_runtime_runs_actionscript_3_listeners)
 {
     Movie movie;
