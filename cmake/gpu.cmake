@@ -38,7 +38,9 @@ FetchContent_GetProperties(dawn_prebuilt)
 if(NOT dawn_prebuilt_POPULATED)
     FetchContent_Populate(dawn_prebuilt)
 endif()
-find_package(Dawn CONFIG REQUIRED PATHS ${dawn_prebuilt_SOURCE_DIR}/lib/cmake/Dawn NO_DEFAULT_PATH)
+# The Linux package keeps its libraries in lib64.
+find_package(Dawn CONFIG REQUIRED
+    PATHS ${dawn_prebuilt_SOURCE_DIR}/lib/cmake/Dawn ${dawn_prebuilt_SOURCE_DIR}/lib64/cmake/Dawn NO_DEFAULT_PATH)
 add_library(phoenix_webgpu INTERFACE)
 target_link_libraries(phoenix_webgpu INTERFACE dawn::webgpu_dawn)
 
