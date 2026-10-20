@@ -43,7 +43,11 @@ if(PHOENIX_DAWN_FROM_SOURCE)
     if(NOT dawn_source_POPULATED)
         FetchContent_Populate(dawn_source)
     endif()
+    # No Qt in it: Qt's code generators stay off its targets.
+    set(_phoenix_automoc ${CMAKE_AUTOMOC})
+    set(CMAKE_AUTOMOC OFF)
     add_subdirectory(${dawn_source_SOURCE_DIR} ${dawn_source_BINARY_DIR} EXCLUDE_FROM_ALL)
+    set(CMAKE_AUTOMOC ${_phoenix_automoc})
     add_library(phoenix_webgpu INTERFACE)
     target_link_libraries(phoenix_webgpu INTERFACE dawn::webgpu_dawn dawncpp_headers)
 else()
@@ -101,6 +105,8 @@ set(_tvg_config ${CMAKE_CURRENT_BINARY_DIR}/thorvg_config)
 file(WRITE ${_tvg_config}/config.h
 "#define THORVG_VERSION_STRING \"1.1.3\"\n#define THORVG_WG_ENGINE_SUPPORT 1\n#define WIN32_LEAN_AND_MEAN 1\n#define THORVG_LOG_ENABLED 1\n")
 add_library(thorvg STATIC ${_tvg_sources})
+# No Qt here: keep Qt's code generators off it.
+set_target_properties(thorvg PROPERTIES AUTOMOC OFF AUTOUIC OFF AUTORCC OFF)
 target_include_directories(thorvg
     PUBLIC ${_tvg}/inc
     PRIVATE ${_tvg_config} ${_tvg}/src/common ${_tvg}/src/renderer ${_tvg}/src/renderer/gpu_engine
@@ -156,6 +162,7 @@ list(APPEND _rive_sources
     ${CMAKE_CURRENT_BINARY_DIR}/rive_paint_outset.cpp
 )
 add_library(rive_renderer STATIC ${_rive_sources})
+set_target_properties(rive_renderer PROPERTIES AUTOMOC OFF AUTOUIC OFF AUTORCC OFF)
 target_include_directories(rive_renderer
     PUBLIC ${_rive}/include ${_rive}/renderer/include
     PRIVATE ${_rive}/renderer/src ${_rive}/decoders/include ${CMAKE_CURRENT_SOURCE_DIR}/third_party/rive_shaders)
