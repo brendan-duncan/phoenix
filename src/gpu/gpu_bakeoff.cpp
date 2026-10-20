@@ -162,7 +162,6 @@ int runGpuBakeoff(PhoenixView& view, const QSize& documentSize, int frameCount, 
     }
 
     std::vector<std::unique_ptr<VectorBackend>> backends;
-    backends.push_back(makeThorvgBackend(*device));
     backends.push_back(makeRiveBackend(*device));
 
     // Each way of drawing: its name, and how it draws a frame (the time it

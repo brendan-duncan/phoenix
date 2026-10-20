@@ -15,7 +15,7 @@ class GpuDevice;
 
 /// A vector renderer on the GPU, drawing what PhoenixView painted (as a
 /// PaintRecorder recorded it, with strokes kept as strokes) into a texture.
-/// The candidates for drawing the stage are compared through it.
+/// Phoenix gpu-bakeoff compares the stage's renderers through it.
 class VectorBackend
 {
 public:
@@ -39,5 +39,4 @@ public:
     QMap<QString, int> unsupported;
 };
 
-std::unique_ptr<VectorBackend> makeThorvgBackend(GpuDevice& device);
 std::unique_ptr<VectorBackend> makeRiveBackend(GpuDevice& device);

@@ -1,6 +1,5 @@
 # The GPU stage renderer (PHOENIX_GPU): WebGPU through Dawn, natively and in
-# the browser, drawn by the Rive renderer. ThorVG is built too on the
-# desktop, for Phoenix gpu-bakeoff.
+# the browser, drawn by the Rive renderer.
 #
 # Natively Dawn comes as Google's prebuilt release package for the platform,
 # pinned to one tag, or (PHOENIX_DAWN_FROM_SOURCE) is built from the same
@@ -82,41 +81,6 @@ add_library(phoenix_webgpu INTERFACE)
 target_link_libraries(phoenix_webgpu INTERFACE dawn::webgpu_dawn)
 endif() # PHOENIX_DAWN_FROM_SOURCE
 
-# ThorVG: the core, the raw image loader and the WebGPU engine.
-FetchContent_Declare(
-    thorvg
-    GIT_REPOSITORY https://github.com/thorvg/thorvg
-    GIT_TAG v1.1.3
-    GIT_SHALLOW TRUE
-)
-FetchContent_GetProperties(thorvg)
-if(NOT thorvg_POPULATED)
-    FetchContent_Populate(thorvg)
-endif()
-set(_tvg ${thorvg_SOURCE_DIR})
-file(GLOB _tvg_sources
-    ${_tvg}/src/common/*.cpp
-    ${_tvg}/src/renderer/*.cpp
-    ${_tvg}/src/renderer/gpu_engine/*.cpp
-    ${_tvg}/src/renderer/gpu_engine/wg/*.cpp
-    ${_tvg}/src/loaders/raw/*.cpp
-)
-set(_tvg_config ${CMAKE_CURRENT_BINARY_DIR}/thorvg_config)
-file(WRITE ${_tvg_config}/config.h
-"#define THORVG_VERSION_STRING \"1.1.3\"\n#define THORVG_WG_ENGINE_SUPPORT 1\n#define WIN32_LEAN_AND_MEAN 1\n#define THORVG_LOG_ENABLED 1\n")
-add_library(thorvg STATIC ${_tvg_sources})
-# No Qt here: keep Qt's code generators off it.
-set_target_properties(thorvg PROPERTIES AUTOMOC OFF AUTOUIC OFF AUTORCC OFF)
-target_include_directories(thorvg
-    PUBLIC ${_tvg}/inc
-    PRIVATE ${_tvg_config} ${_tvg}/src/common ${_tvg}/src/renderer ${_tvg}/src/renderer/gpu_engine
-            ${_tvg}/src/renderer/gpu_engine/wg ${_tvg}/src/loaders/raw ${_tvg}/src/loaders ${_tvg}/src/savers)
-target_compile_definitions(thorvg PUBLIC TVG_STATIC PRIVATE NOMINMAX)
-target_compile_features(thorvg PRIVATE cxx_std_20)
-target_link_libraries(thorvg PUBLIC phoenix_webgpu)
-if(MSVC)
-    target_compile_options(thorvg PRIVATE /W0 /utf-8)
-endif()
 endif() # not EMSCRIPTEN
 
 # The Rive renderer: its core, the WebGPU backend and the math it needs, at
