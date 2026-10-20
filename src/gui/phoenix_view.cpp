@@ -36,6 +36,7 @@
 #include "../parser/ik_tree.h"
 #include "filters.h"
 #include "stroke_effects.h"
+#include "coloring_engine.h"
 #include <QElapsedTimer>
 #ifdef PHOENIX_GPU
 #include "../gpu/gpu_device.h"
@@ -2771,6 +2772,33 @@ QImage coverageImage(const std::vector<uint8_t>& amount, const QSize& size)
     return image;
 }
 
+/// Adds \a value to the fingerprint \a key.
+void fingerprint(quint64& key, quint64 value)
+{
+    key = (key ^ value) * 0x9E3779B97F4A7C15ull;
+    key ^= key >> 29;
+}
+
+void fingerprint(quint64& key, double value)
+{
+    quint64 bits;
+    std::memcpy(&bits, &value, sizeof(bits));
+    fingerprint(key, bits);
+}
+
+/// A fingerprint of \a path: its fill rule and every point.
+void fingerprint(quint64& key, const QPainterPath& path)
+{
+    fingerprint(key, static_cast<quint64>(path.fillRule()) + 0x100u * static_cast<quint64>(path.elementCount()));
+    for (int i = 0; i < path.elementCount(); ++i)
+    {
+        const QPainterPath::Element e = path.elementAt(i);
+        fingerprint(key, static_cast<quint64>(e.type));
+        fingerprint(key, e.x);
+        fingerprint(key, e.y);
+    }
+}
+
 /// \a area grown by \a by (shrunk when it is less than 0), its corners
 /// rounded as a mask's grow rounds them.
 QPainterPath grownArea(const QPainterPath& area, double by)
@@ -3249,7 +3277,7 @@ void PhoenixView::drawTimeline(QPainter& painter, const fla::Timeline* timeline,
                 const std::vector<bool> keep = keepOf(feather);
                 drawMask(recording, parted ? &keep : nullptr);
                 recording.end();
-                vector.parts.emplace_back(coveredArea(recorder.items), feather * deviceScale);
+                vector.parts.emplace_back(maskAreaOf(recorder.items), feather * deviceScale);
             }
             vectorMasks[i] = vector;
             continue;
@@ -3549,7 +3577,24 @@ void PhoenixView::drawTimeline(QPainter& painter, const fla::Timeline* timeline,
                 const QRectF everywhere = QRectF(deviceRect).adjusted(-1.0e4, -1.0e4, 1.0e4, 1.0e4);
                 // A mask's area as a hard edge: its parts together, grown or
                 // shrunk, turned inside out.
-                const auto hardArea = [&everywhere](const VectorMask& vector) {
+                const auto hardArea = [this, &everywhere](const VectorMask& vector) {
+                    // The same parts made into the same area as on an earlier
+                    // paint: that area.
+                    quint64 key = 0x6d61736b;
+                    for (const auto& part : vector.parts)
+                        fingerprint(key, part.first);
+                    fingerprint(key, vector.expand);
+                    fingerprint(key, static_cast<quint64>(vector.invert));
+                    if (vector.invert)
+                    {
+                        fingerprint(key, everywhere.x());
+                        fingerprint(key, everywhere.y());
+                        fingerprint(key, everywhere.width());
+                        fingerprint(key, everywhere.height());
+                    }
+                    const auto known = _maskAreas.constFind(key);
+                    if (known != _maskAreas.constEnd())
+                        return *known;
                     QPainterPath area;
                     area.setFillRule(Qt::WindingFill);
                     for (const auto& part : vector.parts)
@@ -3561,6 +3606,9 @@ void PhoenixView::drawTimeline(QPainter& painter, const fla::Timeline* timeline,
                         all.addRect(everywhere);
                         area = all.subtracted(area);
                     }
+                    if (_maskAreas.size() > 2048)
+                        _maskAreas.clear();
+                    _maskAreas.insert(key, area);
                     return area;
                 };
                 if (soft && _svgSoftMasks)
@@ -5936,7 +5984,13 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
             // over them, an effect, or a blend mode against what is under it.
             // Outline view shows the instance's lines plainly: no color
             // effect, filter or blend, which would wash the lines out.
-            const bool isolate = !_outlineColor.isValid() &&
+            // An engine that colors shapes itself (the GPU stage's) takes a
+            // color effect that is all there is shape by shape, as Flash
+            // colors a symbol's art, with no picture of the instance.
+            ColoringEngine* coloring = !color.isIdentity() && !_maskPass && !_outlineColor.isValid() && filters.empty() &&
+                    pictureEffects.empty() && casters.empty() && !Filters::needsIsolation(instance->blendMode)
+                ? dynamic_cast<ColoringEngine*>(painter.paintEngine()) : nullptr;
+            const bool isolate = !_outlineColor.isValid() && !coloring &&
                 ((!color.isIdentity() && !alphaOnly) || !filters.empty() || !pictureEffects.empty() || !casters.empty() ||
                     Filters::needsIsolation(instance->blendMode));
 
@@ -6048,7 +6102,9 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
                 // shapes inside the symbol show through each other: the
                 // painter's opacity does exactly that.
                 painter.save();
-                if (!color.isIdentity() && !_maskPass)
+                if (coloring)
+                    coloring->pushColor(color);
+                else if (!color.isIdentity() && !_maskPass)
                     painter.setOpacity(painter.opacity() * std::max(0.0, std::min(1.0, color.alphaMultiplier)));
 
                 drawSymbolTimelines(painter, [&](QPainter& target, const fla::Timeline* timeline) {
@@ -6056,6 +6112,8 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
                     drawTimeline(target, timeline, loopType, frameOffset);
                     target.restore();
                 });
+                if (coloring)
+                    coloring->popColor();
                 painter.restore();
             }
             else
@@ -11320,6 +11378,29 @@ void PhoenixView::resetView()
     update();
 }
 
+QPainterPath PhoenixView::maskAreaOf(const std::vector<RecordedItem>& items)
+{
+    // What coveredArea reads: each fill's area and clip.
+    quint64 key = 0x636f766572;
+    for (const RecordedItem& item : items)
+    {
+        if (item.kind == RecordedItem::Kind::Fill && item.brush.style() == Qt::NoBrush)
+            continue;
+        fingerprint(key, item.path);
+        fingerprint(key, static_cast<quint64>(item.clipped));
+        if (item.clipped)
+            fingerprint(key, item.clip);
+    }
+    const auto known = _maskAreas.constFind(key);
+    if (known != _maskAreas.constEnd())
+        return *known;
+    QPainterPath area = coveredArea(items);
+    if (_maskAreas.size() > 2048)
+        _maskAreas.clear();
+    _maskAreas.insert(key, area);
+    return area;
+}
+
 void PhoenixView::clearCaches()
 {
     // A drawing waiting to merge that an undo took off its frame is let go
@@ -12841,47 +12922,7 @@ void PhoenixView::applyColorTransform(QImage& image, const fla::ColorTransform& 
             int g = qGreen(pixel);
             int b = qBlue(pixel);
             int a = qAlpha(pixel);
-
-            if (colorTransform.tintMultiplier != 0.0)
-            {
-                // Tint multiplies each color channel by 1 - t and adds t of
-                // the tint color; alpha is left alone.
-                const double t = colorTransform.tintMultiplier;
-                const double it = 1.0 - t;
-                r = static_cast<int>(it * r + t * colorTransform.tintColor[0]);
-                g = static_cast<int>(it * g + t * colorTransform.tintColor[1]);
-                b = static_cast<int>(it * b + t * colorTransform.tintColor[2]);
-            }
-
-            if (colorTransform.brightness != 0.0)
-            {
-                // Brightness is a multiply and add too: towards white it
-                // multiplies by 1 - b and adds 255 b, towards black it
-                // multiplies by 1 + b.
-                const double br = colorTransform.brightness;
-                if (br > 0.0)
-                {
-                    r = static_cast<int>(r * (1.0 - br) + 255.0 * br);
-                    g = static_cast<int>(g * (1.0 - br) + 255.0 * br);
-                    b = static_cast<int>(b * (1.0 - br) + 255.0 * br);
-                }
-                else
-                {
-                    r = static_cast<int>(r * (1.0 + br));
-                    g = static_cast<int>(g * (1.0 + br));
-                    b = static_cast<int>(b * (1.0 + br));
-                }
-            }
-
-            r = static_cast<int>(r * colorTransform.redMultiplier) + colorTransform.redOffset;
-            g = static_cast<int>(g * colorTransform.greenMultiplier) + colorTransform.greenOffset;
-            b = static_cast<int>(b * colorTransform.blueMultiplier) + colorTransform.blueOffset;
-            a = static_cast<int>(a * colorTransform.alphaMultiplier) + colorTransform.alphaOffset;
-
-            r = qBound(0, r, 255);
-            g = qBound(0, g, 255);
-            b = qBound(0, b, 255);
-            a = qBound(0, a, 255);
+            colorTransform.apply(r, g, b, a);
 
             line[x] = premultiplied ? qPremultiply(qRgba(r, g, b, a)) : qRgba(r, g, b, a);
         }

@@ -256,6 +256,7 @@ set(HEADERS
     src/gui/convert_to_symbol_dialog.h
     src/gui/phoenix_view.h
     src/gui/sample_profiler.h
+    src/gui/coloring_engine.h
     src/gui/behavior_library.h
     src/gui/behaviors_panel.h
     src/gui/tool.h

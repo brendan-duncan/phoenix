@@ -2,6 +2,8 @@
 
 #include "gpu_device.h"
 
+#include "../gui/coloring_engine.h"
+
 #include <rive/renderer/render_context.hpp>
 #include <rive/renderer/rive_render_image.hpp>
 #include <rive/renderer/rive_renderer.hpp>
@@ -37,14 +39,28 @@ rive::ColorInt colorOf(const QColor& color)
         (static_cast<uint32_t>(color.green()) << 8) | static_cast<uint32_t>(color.blue());
 }
 
-/// What QPainterPath shares between its copies: the same for a path and
-/// every copy of it until one is changed.
-const void* sharedDataOf(const QPainterPath& path)
+/// A fingerprint of \a path's fill rule and points: the same for paths
+/// that are the same, so a shape drawn again finds the Rive path made for it
+/// (QPainterPath copies its points, so its own data cannot tell).
+quint64 contentKey(const QPainterPath& path)
 {
-    static_assert(sizeof(QPainterPath) == sizeof(void*), "QPainterPath is one pointer to its shared data");
-    const void* data = nullptr;
-    std::memcpy(&data, &path, sizeof(data));
-    return data;
+    quint64 key = static_cast<quint64>(path.fillRule()) + 0x100u * static_cast<quint64>(path.elementCount());
+    const auto add = [&key](quint64 value) {
+        key = (key ^ value) * 0x9E3779B97F4A7C15ull;
+        key ^= key >> 29;
+    };
+    for (int i = 0; i < path.elementCount(); ++i)
+    {
+        const QPainterPath::Element e = path.elementAt(i);
+        quint64 x;
+        quint64 y;
+        std::memcpy(&x, &e.x, sizeof(x));
+        std::memcpy(&y, &e.y, sizeof(y));
+        add(static_cast<quint64>(e.type));
+        add(x);
+        add(y);
+    }
+    return key;
 }
 
 bool blendOf(QPainter::CompositionMode mode, rive::BlendMode& blend, float& additive)
@@ -98,11 +114,10 @@ public:
 
     struct CachedPath
     {
-        QPainterPath keep;
         rive::rcp<rive::RenderPath> path;
         int frame = 0;
     };
-    QHash<const void*, CachedPath> paths;
+    QHash<quint64, CachedPath> paths;
     struct CachedImage
     {
         rive::rcp<rive::RenderImage> image;
@@ -163,9 +178,21 @@ private:
 
 /// QPainter's calls as Rive's: each drawing call becomes a draw under the
 /// painter's transform and clips, with its opacity and blend mode.
-class RiveCanvas::Impl::Engine : public QPaintEngine
+class RiveCanvas::Impl::Engine : public QPaintEngine, public ColoringEngine
 {
 public:
+    void pushColor(const fla::ColorTransform& color) override
+    {
+        _colors.push_back(color);
+        _colorsKey = keyOf(_colors);
+    }
+    void popColor() override
+    {
+        if (!_colors.empty())
+            _colors.pop_back();
+        _colorsKey = keyOf(_colors);
+    }
+
     explicit Engine(Impl& impl)
         : QPaintEngine(QPaintEngine::AllFeatures)
         , _impl(impl)
@@ -181,6 +208,8 @@ public:
         _mode = QPainter::CompositionMode_SourceOver;
         _brush = QBrush();
         _pen = QPen();
+        _colors.clear();
+        _colorsKey = 0;
         return true;
     }
     bool end() override { return true; }
@@ -295,7 +324,8 @@ public:
         const QRect whole = image.rect();
         const bool all = source.toAlignedRect() == whole;
         const qint64 key = all ? image.cacheKey() : image.cacheKey() ^ (qHash(source.toAlignedRect()) * 0x9E3779B97F4A7C15ull);
-        rive::RenderImage* made = _impl.imageOf(key, [&]() { return all ? image : image.copy(source.toAlignedRect()); });
+        rive::RenderImage* made = _impl.imageOf(imageKey(key),
+            [&]() { return tinted(all ? image : image.copy(source.toAlignedRect())); });
         place(made, rect, source.size());
     }
     void drawPixmap(const QRectF& rect, const QPixmap& pixmap, const QRectF& source) override
@@ -304,8 +334,8 @@ public:
             return;
         const bool all = source.toAlignedRect() == pixmap.rect();
         const qint64 key = all ? pixmap.cacheKey() : pixmap.cacheKey() ^ (qHash(source.toAlignedRect()) * 0x9E3779B97F4A7C15ull);
-        rive::RenderImage* made = _impl.imageOf(key, [&]() {
-            return all ? pixmap.toImage() : pixmap.copy(source.toAlignedRect()).toImage();
+        rive::RenderImage* made = _impl.imageOf(imageKey(key), [&]() {
+            return tinted(all ? pixmap.toImage() : pixmap.copy(source.toAlignedRect()).toImage());
         });
         place(made, rect, source.size());
     }
@@ -323,6 +353,74 @@ public:
     int unsupportedModes = 0;
 
 private:
+    /// What the color effects in force make of \a color: the innermost
+    /// first.
+    QColor colored(const QColor& color) const
+    {
+        if (_colors.empty())
+            return color;
+        int r = color.red();
+        int g = color.green();
+        int b = color.blue();
+        int a = color.alpha();
+        for (auto it = _colors.rbegin(); it != _colors.rend(); ++it)
+            it->apply(r, g, b, a);
+        return QColor(r, g, b, a);
+    }
+
+    /// \a image as the color effects in force make it, pixel by pixel.
+    QImage colored(const QImage& image) const
+    {
+        QImage out = image.convertToFormat(QImage::Format_ARGB32);
+        for (int y = 0; y < out.height(); ++y)
+        {
+            auto* line = reinterpret_cast<QRgb*>(out.scanLine(y));
+            for (int x = 0; x < out.width(); ++x)
+            {
+                if (qAlpha(line[x]) == 0)
+                    continue;
+                int r = qRed(line[x]);
+                int g = qGreen(line[x]);
+                int b = qBlue(line[x]);
+                int a = qAlpha(line[x]);
+                for (auto it = _colors.rbegin(); it != _colors.rend(); ++it)
+                    it->apply(r, g, b, a);
+                line[x] = qRgba(r, g, b, a);
+            }
+        }
+        return out;
+    }
+
+    static quint64 keyOf(const std::vector<fla::ColorTransform>& colors)
+    {
+        quint64 key = 0;
+        const auto add = [&key](double value) {
+            quint64 bits;
+            std::memcpy(&bits, &value, sizeof(bits));
+            key = (key ^ bits) * 0x9E3779B97F4A7C15ull;
+            key ^= key >> 29;
+        };
+        for (const fla::ColorTransform& c : colors)
+        {
+            add(c.tintMultiplier);
+            add(c.tintColor[0] | (c.tintColor[1] << 8) | (c.tintColor[2] << 16));
+            add(c.brightness);
+            add(c.redMultiplier);
+            add(c.greenMultiplier);
+            add(c.blueMultiplier);
+            add(c.alphaMultiplier);
+            add(c.redOffset);
+            add(c.greenOffset);
+            add(c.blueOffset);
+            add(c.alphaOffset);
+        }
+        return key;
+    }
+
+    /// An image's key with the color effects in force: the same image
+    /// colored another way is another texture.
+    qint64 imageKey(qint64 key) const { return _colors.empty() ? key : static_cast<qint64>(key ^ _colorsKey); }
+
     struct Clip
     {
         rive::RenderPath* path = nullptr;
@@ -366,14 +464,15 @@ private:
     {
         if (brush.style() == Qt::SolidPattern)
         {
-            const quint64 key = (static_cast<quint64>(colorOf(brush.color())) << 32) |
-                (static_cast<quint64>(blend) << 8) | static_cast<quint64>(additive > 0.0f);
+            const rive::ColorInt color = colorOf(colored(brush.color()));
+            const quint64 key = (static_cast<quint64>(color) << 32) | (static_cast<quint64>(blend) << 8) |
+                static_cast<quint64>(additive > 0.0f);
             auto found = _impl.fills.find(key);
             if (found == _impl.fills.end())
             {
                 rive::rcp<rive::RenderPaint> paint = _impl.context->makeRenderPaint();
                 paint->style(rive::RenderPaintStyle::fill);
-                paint->color(colorOf(brush.color()));
+                paint->color(color);
                 paint->blendMode(blend);
                 paint->additiveness(additive);
                 found = _impl.fills.insert(key, paint);
@@ -399,7 +498,7 @@ private:
             std::vector<float> stops;
             for (const QGradientStop& stop : gradient->stops())
             {
-                colors.push_back(colorOf(stop.second));
+                colors.push_back(colorOf(colored(stop.second)));
                 stops.push_back(static_cast<float>(stop.first));
             }
             rive::rcp<rive::RenderShader> shader;
@@ -430,8 +529,8 @@ private:
             const QPixmap pixmap = image.isNull() ? brush.texture() : QPixmap();
             const QSize size = image.isNull() ? pixmap.size() : image.size();
             rive::RenderImage* made = image.isNull()
-                ? _impl.imageOf(pixmap.cacheKey(), [&]() { return pixmap.toImage(); })
-                : _impl.imageOf(image.cacheKey(), [&]() { return image; });
+                ? _impl.imageOf(imageKey(pixmap.cacheKey()), [&]() { return tinted(pixmap.toImage()); })
+                : _impl.imageOf(imageKey(image.cacheKey()), [&]() { return tinted(image); });
             if (made && !size.isEmpty())
             {
                 paint.color(0xffffffff);
@@ -441,8 +540,11 @@ private:
                 return;
             }
         }
-        paint.color(colorOf(brush.color()));
+        paint.color(colorOf(colored(brush.color())));
     }
+
+    /// \a image colored by the effects in force, if any.
+    QImage tinted(const QImage& image) const { return _colors.empty() ? image : colored(image); }
 
     void fill(const QPainterPath& path, const QBrush& brush)
     {
@@ -488,7 +590,7 @@ private:
         if (brush.style() == Qt::SolidPattern)
         {
             QByteArray key(sizeof(uint32_t) + sizeof(float) + 4, 0);
-            const uint32_t color = colorOf(brush.color());
+            const uint32_t color = colorOf(colored(brush.color()));
             const float thickness = static_cast<float>(width);
             std::memcpy(key.data(), &color, sizeof(color));
             std::memcpy(key.data() + 4, &thickness, sizeof(thickness));
@@ -560,6 +662,8 @@ private:
     QBrush _brush;
     QPen _pen;
     rive::rcp<rive::RenderPaint> _scratch;
+    std::vector<fla::ColorTransform> _colors;
+    quint64 _colorsKey = 0;
 };
 
 QPaintEngine* RiveCanvas::Impl::Device::paintEngine() const
@@ -591,7 +695,7 @@ RiveCanvas::Impl::~Impl()
 rive::RenderPath* RiveCanvas::Impl::pathOf(const QPainterPath& path)
 {
     ++pathsUsed;
-    const void* key = sharedDataOf(path);
+    const quint64 key = contentKey(path);
     auto found = paths.find(key);
     if (found != paths.end())
     {
@@ -632,7 +736,6 @@ rive::RenderPath* RiveCanvas::Impl::pathOf(const QPainterPath& path)
     if (count > 1 && last == start)
         raw.close();
     CachedPath cached;
-    cached.keep = path;
     cached.path = context->makeRenderPath(raw, path.fillRule() == Qt::OddEvenFill ? rive::FillRule::evenOdd
                                                                                    : rive::FillRule::nonZero);
     cached.frame = frame;

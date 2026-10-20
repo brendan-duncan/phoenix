@@ -1348,6 +1348,13 @@ private:
         QPoint origin;
     };
     QMap<const fla::SymbolInstance*, FilteredImage> _filterCache;
+    /// Masks drawn as vectors: the areas worked out from what a mask layer
+    /// drew (its fills united, grown, turned inside out), by a fingerprint
+    /// of what it drew, so a mask that draws the same as on an earlier
+    /// paint is not worked out again. Path operations are slow.
+    QHash<quint64, QPainterPath> _maskAreas;
+    /// \a items' covered area (coveredArea), remembered by their fingerprint.
+    QPainterPath maskAreaOf(const std::vector<struct RecordedItem>& items);
 
     /// How the classic tween of the frame being drawn turns, from its
     /// keyframe, for interpolateTransform.
