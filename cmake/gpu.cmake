@@ -3,9 +3,11 @@
 # desktop, for Phoenix gpu-bakeoff.
 #
 # Natively Dawn comes as Google's prebuilt release package for the platform,
-# pinned to one tag. In the browser it is Emscripten's emdawnwebgpu port,
-# Dawn's webgpu.h over the browser's WebGPU. The target phoenix_webgpu is
-# whichever it is.
+# pinned to one tag, or (PHOENIX_DAWN_FROM_SOURCE) is built from the same
+# commit: the Linux package is built on a newer system than the release
+# builds on, and needs a newer C++ library than that has. In the browser it
+# is Emscripten's emdawnwebgpu port, Dawn's webgpu.h over the browser's
+# WebGPU. The target phoenix_webgpu is whichever it is.
 
 include(FetchContent)
 
@@ -17,6 +19,34 @@ else()
 
 set(PHOENIX_DAWN_TAG v20261016.190333)
 set(PHOENIX_DAWN_COMMIT 67d4d6e64b0755d638f76549794692badfdbc8ab)
+option(PHOENIX_DAWN_FROM_SOURCE "Build Dawn from source rather than use its prebuilt package" OFF)
+if(PHOENIX_DAWN_FROM_SOURCE)
+    FetchContent_Declare(
+        dawn_source
+        URL https://github.com/google/dawn/archive/${PHOENIX_DAWN_COMMIT}.tar.gz
+        URL_HASH SHA256=5e5112b5f43e1d0fd5bb26259a3cfc5d5672c09973fad45c39d67c77ccb8cecf
+        DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+    )
+    # Only what drawing into a texture and reading it back needs: no window
+    # surfaces (X11, Wayland, GLFW), no OpenGL backends, no tools or tests.
+    # Its dependencies come by its own script rather than depot_tools.
+    set(DAWN_FETCH_DEPENDENCIES ON CACHE BOOL "" FORCE)
+    foreach(_off DAWN_BUILD_SAMPLES DAWN_BUILD_TESTS DAWN_BUILD_BENCHMARKS DAWN_BUILD_PROTOBUF DAWN_USE_GLFW
+            DAWN_USE_X11 DAWN_USE_WAYLAND DAWN_ENABLE_DESKTOP_GL DAWN_ENABLE_OPENGLES DAWN_ENABLE_INSTALL
+            TINT_BUILD_TESTS TINT_BUILD_CMD_TOOLS TINT_BUILD_BENCHMARKS)
+        set(${_off} OFF CACHE BOOL "" FORCE)
+    endforeach()
+    # Dawn's C++ API as a C++20 module is not used, and the check for it
+    # fails with some generators.
+    set(DAWN_SUPPORTS_CXX_MODULES FALSE CACHE INTERNAL "")
+    FetchContent_GetProperties(dawn_source)
+    if(NOT dawn_source_POPULATED)
+        FetchContent_Populate(dawn_source)
+    endif()
+    add_subdirectory(${dawn_source_SOURCE_DIR} ${dawn_source_BINARY_DIR} EXCLUDE_FROM_ALL)
+    add_library(phoenix_webgpu INTERFACE)
+    target_link_libraries(phoenix_webgpu INTERFACE dawn::webgpu_dawn dawncpp_headers)
+else()
 include(${CMAKE_CURRENT_LIST_DIR}/GpuPlatform.cmake)
 phoenix_dawn_package(_dawn_os)
 if(_dawn_os STREQUAL "windows-latest")
@@ -46,6 +76,7 @@ find_package(Dawn CONFIG REQUIRED
     PATHS ${dawn_prebuilt_SOURCE_DIR}/lib/cmake/Dawn ${dawn_prebuilt_SOURCE_DIR}/lib64/cmake/Dawn NO_DEFAULT_PATH)
 add_library(phoenix_webgpu INTERFACE)
 target_link_libraries(phoenix_webgpu INTERFACE dawn::webgpu_dawn)
+endif() # PHOENIX_DAWN_FROM_SOURCE
 
 # ThorVG: the core, the raw image loader and the WebGPU engine.
 FetchContent_Declare(
@@ -76,7 +107,7 @@ target_include_directories(thorvg
             ${_tvg}/src/renderer/gpu_engine/wg ${_tvg}/src/loaders/raw ${_tvg}/src/loaders ${_tvg}/src/savers)
 target_compile_definitions(thorvg PUBLIC TVG_STATIC PRIVATE NOMINMAX)
 target_compile_features(thorvg PRIVATE cxx_std_20)
-target_link_libraries(thorvg PUBLIC dawn::webgpu_dawn)
+target_link_libraries(thorvg PUBLIC phoenix_webgpu)
 if(MSVC)
     target_compile_options(thorvg PRIVATE /W0 /utf-8)
 endif()

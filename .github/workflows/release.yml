@@ -114,6 +114,7 @@ jobs:
             -DPHOENIX_USE_SYSTEM_QT=OFF \
             -DPHOENIX_VERSION=${{ steps.version.outputs.version }} \
             -DPHOENIX_FFMPEG_REQUIRED=ON \
+            ${{ matrix.target == 'linux-x64' && '-DPHOENIX_DAWN_FROM_SOURCE=ON' || '' }} \
             -DCMAKE_BUILD_TYPE=Release
           # A job count, always: with no number, --parallel on macOS's
           # Makefiles means `make -j` with no limit, which started every
