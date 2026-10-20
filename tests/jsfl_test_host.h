@@ -48,6 +48,9 @@ public:
     /// What exportSWF and publish were asked for.
     std::vector<std::string> swfs;
     std::vector<std::string> published;
+    /// How many times the window was brought up to date.
+    int refreshes = 0;
+    void refresh() override { ++refreshes; }
 
     fla::DrawingStyle* drawingStyle() override { return &style; }
 

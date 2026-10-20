@@ -681,6 +681,9 @@ const char* const kListeners = R"JS(
         });
         return fl.__listeners.length < before;
     };
+    fl.__hears = function (type) {
+        return fl.__listeners.some(function (entry) { return entry.type == type; });
+    };
     fl.__dispatch = function (type) {
         var errors = [];
         fl.__listeners.slice().forEach(function (entry) {
@@ -1258,6 +1261,12 @@ void Engine::dispatch(const std::string& type)
     for (size_t i = 0; i < _kept.size(); ++i)
     {
         Kept& kept = *_kept[i];
+        // One not listening for it is left alone: settling brings the whole
+        // window up to date, and playing raises an event every frame.
+        std::string hears;
+        kept.evaluate("String(fl.__hears(" + quoted(type) + "))", &hears);
+        if (hears != "true")
+            continue;
         std::string errors;
         const std::string failed = kept.evaluate("fl.__dispatch(" + quoted(type) + ")", &errors, 5.0);
         if (!failed.empty())
@@ -1738,6 +1747,10 @@ std::string ToolScript::dispatch(const std::string& type)
     Impl& d = *_impl;
     // The events a call sets off are its own doing, not news to it.
     if (!d.ctx || d.busy)
+        return {};
+    // A tool not listening for it is left alone: settling brings the whole
+    // window up to date, and playing raises an event every frame.
+    if (d.text("fl.__hears(" + quoted(type) + ")") != "true")
         return {};
     std::string errors;
     std::string failed = d.eval("fl.__dispatch(" + quoted(type) + ")", d.path, &errors);

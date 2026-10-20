@@ -427,6 +427,12 @@ TEST(jsfl_tools_preview_while_dragging_and_draw_on_release)
     CHECK(frame->elements.empty());
     // A handler the tool does not have is no error.
     CHECK(tool.call("keyDown", state).empty());
+    // An event it does not listen for leaves the window alone: playing
+    // raises one every frame, and bringing the window up to date clears the
+    // stage's caches.
+    const int refreshes = f.host.refreshes;
+    CHECK(tool.dispatch("frameChanged").empty());
+    CHECK(f.host.refreshes == refreshes);
 }
 
 TEST(jsfl_listeners_hear_events_after_their_script_ends)
@@ -445,7 +451,11 @@ TEST(jsfl_listeners_hear_events_after_their_script_ends)
     CHECK(f.engine.listeningScripts() == 1);
     f.engine.dispatch("documentSaved");
     f.engine.dispatch("documentSaved");
+    // Nothing listens for this one: nothing runs, and the window is left
+    // alone.
+    const int refreshes = f.host.refreshes;
     f.engine.dispatch("documentOpened");
+    CHECK(f.host.refreshes == refreshes);
     CHECK(f.take() == "saved 1\nsaved 2\n");
     // What a listener changes is one step to undo, named after its script.
     redFillBlackStroke(f);
