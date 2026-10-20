@@ -4,7 +4,7 @@
 
 #include <memory>
 
-/// A sampling profiler for the thread that starts it (Windows only; a
+/// A sampling profiler for the thread that starts it (x64 Windows only; a
 /// no-op elsewhere): every millisecond it stops the thread, notes where it
 /// is and what called it, and lets it go on. The report names the
 /// functions that took the most time, on their own and with what they

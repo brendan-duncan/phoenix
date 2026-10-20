@@ -9,7 +9,12 @@
 #include <thread>
 #include <vector>
 
-#ifdef Q_OS_WIN
+// The unwinding below reads x64 registers.
+#if defined(Q_OS_WIN) && defined(_M_X64)
+#define PHOENIX_SAMPLER
+#endif
+
+#ifdef PHOENIX_SAMPLER
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <dbghelp.h>
@@ -23,7 +28,7 @@ struct SampleProfiler::Impl
     std::atomic<bool> running{false};
     /// Each sample: the return addresses, innermost first.
     std::vector<std::vector<quint64>> stacks;
-#ifdef Q_OS_WIN
+#ifdef PHOENIX_SAMPLER
     HANDLE target = nullptr;
 #endif
 };
@@ -40,7 +45,7 @@ SampleProfiler::~SampleProfiler()
 
 bool SampleProfiler::start()
 {
-#ifdef Q_OS_WIN
+#ifdef PHOENIX_SAMPLER
     Impl& d = *_impl;
     if (d.running)
         return true;
@@ -100,7 +105,7 @@ void SampleProfiler::stop()
     d.running = false;
     if (d.sampler.joinable())
         d.sampler.join();
-#ifdef Q_OS_WIN
+#ifdef PHOENIX_SAMPLER
     timeEndPeriod(1);
     CloseHandle(d.target);
     d.target = nullptr;
@@ -109,7 +114,7 @@ void SampleProfiler::stop()
 
 QString SampleProfiler::report(int top) const
 {
-#ifdef Q_OS_WIN
+#ifdef PHOENIX_SAMPLER
     const Impl& d = *_impl;
     if (d.stacks.empty())
         return "No samples.\n";
