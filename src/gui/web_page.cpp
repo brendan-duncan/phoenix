@@ -75,7 +75,6 @@ protected:
         // beside the new ones. Not animated, they go at once.
         if (window->isAnimated())
             window->setAnimated(false);
-        // Once the change in hand is done.
         // Once the change in hand is done. A saved size taken back can leave
         // the window full screen in name only, so its size is what counts.
         QTimer::singleShot(0, window, [window]() {
@@ -90,7 +89,7 @@ protected:
     }
 };
 
-// Whether  bar labels a panel of  docks that is open beside it: the tab
+// Whether \a bar labels a panel of \a docks that is open beside it: the tab
 // bars a main window makes for grouped panels carry each panel in their
 // tabs' data, and sit over or under the group, as wide as it.
 bool labelsOpenPanel(const QTabBar* bar, const QList<QDockWidget*>& docks)
@@ -115,10 +114,13 @@ bool labelsOpenPanel(const QTabBar* bar, const QList<QDockWidget*>& docks)
 
 // Leftovers. In a page, a main window has been seen to leave the tab bars of
 // panel groups up after the panels in them closed or moved: a second row of
-// tabs beside the real one, tabs of hidden panels over the stage. After any
-// change to a main window's panels, once it is done, tab bars over no open
-// panel of theirs are hidden (the window shows one again when it uses it),
-// and the whole window is drawn again.
+// tabs beside the real one, tabs of hidden panels over the stage. The window
+// takes these for bars still in use and shows them again whenever it lays
+// out its panels, but never moves them, so they are moved off the window as
+// the window itself puts away the bars it no longer uses (hiding them blinks,
+// shown again by the next layout and hidden after). After any change to a
+// main window's panels, once it is done, tab bars over no open panel of
+// theirs go, and the whole window is drawn again.
 class RedrawAfterPanelChanges : public QObject
 {
 protected:
@@ -142,8 +144,8 @@ protected:
                 return;
             const QList<QDockWidget*> docks = guarded->findChildren<QDockWidget*>(Qt::FindDirectChildrenOnly);
             for (QTabBar* bar : guarded->findChildren<QTabBar*>(Qt::FindDirectChildrenOnly))
-                if (bar->isVisible() && bar->count() > 0 && !labelsOpenPanel(bar, docks))
-                    bar->hide();
+                if (bar->isVisible() && bar->count() > 0 && bar->x() >= 0 && !labelsOpenPanel(bar, docks))
+                    bar->move(-500 - bar->width(), -500 - bar->height());
             guarded->update();
             // ?debugdocks: what the panels and their tab bars are doing.
             if (qEnvironmentVariableIsSet("PHOENIX_DEBUG_DOCKS"))
