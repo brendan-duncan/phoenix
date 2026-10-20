@@ -744,8 +744,9 @@ public:
 
     /// The same as vectors: what frame \a frame paints at \a size, the
     /// stage at the origin, as fills and images (no stage color), masks as
-    /// clips. What SWF export writes.
-    std::vector<struct RecordedItem> recordFrame(int frame, const QSize& size);
+    /// clips. What SWF export writes. With \a keepStrokes, outlines are kept
+    /// as strokes rather than the areas they cover (see PaintRecorder).
+    std::vector<struct RecordedItem> recordFrame(int frame, const QSize& size, bool keepStrokes = false);
     /// What \a element draws, recorded as vectors in its own space (its own
     /// transform taken off; a group's members keep theirs, as it draws
     /// them), its outlines kept as strokes and its text as text where they

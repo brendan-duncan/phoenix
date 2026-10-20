@@ -703,7 +703,21 @@ if(PHOENIX_WEB)
         src/gui/main_window_phone.cpp)
 endif()
 
+# The GPU stage renderer (cmake/gpu.cmake), off while it is being built.
+option(PHOENIX_GPU "Draw the stage on the GPU through WebGPU (Dawn)" OFF)
+if(PHOENIX_GPU)
+    include(cmake/gpu.cmake)
+    list(APPEND SOURCES src/gpu/gpu_device.cpp src/gpu/thorvg_backend.cpp
+        src/gpu/rive_backend.cpp src/gpu/gpu_bakeoff.cpp)
+    list(APPEND HEADERS src/gpu/gpu_device.h src/gpu/vector_backend.h
+        src/gpu/gpu_bakeoff.h)
+endif()
+
 qt6_add_executable(Phoenix MANUAL_FINALIZATION ${SOURCES} ${HEADERS})
+if(PHOENIX_GPU)
+    target_link_libraries(Phoenix PRIVATE dawn::webgpu_dawn thorvg rive_renderer)
+    target_compile_definitions(Phoenix PRIVATE PHOENIX_GPU)
+endif()
 
 # On macOS, Phoenix.app with its icon. The bundle identifier is how macOS
 # knows the app, so it must not change.

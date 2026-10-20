@@ -1,4 +1,7 @@
 #include "main_window.h"
+#ifdef PHOENIX_GPU
+#include "../gpu/gpu_bakeoff.h"
+#endif
 #include "convert_to_symbol_dialog.h"
 #include "lines_to_fills.h"
 #include "fill_offset.h"
@@ -9685,6 +9688,21 @@ std::vector<QImage> MainWindow::renderSamples(const QString& path, std::vector<i
         images.push_back(_phoenixView->renderFrame(frame, size, false).convertToFormat(QImage::Format_ARGB32));
     return images;
 }
+
+#ifdef PHOENIX_GPU
+int MainWindow::gpuBakeoffCommand(const QString& source, const QStringList& options)
+{
+    loadFLAFile(source);
+    if (!_flaDocument || !_flaDocument->document || !_phoenixView)
+    {
+        std::fprintf(stderr, "gpu-bakeoff: could not open %s\n", qPrintable(source));
+        return 1;
+    }
+    const fla::Document* document = _flaDocument->document;
+    return runGpuBakeoff(*_phoenixView, QSize(std::max(1, document->width), std::max(1, document->height)),
+        _phoenixView->frameCount(), options);
+}
+#endif
 
 bool MainWindow::benchmarkRender(const QString& path, int maxFrames, double& openMs, std::vector<double>& coldMs,
     std::vector<double>& warmMs, QSize& size)

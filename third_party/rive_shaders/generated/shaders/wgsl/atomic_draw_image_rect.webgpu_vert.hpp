@@ -1,0 +1,25 @@
+#pragma once
+
+#include <array>
+
+#include "shaders/constants.glsl"
+
+namespace rive::gpu::wgsl
+{
+#ifndef RIVE_WGSL_SHADER_DEFINED
+#define RIVE_WGSL_SHADER_DEFINED
+struct Shader
+{
+    const char* source;
+    std::array<bool, SPECIALIZATION_COUNT> usedOverrides;
+    const char* label;
+};
+#endif
+
+inline constexpr Shader atomic_draw_image_rect_webgpu_vert = {
+    .source = R"WGSL(
+struct WB{Fd:f32,hf:f32,Sg:f32,Tg:f32,W6_:u32,Fa:u32,Eg:u32,Fg:u32,J8_:vec4<i32>,Ti:vec2<f32>,jf:vec2<f32>,q2_:u32,ni:f32,z6_:u32,i3_:f32,De:f32,xg:u32,H3_:f32,I3_:f32,ye:f32,Qi:u32,Ea:u32,Q8_:f32,R8_:f32,}struct _A{@builtin(position) _p:vec4<f32>,_am:f32,_al:array<f32,1>,_ak:array<f32,1>,}struct yi{v2_:array<vec4<u32>>,}struct ug{v2_:array<vec2<u32>>,}struct vg{v2_:array<vec4<f32>>,}struct zi{v2_:array<vec4<u32>>,}struct VertexOutput{@location(1) member:f32,@location(0) member_1:vec2<f32>,@location(3) member_2:vec4<f32>,@location(4)@interpolate(flat,either) member_3:vec4<f32>,@location(5)@interpolate(flat,either) member_4:u32,@location(6)@interpolate(flat,either) member_5:u32,@location(2) member_6:vec4<f32>,@builtin(position) _p:vec4<f32>,}@id(1) override rj:bool=true;var<private>_ae:i32;var<private>_ai:i32;var<private>HC_1:vec4<f32>;var<private>x5_:f32;var<private>AC_1:vec4<f32>;var<private>TD_1:vec4<f32>;var<private>n2_:vec2<f32>;var<private>GD_1:vec4<f32>;var<private>PB_1:vec4<f32>;var<private>W0_:vec4<f32>;var<private>UB_1:vec4<f32>;var<private>Y1_:vec4<f32>;var<private>BC_1:u32;var<private>V3_:u32;var<private>CC_1:u32;var<private>N1_:u32;var<private>DC_1:u32;@group(0)@binding(0) var<uniform>j:WB;var<private>HD_1:vec4<f32>;var<private>UD_1:vec4<f32>;var<private>y5_:vec4<f32>;var<private>_J:_A=_A(vec4<f32>(0f,0f,0f,1f),1f,array<f32,1>(),array<f32,1>());@group(0)@binding(7) var VB:texture_2d<u32>;@group(0)@binding(9) var AD:texture_2d<f32>;@group(0)@binding(2) var<storage>KB:yi;@group(0)@binding(3) var<storage>XC:ug;@group(0)@binding(4) var<storage>JB:vg;@group(0)@binding(5) var<storage>ED:zi;@group(3)@binding(9) var eb:sampler;var<private>MC_1:u32;fn _U(){var _l:bool;var _z:vec2<f32>;var _x:vec2<f32>;var _y:vec2<f32>;var _u:vec2<f32>;var _n:bool;var _q:vec4<f32>;var _w:f32;let _C=HC_1[2u];let _F=(_C==0f);_l=_F;if!(_F){let _8=HC_1[3u];_l=(_8==0f);}let _o=_l;x5_=select(1f,0f,_o);let _j=HC_1;let _m=_j.xy;let _g=AC_1;let _P=vec2<f32>(_g.x,_g.y);let _I=vec2<f32>(_g.z,_g.w);let _Q=mat2x2<f32>(_P,_I);let _a=transpose(_0(_Q));_y=_m;if!(_o){let _v=((0.5f*(abs(_a[1].x)+abs(_a[1].y)))/dot(_I,_a[1]));if (_v>=0.5f){let _aj=x5_;x5_=(_aj*(0.5f/_v));_z=vec2<f32>(0.5f,_m.y);}else{_z=vec2<f32>((_j.x+(_v*_C)),_m.y);}let _t=_z;let _h=((0.5f*(abs(_a[0].x)+abs(_a[0].y)))/dot(_P,_a[0]));if (_h>=0.5f){let _5=x5_;x5_=(_5*(0.5f/_h));_x=vec2<f32>(_t.x,0.5f);}else{let _W=HC_1[3u];_x=vec2<f32>(_t.x,(_t.y+(_h*_W)));}let _4=_x;_y=_4;}let _G=_y;let _d=TD_1;let _L=GD_1;n2_=((mat2x2<f32>(vec2<f32>(_d.x,_d.y),vec2<f32>(_d.z,_d.w))*_G)+_L.xy);let _r=PB_1;let _R=((_Q*_G)+_r.xy);_u=_R;if _o{let _b=(_a*_j.zw);_u=(_R+((_b*((abs(_b.x)+abs(_b.y))/dot(_b,_b)))*0.5f));}let _c=_u;if rj{let _f=UB_1;let _M=vec2<f32>(_f.x,_f.y);let _H=vec2<f32>(_f.z,_f.w);switch bitcast<i32>(0u){default:{let _k=(abs(_M)+abs(_H));let _N=(_k.x!=0f);_n=_N;if _N{_n=(_k.y!=0f);}let _Z=_n;if _Z{let _s=((mat2x2<f32>(_M,_H)*_c)+_r.zw);let _D=-(_s);let _B=(vec2<f32>(1f,1f)/_k).xyxy;_q=(((vec4<f32>(_s.x,_s.y,_D.x,_D.y)*_B)+_B)+vec4<f32>(0.5f,0.5f,0.5f,0.5f));break;}else{_q=_r.zwzw;break;}}}let _1=_q;W0_=_1;}let _X=BC_1;Y1_=unpack4x8unorm(_X);let _ad=CC_1;V3_=_ad;let _7=DC_1;N1_=_7;let _ah=j.Sg;let _K=j.Tg;let _2=HD_1[2u];let _E=bitcast<u32>(_2);if (_E!=0u){let _e=UD_1;let _i=HD_1;let _O=((mat2x2<f32>(vec2<f32>(_e.x,_e.y),vec2<f32>(_e.z,_e.w))*_c)+_L.zw);let _S=((_i.y+(f32(_E)*0.125f))+(max(_i.x,0f)*0.00024414063f));if (_i.x<0f){_w=-(_S);}else{_w=_S;}let _aa=_w;y5_=vec4<f32>(_O.x,_O.y,_aa,(-0.75f-round(255f)));}else{y5_=vec4<f32>(0f,0f,0f,0f);}_J._p=vec4<f32>(((_c.x*_ah)-1f),((_c.y*_K)-sign(_K)),0f,1f);return;}@vertex fn main(@builtin(vertex_index) _6:u32,@builtin(instance_index) _T:u32,@location(0) HC:vec4<f32>,@location(2) AC:vec4<f32>,@location(9) TD:vec4<f32>,@location(11) GD:vec4<f32>,@location(4) PB:vec4<f32>,@location(3) UB:vec4<f32>,@location(5) BC:u32,@location(6) CC:u32,@location(7) DC:u32,@location(12) HD:vec4<f32>,@location(10) UD:vec4<f32>,@location(8) MC:u32)->VertexOutput{_ae=i32(_6);_ai=i32(_T);HC_1=HC;AC_1=AC;TD_1=TD;GD_1=GD;PB_1=PB;UB_1=UB;BC_1=BC;CC_1=CC;DC_1=DC;HD_1=HD;UD_1=UD;MC_1=MC;_U();let _af=x5_;let _ab=n2_;let _ac=W0_;let _3=Y1_;let _ag=V3_;let _9=N1_;let _V=y5_;let _Y=_J._p;return VertexOutput(_af,_ab,_ac,_3,_ag,_9,_V,_Y);}fn _0(m:mat2x2<f32>)->mat2x2<f32>{var adj:mat2x2<f32>;adj[0][0]=m[1][1];adj[0][1]=-m[0][1];adj[1][0]=-m[1][0];adj[1][1]=m[0][0];let det:f32=m[0][0]*m[1][1]-m[1][0]*m[0][1];return adj*(1/det);})WGSL",
+    .usedOverrides = {{false, true, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false}},
+    .label = "atomic_draw_image_rect.webgpu_vert",
+};
+} // namespace wgsl

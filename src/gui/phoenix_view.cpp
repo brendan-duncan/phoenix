@@ -649,9 +649,10 @@ QImage PhoenixView::renderFrame(int frame, const QSize& size, bool transparent, 
     return image;
 }
 
-std::vector<RecordedItem> PhoenixView::recordFrame(int frame, const QSize& size)
+std::vector<RecordedItem> PhoenixView::recordFrame(int frame, const QSize& size, bool keepStrokes)
 {
     PaintRecorder recorder(size);
+    recorder.keepStrokes = keepStrokes;
     if (!_flaDocument || !_flaDocument->document || size.isEmpty())
         return recorder.items;
     fla::Document* document = _flaDocument->document;

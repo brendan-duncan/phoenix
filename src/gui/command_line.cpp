@@ -1577,7 +1577,7 @@ int captureWindow(const QStringList& args)
 
 bool isCommand(const QString& name)
 {
-    return name == "capture-dialog" || name == "capture-window" || name == "play" || name == "display-check" || name == "benchmark" || name == "render" || name == "run-script" || name == "doctor" || name == "diff" || name == "batch" || name == "shots" || name == "links" || name == "shortcuts" || name == "lessons" || name == "help" ||
+    return name == "capture-dialog" || name == "capture-window" || name == "play" || name == "display-check" || name == "benchmark" || name == "render" || name == "gpu-bakeoff" || name == "run-script" || name == "doctor" || name == "diff" || name == "batch" || name == "shots" || name == "links" || name == "shortcuts" || name == "lessons" || name == "help" ||
            name == "--help";
 }
 
@@ -1622,6 +1622,18 @@ int run(const QStringList& arguments)
     // Scripts run without the native libraries in External Libraries.
     if (args.removeAll("--no-native-extensions") > 0)
         jsfl::native::setEnabled(false);
+#ifdef PHOENIX_GPU
+    if (name == "gpu-bakeoff")
+    {
+        if (args.isEmpty())
+        {
+            std::fprintf(stderr, "gpu-bakeoff: which file?\n");
+            return 1;
+        }
+        MainWindow window(QString(), nullptr, false);
+        return window.gpuBakeoffCommand(args.at(0), args.mid(1));
+    }
+#endif
     if (name == "render")
     {
         if (args.isEmpty())

@@ -117,6 +117,11 @@ public:
     /// Phoenix render: frames of a document to a PNG sequence, a video or
     /// a GIF, with no window. See the command line help.
     int renderCommand(const QString& source, const QStringList& options);
+#ifdef PHOENIX_GPU
+    /// Phoenix gpu-bakeoff: opens \a source and compares the stage's
+    /// renderers on it (see gpu/gpu_bakeoff.h).
+    int gpuBakeoffCommand(const QString& source, const QStringList& options);
+#endif
     /// Every command a key can call, with its default key.
     const std::vector<ShortcutEntry>& shortcutEntries() const { return _shortcuts; }
 
