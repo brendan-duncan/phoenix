@@ -458,6 +458,19 @@ MainWindow::MainWindow(const QString& initialFile, QWidget* parent, bool startup
     // Every dock exists now: the layout as made is the default, and the
     // one kept from last time comes back.
     restoreLayout();
+#ifdef PHOENIX_WEB
+    // A phone gets the phone layout once the window is up, with a document
+    // to draw on; a tablet starts in the Simple workspace, until another is
+    // chosen.
+    if (!_secondary && startup && wantsPhoneLayout())
+        QTimer::singleShot(0, this, [this]() {
+            if (!_flaDocument)
+                createNewDocument(1280, 720, 24.0, Qt::white);
+            setPhoneLayout(true);
+        });
+    else if (!_secondary && startup && web_page::isTouchTablet() && !QSettings().value("workspace/chosen", false).toBool())
+        QTimer::singleShot(0, this, [this]() { useWorkspace("Simple"); });
+#endif
 
     // Every command exists too: its key as made is the default, and the
     // set chosen goes on.
@@ -10813,6 +10826,11 @@ QJsonObject MainWindow::currentWorkspace() const
     QJsonObject workspace;
     workspace["phoenixWorkspace"] = 1;
     workspace["layoutVersion"] = kLayoutVersion;
+#ifdef PHOENIX_WEB
+    // In the phone layout, the panels as they will come back.
+    if (_phoneLayout)
+        return _phoneSavedWorkspace;
+#endif
     // In Canvas Only, the panels as they will come back.
     const QByteArray docks =
         _canvasOnly && _canvasOnly->isOn() ? _canvasOnly->savedState() : saveState(kLayoutVersion);
@@ -18714,6 +18732,14 @@ void MainWindow::saveSettings()
         _canvasOnly->leave();
     if (_layoutRestored)
     {
+#ifdef PHOENIX_WEB
+        // In the phone layout, the panels as they will come back.
+        if (_phoneLayout)
+        {
+            settings.setValue("window/state", QByteArray::fromBase64(_phoneSavedWorkspace["docks"].toString().toLatin1()));
+            return;
+        }
+#endif
         expandCollapsedPanels();
         settings.setValue("window/state", saveState(kLayoutVersion));
     }

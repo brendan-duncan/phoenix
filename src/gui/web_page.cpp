@@ -4,9 +4,11 @@
 
 #include <QApplication>
 #include <QColor>
+#include <QDialog>
 #include <QDockWidget>
 #include <QEvent>
 #include <QKeySequence>
+#include <QLayout>
 #include <QMainWindow>
 #include <QPalette>
 #include <QPointer>
@@ -19,6 +21,7 @@
 #include <emscripten/emscripten.h>
 #include <emscripten/val.h>
 
+#include <algorithm>
 #include <cstdlib>
 
 namespace web_page {
@@ -171,6 +174,47 @@ private:
     QSet<QWidget*> _pending;
 };
 
+// A dialog made for a desktop's screen can be larger than a tablet's or a
+// phone's page, its buttons out of reach. Shown larger than the page, it is
+// made to fit, its contents squeezed rather than cut off, and kept on the
+// page.
+class DialogsFitPage : public QObject
+{
+protected:
+    bool eventFilter(QObject* watched, QEvent* event) override
+    {
+        if (event->type() != QEvent::Show)
+            return false;
+        auto* dialog = qobject_cast<QDialog*>(watched);
+        if (!dialog || !dialog->isWindow())
+            return false;
+        QPointer<QDialog> guarded(dialog);
+        // Once it has its size.
+        QTimer::singleShot(0, dialog, [guarded]() {
+            if (!guarded || !guarded->isVisible() || !guarded->screen())
+                return;
+            QDialog* fitting = guarded;
+            const QRect page = fitting->screen()->availableGeometry();
+            const QRect frame = fitting->frameGeometry();
+            const QSize margins = frame.size() - fitting->size();
+            const QSize most = page.size() - margins;
+            if (fitting->width() > most.width() || fitting->height() > most.height())
+            {
+                if (fitting->layout())
+                    fitting->layout()->setSizeConstraint(QLayout::SetNoConstraint);
+                fitting->setMinimumSize(0, 0);
+                fitting->resize(fitting->size().boundedTo(most));
+            }
+            QRect placed = fitting->frameGeometry();
+            placed.moveLeft(std::clamp(placed.left(), page.left(), std::max(page.left(), page.right() - placed.width() + 1)));
+            placed.moveTop(std::clamp(placed.top(), page.top(), std::max(page.top(), page.bottom() - placed.height() + 1)));
+            if (placed.topLeft() != fitting->frameGeometry().topLeft())
+                fitting->move(placed.topLeft());
+        });
+        return false;
+    }
+};
+
 QString css(const QColor& color)
 {
     return color.name(QColor::HexRgb);
@@ -216,6 +260,8 @@ void install()
     qApp->installEventFilter(&fill);
     static RedrawAfterPanelChanges redraw;
     qApp->installEventFilter(&redraw);
+    static DialogsFitPage fit;
+    qApp->installEventFilter(&fit);
     addWindowStyle();
 }
 
@@ -287,6 +333,34 @@ void avoidBrowserKeys(QWidget* window)
 void setUnsavedWorkCheck(std::function<bool()> check)
 {
     g_unsavedWorkCheck = std::move(check);
+}
+
+namespace {
+
+bool coarsePointer()
+{
+    emscripten::val window = emscripten::val::global("window");
+    if (window["matchMedia"].isUndefined())
+        return false;
+    return window.call<emscripten::val>("matchMedia", std::string("(pointer: coarse)"))["matches"].as<bool>();
+}
+
+int shorterScreenSide()
+{
+    emscripten::val screen = emscripten::val::global("screen");
+    return std::min(screen["width"].as<int>(), screen["height"].as<int>());
+}
+
+} // namespace
+
+bool isPhoneSized()
+{
+    return coarsePointer() && shorterScreenSide() < 600;
+}
+
+bool isTouchTablet()
+{
+    return coarsePointer() && shorterScreenSide() >= 600;
 }
 
 void setWindowColors(const QPalette& palette)

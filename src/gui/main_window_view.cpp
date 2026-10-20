@@ -109,6 +109,19 @@ void MainWindow::createViewExtras(QMenu* viewMenu, QAction* after, StageControls
 
     _canvasOnly = new CanvasOnly(this, {_breadcrumbRow}, layoutVersion);
     put(_canvasOnly->action());
+#ifdef PHOENIX_WEB
+    // The web editor's layout for a phone (main_window_phone.cpp); the choice
+    // is kept for the next visit.
+    _phoneLayoutAction = new QAction("&Phone Layout", this);
+    _phoneLayoutAction->setObjectName("viewPhoneLayout");
+    _phoneLayoutAction->setCheckable(true);
+    _phoneLayoutAction->setStatusTip("The stage, a row of large buttons and the panels one at a time, for a phone");
+    connect(_phoneLayoutAction, &QAction::triggered, this, [this](bool on) {
+        QSettings().setValue("web/phoneLayout", on);
+        setPhoneLayout(on);
+    });
+    put(_phoneLayoutAction);
+#endif
 
     // The reference board: pictures to draw from, around the stage.
     _referenceBoard = std::make_unique<ReferenceBoardView>(

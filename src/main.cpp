@@ -219,6 +219,13 @@ int main(int argc, char *argv[])
         const double scale = QSettings().value("theme/uiScale", 1.0).toDouble();
         if (scale >= 0.75 && scale <= 2.5 && scale != 1.0 && qEnvironmentVariableIsEmpty("QT_SCALE_FACTOR"))
             qputenv("QT_SCALE_FACTOR", QByteArray::number(scale));
+#ifdef PHOENIX_WEB
+        // On a tablet, everything a little larger for fingers, unless a
+        // scale was chosen.
+        else if (!QSettings().contains("theme/uiScale") && qEnvironmentVariableIsEmpty("QT_SCALE_FACTOR") &&
+                 web_page::isTouchTablet())
+            qputenv("QT_SCALE_FACTOR", "1.2");
+#endif
     }
 
 #ifdef PHOENIX_WEB
@@ -457,6 +464,12 @@ int main(int argc, char *argv[])
 #endif
     app_identity::apply();
     theme::applySaved();
+#ifdef PHOENIX_WEB
+    // A phone starts on a new document in the phone layout: the start
+    // screen is wider than a phone.
+    if (MainWindow::wantsPhoneLayout())
+        MainWindow::skipStartScreen();
+#endif
     releaseOwnConsole();
 #ifdef PHOENIX_WEB
     MainWindow& window = *new MainWindow(initialFile);

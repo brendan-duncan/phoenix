@@ -32,6 +32,12 @@ void avoidBrowserKeys(QWidget* window);
 /// What the page asks when it is about to be closed or reloaded: true
 /// keeps it open long enough for the browser to ask the person.
 void setUnsavedWorkCheck(std::function<bool()> check);
+
+/// A touch screen (the browser's pointer is coarse) whose shorter side is
+/// under 600 points: a phone.
+bool isPhoneSized();
+/// A touch screen larger than a phone's: a tablet.
+bool isTouchTablet();
 #endif
 
 /// Leaves \a action out of the web build: hidden and disabled, so its

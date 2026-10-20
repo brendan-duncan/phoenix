@@ -73,6 +73,7 @@ faster before building it in (`resources/web/index.html`):
 | `?memory=1024` | start with that many MB of memory rather than growing to it |
 | `?threads=4` | the threads Phoenix draws and decodes with (1 for none) |
 | `?guithreads=0` | without Qt's threaded image and painting helpers |
+| `?audiobuffer=8192` | the sound buffer in frames (256 to 16384; 4096 by default) |
 | `?debugdocks` | log the panels and their tab bars to the console after each change to them |
 
 Settings combine (`?dpr=1&memory=2048`), and the browser console lists the
@@ -176,6 +177,42 @@ draws the window again, keeps every main window filling the page (a saved
 size taken back would leave part of the page undrawn), and turns panel
 animation off. The interface's font is 10 points: a browser gives Qt no
 size of its own, and Qt's default, 12, is larger than any desktop's.
+
+### Phones and tablets
+
+A touch screen (the browser reports a coarse pointer) whose shorter side is
+under 600 points gets the phone layout (`src/gui/main_window_phone.cpp`):
+the stage alone, two rows of large buttons along the bottom (the common
+tools with undo and redo; step, play, the frame and a menu), and the
+panels (Properties, Color, Swatches, Library, Timeline) one at a time as a
+sheet over the bottom of the stage. The menu also holds the menu bar's
+menus, which the layout puts away, and Full Layout. View > Phone Layout
+switches it on any screen, and the choice is kept. A phone starts on a new
+document rather than the start screen. While the layout is on, the window
+saves the panels as they were before it, so they come back as they were.
+
+A larger touch screen (a tablet) starts in the Simple workspace, until
+another is chosen, with everything 1.2 times larger unless the theme sets
+a scale. A dialog shown larger than the page is made to fit it
+(`web_page.cpp`).
+
+### Keys, the clipboard, touch and leaving
+
+- A browser keeps some keys for itself and never passes them on: Ctrl+N,
+  Ctrl+T, Ctrl+W and Ctrl+Tab, with Shift too. Their commands get the same
+  key with Alt (or Alt and Shift, where Alt is taken), and Ctrl+Tab's get
+  Ctrl+Alt+Page Down and Up, as their defaults, so the menus and Keyboard
+  Shortcuts show them.
+- Copying puts only plain text on the system clipboard (a text field's
+  words): Qt hands the browser pictures in a form it turns down, and
+  shapes paste within the page from Phoenix's own copies.
+- A pen arrives as tablet events with pressure and tilt; touches as touch
+  events. Two fingers zoom and turn the stage from where the fingers are
+  (a browser moves one finger at a time, which Qt's pinch steps get wrong).
+- Closing or reloading the page with changes not saved: the browser asks
+  first (`MainWindow::hasUnsavedWork`, through `phoenix_has_unsaved_work`).
+- Sound is filled in on the page's own thread between frames, so its
+  buffer is 4096 frames (93 ms), large enough to cover a slow frame.
 
 ### Threads
 

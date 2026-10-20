@@ -699,7 +699,8 @@ endif()
 if(PHOENIX_WEB)
     list(REMOVE_ITEM SOURCES src/gui/terminal_view.cpp)
     list(APPEND SOURCES src/gui/terminal_view_web.cpp src/gui/web_files.cpp
-        src/gui/web_drag.cpp src/gui/web_exec.cpp src/gui/web_page.cpp)
+        src/gui/web_drag.cpp src/gui/web_exec.cpp src/gui/web_page.cpp
+        src/gui/main_window_phone.cpp)
 endif()
 
 qt6_add_executable(Phoenix MANUAL_FINALIZATION ${SOURCES} ${HEADERS})

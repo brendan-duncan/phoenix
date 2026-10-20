@@ -92,6 +92,12 @@ public:
     /// Whether a document in any window has changes not saved: the page
     /// asks before it is closed or reloaded.
     static bool hasUnsavedWork();
+    /// The phone layout (main_window_phone.cpp): the stage, a row of large
+    /// buttons and the panels one at a time. Whether it is wanted: as last
+    /// chosen, else on a phone-sized touch screen.
+    static bool wantsPhoneLayout();
+    void setPhoneLayout(bool on);
+    bool phoneLayout() const { return _phoneLayout; }
 #endif
 
     /// Every window people work in, the one Phoenix started with first.
@@ -1152,6 +1158,18 @@ private:
     /// A workspace: the docks' arrangement, the tools' layout and the
     /// timeline's layers width, as JSON (what Export writes).
     QJsonObject currentWorkspace() const;
+#ifdef PHOENIX_WEB
+    void buildPhoneBar();
+    /// Shows \a dock as the phone layout's sheet, closing the one up.
+    void showPhoneSheet(QDockWidget* dock);
+    bool _phoneLayout = false;
+    /// The panels as they were before the phone layout, as they come back.
+    QJsonObject _phoneSavedWorkspace;
+    /// Its two rows: the tools, and playing with the menu.
+    QList<class QToolBar*> _phoneBars;
+    QPointer<QDockWidget> _phoneSheet;
+    QAction* _phoneLayoutAction = nullptr;
+#endif
     /// False when the docks' arrangement could not be used.
     bool applyWorkspace(const QJsonObject& workspace);
     void applyBuiltInWorkspace(const QString& name);
