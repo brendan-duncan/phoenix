@@ -1585,9 +1585,9 @@ void LayersPanel::showLayerMenu(QTreeWidgetItem* item, const QPoint& globalPos)
         if (!folder)
             setCurrentLayer(timeline, layerIndex);
     };
-    menu->addAction("Insert Layer", this, [=]() { atRow(); emit addLayerRequested(false); });
-    menu->addAction("Insert Folder", this, [=]() { atRow(); emit addLayerRequested(true); });
-    QAction* remove = menu->addAction("Delete Layer", this, [=]() { atRow(); emit deleteLayerRequested(); });
+    menu->addAction("Insert Layer", this, [=, this]() { atRow(); emit addLayerRequested(false); });
+    menu->addAction("Insert Folder", this, [=, this]() { atRow(); emit addLayerRequested(true); });
+    QAction* remove = menu->addAction("Delete Layer", this, [=, this]() { atRow(); emit deleteLayerRequested(); });
     remove->setEnabled(!folder || timeline->layers.size() > 1);
     menu->addSeparator();
     // On the layers picked, or this one.
@@ -1601,13 +1601,13 @@ void LayersPanel::showLayerMenu(QTreeWidgetItem* item, const QPoint& globalPos)
     };
     menu->addAction("Cut Layers", this, [=]() { onPicked(0); });
     menu->addAction("Copy Layers", this, [=]() { onPicked(1); });
-    menu->addAction("Paste Layers", this, [=]() { atRow(); emit layerClipboardRequested(2); });
+    menu->addAction("Paste Layers", this, [=, this]() { atRow(); emit layerClipboardRequested(2); });
     menu->addAction("Duplicate Layers", this, [=]() { onPicked(3); });
     menu->addSeparator();
 
     if (!folder)
     {
-        QAction* guide = menu->addAction("Guide", this, [=]() {
+        QAction* guide = menu->addAction("Guide", this, [=, this]() {
             fla::LayerSnapshot after = fla::snapshotLayers(*timeline);
             fla::layers::setKind(after, layer,
                 kind == fla::layers::Kind::Guide ? fla::layers::Kind::Normal : fla::layers::Kind::Guide);
@@ -1616,7 +1616,7 @@ void LayersPanel::showLayerMenu(QTreeWidgetItem* item, const QPoint& globalPos)
         guide->setCheckable(true);
         guide->setChecked(kind == fla::layers::Kind::Guide);
 
-        QAction* mask = menu->addAction("Mask", this, [=]() {
+        QAction* mask = menu->addAction("Mask", this, [=, this]() {
             fla::LayerSnapshot after = fla::snapshotLayers(*timeline);
             if (kind == fla::layers::Kind::Mask)
             {
@@ -1655,7 +1655,7 @@ void LayersPanel::showLayerMenu(QTreeWidgetItem* item, const QPoint& globalPos)
         mask->setChecked(kind == fla::layers::Kind::Mask);
 
         if (fla::effects::isEffect(*layer))
-            menu->addAction("Effect Settings...", this, [=]() { emit effectSettingsRequested(layer); });
+            menu->addAction("Effect Settings...", this, [=, this]() { emit effectSettingsRequested(layer); });
 
         // Compositing: shown through the layer above, or changing all below.
         QMenu* matteMenu = menu->addMenu("Track Matte");
@@ -1668,11 +1668,11 @@ void LayersPanel::showLayerMenu(QTreeWidgetItem* item, const QPoint& globalPos)
         for (const auto& [kind, label] : mattes)
         {
             const QString what = QString("matte:%1").arg(kind == fla::compositing::Matte::None ? "none" : fla::compositing::matteName(kind));
-            QAction* choice = matteMenu->addAction(label, this, [=]() { emit compositingRequested(layer, what); });
+            QAction* choice = matteMenu->addAction(label, this, [=, this]() { emit compositingRequested(layer, what); });
             choice->setCheckable(true);
             choice->setChecked(kind == matte);
         }
-        QAction* adjustment = menu->addAction("Adjustment Layer", this, [=]() {
+        QAction* adjustment = menu->addAction("Adjustment Layer", this, [=, this]() {
             emit compositingRequested(layer, fla::compositing::isAdjustment(*layer) ? "adjustment:off" : "adjustment:on");
         });
         adjustment->setCheckable(true);
@@ -1687,12 +1687,12 @@ void LayersPanel::showLayerMenu(QTreeWidgetItem* item, const QPoint& globalPos)
         for (const auto& [kind, label] : modes)
         {
             const QString what = QString("mode:%1").arg(kind == fla::compositing::LayerMode::Normal ? "normal" : fla::compositing::layerModeName(kind));
-            QAction* choice = modeMenu->addAction(label, this, [=]() { emit compositingRequested(layer, what); });
+            QAction* choice = modeMenu->addAction(label, this, [=, this]() { emit compositingRequested(layer, what); });
             choice->setCheckable(true);
             choice->setChecked(kind == mode);
         }
         if (layer->layerType == fla::Layer::Type::Mask)
-            menu->addAction("Mask Edge...", this, [=]() { emit compositingRequested(layer, "maskedge"); })
+            menu->addAction("Mask Edge...", this, [=, this]() { emit compositingRequested(layer, "maskedge"); })
                 ->setStatusTip("Feather, grow or shrink this mask's edge, or invert it; or feather the selected objects on it");
         // Several masks: the other mask layers of the timeline, each added
         // to the layer's own mask, cut out of it or overlapped with it.
@@ -1716,7 +1716,7 @@ void LayersPanel::showLayerMenu(QTreeWidgetItem* item, const QPoint& globalPos)
                 {
                     const auto& mode = entry.first;
                     const auto& label = entry.second;
-                    QAction* choice = otherMenu->addAction(label, this, [=]() {
+                    QAction* choice = otherMenu->addAction(label, this, [=, this]() {
                         emit compositingRequested(layer, QString("maskwith:%1:%2").arg(i).arg(mode));
                     });
                     choice->setCheckable(true);
@@ -1727,15 +1727,15 @@ void LayersPanel::showLayerMenu(QTreeWidgetItem* item, const QPoint& globalPos)
                 moreMenu->addAction("No other mask layers")->setEnabled(false);
             moreMenu->setStatusTip("Mask this layer by other mask layers too, added, subtracted or intersected");
         }
-        menu->addAction("Echo and Posterize Time...", this, [=]() { emit compositingRequested(layer, "time"); })
+        menu->addAction("Echo and Posterize Time...", this, [=, this]() { emit compositingRequested(layer, "time"); })
             ->setStatusTip("A trail of earlier poses behind the layer, or each pose held for some frames");
-        QAction* blur = menu->addAction("Motion Blur", this, [=]() {
+        QAction* blur = menu->addAction("Motion Blur", this, [=, this]() {
             emit compositingRequested(layer, fla::motionblur::on(*layer) ? "motionblur:off" : "motionblur:on");
         });
         blur->setCheckable(true);
         blur->setChecked(fla::motionblur::on(*layer));
         blur->setStatusTip("Smear what moves fast on this layer along its path; the shutter is on the Properties panel's Doc tab");
-        QAction* depth = menu->addAction("Sort by Depth", this, [=]() {
+        QAction* depth = menu->addAction("Sort by Depth", this, [=, this]() {
             emit compositingRequested(layer, fla::depthsort::sorts(*layer) ? "depthsort:off" : "depthsort:on");
         });
         depth->setCheckable(true);
@@ -1746,7 +1746,7 @@ void LayersPanel::showLayerMenu(QTreeWidgetItem* item, const QPoint& globalPos)
         // its arm.
         QMenu* parentMenu = menu->addMenu("Parent Layer");
         const fla::Layer* current = parentLayerOf(*layer);
-        QAction* none = parentMenu->addAction("None", this, [=]() { emit parentLayerRequested(timeline, layer, nullptr); });
+        QAction* none = parentMenu->addAction("None", this, [=, this]() { emit parentLayerRequested(timeline, layer, nullptr); });
         none->setCheckable(true);
         none->setChecked(!current);
         parentMenu->addSeparator();
@@ -1760,7 +1760,7 @@ void LayersPanel::showLayerMenu(QTreeWidgetItem* item, const QPoint& globalPos)
             for (const fla::Layer* up = other; up && !loops; up = parentLayerOf(*up))
                 loops = up == layer;
             QAction* choice = parentMenu->addAction(QString::fromStdString(other->name), this,
-                [=]() { emit parentLayerRequested(timeline, layer, other); });
+                [=, this]() { emit parentLayerRequested(timeline, layer, other); });
             choice->setCheckable(true);
             choice->setChecked(other == current);
             choice->setEnabled(!loops);
@@ -1783,7 +1783,7 @@ void LayersPanel::showLayerMenu(QTreeWidgetItem* item, const QPoint& globalPos)
     menu->addAction("Hide Others", this, [=]() { everyOther([](fla::Layer& l, bool self) { l.visible = self; }); });
     menu->addAction("Lock Others", this, [=]() { everyOther([](fla::Layer& l, bool self) { l.locked = !self; }); });
     menu->addSeparator();
-    menu->addAction("Properties...", this, [=]() { showLayerProperties(item); });
+    menu->addAction("Properties...", this, [=, this]() { showLayerProperties(item); });
     modal::popup(menu, globalPos);
 }
 
@@ -1886,7 +1886,7 @@ void LayersPanel::showLayerProperties(QTreeWidgetItem* item)
     connect(box, &QDialogButtonBox::accepted, dialog, &QDialog::accept);
     connect(box, &QDialogButtonBox::rejected, dialog, &QDialog::reject);
     form->addRow(box);
-    modal::open(dialog, [=](int result) {
+    modal::open(dialog, [=, this](int result) {
         if (result != QDialog::Accepted)
             return;
         fla::LayerSnapshot after = now;

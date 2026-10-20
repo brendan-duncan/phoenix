@@ -212,6 +212,38 @@ def package(build):
     return out
 
 
+def memory_gb():
+    """The machine's memory in GB, or 0 when it cannot tell."""
+    try:
+        if sys.platform == "win32":
+            import ctypes
+
+            class Status(ctypes.Structure):
+                _fields_ = [("length", ctypes.c_ulong), ("load", ctypes.c_ulong), ("total", ctypes.c_ulonglong),
+                            ("free", ctypes.c_ulonglong), ("page_total", ctypes.c_ulonglong),
+                            ("page_free", ctypes.c_ulonglong), ("virtual_total", ctypes.c_ulonglong),
+                            ("virtual_free", ctypes.c_ulonglong), ("extended", ctypes.c_ulonglong)]
+            status = Status()
+            status.length = ctypes.sizeof(Status)
+            ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(status))
+            return status.total / 2**30
+        if sys.platform == "darwin":
+            return int(subprocess.run(["sysctl", "-n", "hw.memsize"], capture_output=True, text=True).stdout) / 2**30
+        return os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES") / 2**30
+    except Exception:
+        return 0
+
+
+def build_jobs():
+    """How many files to compile at once: a core each, but no more than one
+    for every 2 GB of memory. Emscripten's compiler takes well over a GB on
+    Phoenix's largest files, and many at once can run the machine out of
+    memory, which crashes it part way through a file."""
+    cores = os.cpu_count() or 4
+    memory = memory_gb()
+    return max(1, min(cores, int(memory // 2))) if memory else cores
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--serve", action="store_true", help="then serve it on localhost and open it in the browser")
@@ -255,7 +287,8 @@ def main():
     subprocess.run(configure, env=env, check=True)
     if args.configure_only:
         return 0
-    subprocess.run(["cmake", "--build", str(build), "--target", "Phoenix"], env=env, check=True)
+    subprocess.run(["cmake", "--build", str(build), "--target", "Phoenix", "--parallel", str(build_jobs())],
+                   env=env, check=True)
     site = package(build)
     if args.serve:
         serve = [sys.executable, str(Path(__file__).with_name("serve.py")), str(site), "--port", str(args.port), "--open"]

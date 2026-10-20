@@ -5465,7 +5465,7 @@ void MainWindow::showBoneMenu(const QPoint& globalPos, const PhoenixView::IKBone
     }
     menu->addSeparator();
     const int head = shown[static_cast<size_t>(joint)].parent;
-    menu->addAction("Joint Rotation and Spring...", this, [=]() { editJointLimits(frame, child, head); });
+    menu->addAction("Joint Rotation and Spring...", this, [=, this]() { editJointLimits(frame, child, head); });
     modal::popup(menu, globalPos);
 }
 

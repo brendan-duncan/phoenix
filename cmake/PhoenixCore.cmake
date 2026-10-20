@@ -298,7 +298,14 @@ function(phoenix_add_core target src)
     add_library(${target} OBJECT ${sources})
     # No Qt here: keep Qt's code generators off it.
     set_target_properties(${target} PROPERTIES AUTOMOC OFF AUTOUIC OFF AUTORCC OFF)
-    target_compile_features(${target} PUBLIC cxx_std_17)
+    target_compile_features(${target} PUBLIC cxx_std_20)
+    # C++20 with char as UTF-8, as before it: path::u8string() and u8""
+    # stay std::string rather than char8_t, which nothing here uses.
+    if(MSVC)
+        target_compile_options(${target} PUBLIC /Zc:char8_t-)
+    else()
+        target_compile_options(${target} PUBLIC -fno-char8_t)
+    endif()
     # As the app compiled these sources before they moved here, with Qt's
     # settings: UTF-8 source text (strings with ° or × in them), the Unicode
     # Windows API, and Qt's aligned-storage and __cplusplus settings.

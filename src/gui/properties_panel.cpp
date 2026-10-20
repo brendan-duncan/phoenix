@@ -632,7 +632,7 @@ void PropertiesPanel::bindLive(HotText* hot, std::function<void()> start,
         *dragged = false;
         start();
     });
-    connect(hot, &HotText::valueChanged, this, [=](double value, bool live) {
+    connect(hot, &HotText::valueChanged, this, [=, this](double value, bool live) {
         _inEdit = true;
         apply(value);
         if (live)
@@ -643,7 +643,7 @@ void PropertiesPanel::bindLive(HotText* hot, std::function<void()> start,
         if (!live)
             flushRefresh();
     });
-    connect(hot, &HotText::editFinished, this, [=]() {
+    connect(hot, &HotText::editFinished, this, [=, this]() {
         _inEdit = true;
         if (*dragged)
         {
@@ -1475,7 +1475,7 @@ void PropertiesPanel::addPositionAndSize(QVBoxLayout* layout, const std::vector<
             snapshot->before.push_back(element->transform);
         snapshot->bounds = bounds;
     };
-    const auto applyAdjust = [=](const QTransform& adjust) {
+    const auto applyAdjust = [=, this](const QTransform& adjust) {
         for (size_t i = 0; i < elements.size() && i < snapshot->before.size(); ++i)
         {
             const QTransform result = toQTransform(snapshot->before[i]) * adjust;
@@ -1484,7 +1484,7 @@ void PropertiesPanel::addPositionAndSize(QVBoxLayout* layout, const std::vector<
         _links.view->invalidateBounds();
         _links.view->update();
     };
-    const auto commit = [=](const char* name) {
+    const auto commit = [=, this](const char* name) {
         fla::CommandStack& stack = _links.editContext->commandStack();
         const bool several = elements.size() > 1;
         if (several)
@@ -1510,7 +1510,7 @@ void PropertiesPanel::addPositionAndSize(QVBoxLayout* layout, const std::vector<
             QTransform::fromTranslate(anchor.x(), anchor.y());
     };
     bindLive(width, start,
-        [=](double value) {
+        [=, this](double value) {
             const double sx = snapshot->bounds.width() > 0.0 ? value / snapshot->bounds.width() : 1.0;
             const double sy = _aspectLocked ? sx : 1.0;
             applyAdjust(scaleAbout(sx, sy));
@@ -1519,7 +1519,7 @@ void PropertiesPanel::addPositionAndSize(QVBoxLayout* layout, const std::vector<
         },
         [=]() { commit("Resize"); });
     bindLive(height, start,
-        [=](double value) {
+        [=, this](double value) {
             const double sy = snapshot->bounds.height() > 0.0 ? value / snapshot->bounds.height() : 1.0;
             const double sx = _aspectLocked ? sy : 1.0;
             applyAdjust(scaleAbout(sx, sy));
@@ -1602,13 +1602,13 @@ std::vector<std::pair<QWidget*, QWidget*>> PropertiesPanel::addStrokeLookFields(
     custom->setToolTip("Custom Stroke Style: the stroke's kind and weight, dash and gap, dot spacing, the ragged, "
                        "stipple and hatched choices, and a brush and its options");
     styleLayout->addWidget(custom);
-    connect(custom, &QToolButton::clicked, this, [=]() {
+    connect(custom, &QToolButton::clicked, this, [=, this]() {
         const QColor color = _links.style ? QColor(_links.style->strokeColor[0], _links.style->strokeColor[1],
                                                 _links.style->strokeColor[2])
                                           : QColor(Qt::black);
         const double shownWeight = forTool && _links.style ? _links.style->strokeWeight : weight;
         StrokeStyleDialog* dialog = new StrokeStyleDialog(*current, shownWeight, color, document(), this);
-        modal::open(dialog, [=](int result) {
+        modal::open(dialog, [=, this](int result) {
             if (result != QDialog::Accepted)
                 return;
             fla::StrokeLook chosen = dialog->look();
@@ -1894,11 +1894,11 @@ HotText* PropertiesPanel::bindDouble(double& field, double minimum, double maxim
     auto before = std::make_shared<double>(field);
     bindLive(hot,
         [=]() { *before = *target; },
-        [=](double value) {
+        [=, this](double value) {
             *target = value;
             emit documentEdited();
         },
-        [=]() {
+        [=, this]() {
             if (*target != *before)
                 push(std::unique_ptr<fla::Command>(new fla::SetPropertyCommand<double>(*target, *before, *target, name)));
         });
@@ -1936,7 +1936,7 @@ void PropertiesPanel::addPrimitiveSections(QVBoxLayout* layout, fla::Element* el
                     for (int k = 0; k < 4; ++k)
                         (*before)[static_cast<size_t>(k)] = *radii[k];
                 },
-                [=](double value) {
+                [=, this](double value) {
                     for (int k = 0; k < 4; ++k)
                     {
                         if (*locked || k == i)
@@ -1948,7 +1948,7 @@ void PropertiesPanel::addPrimitiveSections(QVBoxLayout* layout, fla::Element* el
                     }
                     emit documentEdited();
                 },
-                [=]() {
+                [=, this]() {
                     auto* command = new fla::CompoundCommand("Corner Radius");
                     for (int k = 0; k < 4; ++k)
                     {
@@ -1965,7 +1965,7 @@ void PropertiesPanel::addPrimitiveSections(QVBoxLayout* layout, fla::Element* el
         corners->addWide(2, lock);
         QPushButton* reset = new QPushButton("Reset", this);
         reset->setToolTip("Square corners");
-        connect(reset, &QPushButton::clicked, this, [=]() {
+        connect(reset, &QPushButton::clicked, this, [=, this]() {
             auto* command = new fla::CompoundCommand("Reset Corners");
             for (int k = 0; k < 4; ++k)
                 command->addCommand(fla::CommandPtr(new fla::SetPropertyCommand<double>(*radii[k], *radii[k], 0.0, "Reset Corners")));
@@ -2034,7 +2034,7 @@ void PropertiesPanel::addPrimitiveSections(QVBoxLayout* layout, fla::Element* el
         QToolButton* swatch = makeSwatch(kNoColorRgba, solid ? "Fill color" : "Fill: pick a color or gradient; the Color panel edits this one's stops");
         swatch->setObjectName("propertiesFill");
         swatch->setIcon(brushSwatchIcon(brushOf(*fill), false));
-        connect(swatch, &QToolButton::clicked, this, [=]() {
+        connect(swatch, &QToolButton::clicked, this, [=, this]() {
             const QColor current = solid ? toQColor(static_cast<fla::SolidColor*>(*fillSlot)->color) : QColor(Qt::black);
             SwatchPopup::Offer offer;
             offer.gradients = true;
@@ -2042,12 +2042,12 @@ void PropertiesPanel::addPrimitiveSections(QVBoxLayout* layout, fla::Element* el
             if (!solid)
                 popup->setCurrentBrush(brushOf(**fillSlot));
             popup->previewOn(_links.view, {element}, false);
-            const auto replace = [=](fla::FillStyle* after) {
+            const auto replace = [=, this](fla::FillStyle* after) {
                 push(std::unique_ptr<fla::Command>(new fla::ReplaceOwnedCommand<fla::FillStyle>(*fillSlot, after, "Fill Color")));
                 emit documentEdited();
                 QTimer::singleShot(0, this, [this]() { refresh(); });
             };
-            connect(popup, &SwatchPopup::colorPicked, this, [=](const QColor& chosen) {
+            connect(popup, &SwatchPopup::colorPicked, this, [=, this](const QColor& chosen) {
                 if ((*fillSlot)->type() == fla::FillStyle::Type::SolidColor)
                 {
                     uint8_t* color = static_cast<fla::SolidColor*>(*fillSlot)->color;
@@ -2082,11 +2082,11 @@ void PropertiesPanel::addPrimitiveSections(QVBoxLayout* layout, fla::Element* el
             uint8_t* color = static_cast<fla::SolidColor*>(stroke->fill)->color;
             QToolButton* swatch = makeSwatch(color, "Stroke color");
             swatch->setObjectName("propertiesStroke");
-            connect(swatch, &QToolButton::clicked, this, [=]() {
+            connect(swatch, &QToolButton::clicked, this, [=, this]() {
                 // A primitive's stroke keeps to one color.
                 SwatchPopup* popup = SwatchPopup::open(swatch, document(), toQColor(color), "Stroke Color", SwatchPopup::Offer());
                 popup->previewOn(_links.view, {element}, true);
-                connect(popup, &SwatchPopup::colorPicked, this, [=](const QColor& chosen) {
+                connect(popup, &SwatchPopup::colorPicked, this, [=, this](const QColor& chosen) {
                     uint8_t after[4];
                     applyColor(chosen, after);
                     push(std::unique_ptr<fla::Command>(new fla::SetColorCommand(color, color, after, "Stroke Color")));
@@ -2099,12 +2099,12 @@ void PropertiesPanel::addPrimitiveSections(QVBoxLayout* layout, fla::Element* el
         section->addField(row++, 1, "Size", bindDouble(stroke->weight, 0.1, 200.0, 2, QString(), "Stroke Size"));
         addStrokeLookFields(
             section, row, fla::StrokeLook::of(*stroke),
-            [=](const fla::StrokeLook& look) {
+            [=, this](const fla::StrokeLook& look) {
                 push(std::unique_ptr<fla::Command>(new fla::ReplaceOwnedCommand<fla::StrokeStyle>(
                     *strokeSlot, look.applyTo(**strokeSlot, element), "Stroke Style")));
                 emit documentEdited();
             },
-            [=](double value) {
+            [=, this](double value) {
                 push(std::unique_ptr<fla::Command>(
                     new fla::SetPropertyCommand<double>((*strokeSlot)->weight, (*strokeSlot)->weight, value, "Stroke Size")));
                 emit documentEdited();
@@ -2154,7 +2154,7 @@ void PropertiesPanel::addShapeSections(QVBoxLayout* layout, fla::Shape* shape)
     // A pick from the swatch pop-up: every fill (or stroke) takes the
     // color or the gradient, a gradient fitted to the art it covers; No
     // Color takes the fills (or strokes) away, leaving the rest.
-    const auto paint = [=](SwatchPopup* popup, bool strokes) {
+    const auto paint = [=, this](SwatchPopup* popup, bool strokes) {
         const char* name = strokes ? "Stroke Color" : "Fill Color";
         connect(popup, &SwatchPopup::colorPicked, this, [=](const QColor& chosen) {
             const fla::swatches::Color color = {static_cast<uint8_t>(chosen.red()), static_cast<uint8_t>(chosen.green()),
@@ -2174,7 +2174,7 @@ void PropertiesPanel::addShapeSections(QVBoxLayout* layout, fla::Shape* shape)
                     fla::swatches::paintFills(after, gradient);
             });
         });
-        connect(popup, &SwatchPopup::nonePicked, this, [=]() {
+        connect(popup, &SwatchPopup::nonePicked, this, [=, this]() {
             std::unique_ptr<fla::Shape> after(strokes ? fla::colorart::fillsOnly(*shape) : fla::colorart::strokesOnly(*shape));
             push(std::unique_ptr<fla::Command>(new fla::SetShapeContentsCommand(shape, *after, strokes ? "No Stroke" : "No Fill")));
             emit documentEdited();
@@ -2191,7 +2191,7 @@ void PropertiesPanel::addShapeSections(QVBoxLayout* layout, fla::Shape* shape)
             fill ? QString("Fill color, or a gradient") : QString("Fill: pick a color or gradient; the Color panel edits this one's stops"));
         swatch->setObjectName("propertiesFill");
         swatch->setIcon(brushSwatchIcon(brushOf(*anyFill), false));
-        connect(swatch, &QToolButton::clicked, this, [=]() {
+        connect(swatch, &QToolButton::clicked, this, [=, this]() {
             SwatchPopup::Offer offer;
             offer.gradients = true;
             offer.none = stroke != nullptr;
@@ -2235,7 +2235,7 @@ void PropertiesPanel::addShapeSections(QVBoxLayout* layout, fla::Shape* shape)
         swatch->setObjectName("propertiesStroke");
         if (!strokeColor && stroke->fill)
             swatch->setIcon(brushSwatchIcon(brushOf(*stroke->fill), false));
-        connect(swatch, &QToolButton::clicked, this, [=]() {
+        connect(swatch, &QToolButton::clicked, this, [=, this]() {
             SwatchPopup::Offer offer;
             offer.gradients = true;
             offer.none = anyFill != nullptr;
@@ -2401,13 +2401,13 @@ void PropertiesPanel::addThreeDSection(QVBoxLayout* layout, fla::SymbolInstance*
     {
         std::shared_ptr<Attributes> before = std::make_shared<Attributes>();
         bindLive(z, [=]() { *before = instance->extraAttributes; },
-            [=](double value) {
+            [=, this](double value) {
                 fla::threed::Pose pose = fla::threed::of(*instance);
                 pose.z = value;
                 instance->extraAttributes = fla::threed::withPose(*instance, pose);
                 emit documentEdited();
             },
-            [=]() {
+            [=, this]() {
                 push(std::make_unique<fla::SetPropertyCommand<Attributes>>(instance->extraAttributes, *before,
                     instance->extraAttributes, "3D Position"));
             });
@@ -2421,11 +2421,11 @@ void PropertiesPanel::addThreeDSection(QVBoxLayout* layout, fla::SymbolInstance*
     {
         std::shared_ptr<Attributes> before = std::make_shared<Attributes>();
         bindLive(extrude, [=]() { *before = instance->extraAttributes; },
-            [=](double value) {
+            [=, this](double value) {
                 instance->extraAttributes = fla::threed::withExtrusion(*instance, value);
                 emit documentEdited();
             },
-            [=]() {
+            [=, this]() {
                 push(std::make_unique<fla::SetPropertyCommand<Attributes>>(instance->extraAttributes, *before,
                     instance->extraAttributes, "Extrusion"));
             });
@@ -2438,11 +2438,11 @@ void PropertiesPanel::addThreeDSection(QVBoxLayout* layout, fla::SymbolInstance*
     {
         std::shared_ptr<Attributes> before = std::make_shared<Attributes>();
         bindLive(angle, [=]() { *before = document->extraAttributes; },
-            [=](double value) {
+            [=, this](double value) {
                 document->extraAttributes = fla::threed::withPerspectiveAngle(*document, value);
                 emit documentEdited();
             },
-            [=]() {
+            [=, this]() {
                 push(std::make_unique<fla::SetPropertyCommand<Attributes>>(document->extraAttributes, *before,
                     document->extraAttributes, "Perspective Angle"));
             });
@@ -2452,11 +2452,11 @@ void PropertiesPanel::addThreeDSection(QVBoxLayout* layout, fla::SymbolInstance*
     const auto bindPoint = [this](HotText* hot, double& field, const char* name) {
         std::shared_ptr<double> before = std::make_shared<double>();
         bindLive(hot, [=, &field]() { *before = field; },
-            [=, &field](double value) {
+            [=, this, &field](double value) {
                 field = value;
                 emit documentEdited();
             },
-            [=, &field]() { push(std::make_unique<fla::SetPropertyCommand<double>>(field, *before, field, name)); });
+            [=, this, &field]() { push(std::make_unique<fla::SetPropertyCommand<double>>(field, *before, field, name)); });
     };
     HotText* vanishX = makeHotText(-100000, 100000, 1);
     vanishX->setValue(document->vanishingPoint3DX);
@@ -2731,10 +2731,10 @@ void PropertiesPanel::addColorEffectSection(QVBoxLayout* layout, const QString& 
     case ColorStyle::Tint:
     {
         QToolButton* swatch = makeSwatch(color.tintColor, "Tint color");
-        connect(swatch, &QToolButton::clicked, this, [=]() {
+        connect(swatch, &QToolButton::clicked, this, [=, this]() {
             const fla::ColorTransform before = get();
             SwatchPopup::getColor(swatch, document(), toQColor(before.tintColor), "Tint Color", false,
-                [=](const QColor& chosen) {
+                [=, this](const QColor& chosen) {
                     fla::ColorTransform after = before;
                     applyColor(chosen, after.tintColor);
                     after.tintColor[3] = 255;
@@ -2867,11 +2867,11 @@ void PropertiesPanel::addInstanceDisplaySections(QVBoxLayout* layout, fla::Symbo
         auto before = std::make_shared<fla::Transform>();
         bindLive(hot,
             [=]() { *before = instance->transform; },
-            [=](double value) {
+            [=, this](double value) {
                 (horizontal ? instance->transform.tx : instance->transform.ty) = value;
                 emit documentEdited();
             },
-            [=]() {
+            [=, this]() {
                 if (_links.view)
                     push(_links.view->transformCommand(instance, *before, instance->transform, "Move"));
             });
@@ -2909,11 +2909,11 @@ void PropertiesPanel::addInstanceDisplaySections(QVBoxLayout* layout, fla::Symbo
         std::shared_ptr<int> before = std::make_shared<int>(0);
         bindLive(first,
             [=]() { *before = instance->firstFrame; },
-            [=](double value) {
+            [=, this](double value) {
                 instance->firstFrame = static_cast<int>(value) - 1;
                 emit documentEdited();
             },
-            [=]() {
+            [=, this]() {
                 push(std::unique_ptr<fla::Command>(new fla::SetPropertyCommand<int>(
                     instance->firstFrame, *before, instance->firstFrame, "First Frame")));
             });
@@ -2928,11 +2928,11 @@ void PropertiesPanel::addInstanceDisplaySections(QVBoxLayout* layout, fla::Symbo
         std::shared_ptr<int> beforeLast = std::make_shared<int>(0);
         bindLive(last,
             [=]() { *beforeLast = instance->lastFrame; },
-            [=](double value) {
+            [=, this](double value) {
                 instance->lastFrame = static_cast<int>(value) - 1;
                 emit documentEdited();
             },
-            [=]() {
+            [=, this]() {
                 push(std::unique_ptr<fla::Command>(new fla::SetPropertyCommand<int>(
                     instance->lastFrame, *beforeLast, instance->lastFrame, "Last Frame")));
             });
@@ -3137,7 +3137,7 @@ void PropertiesPanel::addFilterSection(QVBoxLayout* layout, fla::SymbolInstance*
         field->setValue((*filters)[index].*member * scale);
         bindLive(field,
             [=]() { *before = *filters; },
-            [=](double value) {
+            [=, this](double value) {
                 (*filters)[index].*member = value / scale;
                 emit documentEdited();
             },
@@ -3150,7 +3150,7 @@ void PropertiesPanel::addFilterSection(QVBoxLayout* layout, fla::SymbolInstance*
     };
     const auto colorButton = [&](size_t index, uint8_t (fla::Filter::*member)[4], const char* title) {
         QToolButton* swatch = makeSwatch((*filters)[index].*member, title);
-        connect(swatch, &QToolButton::clicked, this, [=]() {
+        connect(swatch, &QToolButton::clicked, this, [=, this]() {
             SwatchPopup::getColor(swatch, document(), toQColor((*filters)[index].*member), title, true,
                 [=](const QColor& chosen) {
                     if (index >= filters->size())
@@ -3310,7 +3310,7 @@ void PropertiesPanel::addFilterSection(QVBoxLayout* layout, fla::SymbolInstance*
                 }
                 change(after, "Filter Gradient", false);
             });
-            connect(bar, &GradientBar::colorRequested, this, [=](int index) {
+            connect(bar, &GradientBar::colorRequested, this, [=, this](int index) {
                 const auto& current = bar->stops();
                 if (index < 0 || index >= static_cast<int>(current.size()))
                     return;
@@ -3832,7 +3832,7 @@ void PropertiesPanel::addCameraSections(QVBoxLayout* layout, fla::Frame* frame)
         hot->setValue(state.*member);
         bindLive(hot,
             [=]() { *before = frame->extraAttributes; },
-            [=](double value) {
+            [=, this](double value) {
                 fla::camera::State now = fla::camera::stateOf(*frame, w, h);
                 now.*member = value;
                 fla::camera::set(frame->extraAttributes, now);
@@ -3840,7 +3840,7 @@ void PropertiesPanel::addCameraSections(QVBoxLayout* layout, fla::Frame* frame)
                     _links.view->clearCaches();
                 emit documentEdited();
             },
-            [=]() {
+            [=, this]() {
                 const auto after = frame->extraAttributes;
                 frame->extraAttributes = *before;
                 push(std::unique_ptr<fla::Command>(
@@ -3975,13 +3975,13 @@ void PropertiesPanel::rebuildFrameTab()
         auto before = std::make_shared<std::vector<std::pair<std::string, std::string>>>();
         bindLive(depth,
             [=]() { *before = layer->extraAttributes; },
-            [=](double value) {
+            [=, this](double value) {
                 fla::camera::setDepth(layer->extraAttributes, value);
                 if (_links.view)
                     _links.view->clearCaches();
                 emit documentEdited();
             },
-            [=]() {
+            [=, this]() {
                 const auto after = layer->extraAttributes;
                 layer->extraAttributes = *before;
                 push(std::unique_ptr<fla::Command>(
@@ -4039,7 +4039,7 @@ void PropertiesPanel::rebuildFrameTab()
         for (int i = 1; i < 3; ++i)
             qobject_cast<QStandardItemModel*>(tween->model())->item(i)->setEnabled(false);
     }
-    connect(tween, &QComboBox::currentIndexChanged, this, [=](int index) {
+    connect(tween, &QComboBox::currentIndexChanged, this, [=, this](int index) {
         if (motionObject)
         {
             if (index == 0 && frameLayer)
@@ -4139,11 +4139,11 @@ void PropertiesPanel::rebuildFrameTab()
         std::shared_ptr<int> before = std::make_shared<int>(0);
         bindLive(ease,
             [=]() { *before = frame->acceleration; },
-            [=](double value) {
+            [=, this](double value) {
                 frame->acceleration = static_cast<int>(value);
                 emit documentEdited();
             },
-            [=]() {
+            [=, this]() {
                 push(std::unique_ptr<fla::Command>(new fla::SetPropertyCommand<int>(
                     frame->acceleration, *before, frame->acceleration, "Ease")));
             });
@@ -4177,11 +4177,11 @@ void PropertiesPanel::rebuildFrameTab()
         std::shared_ptr<int> before = std::make_shared<int>(0);
         bindLive(times,
             [=]() { *before = frame->motionTweenRotateTimes; },
-            [=](double value) {
+            [=, this](double value) {
                 frame->motionTweenRotateTimes = static_cast<int>(value);
                 emit documentEdited();
             },
-            [=]() {
+            [=, this]() {
                 push(std::unique_ptr<fla::Command>(new fla::SetPropertyCommand<int>(
                     frame->motionTweenRotateTimes, *before, frame->motionTweenRotateTimes, "Rotate Times")));
             });
@@ -4207,7 +4207,7 @@ void PropertiesPanel::rebuildFrameTab()
         QCheckBox* orient = new QCheckBox("Orient to path", this);
         orient->setChecked(orients);
         orient->setToolTip("Turn the object as the motion guide's path turns");
-        connect(orient, &QCheckBox::toggled, this, [=](bool on) {
+        connect(orient, &QCheckBox::toggled, this, [=, this](bool on) {
             auto attributes = frame->extraAttributes;
             attributes.erase(std::remove_if(attributes.begin(), attributes.end(),
                                  [](const auto& a) { return a.first == "motionTweenOrientToPath"; }),
@@ -4228,7 +4228,7 @@ void PropertiesPanel::rebuildFrameTab()
         QCheckBox* orient = new QCheckBox("Orient to path", this);
         orient->setChecked(xml && fla::orientsToPath(*xml));
         orient->setToolTip("Turn the object as its motion path turns");
-        connect(orient, &QCheckBox::toggled, this, [=](bool on) {
+        connect(orient, &QCheckBox::toggled, this, [=, this](bool on) {
             auto children = frame->extraChildren;
             for (std::string& child : children)
                 if (child.compare(0, 16, "<motionObjectXML") == 0)
@@ -4296,7 +4296,7 @@ void PropertiesPanel::rebuildFrameTab()
                     effect->setCurrentIndex(i);
             }
             // Custom is drawn in Edit Envelope.
-            connect(effect, &QComboBox::currentIndexChanged, this, [=](int index) {
+            connect(effect, &QComboBox::currentIndexChanged, this, [=, this](int index) {
                 if (index == 7)
                 {
                     emit editEnvelopeRequested(frame);
@@ -4390,21 +4390,21 @@ void PropertiesPanel::rebuildDocTab()
     std::shared_ptr<int> beforeHeight = std::make_shared<int>(0);
     bindLive(width,
         [=]() { *beforeWidth = doc->width; },
-        [=](double value) {
+        [=, this](double value) {
             doc->width = static_cast<int>(value);
             emit documentEdited();
         },
-        [=]() {
+        [=, this]() {
             push(std::unique_ptr<fla::Command>(new fla::SetPropertyCommand<int>(
                 doc->width, *beforeWidth, doc->width, "Stage Size")));
         });
     bindLive(height,
         [=]() { *beforeHeight = doc->height; },
-        [=](double value) {
+        [=, this](double value) {
             doc->height = static_cast<int>(value);
             emit documentEdited();
         },
-        [=]() {
+        [=, this]() {
             push(std::unique_ptr<fla::Command>(new fla::SetPropertyCommand<int>(
                 doc->height, *beforeHeight, doc->height, "Stage Size")));
         });
@@ -4416,11 +4416,11 @@ void PropertiesPanel::rebuildDocTab()
     std::shared_ptr<double> beforeRate = std::make_shared<double>(0.0);
     bindLive(frameRate,
         [=]() { *beforeRate = doc->frameRate; },
-        [=](double value) {
+        [=, this](double value) {
             doc->frameRate = value;
             emit documentEdited();
         },
-        [=]() {
+        [=, this]() {
             const double after = doc->frameRate;
             const double before = *beforeRate;
             if (!QSettings().value("document/scaleSpans", false).toBool() || before <= 0.0 || after == before)

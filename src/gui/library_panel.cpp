@@ -541,7 +541,7 @@ void LibraryPanel::showItemMenu(QTreeWidgetItem* item, const QPoint& globalPos)
         menu->addSeparator();
         QAction* expandAll = menu->addAction("Expand All Folders");
         QAction* collapseAll = menu->addAction("Collapse All Folders");
-        modal::popup(menu, globalPos, [=](QAction* chosen) {
+        modal::popup(menu, globalPos, [=, this](QAction* chosen) {
             if (chosen == copyTo)
                 emit copyToDocumentRequested(chosenNames);
             else if (chosen == copy)
@@ -633,7 +633,7 @@ void LibraryPanel::showItemMenu(QTreeWidgetItem* item, const QPoint& globalPos)
         QAction* updateAll = nullptr;
         if (anyLinked)
             updateAll = menu->addAction("Update All Linked Items");
-        modal::popup(menu, globalPos, [=](QAction* chosen) {
+        modal::popup(menu, globalPos, [=, this](QAction* chosen) {
             if (!chosen)
                 return;
             if (chosen == expandAll || chosen == collapseAll)
