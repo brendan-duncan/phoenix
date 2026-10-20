@@ -1,4 +1,9 @@
 cmake_minimum_required(VERSION 3.16)
+# Files a build generates are known as generated in every directory, not
+# only the one that makes them: Dawn built from source makes its C++ header.
+if(POLICY CMP0118)
+    cmake_policy(SET CMP0118 NEW)
+endif()
 
 # Visual Studio builds a project's files one at a time unless the compiler
 # is given /MP; make and Ninja already run as many compiles as they may.
