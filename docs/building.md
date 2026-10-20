@@ -34,13 +34,13 @@ On Windows, add `-A x64` to the first command to pick 64-bit (`-A ARM64` for Arm
 
 Each of these is pinned to a version or commit, and checked against a hash where it is an archive:
 
-- **Qt 6.11.2.** CMake uses an installed Qt if it finds one, in this order:
+- **Qt 6.12.0** (LTS). CMake uses an installed Qt if it finds one, in this order:
   1. `-DQt6_ROOT=...` or `-DCMAKE_PREFIX_PATH=...`
   2. the `Qt6_ROOT` or `QTDIR` environment variable
   3. a trimmed Qt already unpacked in `third_party/qt`
   4. on Windows, the newest `C:/Qt/6.*/msvc*_64`
 
-  Failing all of those, it downloads a trimmed Qt (about 45 MB) from this repository's `qt-6.11.2` release into `third_party/qt`.
+  Failing all of those, it downloads a trimmed Qt (about 45 MB) from this repository's `qt-6.12.0` release into `third_party/qt`.
 - **ffmpeg**, the program Phoenix encodes and reads video with. It ships beside Phoenix rather than being linked in. It is downloaded into `third_party/ffmpeg`.
 - **libas3**, the ActionScript compiler and virtual machine. If a checkout sits beside this one (`../libas3`), that one is built as it stands; otherwise the pinned commit is fetched.
 - **QuickJS** for JSFL scripts, **Velopack** for installing and updating, and the **WebView2 SDK** on Windows.
@@ -106,7 +106,7 @@ QT_QPA_PLATFORM=offscreen build/Release/Phoenix --export-image my.fla frame1.png
 Phoenix also builds for browsers with Qt for WebAssembly, as the web editor at [phoenixanimate.com/webeditor](https://phoenixanimate.com/webeditor/). It needs Emscripten and Qt for WebAssembly as well as the desktop Qt above (for its tools); `tools/web/setup_web.py` installs Emscripten and builds Qt for WebAssembly from source into `third_party/` (about ten minutes, and it needs 7-Zip), with the features that make the editor fast.
 
 ```sh
-python tools/web/setup_web.py          # once: Emscripten 4.0.23, and Qt 6.11.2 built for WebAssembly
+python tools/web/setup_web.py          # once: Emscripten 5.0.5, and Qt 6.12.0 built for WebAssembly
 python tools/web/build_web.py --serve  # build, then try it at http://localhost:8000/
 python tools/web/deploy_web.py         # put that build on phoenixanimate.com/webeditor
 ```

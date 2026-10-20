@@ -11,9 +11,9 @@ on:
   workflow_dispatch:
     inputs:
       qt_version:
-        description: "Qt version to package, e.g. 6.11.2"
+        description: "Qt version to package, e.g. 6.12.0"
         required: true
-        default: "6.11.2"
+        default: "6.12.0"
       publish:
         description: "Publish to the qt-<version> release and open the pin PR"
         type: boolean

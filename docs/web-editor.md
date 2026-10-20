@@ -16,9 +16,9 @@ python tools/web/deploy_web.py         # put that build on phoenixanimate.com/we
 ```
 
 - **setup_web.py** clones emsdk into `third_party/emsdk` and activates
-  Emscripten 4.0.23, the first with the `emdawnwebgpu` port the stage's
-  WebGPU renderer needs (Qt 6.11 itself is released for 4.0.7, so its
-  prebuilt kits do not match), then builds Qt 6.11.2 for WebAssembly from source (qtbase
+  Emscripten 5.0.5, the version Qt 6.12 is made for (the two have to
+  match), which has the `emdawnwebgpu` port the stage's WebGPU renderer
+  needs, then builds Qt 6.12.0 for WebAssembly from source (qtbase
   and qtsvg, about ten minutes) into `third_party/qt/wasm32`. Qt's prebuilt
   kits are slower for Phoenix, so the build turns on what they leave out:
   WebAssembly's own exceptions (the prebuilt kits emulate them in

@@ -707,8 +707,17 @@ if(PHOENIX_WEB)
 endif()
 
 # The GPU stage renderer (cmake/gpu.cmake): WebGPU through Dawn, natively
-# and in the browser.
-option(PHOENIX_GPU "Draw the stage on the GPU through WebGPU (Dawn)" ON)
+# and in the browser. On by default where Dawn's prebuilt packages reach:
+# the web, x64 Windows and Linux, and macOS; elsewhere (arm64 Windows and
+# Linux) the CPU draws the stage.
+include(cmake/GpuPlatform.cmake)
+phoenix_dawn_package(_phoenix_dawn_package)
+if(EMSCRIPTEN OR _phoenix_dawn_package)
+    set(_phoenix_gpu_default ON)
+else()
+    set(_phoenix_gpu_default OFF)
+endif()
+option(PHOENIX_GPU "Draw the stage on the GPU through WebGPU (Dawn)" ${_phoenix_gpu_default})
 if(PHOENIX_GPU)
     include(cmake/gpu.cmake)
     list(APPEND SOURCES src/gpu/gpu_device.cpp src/gpu/rive_canvas.cpp)

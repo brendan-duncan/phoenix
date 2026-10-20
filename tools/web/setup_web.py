@@ -39,8 +39,8 @@ import build_web  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent.parent
 
-QT_VERSION = "6.11.2"
-EMSCRIPTEN_VERSION = "4.0.23"
+QT_VERSION = "6.12.0"
+EMSCRIPTEN_VERSION = "5.0.5"
 QT_MODULES = ["qtbase", "qtsvg"]
 QT_REPOSITORY = "https://download.qt.io/online/qtsdkrepository/all_os/wasm"
 QT_SOURCES = "https://download.qt.io/official_releases/qt/%s/%s/submodules" % (
