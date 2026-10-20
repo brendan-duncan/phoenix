@@ -8232,40 +8232,44 @@ void MainWindow::setupMenus()
     connect(highQualityAntialiasingAction, &QAction::toggled, this, &MainWindow::onHighQualityAntiAliasingToggled);
     viewMenu->addAction(highQualityAntialiasingAction);
 
-    // What draws the stage, to compare them: QPainter, or Rive on the GPU.
+    // What draws the stage: the GPU where WebGPU has what it needs, or the
+    // CPU.
     {
         QMenu* rendererMenu = viewMenu->addMenu("Stage Renderer");
         auto* group = new QActionGroup(this);
-        QAction* qpainterAction = rendererMenu->addAction("QPainter");
-        QAction* riveAction = rendererMenu->addAction("Rive (GPU)");
-        for (QAction* action : {qpainterAction, riveAction})
+        QAction* gpuAction = rendererMenu->addAction("GPU");
+        QAction* cpuAction = rendererMenu->addAction("CPU");
+        for (QAction* action : {gpuAction, cpuAction})
         {
             action->setCheckable(true);
             group->addAction(action);
         }
-        // The GPU is looked for only when Rive is chosen.
-        riveAction->setEnabled(PhoenixView::gpuStageBuilt());
-        if (!PhoenixView::gpuStageBuilt())
-            riveAction->setStatusTip("This build of Phoenix draws the stage with QPainter only.");
+        gpuAction->setStatusTip("Draw the stage on the GPU (WebGPU), where it has what the stage needs");
+        cpuAction->setStatusTip("Draw the stage on the CPU");
+        gpuAction->setEnabled(PhoenixView::gpuStageBuilt());
         QSettings settings;
-        const auto choose = [this, qpainterAction, riveAction](bool rive) {
-            _phoenixView->setStageRenderer(rive ? PhoenixView::StageRenderer::Rive : PhoenixView::StageRenderer::QPainter);
-            const bool drawn = _phoenixView->stageRenderer() == PhoenixView::StageRenderer::Rive;
-            (drawn ? riveAction : qpainterAction)->setChecked(true);
-            if (rive && !drawn)
-            {
-                QString why;
-                PhoenixView::gpuStageAvailable(&why);
-                statusBar()->showMessage("The stage stays with QPainter: " + why, 8000);
-            }
+        const auto choose = [this, gpuAction](bool gpu) {
+            gpuAction->setChecked(gpu);
+            _phoenixView->setStageRenderer(gpu ? PhoenixView::StageRenderer::Gpu : PhoenixView::StageRenderer::Cpu);
         };
-        // PHOENIX_STAGE_RENDERER=rive or qpainter picks it for this run alone.
-        const QString wanted = qEnvironmentVariableIsSet("PHOENIX_STAGE_RENDERER")
-            ? qEnvironmentVariable("PHOENIX_STAGE_RENDERER") : settings.value("view/stageRenderer", "rive").toString();
-        choose(PhoenixView::gpuStageBuilt() && wanted == "rive");
-        connect(group, &QActionGroup::triggered, this, [choose, riveAction](QAction* action) {
-            choose(action == riveAction);
-            QSettings().setValue("view/stageRenderer", action == riveAction ? "rive" : "qpainter");
+        // Gone back to the CPU on its own: the menu says so, and why.
+        connect(_phoenixView, &PhoenixView::stageRendererChanged, this,
+            [this, cpuAction](PhoenixView::StageRenderer renderer, const QString& why) {
+                if (renderer != PhoenixView::StageRenderer::Cpu)
+                    return;
+                cpuAction->setChecked(true);
+                statusBar()->showMessage("The stage is drawn on the CPU: " + why + ".", 10000);
+            });
+        // PHOENIX_STAGE_RENDERER=gpu or cpu picks it for this run alone.
+        const QString wanted = (qEnvironmentVariableIsSet("PHOENIX_STAGE_RENDERER")
+            ? qEnvironmentVariable("PHOENIX_STAGE_RENDERER") : settings.value("view/stageRenderer", "gpu").toString()).toLower();
+        const bool gpu = PhoenixView::gpuStageBuilt() && wanted != "cpu" && wanted != "qpainter";
+        if (!gpu)
+            cpuAction->setChecked(true);
+        choose(gpu);
+        connect(group, &QActionGroup::triggered, this, [choose, gpuAction](QAction* action) {
+            choose(action == gpuAction);
+            QSettings().setValue("view/stageRenderer", action == gpuAction ? "gpu" : "cpu");
         });
         rendererMenu->addSeparator();
         QAction* timingAction = rendererMenu->addAction("Show Stage Timing");
@@ -9763,8 +9767,8 @@ int MainWindow::stageBenchmarkCommand(const QString& source, int start, int fram
     resize(size);
     show();
     QCoreApplication::processEvents();
-    const bool gpu = _phoenixView->stageRenderer() == PhoenixView::StageRenderer::Rive;
-    std::printf("%s on %s, %dx%d stage\n", gpu ? "Rive" : "QPainter", qPrintable(QFileInfo(source).fileName()),
+    const bool gpu = _phoenixView->stageRenderer() == PhoenixView::StageRenderer::Gpu;
+    std::printf("%s on %s, %dx%d stage\n", gpu ? "GPU" : "CPU", qPrintable(QFileInfo(source).fileName()),
         _phoenixView->width(), _phoenixView->height());
     start = std::clamp(start, 0, std::max(0, _phoenixView->frameCount() - 1));
     const int count = std::max(1, std::min(frames, _phoenixView->frameCount() - start));

@@ -20,16 +20,24 @@ public:
     explicit WebStage(QWidget* over);
     ~WebStage();
 
+    enum class Result
+    {
+        Drawn,
+        /// The browser is still starting WebGPU: the widget is asked to paint
+        /// again once it has.
+        NotYet,
+        /// No WebGPU, or not with what the stage needs, or it failed.
+        Unavailable
+    };
     /// Draws the view, painted by \a paint, into the canvas over the widget;
-    /// false while there is no WebGPU device yet (the widget asks for a
-    /// paint again once there is) or none at all.
-    bool paint(const QColor& clear, const std::function<void(QPainter&)>& paint);
+    /// why it could not in \a why.
+    Result paint(const QColor& clear, const std::function<void(QPainter&)>& paint, QString* why);
     /// Hides the canvas (the widget is hidden, or draws itself again).
     void hide();
     const RiveCanvas::Timing* timing() const { return _canvas ? &_canvas->timing() : nullptr; }
 
 private:
-    bool make();
+    Result make(QString* why);
 
     QPointer<QWidget> _widget;
     std::unique_ptr<RiveCanvas> _canvas;
@@ -38,4 +46,5 @@ private:
     QSize _configured;
     bool _shown = false;
     bool _waiting = false;
+    bool _unavailable = false;
 };

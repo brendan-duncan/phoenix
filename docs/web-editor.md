@@ -76,7 +76,7 @@ faster before building it in (`resources/web/index.html`):
 | `?guithreads=0` | without Qt's threaded image and painting helpers |
 | `?audiobuffer=8192` | the sound buffer in frames (256 to 16384; 4096 by default) |
 | `?debugdocks` | log the panels and their tab bars to the console after each change to them |
-| `?renderer=qpainter` | the stage drawn by QPainter rather than Rive on WebGPU (`?renderer=rive` the other way) |
+| `?renderer=cpu` | the stage drawn on the CPU rather than the GPU (`?renderer=gpu` the other way) |
 
 Settings combine (`?dpr=1&memory=2048`), and the browser console lists the
 ones in use. Measured on 2026-10-19 playing a 1920×1080 production scene
@@ -183,9 +183,16 @@ and dialogs, which are windows of their own, stay above it. It hides when
 the widget does.
 
 The adapter and device come back from the browser's promises after the
-page starts (`GpuDevice::whenReady`); until then, and in a browser without
-WebGPU, QPainter draws the stage as before. View > Stage Renderer switches
-between them, and so does `?renderer=` for one visit.
+page starts (`GpuDevice::whenReady`); until then the CPU (QPainter) draws
+the stage. What decides it is what WebGPU offers, not which browser it is:
+the CPU draws the stage for good when there is no WebGPU adapter or device,
+when the device lacks the storage buffers the renderer's exact coverage
+needs (it would fall back to MSAA, whose edges fall short of the CPU's;
+`RiveCanvas::valid`), and when the device reports an error or is lost
+(`GpuDevice::broken`). The status bar says why, and View > Stage Renderer
+shows CPU. The same holds on the desktop. View > Stage Renderer switches
+between GPU and CPU, `?renderer=` does for one visit, and
+`PHOENIX_GPU_DISABLE=1` turns WebGPU off as if there were none.
 
 ### Panels
 

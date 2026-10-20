@@ -124,13 +124,14 @@ public:
 
     void setHighQualityAntiAliasing(bool on);
 
-    /// What draws the stage: QPainter on the CPU, or the Rive renderer on
-    /// the GPU (in builds with PHOENIX_GPU). The tools' handles, the grid and
-    /// the rulers are QPainter's either way.
+    /// What draws the stage: the CPU (QPainter), or the GPU (the Rive
+    /// renderer on WebGPU, in builds with PHOENIX_GPU). The GPU is used only
+    /// where WebGPU has what it needs; otherwise, or once it fails, the
+    /// stage goes back to the CPU and stageRendererChanged says why.
     enum class StageRenderer
     {
-        QPainter,
-        Rive
+        Cpu,
+        Gpu
     };
     void setStageRenderer(StageRenderer renderer);
     StageRenderer stageRenderer() const { return _stageRenderer; }
@@ -363,6 +364,9 @@ public:
     QString scopeName(int depth) const;
 
 signals:
+    /// The stage went back to the CPU on its own (\a why): the GPU lacks
+    /// what it needs, or failed.
+    void stageRendererChanged(PhoenixView::StageRenderer renderer, const QString& why);
     /// The stage was right-clicked at \a documentPos.
     void stageMenuRequested(const QPoint& globalPos, const QPointF& documentPos);
     /// The cursor moved over the stage, to the document point given and the
@@ -930,7 +934,9 @@ private:
     Player* _player;
 
     bool _highQualityAntiAliasing;
-    StageRenderer _stageRenderer = StageRenderer::QPainter;
+    StageRenderer _stageRenderer = StageRenderer::Cpu;
+    /// The GPU found wanting: back to the CPU, after this paint, and why.
+    void fallBackToCpu(const QString& why);
     bool _showStageTiming = false;
     /// The last paint's time to draw the stage, and as the corner shows it.
     StageTimes _stageTimes;

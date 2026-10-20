@@ -46,7 +46,7 @@
   //   ?threads=4       the threads Phoenix draws and decodes with (1 for none)
   //   ?guithreads=0    without Qt's threaded image and painting helpers
   //   ?audiobuffer=8192 the sound buffer, in frames (256 to 16384; 4096 by default)
-  //   ?renderer=qpainter  the stage drawn by QPainter rather than Rive (WebGPU)
+  //   ?renderer=cpu    the stage drawn on the CPU rather than the GPU (WebGPU)
   const options = new URLSearchParams(location.search);
   const environment = {};
   const emscripten = {};
@@ -66,7 +66,7 @@
     environment.PHOENIX_AUDIO_BUFFER = String(Math.round(Number(options.get("audiobuffer")) || 4096));
   if (options.has("debugdocks"))
     environment.PHOENIX_DEBUG_DOCKS = "1";
-  if (options.get("renderer") === "qpainter" || options.get("renderer") === "rive")
+  if (options.get("renderer") === "cpu" || options.get("renderer") === "gpu")
     environment.PHOENIX_STAGE_RENDERER = options.get("renderer");
   if (options.get("guithreads") === "0")
     environment.QT_NO_GUI_THREADPOOL = "1";

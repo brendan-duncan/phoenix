@@ -42,7 +42,11 @@ public:
     explicit RiveCanvas(GpuDevice& device);
     ~RiveCanvas();
 
-    bool valid() const;
+    /// Whether the GPU can draw the stage as it should: the renderer starts
+    /// on it, and the device has what its smooth edges need (storage
+    /// buffers in the fragment stage, for coverage worked out exactly rather
+    /// than by MSAA). Why not in \a why.
+    bool valid(QString* why = nullptr) const;
 
 #ifndef __EMSCRIPTEN__
     /// A frame of \a pixels device pixels (\a ratio of them to a logical

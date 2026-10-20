@@ -46,13 +46,21 @@ WebStage::~WebStage()
     emscripten::val::module_property("specialHTMLTargets").delete_(std::string(kSelector));
 }
 
-bool WebStage::make()
+WebStage::Result WebStage::make(QString* why)
 {
+    if (_unavailable)
+        return Result::Unavailable;
     if (_canvas)
-        return true;
-    GpuDevice* device = GpuDevice::get();
+        return Result::Drawn;
+    GpuDevice* device = GpuDevice::get(why);
     if (!device)
     {
+        if (!GpuDevice::pending())
+        {
+            // Asked, and answered without a device.
+            _unavailable = true;
+            return Result::Unavailable;
+        }
         // Asked of the browser; the stage is drawn again once it answers.
         if (!_waiting)
         {
@@ -63,11 +71,11 @@ bool WebStage::make()
                     widget->update();
             });
         }
-        return false;
+        return Result::NotYet;
     }
     emscripten::val qtCanvas = qtCanvasOf(_widget);
     if (qtCanvas.isUndefined() || qtCanvas.isNull())
-        return false;
+        return Result::NotYet;
     // Beside Qt's canvas in the window's element, over it, letting the
     // pointer through.
     emscripten::val canvas = emscripten::val::global("document").call<emscripten::val>("createElement", std::string("canvas"));
@@ -86,7 +94,12 @@ bool WebStage::make()
     descriptor.nextInChain = &source.chain;
     _surface = wgpuInstanceCreateSurface(device->instance(), &descriptor);
     if (!_surface)
-        return false;
+    {
+        if (why)
+            *why = QStringLiteral("WebGPU could not draw into the page");
+        _unavailable = true;
+        return Result::Unavailable;
+    }
     WGPUSurfaceCapabilities capabilities = WGPU_SURFACE_CAPABILITIES_INIT;
     if (wgpuSurfaceGetCapabilities(_surface, device->adapter(), &capabilities) == WGPUStatus_Success &&
         capabilities.formatCount > 0)
@@ -95,18 +108,33 @@ bool WebStage::make()
         _format = WGPUTextureFormat_BGRA8Unorm;
     wgpuSurfaceCapabilitiesFreeMembers(capabilities);
     _canvas = std::make_unique<RiveCanvas>(*device);
-    return _canvas->valid();
+    if (!_canvas->valid(why))
+    {
+        _canvas.reset();
+        _unavailable = true;
+        return Result::Unavailable;
+    }
+    return Result::Drawn;
 }
 
-bool WebStage::paint(const QColor& clear, const std::function<void(QPainter&)>& paint)
+WebStage::Result WebStage::paint(const QColor& clear, const std::function<void(QPainter&)>& paint, QString* why)
 {
-    if (!_widget || !make())
-        return false;
+    if (!_widget)
+        return Result::NotYet;
+    const Result made = make(why);
+    if (made != Result::Drawn)
+        return made;
+    if (GpuDevice::broken(why))
+    {
+        hide();
+        _unavailable = true;
+        return Result::Unavailable;
+    }
     GpuDevice* device = GpuDevice::get();
     emscripten::val qtCanvas = qtCanvasOf(_widget);
     emscripten::val canvas = stageCanvas();
     if (qtCanvas.isUndefined() || canvas.isUndefined())
-        return false;
+        return Result::NotYet;
 
     // Over the widget: where it is in its window, from where Qt's canvas is.
     const qreal ratio = _widget->devicePixelRatioF();
@@ -114,7 +142,7 @@ bool WebStage::paint(const QColor& clear, const std::function<void(QPainter&)>& 
     const QSize logical = _widget->size();
     const QSize pixels(qCeil(logical.width() * ratio), qCeil(logical.height() * ratio));
     if (pixels.isEmpty())
-        return false;
+        return Result::NotYet;
     emscripten::val style = canvas["style"];
     style.set("left", std::to_string(qtCanvas["offsetLeft"].as<int>() + at.x()) + "px");
     style.set("top", std::to_string(qtCanvas["offsetTop"].as<int>() + at.y()) + "px");
@@ -138,7 +166,7 @@ bool WebStage::paint(const QColor& clear, const std::function<void(QPainter&)>& 
     WGPUSurfaceTexture current = WGPU_SURFACE_TEXTURE_INIT;
     wgpuSurfaceGetCurrentTexture(_surface, &current);
     if (!current.texture)
-        return false;
+        return Result::NotYet;
     const bool drawn = _canvas->drawInto(current.texture, _format, pixels, ratio, clear, paint);
     wgpuTextureRelease(current.texture);
     if (drawn && !_shown)
@@ -146,7 +174,7 @@ bool WebStage::paint(const QColor& clear, const std::function<void(QPainter&)>& 
         style.set("display", "block");
         _shown = true;
     }
-    return drawn;
+    return drawn ? Result::Drawn : Result::NotYet;
 }
 
 void WebStage::hide()

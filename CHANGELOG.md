@@ -6,7 +6,7 @@ What changed in each release of Phoenix, newest first.
 
 - The web editor has a phone layout: the stage, large buttons for the common tools and playing, and the panels one at a time; phones get it the first time, and View > Phone Layout switches it
 - The web editor asks before a tab with unsaved changes closes, starts tablets in the Simple workspace, plays sound more smoothly, and gives the commands on keys the browser keeps (Ctrl+N, Ctrl+W, Ctrl+T, Ctrl+Tab) keys with Alt
-- The stage is drawn on the GPU (WebGPU, by the Rive renderer), several times faster than before, in the desktop app and the web editor; View > Stage Renderer switches back to the CPU renderer
+- The stage is drawn on the GPU (WebGPU), several times faster than before, in the desktop app and the web editor; where WebGPU is missing or lacks what the stage needs, the CPU draws it as before, and View > Stage Renderer switches between GPU and CPU
 - Playing is several times faster with a script tool installed, such as Rig Tool: tools and scripts not listening for an event no longer redraw everything from scratch on each frame
 
 ## 0.21.3

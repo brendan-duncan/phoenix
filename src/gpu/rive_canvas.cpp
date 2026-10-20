@@ -797,9 +797,26 @@ RiveCanvas::RiveCanvas(GpuDevice& device)
 
 RiveCanvas::~RiveCanvas() = default;
 
-bool RiveCanvas::valid() const
+bool RiveCanvas::valid(QString* why) const
 {
-    return _impl->context != nullptr;
+    if (!_impl->context)
+    {
+        if (why)
+            *why = QStringLiteral("the renderer could not start on this GPU");
+        return false;
+    }
+    // Without the storage buffers its exact coverage needs, the renderer
+    // falls back to MSAA, whose edges fall short of the CPU's.
+    rive::gpu::RenderContext::FrameDescriptor frame;
+    frame.renderTargetWidth = 1;
+    frame.renderTargetHeight = 1;
+    if (_impl->context->selectInterlockMode(frame) == rive::gpu::InterlockMode::depthStencil)
+    {
+        if (why)
+            *why = QStringLiteral("this GPU's WebGPU lacks the storage buffers smooth edges need");
+        return false;
+    }
+    return true;
 }
 
 void RiveCanvas::forget()

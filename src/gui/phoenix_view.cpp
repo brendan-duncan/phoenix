@@ -1002,16 +1002,20 @@ void PhoenixView::paintEvent(QPaintEvent *event)
 #if defined(PHOENIX_GPU) && defined(__EMSCRIPTEN__)
     // In the browser, Rive draws the whole view into a WebGPU canvas over
     // the widget; while there is no device yet, QPainter draws it here.
-    if (_stageRenderer == StageRenderer::Rive && !_grayscale)
+    if (_stageRenderer == StageRenderer::Gpu && !_grayscale)
     {
         if (!_webStage)
             _webStage = std::make_unique<WebStage>(this);
         QElapsedTimer clock;
         clock.start();
         _onGpuDevice = true;
-        const bool drawn = _webStage->paint(QColor(37, 37, 37), [this](QPainter& painter) { paintView(painter); });
+        QString why;
+        const WebStage::Result drawn =
+            _webStage->paint(QColor(37, 37, 37), [this](QPainter& painter) { paintView(painter); }, &why);
         _onGpuDevice = false;
-        if (drawn)
+        if (drawn == WebStage::Result::Unavailable)
+            fallBackToCpu(why);
+        if (drawn == WebStage::Result::Drawn)
         {
             if (const RiveCanvas::Timing* t = _webStage->timing())
             {
@@ -1024,7 +1028,7 @@ void PhoenixView::paintEvent(QPaintEvent *event)
                 _stageTimes.pathsMade = t->pathsMade;
                 _stageTimes.gpu = true;
                 if (_showStageTiming)
-                    _stageTiming = QString("Rive  %1 ms\npaint %2  flush %3  submit %4\n%5 paths, %6 new")
+                    _stageTiming = QString("GPU  %1 ms\npaint %2  flush %3  submit %4\n%5 paths, %6 new")
                                        .arg(_stageTimes.totalMs, 0, 'f', 1)
                                        .arg(t->paintMs, 0, 'f', 1)
                                        .arg(t->flushMs, 0, 'f', 1)
@@ -1145,7 +1149,7 @@ void PhoenixView::paintView(QPainter& painter)
     stageClock.start();
     bool gpuDrawn = false;
 #if defined(PHOENIX_GPU) && !defined(__EMSCRIPTEN__)
-    if (_stageRenderer == StageRenderer::Rive && !_grayPass)
+    if (_stageRenderer == StageRenderer::Gpu && !_grayPass)
         gpuDrawn = drawStageOnGpu(painter, document, backgroundColor);
 #endif
 
@@ -1286,7 +1290,7 @@ void PhoenixView::paintView(QPainter& painter)
         _stageTimes.totalMs = stageClock.nsecsElapsed() / 1.0e6;
         if (_showStageTiming)
             _stageTiming =
-                QString("QPainter%1  %2 ms").arg(supersampled ? " 2x" : "").arg(_stageTimes.totalMs, 0, 'f', 1);
+                QString("CPU%1  %2 ms").arg(supersampled ? " 2x" : "").arg(_stageTimes.totalMs, 0, 'f', 1);
     }
 
     // The grid over the art.
@@ -1393,17 +1397,33 @@ void PhoenixView::hideEvent(QHideEvent* event)
 
 void PhoenixView::setStageRenderer(StageRenderer renderer)
 {
+    // Natively the device is there or not at once; in the browser it comes
+    // later, and the CPU draws the stage until it has.
 #ifndef __EMSCRIPTEN__
-    // In the browser the device comes later; each paint falls back to
-    // QPainter until it has.
-    if (renderer == StageRenderer::Rive && !gpuStageAvailable())
-        renderer = StageRenderer::QPainter;
+    QString why;
+    if (renderer == StageRenderer::Gpu && !gpuStageAvailable(&why))
+    {
+        fallBackToCpu(why);
+        return;
+    }
 #endif
     if (_stageRenderer == renderer)
         return;
     _stageRenderer = renderer;
     _staticValid = false;
     update();
+}
+
+void PhoenixView::fallBackToCpu(const QString& why)
+{
+    qWarning("The stage is drawn on the CPU: %s", qPrintable(why));
+    // After the paint this may come in the middle of.
+    QMetaObject::invokeMethod(this, [this, why]() {
+        _stageRenderer = StageRenderer::Cpu;
+        _staticValid = false;
+        update();
+        emit stageRendererChanged(StageRenderer::Cpu, why);
+    }, Qt::QueuedConnection);
 }
 
 void PhoenixView::setShowStageTiming(bool on)
@@ -1425,10 +1445,16 @@ bool PhoenixView::gpuStageBuilt()
 bool PhoenixView::gpuStageAvailable(QString* why)
 {
 #ifdef PHOENIX_GPU
-    return GpuDevice::get(why) != nullptr;
+    if (!GpuDevice::get(why))
+    {
+        if (why && why->isEmpty())
+            *why = QStringLiteral("there is no WebGPU here");
+        return false;
+    }
+    return !GpuDevice::broken(why);
 #else
     if (why)
-        *why = "This build of Phoenix draws the stage with QPainter only.";
+        *why = QStringLiteral("this build of Phoenix draws the stage on the CPU only");
     return false;
 #endif
 }
@@ -1438,17 +1464,26 @@ bool PhoenixView::drawStageOnGpu(QPainter& painter, const fla::Document* documen
 {
     if (_riveFailed)
         return false;
+    QString why;
     if (!_riveCanvas)
     {
-        GpuDevice* device = GpuDevice::get();
+        GpuDevice* device = GpuDevice::get(&why);
         if (device)
             _riveCanvas = std::make_unique<RiveCanvas>(*device);
-        if (!device || !_riveCanvas->valid())
+        if (!device || !_riveCanvas->valid(&why))
         {
             _riveCanvas.reset();
             _riveFailed = true;
+            fallBackToCpu(why.isEmpty() ? QStringLiteral("there is no WebGPU here") : why);
             return false;
         }
+    }
+    if (GpuDevice::broken(&why))
+    {
+        _riveCanvas.reset();
+        _riveFailed = true;
+        fallBackToCpu(why);
+        return false;
     }
     QElapsedTimer clock;
     clock.start();
@@ -1482,7 +1517,7 @@ bool PhoenixView::drawStageOnGpu(QPainter& painter, const fla::Document* documen
     _stageTimes.gpu = true;
     if (_showStageTiming)
     {
-        _stageTiming = QString("Rive  %1 ms\npaint %2  flush %3  gpu %4  read %5\n%6 paths, %7 new")
+        _stageTiming = QString("GPU  %1 ms\npaint %2  flush %3  gpu %4  read %5\n%6 paths, %7 new")
                            .arg(_stageTimes.totalMs, 0, 'f', 1)
                            .arg(t.paintMs, 0, 'f', 1)
                            .arg(t.flushMs, 0, 'f', 1)

@@ -30,7 +30,38 @@ QString backendName(WGPUBackendType type)
     }
 }
 
+/// A GPU error or a device lost, once there has been one.
+QString brokenBecause;
+
+void breakDevice(const QString& why)
+{
+    if (brokenBecause.isEmpty())
+        brokenBecause = why.isEmpty() ? QStringLiteral("the GPU stopped") : why;
+    qWarning("GPU: %s", qPrintable(why));
+}
+
+/// What a device descriptor needs to hear of errors and of the device lost.
+void listen(WGPUDeviceDescriptor& descriptor)
+{
+    descriptor.uncapturedErrorCallbackInfo.callback = [](WGPUDevice const*, WGPUErrorType, WGPUStringView message, void*,
+                                                          void*) { breakDevice("GPU error: " + text(message)); };
+    descriptor.deviceLostCallbackInfo.mode = WGPUCallbackMode_AllowSpontaneous;
+    descriptor.deviceLostCallbackInfo.callback = [](WGPUDevice const*, WGPUDeviceLostReason reason, WGPUStringView message,
+                                                     void*, void*) {
+        // Lost on purpose when Phoenix quits and lets it go.
+        if (reason != WGPUDeviceLostReason_Destroyed && reason != WGPUDeviceLostReason_CallbackCancelled)
+            breakDevice("the GPU device was lost: " + text(message));
+    };
+}
+
 } // namespace
+
+bool GpuDevice::broken(QString* why)
+{
+    if (why)
+        *why = brokenBecause;
+    return !brokenBecause.isEmpty();
+}
 
 #ifndef __EMSCRIPTEN__
 GpuDevice* GpuDevice::get(QString* error)
@@ -55,6 +86,11 @@ GpuDevice* GpuDevice::get(QString* error)
 void GpuDevice::whenReady(const std::function<void(bool)>& done)
 {
     done(get() != nullptr);
+}
+
+bool GpuDevice::pending()
+{
+    return false;
 }
 #else
 namespace {
@@ -98,6 +134,12 @@ GpuDevice* GpuDevice::get(QString* error)
     return state == State::Ready ? made : nullptr;
 }
 
+bool GpuDevice::pending()
+{
+    get();
+    return state == State::Asking;
+}
+
 void GpuDevice::whenReady(const std::function<void(bool)>& done)
 {
     get();
@@ -109,6 +151,11 @@ void GpuDevice::whenReady(const std::function<void(bool)>& done)
 
 void GpuDevice::request()
 {
+    if (qEnvironmentVariableIntValue("PHOENIX_GPU_DISABLE"))
+    {
+        settle(false, "WebGPU is turned off (PHOENIX_GPU_DISABLE)");
+        return;
+    }
     _instance = wgpuCreateInstance(nullptr);
     if (!_instance)
     {
@@ -138,10 +185,7 @@ void GpuDevice::request()
             wgpuAdapterInfoFreeMembers(info);
         }
         WGPUDeviceDescriptor deviceDescriptor = WGPU_DEVICE_DESCRIPTOR_INIT;
-        deviceDescriptor.uncapturedErrorCallbackInfo.callback = [](WGPUDevice const*, WGPUErrorType,
-                                                                    WGPUStringView message, void*, void*) {
-            qWarning("GPU: %s", qPrintable(text(message)));
-        };
+        listen(deviceDescriptor);
         WGPURequestDeviceCallbackInfo deviceCallback = WGPU_REQUEST_DEVICE_CALLBACK_INFO_INIT;
         deviceCallback.mode = WGPUCallbackMode_AllowSpontaneous;
         deviceCallback.callback = [](WGPURequestDeviceStatus status, WGPUDevice device, WGPUStringView message,
@@ -185,6 +229,12 @@ void GpuDevice::wait(WGPUFuture future) const
 
 bool GpuDevice::make(QString& error)
 {
+    // PHOENIX_GPU_DISABLE=1 leaves the stage to the CPU, as with no GPU.
+    if (qEnvironmentVariableIntValue("PHOENIX_GPU_DISABLE"))
+    {
+        error = "WebGPU is turned off (PHOENIX_GPU_DISABLE)";
+        return false;
+    }
     // Waiting on a future with a timeout is what lets the requests below be
     // answered in place.
     const WGPUInstanceFeatureName features[] = {WGPUInstanceFeatureName_TimedWaitAny};
@@ -234,10 +284,7 @@ bool GpuDevice::make(QString& error)
 
     Answer deviceAnswer;
     WGPUDeviceDescriptor deviceDescriptor = WGPU_DEVICE_DESCRIPTOR_INIT;
-    deviceDescriptor.uncapturedErrorCallbackInfo.callback = [](WGPUDevice const*, WGPUErrorType, WGPUStringView message,
-                                                                void*, void*) {
-        qWarning("GPU: %s", qPrintable(text(message)));
-    };
+    listen(deviceDescriptor);
     WGPURequestDeviceCallbackInfo deviceCallback = WGPU_REQUEST_DEVICE_CALLBACK_INFO_INIT;
     deviceCallback.mode = WGPUCallbackMode_WaitAnyOnly;
     deviceCallback.callback = [](WGPURequestDeviceStatus status, WGPUDevice device, WGPUStringView message,

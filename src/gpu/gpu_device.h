@@ -25,6 +25,12 @@ public:
     /// Calls \a done (with whether there is a device) once the device is
     /// made or could not be: at once natively.
     static void whenReady(const std::function<void(bool)>& done);
+    /// Whether the device has failed since it was made (a GPU error, or the
+    /// device lost), and why in \a why: the stage goes back to the CPU.
+    static bool broken(QString* why = nullptr);
+    /// Whether the device is still being made (in the browser, while its
+    /// promises have not settled).
+    static bool pending();
     ~GpuDevice();
 
     WGPUInstance instance() const { return _instance; }
