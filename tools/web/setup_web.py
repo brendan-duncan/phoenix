@@ -30,7 +30,6 @@ import hashlib
 import shutil
 import subprocess
 import sys
-import tempfile
 import urllib.request
 import xml.etree.ElementTree as ElementTree
 from pathlib import Path
@@ -130,8 +129,11 @@ def fetch_source(module, sources):
     """Downloads, checks and unpacks a Qt module's source; returns its folder."""
     name = "%s-everywhere-src-%s" % (module, QT_VERSION)
     folder = sources / name
-    if folder.is_dir():
+    done = sources / (name + ".ready")
+    if folder.is_dir() and done.exists():
         return folder
+    if folder.is_dir():
+        shutil.rmtree(folder)
     archive = sources / (name + ".tar.xz")
     print("Downloading %s" % archive.name)
     download("%s/%s.tar.xz" % (QT_SOURCES, name), archive)
@@ -151,48 +153,56 @@ def fetch_source(module, sources):
         if old not in text:
             sys.exit("%s has changed; update QT_PATCHES in %s" % (file, Path(__file__).name))
         file.write_text(text.replace(old, new, 1), encoding="utf-8", newline="")
+    done.write_text("unpacked and patched\n", encoding="utf-8")
     return folder
 
 
 def build_qt(folder, arch, emsdk, host):
-    """Builds qtbase and qtsvg for WebAssembly from source into folder."""
-    work = Path(tempfile.mkdtemp(prefix="phoenix-qt-wasm-", dir=str(ROOT / "third_party")))
+    """Builds qtbase and qtsvg for WebAssembly from source into folder.
+
+    The sources and the build go into third_party/qt/source-<arch> (ignored by
+    git), so a build stopped part way goes on from where it was when run
+    again; the folder is removed once Qt is installed."""
+    work = ROOT / "third_party" / "qt" / ("source-" + arch)
+    work.mkdir(parents=True, exist_ok=True)
     env = build_web.emsdk_environment(emsdk)
-    try:
-        qtbase = fetch_source("qtbase", work)
-        qtsvg = fetch_source("qtsvg", work)
-        configure = qtbase / ("configure.bat" if sys.platform == "win32" else "configure")
-        options = ["-qt-host-path", str(host), "-platform", "wasm-emscripten", "-prefix", str(folder), "-release",
-                   *QT_FEATURES, "-nomake", "examples", "-nomake", "tests", "-no-warnings-are-errors"]
-        if arch == "wasm64":
-            options.append("-feature-wasm64")
-        base_build = work / "build-qtbase"
-        base_build.mkdir()
+    qtbase = fetch_source("qtbase", work)
+    qtsvg = fetch_source("qtsvg", work)
+    configure = qtbase / ("configure.bat" if sys.platform == "win32" else "configure")
+    options = ["-qt-host-path", str(host), "-platform", "wasm-emscripten", "-prefix", str(folder), "-release",
+               *QT_FEATURES, "-nomake", "examples", "-nomake", "tests", "-no-warnings-are-errors"]
+    if arch == "wasm64":
+        options.append("-feature-wasm64")
+    base_build = work / "build-qtbase"
+    base_build.mkdir(exist_ok=True)
+    if not (base_build / "build.ninja").exists():
         run([str(configure), *options], cwd=base_build, env=env)
-        run(["cmake", "--build", ".", "--parallel"], cwd=base_build, env=env)
-        run(["cmake", "--install", "."], cwd=base_build, env=env)
-        svg_build = work / "build-qtsvg"
-        svg_build.mkdir()
+    run(["cmake", "--build", ".", "--parallel"], cwd=base_build, env=env)
+    run(["cmake", "--install", "."], cwd=base_build, env=env)
+    svg_build = work / "build-qtsvg"
+    svg_build.mkdir(exist_ok=True)
+    if not (svg_build / "build.ninja").exists():
         configure_module = folder / "bin" / ("qt-configure-module.bat" if sys.platform == "win32" else "qt-configure-module")
         run([str(configure_module), str(qtsvg)], cwd=svg_build, env=env)
-        run(["cmake", "--build", ".", "--parallel"], cwd=svg_build, env=env)
-        run(["cmake", "--install", "."], cwd=svg_build, env=env)
-    finally:
-        shutil.rmtree(work, ignore_errors=True)
+    run(["cmake", "--build", ".", "--parallel"], cwd=svg_build, env=env)
+    run(["cmake", "--install", "."], cwd=svg_build, env=env)
+    shutil.rmtree(work, ignore_errors=True)
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--arch", choices=["wasm32", "wasm64"], default="wasm32")
     parser.add_argument("--prebuilt", action="store_true", help="unpack Qt's prebuilt kit rather than building one")
-    parser.add_argument("--emsdk", default=str(ROOT / "third_party" / "emsdk"))
+    parser.add_argument("--emsdk", help="where Emscripten goes (default third_party/emsdk)")
     parser.add_argument("--qt", help="where Qt for WebAssembly goes (default third_party/qt/<arch>)")
     parser.add_argument("--qt-host", help="the desktop Qt of the same version")
     args = parser.parse_args()
 
-    emsdk = Path(args.emsdk)
+    # What tools/web/web.ini already names is kept rather than installed again.
+    known = build_web.settings()
+    emsdk = Path(args.emsdk or known.get("emsdk") or ROOT / "third_party" / "emsdk")
     install_emscripten(emsdk)
-    qt = Path(args.qt) if args.qt else ROOT / "third_party" / "qt" / args.arch
+    qt = Path(args.qt or known.get("qt_" + args.arch) or ROOT / "third_party" / "qt" / args.arch)
     if installed(qt):
         print("Qt for WebAssembly is already in %s" % qt)
     elif args.prebuilt:
@@ -204,7 +214,9 @@ def main():
         if not host:
             sys.exit("Building Qt for WebAssembly needs the desktop Qt %s: pass --qt-host" % QT_VERSION)
         build_qt(qt, args.arch, emsdk, host)
-    print("\nReady. Build with:\n  python tools/web/build_web.py --arch %s" % args.arch)
+    build_web.remember(emsdk=emsdk, qt_host=build_web.find_host_qt(args.qt_host), **{"qt_" + args.arch: qt})
+    print("\nReady (tools/web/web.ini says where). Build and try it with:\n  python tools/web/build_web.py --serve%s"
+          % ("" if args.arch == "wasm32" else " --arch " + args.arch))
     return 0
 
 

@@ -5,7 +5,10 @@
 #include <QApplication>
 #include <QColor>
 #include <QEvent>
+#include <QMainWindow>
 #include <QPalette>
+#include <QScreen>
+#include <QTimer>
 #include <QWidget>
 
 #include <emscripten/val.h>
@@ -31,6 +34,44 @@ protected:
                 !widget->windowFlags().testFlag(Qt::WindowStaysOnTopHint))
                 widget->setWindowFlag(Qt::WindowStaysOnTopHint, true);
         }
+        return false;
+    }
+};
+
+// The page is Phoenix's screen, and a main window always fills it. On the
+// desktop a main window takes back the size and place it was saved with
+// (a workspace, a window of its own for a tab); in a page that would leave
+// part of the page uncovered and never drawn again, still showing whatever
+// was there before.
+class MainWindowsFillPage : public QObject
+{
+protected:
+    bool eventFilter(QObject* watched, QEvent* event) override
+    {
+        switch (event->type())
+        {
+        case QEvent::Show:
+        case QEvent::Resize:
+        case QEvent::Move:
+        case QEvent::WindowStateChange:
+            break;
+        default:
+            return false;
+        }
+        auto* window = qobject_cast<QMainWindow*>(watched);
+        if (!window || !window->isWindow() || !window->isVisible())
+            return false;
+        // Once the change in hand is done.
+        // Once the change in hand is done. A saved size taken back can leave
+        // the window full screen in name only, so its size is what counts.
+        QTimer::singleShot(0, window, [window]() {
+            QScreen* screen = window->screen();
+            if (!window->isVisible() || !screen || window->geometry() == screen->geometry())
+                return;
+            window->setWindowState((window->windowState() & ~(Qt::WindowMaximized | Qt::WindowMinimized)) |
+                Qt::WindowFullScreen);
+            window->setGeometry(screen->geometry());
+        });
         return false;
     }
 };
@@ -76,6 +117,8 @@ void install()
 {
     static PopupsOnTop popups;
     qApp->installEventFilter(&popups);
+    static MainWindowsFillPage fill;
+    qApp->installEventFilter(&fill);
     addWindowStyle();
 }
 

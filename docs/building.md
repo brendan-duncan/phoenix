@@ -106,14 +106,12 @@ QT_QPA_PLATFORM=offscreen build/Release/Phoenix --export-image my.fla frame1.png
 Phoenix also builds for browsers with Qt for WebAssembly, as the web editor at [phoenixanimate.com/webeditor](https://phoenixanimate.com/webeditor/). It needs Emscripten and Qt for WebAssembly as well as the desktop Qt above (for its tools); `tools/web/setup_web.py` installs Emscripten and builds Qt for WebAssembly from source into `third_party/` (about ten minutes, and it needs 7-Zip), with the features that make the editor fast.
 
 ```sh
-python tools/web/setup_web.py            # once: Emscripten 4.0.7, and Qt 6.11.2 built for WebAssembly
-python tools/web/build_web.py            # builds into build-wasm32/
-python tools/web/serve.py --open         # tries it at http://localhost:8000/
-python tools/web/build_web.py --package  # gathers the site into build-wasm32/webeditor/
-python tools/web/deploy_web.py           # uploads that to phoenixanimate.com/webeditor
+python tools/web/setup_web.py          # once: Emscripten 4.0.7, and Qt 6.11.2 built for WebAssembly
+python tools/web/build_web.py --serve  # build, then try it at http://localhost:8000/
+python tools/web/deploy_web.py         # put that build on phoenixanimate.com/webeditor
 ```
 
-Serve it with `serve.py`, not a plain file server: the page needs the `Cross-Origin-Opener-Policy` and `Cross-Origin-Embedder-Policy` headers for threads. `--arch wasm64` builds a 64-bit version into `build-wasm64/`, given a Qt kit built for it. [web-editor.md](web-editor.md) covers how the web editor differs from the desktop app and what to keep in mind when changing code that it shares.
+`setup_web.py` writes where it put everything into `tools/web/web.ini` (kept out of the repository), so the other two need no settings; to use an Emscripten or Qt installed elsewhere, name them there. Try builds with `--serve` (or `serve.py`), not a plain file server: the page needs the `Cross-Origin-Opener-Policy` and `Cross-Origin-Embedder-Policy` headers for threads. `--arch wasm64` builds a 64-bit version into `build-wasm64/`, given a Qt kit built for it. [web-editor.md](web-editor.md) covers how the web editor differs from the desktop app and what to keep in mind when changing code that it shares.
 
 ## Releases
 

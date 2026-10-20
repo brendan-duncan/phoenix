@@ -1,17 +1,19 @@
 #!/usr/bin/env python3
 """Copies Phoenix's web editor to phoenixanimate.com/webeditor.
 
-  python tools/web/deploy_web.py [--build] [--arch wasm32] [--dry-run] [--configure-apache]
+  python tools/web/deploy_web.py
+
+  more: [--build] [--arch wasm32] [--dry-run] [--configure-apache]
+
+What goes up is the last build, as tools/web/build_web.py packaged it into
+<build>/webeditor: the same files `build_web.py --serve` tried. --build
+builds it again first.
 
 The server comes from tools/deploy_site.ini, the same one tools/deploy_site.py
 uses (its host, user, SSH key and web root); the editor goes into the
-webeditor folder under the web root, replacing what was there.
-
-What goes up is <build>/webeditor, which tools/web/build_web.py --package
-makes; --build runs that first (with the same environment variables and
-defaults build_web.py takes). The folder goes up as one archive over scp and
-is unpacked over ssh to one side, then swapped in, so the editor is never half
-updated.
+webeditor folder under the web root, replacing what was there. The folder
+goes up as one archive over scp and is unpacked over ssh to one side, then
+swapped in, so the editor is never half updated.
 
 The page only works with the Cross-Origin-Opener-Policy and
 Cross-Origin-Embedder-Policy headers. The package's .htaccess sends them when
@@ -107,7 +109,7 @@ def missing_headers():
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    parser.add_argument("--build", action="store_true", help="build and package first (tools/web/build_web.py)")
+    parser.add_argument("--build", action="store_true", help="build first (tools/web/build_web.py)")
     parser.add_argument("--arch", choices=["wasm32", "wasm64"], default="wasm32")
     parser.add_argument("--dry-run", action="store_true", help="list what would go up and stop")
     parser.add_argument("--configure-apache", action="store_true",
@@ -115,11 +117,11 @@ def main():
     args = parser.parse_args()
 
     if args.build:
-        subprocess.run([sys.executable, str(ROOT / "tools" / "web" / "build_web.py"), "--arch", args.arch, "--package"],
+        subprocess.run([sys.executable, str(ROOT / "tools" / "web" / "build_web.py"), "--arch", args.arch],
                        check=True)
     package = ROOT / ("build-" + args.arch) / "webeditor"
     if not (package / "Phoenix.wasm").is_file():
-        sys.exit(f"No package in {package}: run tools/web/build_web.py --package, or pass --build")
+        sys.exit(f"No build in {package}: run tools/web/build_web.py first, or pass --build")
 
     config = load_config()
     target = f"{config['user']}@{config['host']}"

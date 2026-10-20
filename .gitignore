@@ -16,6 +16,7 @@ WEBSITE.md
 WEB-TODO.md
 UNITY-TODO.md
 tools/deploy_site.ini
+tools/web/web.ini
 
 # Working copies Claude Code makes for its agents
 .claude/worktrees/

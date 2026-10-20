@@ -10,11 +10,9 @@ web-only code and runs as it always has.
 ## Building, trying and deploying
 
 ```sh
-python tools/web/setup_web.py            # once
-python tools/web/build_web.py            # build-wasm32/
-python tools/web/serve.py --open         # http://localhost:8000/
-python tools/web/build_web.py --package  # build-wasm32/webeditor/
-python tools/web/deploy_web.py           # phoenixanimate.com/webeditor
+python tools/web/setup_web.py          # once
+python tools/web/build_web.py --serve  # build, then try it at http://localhost:8000/
+python tools/web/deploy_web.py         # put that build on phoenixanimate.com/webeditor
 ```
 
 - **setup_web.py** clones emsdk into `third_party/emsdk` and activates the
@@ -28,25 +26,29 @@ python tools/web/deploy_web.py           # phoenixanimate.com/webeditor
   and the script enables with a one-line patch. It needs the desktop Qt of
   the same version, for its tools, and 7-Zip. `--prebuilt` unpacks Qt's
   prebuilt multithreaded kit instead (quick, slower editor); `--arch
-  wasm64` builds the 64-bit kit.
+  wasm64` builds the 64-bit kit. Stopped part way, it carries on from
+  there when run again. It writes where everything went into
+  `tools/web/web.ini`.
 - **build_web.py** configures with Qt's toolchain file and builds with
-  Ninja, Release unless `--config` says otherwise. Besides Emscripten and
-  the wasm kit it needs the desktop Qt of the same version, for moc, rcc
-  and uic; it finds the one the desktop build uses, or takes `--qt-host`.
-  Each of the three can also come from an environment variable
-  (`PHOENIX_EMSDK`, `PHOENIX_QT_WASM32` or `_WASM64`, `PHOENIX_QT_HOST`).
-  The build compiles everything the way the Qt kit was compiled: native
-  exceptions and SIMD with a kit built by setup_web.py, JavaScript
-  exceptions with a prebuilt one.
-  `--package` gathers what the site needs into `<build>/webeditor`: the
-  page (`resources/web/index.html`), `Phoenix.js`, `Phoenix.wasm`, Qt's
-  `qtloader.js`, the icon, and an `.htaccess` for Apache.
+  Ninja, Release unless `--config` says otherwise, then packages what the
+  site needs into `<build>/webeditor`: the page
+  (`resources/web/index.html`), `Phoenix.js`, `Phoenix.wasm`, Qt's
+  `qtloader.js`, the icon, and an `.htaccess` for Apache. `--serve` then
+  serves that folder and opens it in the browser. Besides Emscripten and the
+  wasm kit it needs the desktop Qt of the same version, for moc, rcc and
+  uic. It finds all three in `tools/web/web.ini`, which setup_web.py writes
+  (and which can name ones installed elsewhere), or from an option or an
+  environment variable (`PHOENIX_EMSDK`, `PHOENIX_QT_WASM32` or `_WASM64`,
+  `PHOENIX_QT_HOST`). It compiles everything the way the Qt kit was
+  compiled: native exceptions and SIMD with a kit built by setup_web.py,
+  JavaScript exceptions with a prebuilt one.
 - **serve.py** serves a build folder (or the package) on localhost with the
   `Cross-Origin-Opener-Policy` and `Cross-Origin-Embedder-Policy` headers,
   uncached. Threads need those headers: without them the page has no
   SharedArrayBuffer and says so instead of starting. Any host for the
   editor has to send them.
-- **deploy_web.py** uploads the package to the `webeditor` folder of the
+- **deploy_web.py** uploads the last build's package (what `--serve`
+  tried; `--build` builds it again first) to the `webeditor` folder of the
   site, using the server in `tools/deploy_site.ini` (as `deploy_site.py`
   does), and swaps it in whole. It then checks that the live page sends the
   isolation headers. The package's `.htaccess` sets them where Apache
