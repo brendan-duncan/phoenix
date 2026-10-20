@@ -460,6 +460,7 @@ int main(int argc, char *argv[])
     releaseOwnConsole();
 #ifdef PHOENIX_WEB
     MainWindow& window = *new MainWindow(initialFile);
+    web_page::setUnsavedWorkCheck([]() { return MainWindow::hasUnsavedWork(); });
 #else
     MainWindow window(initialFile);
 #endif

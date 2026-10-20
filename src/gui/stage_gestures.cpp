@@ -100,7 +100,18 @@ bool StageGestures::eventFilter(QObject* watched, QEvent* event)
         case QEvent::TouchBegin:
             if (_touchStarted)
                 _touchStarted();
+#ifdef PHOENIX_WEB
+            [[fallthrough]];
+        case QEvent::TouchUpdate:
+        {
+            const QList<QEventPoint>& points = static_cast<QTouchEvent*>(event)->points();
+            if (points.size() >= 2)
+                _fingers = QLineF(points[0].position(), points[1].position());
             break;
+        }
+#else
+            break;
+#endif
         case QEvent::Gesture:
             return gestureEvent(static_cast<QGestureEvent*>(event));
         case QEvent::NativeGesture:
@@ -128,9 +139,35 @@ bool StageGestures::gestureEvent(QGestureEvent* event)
             _twist = 0.0;
             _turning = false;
             _pinching = true;
+#ifdef PHOENIX_WEB
+            _fingersAtStart = _fingers;
+            _fingersApplied = _fingers;
+            _zoomAtStart = _view->zoom();
+#endif
         }
         const QPointF center = _view->mapFromGlobal(pinch->centerPoint());
         double degrees = 0.0;
+#ifdef PHOENIX_WEB
+        // From the fingers themselves (see the header).
+        double factor = 1.0;
+        if (_fingersAtStart.length() > 0.0 && _fingers.length() > 0.0 && _view->zoom() > 0.0)
+        {
+            factor = _zoomAtStart * _fingers.length() / _fingersAtStart.length() / _view->zoom();
+            // QLineF's angles turn counterclockwise; the view's clockwise.
+            double step = _fingers.angleTo(_fingersApplied);
+            if (step > 180.0)
+                step -= 360.0;
+            _fingersApplied = _fingers;
+            _twist += step;
+            if (_turning)
+                degrees = step;
+            else if (std::fabs(_twist) >= kTwistStart)
+            {
+                _turning = true;
+                degrees = _twist;
+            }
+        }
+#else
         if (pinch->changeFlags() & QPinchGesture::RotationAngleChanged)
         {
             const double step = pinch->rotationAngle() - pinch->lastRotationAngle();
@@ -144,6 +181,7 @@ bool StageGestures::gestureEvent(QGestureEvent* event)
             }
         }
         const double factor = pinch->changeFlags() & QPinchGesture::ScaleFactorChanged ? pinch->scaleFactor() : 1.0;
+#endif
         zoomAndTurn(factor, degrees, center);
         // Over: whatever the first finger drew as it came down is taken back.
         if (pinch->state() == Qt::GestureFinished || pinch->state() == Qt::GestureCanceled)

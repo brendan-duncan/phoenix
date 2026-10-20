@@ -88,6 +88,12 @@ public:
     explicit MainWindow(const QString& initialFile = QString(), QWidget* parent = nullptr, bool startup = true);
     ~MainWindow() override;
 
+#ifdef PHOENIX_WEB
+    /// Whether a document in any window has changes not saved: the page
+    /// asks before it is closed or reloaded.
+    static bool hasUnsavedWork();
+#endif
+
     /// Every window people work in, the one Phoenix started with first.
     static QList<MainWindow*> windows();
     /// Whether \a document is open in any window: shown, in a tab or in an

@@ -228,6 +228,15 @@ bool AudioEngine::open()
     config.playback.format = ma_format_f32;
     config.playback.channels = 2;
     config.sampleRate = PcmBuffer::kRate;
+#ifdef PHOENIX_WEB
+    // In a browser the sound is filled in on the page's own thread, between
+    // the frames it draws; a frame that takes longer than the buffer lasts
+    // leaves a gap. 4096 frames (93 ms) covers a slow frame; the page can
+    // ask for another size (?audiobuffer=).
+    const char* asked = std::getenv("PHOENIX_AUDIO_BUFFER");
+    const int frames = asked ? std::atoi(asked) : 0;
+    config.periodSizeInFrames = frames >= 256 && frames <= 16384 ? static_cast<ma_uint32>(frames) : 4096;
+#endif
     config.dataCallback = [](ma_device* device, void* output, const void* input, ma_uint32 frameCount) {
         AudioEngine::callback(device, output, input, frameCount);
     };

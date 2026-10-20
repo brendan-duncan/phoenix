@@ -6,6 +6,7 @@
 #include <QColor>
 #include <QDockWidget>
 #include <QEvent>
+#include <QKeySequence>
 #include <QMainWindow>
 #include <QPalette>
 #include <QPointer>
@@ -15,6 +16,7 @@
 #include <QTimer>
 #include <QWidget>
 
+#include <emscripten/emscripten.h>
 #include <emscripten/val.h>
 
 #include <cstdlib>
@@ -215,6 +217,76 @@ void install()
     addWindowStyle();
 }
 
+namespace {
+
+std::function<bool()> g_unsavedWorkCheck;
+
+/// The keys a browser keeps: they close, open and switch its tabs and
+/// windows, and a page never sees them.
+bool browserKeeps(const QKeySequence& key)
+{
+    if (key.count() != 1)
+        return false;
+    const QKeyCombination combination = key[0];
+    const Qt::KeyboardModifiers modifiers = combination.keyboardModifiers();
+    const Qt::Key code = combination.key();
+    if (modifiers != Qt::ControlModifier && modifiers != (Qt::ControlModifier | Qt::ShiftModifier))
+        return false;
+    return code == Qt::Key_N || code == Qt::Key_T || code == Qt::Key_W || code == Qt::Key_Tab ||
+        code == Qt::Key_Backtab || code == Qt::Key_PageUp || code == Qt::Key_PageDown;
+}
+
+/// The keys tried in place of \a key, best first.
+QList<QKeySequence> replacements(const QKeySequence& key)
+{
+    const QKeyCombination combination = key[0];
+    const Qt::Key code = combination.key();
+    const bool shift = combination.keyboardModifiers().testFlag(Qt::ShiftModifier);
+    if (code == Qt::Key_Tab || code == Qt::Key_Backtab)
+        return {QKeySequence(Qt::CTRL | Qt::ALT | (shift ? Qt::Key_PageUp : Qt::Key_PageDown))};
+    const QKeyCombination withAlt = QKeyCombination(combination.keyboardModifiers() | Qt::AltModifier, code);
+    return {QKeySequence(withAlt), QKeySequence(QKeyCombination(withAlt.keyboardModifiers() | Qt::ShiftModifier, code))};
+}
+
+} // namespace
+
+void avoidBrowserKeys(QWidget* window)
+{
+    const QList<QAction*> actions = window->findChildren<QAction*>();
+    QSet<QKeySequence> taken;
+    for (const QAction* action : actions)
+        for (const QKeySequence& key : action->shortcuts())
+            taken.insert(key);
+    for (QAction* action : actions)
+    {
+        QList<QKeySequence> keys = action->shortcuts();
+        bool changed = false;
+        for (int i = keys.size() - 1; i >= 0; --i)
+        {
+            if (!browserKeeps(keys[i]))
+                continue;
+            changed = true;
+            const QKeySequence kept = keys[i];
+            keys.removeAt(i);
+            for (const QKeySequence& other : replacements(kept))
+            {
+                if (taken.contains(other) || keys.contains(other))
+                    continue;
+                keys.insert(i, other);
+                taken.insert(other);
+                break;
+            }
+        }
+        if (changed)
+            action->setShortcuts(keys);
+    }
+}
+
+void setUnsavedWorkCheck(std::function<bool()> check)
+{
+    g_unsavedWorkCheck = std::move(check);
+}
+
 void setWindowColors(const QPalette& palette)
 {
     // The page's style sheet (resources/web/index.html) draws the title
@@ -232,3 +304,9 @@ void setWindowColors(const QPalette& palette)
 }
 
 } // namespace web_page
+
+// For the page (resources/web/index.html), before it is closed or reloaded.
+extern "C" EMSCRIPTEN_KEEPALIVE int phoenix_has_unsaved_work()
+{
+    return web_page::g_unsavedWorkCheck && web_page::g_unsavedWorkCheck() ? 1 : 0;
+}

@@ -466,6 +466,11 @@ MainWindow::MainWindow(const QString& initialFile, QWidget* parent, bool startup
         for (const auto& entry : _toolActionList)
             tools.push_back(entry.second);
         std::sort(tools.begin(), tools.end(), [](QAction* a, QAction* b) { return a->text() < b->text(); });
+#ifdef PHOENIX_WEB
+        // Keys the browser keeps for itself (Ctrl+N, Ctrl+W, Ctrl+T,
+        // Ctrl+Tab) never reach the page: their commands get others.
+        web_page::avoidBrowserKeys(this);
+#endif
         _shortcuts = Shortcuts::collect(menuBar(), tools);
         Shortcuts::apply(_shortcuts);
     }
@@ -1437,6 +1442,7 @@ void MainWindow::showTabMenu(int index, const QPoint& globalPos)
     QAction* newWindow = menu->addAction("Move to &New Window", this, [this, indexOf]() {
         moveTabToNewWindow(indexOf());
     });
+    web_page::desktopOnly(newWindow);
     newWindow->setEnabled(_tabs.size() > 1);
     QMenu* toWindow = menu->addMenu("Move to &Window");
     for (MainWindow* window : s_windows)
@@ -1534,6 +1540,11 @@ void MainWindow::tabDraggedOut(int index)
 {
     if (!_tabBar || index < 0 || index >= static_cast<int>(_tabs.size()))
         return;
+#ifdef PHOENIX_WEB
+    // A page has the one window: a tab dragged off the bar stays where it
+    // is (dragging along the bar still reorders the tabs).
+    return;
+#endif
     QDrag* drag = new QDrag(_tabBar);
     QMimeData* data = new QMimeData;
     data->setData(kTabMime, QByteArray::number(index));
@@ -1591,6 +1602,17 @@ void eachInTurn(std::vector<T> items, size_t index, std::function<void(const T&,
 }
 
 } // namespace
+
+#ifdef PHOENIX_WEB
+bool MainWindow::hasUnsavedWork()
+{
+    for (MainWindow* window : s_windows)
+        for (const std::unique_ptr<DocumentTab>& tab : window->_tabs)
+            if (window->tabModified(*tab))
+                return true;
+    return false;
+}
+#endif
 
 void MainWindow::settleUnsaved(const QList<MainWindow*>& windows, QWidget* parent, const DocumentTab* except,
     std::function<void()> settled)
@@ -17946,6 +17968,11 @@ void MainWindow::putOnSystemClipboard()
             if (const fla::Element* element = dynamic_cast<const fla::Element*>(selected))
                 shown.push_back(element);
         }
+#ifndef PHOENIX_WEB
+        // In a browser Qt hands the system clipboard plain text, HTML and
+        // pictures only, and a picture as it does it the browser turns down,
+        // taking everything copied with it; pasting in the page uses
+        // Phoenix's own copies, so the browser gets text alone.
         const QImage picture = _phoenixView->renderElements(shown, 2.0);
         if (!picture.isNull())
             data->setImageData(picture);
@@ -17953,6 +17980,7 @@ void MainWindow::putOnSystemClipboard()
         const QByteArray svg = _phoenixView->svgOfElements(shown);
         if (!svg.isEmpty())
             data->setData("image/svg+xml", svg);
+#endif
     }
     if (_clipboard.size() == 1 && _clipboard.front()->elementType() == fla::Element::Type::StaticText)
     {

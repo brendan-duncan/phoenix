@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QLineF>
 #include <QObject>
 #include <QPointF>
 
@@ -40,4 +41,14 @@ private:
     double _twist = 0.0;
     bool _turning = false;
     bool _pinching = false;
+#ifdef PHOENIX_WEB
+    // A browser moves one finger at a time, and Qt's pinch measures each step
+    // against the other finger where it last was, so its steps run ahead of
+    // the fingers: on the web the zoom and turn come from where the two
+    // fingers are, against where they were when the pinch began.
+    QLineF _fingers;
+    QLineF _fingersAtStart;
+    QLineF _fingersApplied;
+    double _zoomAtStart = 1.0;
+#endif
 };
