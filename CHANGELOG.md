@@ -4,6 +4,10 @@ What changed in each release of Phoenix, newest first.
 
 ## Unreleased
 
+- SWF panels in the Configuration folder's WindowSWF show under Window > Extensions, and their buttons run JSFL through MMExecute
+- SWF movies in script dialogs can call JSFL too, reaching the dialog's controls through fl.xmlui
+- Test Movie: interface components such as buttons build without a stack overflow, and art drawn over a button leaves it its clicks
+- Script errors in Test Movie say what the error was rather than [object Error]
 - Phoenix runs in a browser: the web editor at phoenixanimate.com/webeditor opens, draws, animates, plays and saves documents, with files opened from the browser and saved as downloads
 
 ## 0.21.2

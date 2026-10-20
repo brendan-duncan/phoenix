@@ -116,8 +116,9 @@ public:
     /// Makes docks for the panels installed now, and lets go of those of
     /// extensions removed since.
     void refresh();
-    /// The Window > Extensions menu: a line for each panel.
-    void fillMenu(QMenu* menu);
+    /// The Window > Extensions menu: a line for each panel, added to
+    /// \a menu; false when there are none.
+    bool fillMenu(QMenu* menu);
     /// Opens the panel of id \a id; false when there is none.
     bool open(const QString& id);
     /// Hands \a event to every panel.

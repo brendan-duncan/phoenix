@@ -90,6 +90,10 @@ bool pick(const DisplayObject& object, double x, double y, InteractiveObject*& t
         return true;
     }
     const auto& children = container.children();
+    // A plain shape over the pointer makes it the container's, but only
+    // once nothing that takes the mouse is found under it: art drawn over a
+    // button leaves the button its clicks.
+    bool plainHit = false;
     for (size_t i = children.size(); i-- > 0;)
     {
         const DisplayObject* child = children[i].get();
@@ -107,13 +111,14 @@ bool pick(const DisplayObject& object, double x, double y, InteractiveObject*& t
             target = inner;
             return true;
         }
-        // A plain shape in it: it takes the pointer, unless it does not
-        // take the mouse, when the pointer goes on to what is under.
-        if (enabled)
-        {
-            target = static_cast<InteractiveObject*>(self);
-            return true;
-        }
+        plainHit = true;
+    }
+    // A container that does not take the mouse lets the pointer go on to
+    // what is under it.
+    if (plainHit && enabled)
+    {
+        target = static_cast<InteractiveObject*>(self);
+        return true;
     }
     if (enabled && object.contentHits(x, y))
     {

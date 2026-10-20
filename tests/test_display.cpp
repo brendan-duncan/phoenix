@@ -477,6 +477,32 @@ TEST(display_stage_sends_mouse_events)
     stage->stopDrag();
 }
 
+TEST(display_art_over_a_button_leaves_it_the_pointer)
+{
+    // A panel: buttons in a sprite, and the icons drawn over them as one
+    // plain shape in the same sprite.
+    auto stage = std::make_shared<Stage>(400, 300);
+    auto panel = std::make_shared<Sprite>();
+    auto button = box(50, 50, 40, 40);
+    auto icons = std::make_shared<Shape>();
+    icons->graphics.beginFill(0);
+    icons->graphics.drawRect(40, 40, 100, 20);
+    icons->graphics.endFill();
+    panel->addChild(button);
+    panel->addChild(icons);
+    stage->addChild(panel);
+    // Over the button and the icon: the button.
+    stage->pointerMove(60, 55);
+    CHECK(stage->hovered() == button.get());
+    // Over the icon alone: the sprite holding it.
+    stage->pointerMove(120, 55);
+    CHECK(stage->hovered() == panel.get());
+    // A sprite that does not take the mouse leaves the icon to what is under.
+    panel->mouseEnabled = false;
+    stage->pointerMove(120, 55);
+    CHECK(stage->hovered() == nullptr);
+}
+
 TEST(display_simple_button_shows_its_states)
 {
     auto stage = std::make_shared<Stage>();

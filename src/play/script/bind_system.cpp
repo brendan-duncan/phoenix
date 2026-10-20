@@ -268,6 +268,15 @@ void Bindings::defineSystem()
         return Val();
     }, 2);
 
+    // adobe.utils: a panel's way to the editor holding it. MMExecute runs
+    // JSFL there and gives back its value as text; MMEndCommand ends a
+    // command the panel was opened for, which a panel left open has none of.
+    vm.defineFunction("adobe.utils.MMExecute", NATIVE(this) {
+        const std::string code = stringArg(vm, args, 0);
+        return text(runtime.mmExecute ? runtime.mmExecute(code) : std::string());
+    }, 1);
+    vm.defineFunction("adobe.utils.MMEndCommand", NATIVE() { return Val(); }, 2);
+
     // flash.media: library sounds, played through the movie's player.
     vm.defineNativeClass("flash.media.SoundTransform")
         .field("volume", number(1), as3::Coerce::Number)

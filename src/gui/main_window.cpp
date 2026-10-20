@@ -96,6 +96,7 @@
 #include "claude_code.h"
 #include "actions_panel.h"
 #include "cep_panel.h"
+#include "swf_panels.h"
 #include "claude_code_panel.h"
 #include "ik_poser.h"
 #include "bone_corrector.h"
@@ -437,6 +438,9 @@ MainWindow::MainWindow(const QString& initialFile, QWidget* parent, bool startup
     // back so one left open opens again.
     _cepPanels = new CepPanels(*this, *_scripts);
     _cepPanels->refresh();
+    // The SWF panels in Configuration/WindowSWF, the same way.
+    _swfPanels = new SwfPanels(*this, *_scripts);
+    _swfPanels->refresh();
     setupWindowMenu();
     connect(theme::notifier(), &theme::Notifier::changed, this, [this]() {
         QSettings settings;
@@ -2872,7 +2876,22 @@ void MainWindow::setupWindowMenu()
     });
     QMenu* extensionsMenu = windowMenu->addMenu("E&xtensions");
     web_page::desktopOnly(extensionsMenu);
-    connect(extensionsMenu, &QMenu::aboutToShow, this, [this, extensionsMenu]() { _cepPanels->fillMenu(extensionsMenu); });
+    // The extensions' HTML panels, then the SWF panels.
+    connect(extensionsMenu, &QMenu::aboutToShow, this, [this, extensionsMenu]() {
+        extensionsMenu->clear();
+        const bool html = _cepPanels->fillMenu(extensionsMenu);
+        QAction* line = extensionsMenu->addSeparator();
+        const bool swf = _swfPanels->fillMenu(extensionsMenu);
+        if (!html || !swf)
+            extensionsMenu->removeAction(line);
+        if (!html && !swf)
+        {
+            QAction* none = extensionsMenu->addAction("No Extension Panels");
+            none->setEnabled(false);
+            none->setStatusTip("Install extensions through Commands > Manage Extensions, or put SWF panels in the "
+                               "Configuration folder's WindowSWF");
+        }
+    });
     windowMenu->addSeparator();
 
     QAction* hidePanels = windowMenu->addAction("&Hide Panels");

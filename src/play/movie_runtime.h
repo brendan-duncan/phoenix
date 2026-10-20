@@ -262,6 +262,11 @@ public:
     /// plays the scripts with the flash.* classes over the display list;
     /// 1 and 2 with the timeline's own objects. Set before start().
     void setActionScriptVersion(int version) { _version = version; }
+    /// How much of the thread's stack scripts may use, in bytes, before
+    /// they stop with a stack overflow; 0 for the VM's own, small, limit.
+    /// Deep component code (a panel's buttons) needs more. Set before
+    /// start(), and only as much as the thread has.
+    void setNativeStackLimit(size_t bytes) { _nativeStack = bytes; }
     /// Whether the movie plays as ActionScript 3 (once started).
     bool actionScript3() const { return _as3; }
     /// The movie's scripts are JavaScript, as an HTML5 Canvas document's
@@ -408,6 +413,10 @@ public:
     std::function<void(const ScriptError&)> scriptError;
     /// getURL and fscommand: what the movie asks of the player around it.
     std::function<void(const std::string& url, const std::string& window)> getURL;
+    /// MMExecute: JSFL the movie gives the editor it is a panel of, and the
+    /// value that comes back, as text. Unset where no editor holds it, and
+    /// MMExecute gives back an empty string.
+    std::function<std::string(const std::string& code)> mmExecute;
 
     /// The movie changed: what shows needs drawing again.
     std::function<void()> changed;
@@ -572,6 +581,7 @@ private:
     SceneMove _sceneMove;
     double _frameRate;
     std::unique_ptr<as3::VM> _vm;
+    size_t _nativeStack = 0;
     std::shared_ptr<display::Stage> _stage;
     uint64_t _scriptRuns = 0;
     bool _hiddenLayers = true;

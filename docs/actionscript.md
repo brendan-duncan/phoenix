@@ -83,7 +83,8 @@ movie.setLibraryBitmaps(bitmaps);        // │ "set before start()"
 movie.setActionScriptVersion(v);         // │
 movie.setJavaScript(isCanvas);           // │
 movie.setClasses(sources, documentClass);// │
-movie.setCompiledScripts(abcFiles);      // ┘
+movie.setCompiledScripts(abcFiles);      // │
+movie.setNativeStackLimit(bytes);        // ┘
 movie.findClass = ...; movie.trace = ...; movie.scriptError = ...; ...
 movie.start();                           // again, now with the settings
 loop: movie.step();                      // one frame
@@ -104,6 +105,7 @@ Host callbacks (all `std::function` members; none are required):
 | `fetch`, `decodeImage` | Network and non-PNG image decoding for `URLLoader`/`Loader` |
 | `playSound`, `stopSound`, `stopAllSounds`, `frameSound` | Library sounds from scripts, keyframe sounds |
 | `getURL`, `notice` | Links; things the player did not do (loads, form posts) |
+| `mmExecute` | `MMExecute` (AS3's `adobe.utils.MMExecute`, the AS1/2 global): JSFL for the editor holding the movie as a panel, its value back as text; empty without a host |
 | `frameRateChanged` | `stage.frameRate` set by a script |
 | `heldFrame` | Time Remap behavior: the frame a clip is held on, `-1` for none |
 | `hitShape` | Shape-accurate hit test of a clip's art as last drawn |
@@ -111,6 +113,11 @@ Host callbacks (all `std::function` members; none are required):
 
 The GUI sets these in `connectMovie` ([src/gui/movie_hooks.cpp](../src/gui/movie_hooks.cpp)) and
 `TestMovieWindow`'s constructor ([src/gui/test_movie_window.cpp](../src/gui/test_movie_window.cpp)).
+`connectMovie` also raises the VM's native stack limit (`setNativeStackLimit`, 6 MB) above
+libas3's 512 KB default, which interface components' setup (`fl.controls`) runs past; the window's
+thread has 8 MB, and the web build keeps the default. `TestMovieWindow::setPanel` hides the
+playing controls and sets `mmExecute`, for SWF panels docked by
+[src/gui/swf_panels.cpp](../src/gui/swf_panels.cpp) and those embedded in script dialogs.
 
 ### 2.2 Which language plays
 

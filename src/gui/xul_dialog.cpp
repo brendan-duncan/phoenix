@@ -281,7 +281,7 @@ QWidget* XulDialog::make(const Node& node)
 QWidget* XulDialog::makeMovie(const jsfl::xul::Node& node)
 {
     // An SWF panel: played as Test Movie plays a movie, at the size the
-    // XML gives. Its ActionScript runs, but cannot call JSFL (MMExecute).
+    // XML gives, its ActionScript calling JSFL through MMExecute.
     const QString source = qtext(node.attr("src"));
     QString path = source;
     if (path.startsWith("file:", Qt::CaseInsensitive))
@@ -306,13 +306,13 @@ QWidget* XulDialog::makeMovie(const jsfl::xul::Node& node)
     auto* player = new TestMovieWindow(*movie, QFileInfo(path).fileName(), [](const QString&) {},
         [](const QString&, const fla::DOMElement*, int) {}, holder, path);
     player->setWindowFlags(Qt::Widget);
+    // Its MMExecute calls run in the script that opened the dialog, where
+    // fl.xmlui reaches the dialog's controls.
+    player->setPanel([this](const std::string& code) { return _dialog.execute ? _dialog.execute(code) : std::string(); });
     const int width = number(node, "width", 0), height = number(node, "height", 0);
     if (width > 0 && height > 0)
         player->setMinimumSize(width, height);
     layout->addWidget(player, 1);
-    auto* note = new QLabel("This panel's scripts cannot call Phoenix's JSFL.", holder);
-    note->setEnabled(false);
-    layout->addWidget(note);
     _movies.push_back(std::move(movie));
     return holder;
 }

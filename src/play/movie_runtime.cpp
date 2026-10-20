@@ -723,6 +723,8 @@ void MovieRuntime::start()
     _actions.reset();
     _initsRun.clear();
     _vm = std::make_unique<as3::VM>();
+    if (_nativeStack > 0)
+        _vm->setNativeStackLimit(_nativeStack);
     if (!_stage)
         _stage = std::make_shared<display::Stage>();
     _stage->setFrameRate(_frameRate);
@@ -1021,6 +1023,12 @@ void MovieRuntime::setupGlobals()
         if (trace)
             trace("fscommand(" + arg(args, 0)->toString() + ", " + arg(args, 1)->toString() + ")");
         return Value::makeUndefined();
+    });
+    // A panel's way to the editor holding it; MMEndCommand ends a command
+    // the panel was opened for, which a panel left open has none of.
+    vm.registerBuiltin("MMEndCommand", [](const Args&) { return Value::makeUndefined(); });
+    vm.registerBuiltin("MMExecute", [this, arg](const Args& args) {
+        return Value::makeString(mmExecute ? mmExecute(arg(args, 0)->toString()) : std::string());
     });
     // Milliseconds since the movie started.
     vm.registerBuiltin("getTimer", [this](const Args&) {

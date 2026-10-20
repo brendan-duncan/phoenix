@@ -490,6 +490,7 @@ bool install(const std::string& path, const std::string& configFolder, const std
     }
     std::map<std::string, uint64_t> hashes;
     bool flashPanels = false;
+    bool otherMovies = false;
     bool elsewhere = false;
     for (const Package::File& file : package.files)
     {
@@ -519,8 +520,15 @@ bool install(const std::string& path, const std::string& configFolder, const std
         }
         installed.placed.push_back(placed);
         hashes[placed] = hashOf(bytes);
+        // Movies in WindowSWF are panels Phoenix plays; others (effects) are
+        // kept as they are.
         if (lower(leaf).size() > 4 && lower(leaf).compare(leaf.size() - 4, 4, ".swf") == 0)
-            flashPanels = true;
+        {
+            if (lower(placed).rfind("windowswf/", 0) == 0)
+                flashPanels = true;
+            else
+                otherMovies = true;
+        }
     }
     writeRecord(installed, hashes);
     if (package.kind == Package::Kind::Panels)
@@ -539,8 +547,11 @@ bool install(const std::string& path, const std::string& configFolder, const std
                             "events and the web, but not native add-ons, servers or sockets.");
     }
     if (flashPanels)
-        notes.push_back("Its SWF panels and effects are kept, but Phoenix does not run them; its JSFL commands and "
-                        "tools work.");
+        notes.push_back("Its SWF panels are under Window > Extensions; their buttons run JSFL as they would "
+                        "anywhere.");
+    if (otherMovies)
+        notes.push_back("Its other SWF movies (effects) are kept, but Phoenix does not run them; its JSFL commands "
+                        "and tools work.");
     if (elsewhere)
         notes.push_back("Some of its files were meant for places outside the Configuration folder; they are kept "
                         "with the extension.");

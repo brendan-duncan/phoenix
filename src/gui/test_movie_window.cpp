@@ -196,7 +196,8 @@ TestMovieWindow::TestMovieWindow(const fla::FLADocument& document, const QString
     _view->setClipOutsideStage(true);
     layout->addWidget(_view, 1);
 
-    QHBoxLayout* bar = new QHBoxLayout;
+    _controls = new QWidget(this);
+    QHBoxLayout* bar = new QHBoxLayout(_controls);
     bar->setContentsMargins(8, 4, 8, 4);
     const QColor ink = palette().color(QPalette::ButtonText);
     QPushButton* restartButton = new QPushButton(this);
@@ -255,7 +256,7 @@ TestMovieWindow::TestMovieWindow(const fla::FLADocument& document, const QString
     _status = new QLabel(this);
     _status->setForegroundRole(QPalette::PlaceholderText);
     bar->addWidget(_status);
-    layout->addLayout(bar);
+    layout->addWidget(_controls);
 
     // Every scene, from the first, as the published movie plays them.
     std::vector<const fla::Timeline*> scenes(data.timelines.begin(), data.timelines.end());
@@ -458,6 +459,13 @@ void TestMovieWindow::stopSounds()
         AudioEngine::instance().stop(voice);
     _voices.clear();
     _frameVoices.clear();
+}
+
+void TestMovieWindow::setPanel(std::function<std::string(const std::string& code)> execute)
+{
+    _controls->hide();
+    if (_movie)
+        _movie->mmExecute = std::move(execute);
 }
 
 void TestMovieWindow::resizeEvent(QResizeEvent* event)

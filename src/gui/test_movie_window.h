@@ -45,6 +45,11 @@ public:
         const QString& file = QString());
     ~TestMovieWindow() override;
 
+    /// Plays the movie as a panel: the movie alone, without the playing
+    /// controls, its MMExecute calls given to \a execute (JSFL, and its
+    /// value back as text).
+    void setPanel(std::function<std::string(const std::string& code)> execute);
+
 protected:
     void resizeEvent(QResizeEvent* event) override;
     bool eventFilter(QObject* watched, QEvent* event) override;
@@ -77,6 +82,8 @@ private:
     uint64_t _shownScriptRuns = 0;
     double _frameRate = 24.0;
     QLabel* _status = nullptr;
+    /// The playing controls under the movie, hidden for a panel.
+    QWidget* _controls = nullptr;
     QPushButton* _pause = nullptr;
     QPushButton* _step = nullptr;
     class QSlider* _slider = nullptr;

@@ -255,9 +255,18 @@ Value showXmlPanel(Session& session, const std::string& xml, const std::string& 
     dialog.run = [&session](const std::string& code) {
         if (!session.evaluate)
             return;
-        const std::string failure = session.evaluate(code);
+        const std::string failure = session.evaluate(code, nullptr);
         if (!failure.empty())
             session.host().trace("xmlPanel: " + failure);
+    };
+    dialog.execute = [&session](const std::string& code) {
+        std::string value;
+        if (!session.evaluate)
+            return value;
+        const std::string failure = session.evaluate(code, &value);
+        if (!failure.empty())
+            session.host().trace("MMExecute: " + failure);
+        return value;
     };
     struct Open
     {

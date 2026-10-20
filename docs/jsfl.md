@@ -470,8 +470,11 @@ without a window.
 `XulDialog` ([src/gui/xul_dialog.cpp](../src/gui/xul_dialog.cpp)) builds Qt widgets from the
 model. The person's edits go to `Dialog::edit`, `toggle`, `choose` and `click`; script changes
 come back through the `changed` and `closedByScript` callbacks. A `<flash src>` panel is played
-like Test Movie plays a movie, but its ActionScript cannot call back into JSFL (`MMExecute` is not
-available there). While a dialog is open, `JsflHost` counts it (`dialogsOpen`, `dialogsShown`) so
+like Test Movie plays a movie (`TestMovieWindow::setPanel`), and its `MMExecute` calls go to
+`Dialog::execute`, which runs the code in the script that opened the dialog through
+`Session::evaluate`, so `fl.xmlui` reaches the dialog from the movie. Docked SWF panels are in
+[src/gui/swf_panels.cpp](../src/gui/swf_panels.cpp): one per movie in `Configuration/WindowSWF`,
+each with its own `PanelScript` context for `MMExecute`, as an HTML panel's `evalScript` has. While a dialog is open, `JsflHost` counts it (`dialogsOpen`, `dialogsShown`) so
 that `LongRun` does not count the person's time in the dialog as the script running long.
 
 ## E4X
