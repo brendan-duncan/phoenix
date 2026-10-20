@@ -832,6 +832,9 @@ public slots:
 
 protected:
     void paintEvent(QPaintEvent *event) override;
+    /// The pixels per point the stage is drawn at: the screen's, or fewer
+    /// where the web editor's page asks for it.
+    qreal stagePixelRatio() const;
     void dragEnterEvent(QDragEnterEvent* event) override;
     void dragMoveEvent(QDragMoveEvent* event) override;
     void dropEvent(QDropEvent* event) override;

@@ -42,16 +42,6 @@ if(EMSCRIPTEN)
     set(PHOENIX_PYTHON OFF CACHE BOOL "" FORCE)
     set(PHOENIX_UPDATER OFF CACHE BOOL "" FORCE)
     set(PHOENIX_WEBVIEW OFF CACHE BOOL "" FORCE)
-    # Emscripten leaves C++ exceptions uncaught unless asked; Phoenix's
-    # readers and libas3 catch them. Qt's prebuilt kits use the JavaScript
-    # ones (-fexceptions), so everything linked with it does too.
-    # Threads share the page's memory, so every object linked in has to be
-    # compiled for it (-pthread), not only those that link Qt.
-    add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-fexceptions> -pthread)
-    add_link_options(-fexceptions -pthread)
-    if(TARGET as3_parser)
-        target_compile_options(as3_parser PRIVATE -fexceptions -pthread)
-    endif()
 else()
     set(PHOENIX_WEB OFF)
 endif()
@@ -97,6 +87,32 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # cmake/PhoenixQt.cmake.
 include(cmake/PhoenixQt.cmake)
 phoenix_find_qt()
+
+# The web build compiles everything as the Qt kit it links was compiled:
+# threads share the page's memory, so every object has to be built for them
+# (-pthread), not only those that link Qt; C++ exceptions, which Phoenix's
+# readers and libas3 catch, are WebAssembly's own where the kit has them
+# (tools/web/build_qt_web.py builds such a kit) and JavaScript's otherwise,
+# as in Qt's prebuilt kits; and SIMD where the kit has it.
+if(PHOENIX_WEB)
+    file(STRINGS "${QT6_INSTALL_PREFIX}/${QT6_INSTALL_HEADERS}/QtCore/qconfig.h" _phoenix_qt_config
+        REGEX "define QT_FEATURE_wasm_(exceptions|simd128) ")
+    set(PHOENIX_WEB_OPTIONS -pthread)
+    if(_phoenix_qt_config MATCHES "QT_FEATURE_wasm_exceptions 1")
+        list(APPEND PHOENIX_WEB_OPTIONS -fwasm-exceptions -sSUPPORT_LONGJMP=wasm)
+    else()
+        list(APPEND PHOENIX_WEB_OPTIONS -fexceptions)
+    endif()
+    if(_phoenix_qt_config MATCHES "QT_FEATURE_wasm_simd128 1")
+        list(APPEND PHOENIX_WEB_OPTIONS -msimd128)
+    endif()
+    message(STATUS "Web build options: ${PHOENIX_WEB_OPTIONS}")
+    add_compile_options(${PHOENIX_WEB_OPTIONS})
+    add_link_options(${PHOENIX_WEB_OPTIONS})
+    if(TARGET as3_parser)
+        target_compile_options(as3_parser PRIVATE ${PHOENIX_WEB_OPTIONS})
+    endif()
+endif()
 
 # The auto-updater: see cmake/PhoenixVelopack.cmake.
 include(cmake/PhoenixVelopack.cmake)
@@ -789,9 +805,11 @@ if(PHOENIX_WEB)
     target_compile_definitions(phoenix_core PUBLIC PHOENIX_WEB)
     # Threads are web workers made when the page loads: a thread asked for
     # beyond these waits for the browser to make one, which the page's own
-    # thread has to be free for (util/parallel.cpp sizes its pool to fit).
-    # Memory grows as documents need it, up to what the build allows (4 GB
-    # for wasm32; Qt's default, larger, for wasm64).
+    # thread has to be free for. Enough for util/parallel.cpp's pool (6),
+    # Qt's painting helpers (up to 8, in a kit built with them) and the odd
+    # thread of autosave and sound. Memory grows as documents need it, up to
+    # what the build allows (4 GB for wasm32; Qt's default, larger, for
+    # wasm64); the page can start it larger (?memory=).
     # Nothing may wait in an event loop of its own: drags run in the page
     # (src/gui/web_drag.cpp), and the menus and dialogs Qt's own widgets
     # open with exec() pop up or answer at once (src/gui/web_exec.cpp).
@@ -805,8 +823,12 @@ if(PHOENIX_WEB)
     find_package(Qt6 REQUIRED COMPONENTS GuiPrivate WidgetsPrivate)
     target_link_libraries(Phoenix PRIVATE Qt6::GuiPrivate Qt6::WidgetsPrivate)
     set_target_properties(Phoenix PROPERTIES
-        QT_WASM_PTHREAD_POOL_SIZE 8
-        QT_WASM_INITIAL_MEMORY "256MB")
+        QT_WASM_PTHREAD_POOL_SIZE 16
+        QT_WASM_INITIAL_MEMORY "256MB"
+        # Sound: miniaudio's browser output reads the samples it is given
+        # through the module's float view of memory. ENV: the page's
+        # settings arrive as environment variables (resources/web/index.html).
+        QT_WASM_EXTRA_EXPORTED_METHODS "HEAPF32,ENV")
     # Phoenix's own page and icon, beside the one Qt writes (Phoenix.html).
     configure_file(${CMAKE_SOURCE_DIR}/resources/web/index.html ${CMAKE_CURRENT_BINARY_DIR}/index.html COPYONLY)
     configure_file(${CMAKE_SOURCE_DIR}/src/phoenix.png ${CMAKE_CURRENT_BINARY_DIR}/phoenix.png COPYONLY)

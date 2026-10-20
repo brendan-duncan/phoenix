@@ -103,10 +103,10 @@ QT_QPA_PLATFORM=offscreen build/Release/Phoenix --export-image my.fla frame1.png
 
 ## The web editor
 
-Phoenix also builds for browsers with Qt for WebAssembly, as the web editor at [phoenixanimate.com/webeditor](https://phoenixanimate.com/webeditor/). It needs Emscripten and Qt's WebAssembly kit as well as the desktop Qt above (for its code generators); `tools/web/setup_web.py` installs the first two into `third_party/`.
+Phoenix also builds for browsers with Qt for WebAssembly, as the web editor at [phoenixanimate.com/webeditor](https://phoenixanimate.com/webeditor/). It needs Emscripten and Qt for WebAssembly as well as the desktop Qt above (for its tools); `tools/web/setup_web.py` installs Emscripten and builds Qt for WebAssembly from source into `third_party/` (about ten minutes, and it needs 7-Zip), with the features that make the editor fast.
 
 ```sh
-python tools/web/setup_web.py            # once: Emscripten 4.0.7 and Qt 6.11.2 for WebAssembly
+python tools/web/setup_web.py            # once: Emscripten 4.0.7, and Qt 6.11.2 built for WebAssembly
 python tools/web/build_web.py            # builds into build-wasm32/
 python tools/web/serve.py --open         # tries it at http://localhost:8000/
 python tools/web/build_web.py --package  # gathers the site into build-wasm32/webeditor/

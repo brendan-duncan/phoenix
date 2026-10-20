@@ -38,6 +38,33 @@
   const screen = document.getElementById("screen");
   const status = document.getElementById("status");
 
+  // Settings to try from the address, for measuring what makes Phoenix
+  // faster in a browser before it is built in:
+  //   ?dpr=1           the whole window at 1 pixel per point, whatever the screen
+  //   ?stagescale=1    the stage alone drawn at 1 pixel per point, scaled up
+  //   ?memory=1024     start with this many MB of memory rather than growing to it
+  //   ?threads=4       the threads Phoenix draws and decodes with (1 for none)
+  //   ?guithreads=0    without Qt's threaded image and painting helpers
+  const options = new URLSearchParams(location.search);
+  const environment = {};
+  const emscripten = {};
+  if (options.has("dpr")) {
+    const ratio = Math.max(0.5, Number(options.get("dpr")) || 1);
+    Object.defineProperty(window, "devicePixelRatio", { get: () => ratio });
+  }
+  if (options.has("stagescale"))
+    environment.PHOENIX_STAGE_SCALE = String(Math.max(0.25, Number(options.get("stagescale")) || 1));
+  if (options.has("memory")) {
+    const megabytes = Math.min(4032, Math.max(64, Math.round(Number(options.get("memory")) || 0)));
+    emscripten.INITIAL_MEMORY = megabytes * 1024 * 1024;
+  }
+  if (options.has("threads"))
+    environment.PHOENIX_THREADS = String(Math.max(1, Math.round(Number(options.get("threads")) || 1)));
+  if (options.get("guithreads") === "0")
+    environment.QT_NO_GUI_THREADPOOL = "1";
+  if (options.size)
+    console.log("Phoenix web settings:", Object.fromEntries(options));
+
   function problem(text) {
     status.textContent = text;
     status.className = "problem";
@@ -54,9 +81,11 @@
     status.textContent = "Loading Phoenix…";
     try {
       await qtLoad({
+        ...emscripten,
         qt: {
           entryFunction: window.Phoenix_entry,
           containerElements: [screen],
+          environment,
           onLoaded: () => {
             loading.hidden = true;
             screen.hidden = false;

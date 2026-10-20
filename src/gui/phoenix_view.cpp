@@ -967,6 +967,19 @@ QImage PhoenixView::renderTimelinePart(const fla::Timeline* timeline, int from, 
     return image;
 }
 
+qreal PhoenixView::stagePixelRatio() const
+{
+    const qreal ratio = devicePixelRatioF();
+#ifdef PHOENIX_WEB
+    // The web editor's page can ask for the stage at fewer pixels
+    // (resources/web/index.html, ?stagescale=), to draw faster.
+    static const qreal most = qEnvironmentVariable("PHOENIX_STAGE_SCALE").toDouble();
+    if (most > 0)
+        return std::min(ratio, most);
+#endif
+    return ratio;
+}
+
 void PhoenixView::paintEvent(QPaintEvent *event)
 {
     if (_zoom != _toldZoom || _rotation != _toldRotation)
@@ -977,10 +990,13 @@ void PhoenixView::paintEvent(QPaintEvent *event)
     }
 
     // A value check: the stage is drawn into a picture first and turned
-    // gray, then the tools' handles go over it in their own colors.
-    if (_grayscale && !_grayPass)
+    // gray, then the tools' handles go over it in their own colors. A stage
+    // drawn at fewer pixels than the screen has (the web editor's
+    // ?stagescale=) takes the same way, scaled up.
+    const qreal stageRatio = stagePixelRatio();
+    if ((_grayscale || stageRatio < devicePixelRatioF()) && !_grayPass)
     {
-        const qreal ratio = devicePixelRatioF();
+        const qreal ratio = stageRatio;
         QImage gray(size() * ratio, QImage::Format_ARGB32_Premultiplied);
         if (!gray.isNull())
         {
@@ -988,8 +1004,9 @@ void PhoenixView::paintEvent(QPaintEvent *event)
             _grayPass = &gray;
             paintEvent(event);
             _grayPass = nullptr;
-            fla::stageview::grayscale(reinterpret_cast<uint32_t*>(gray.bits()),
-                static_cast<size_t>(gray.width()) * static_cast<size_t>(gray.height()));
+            if (_grayscale)
+                fla::stageview::grayscale(reinterpret_cast<uint32_t*>(gray.bits()),
+                    static_cast<size_t>(gray.width()) * static_cast<size_t>(gray.height()));
             QPainter painter(this);
             painter.drawImage(0, 0, gray);
             if (_flaDocument && _flaDocument->document)

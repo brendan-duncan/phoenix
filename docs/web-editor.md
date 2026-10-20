@@ -19,16 +19,25 @@ python tools/web/deploy_web.py           # phoenixanimate.com/webeditor
 
 - **setup_web.py** clones emsdk into `third_party/emsdk` and activates the
   Emscripten the Qt release was built with (Qt 6.11 uses 4.0.7; the two
-  have to match), and unpacks Qt's prebuilt multithreaded WebAssembly kit
-  (qtbase and qtsvg) into `third_party/qt/wasm32`. aqtinstall cannot fetch
-  that kit at the moment, so the script downloads it from Qt's repository
-  itself and checks each archive's SHA-1. Unpacking needs 7-Zip.
+  have to match), then builds Qt 6.11.2 for WebAssembly from source (qtbase
+  and qtsvg, about ten minutes) into `third_party/qt/wasm32`. Qt's prebuilt
+  kits are slower for Phoenix, so the build turns on what they leave out:
+  WebAssembly's own exceptions (the prebuilt kits emulate them in
+  JavaScript, which costs every call that might throw), SIMD, and Qt's
+  threaded image and painting helpers, which Qt disables for WebAssembly
+  and the script enables with a one-line patch. It needs the desktop Qt of
+  the same version, for its tools, and 7-Zip. `--prebuilt` unpacks Qt's
+  prebuilt multithreaded kit instead (quick, slower editor); `--arch
+  wasm64` builds the 64-bit kit.
 - **build_web.py** configures with Qt's toolchain file and builds with
   Ninja, Release unless `--config` says otherwise. Besides Emscripten and
   the wasm kit it needs the desktop Qt of the same version, for moc, rcc
   and uic; it finds the one the desktop build uses, or takes `--qt-host`.
   Each of the three can also come from an environment variable
   (`PHOENIX_EMSDK`, `PHOENIX_QT_WASM32` or `_WASM64`, `PHOENIX_QT_HOST`).
+  The build compiles everything the way the Qt kit was compiled: native
+  exceptions and SIMD with a kit built by setup_web.py, JavaScript
+  exceptions with a prebuilt one.
   `--package` gathers what the site needs into `<build>/webeditor`: the
   page (`resources/web/index.html`), `Phoenix.js`, `Phoenix.wasm`, Qt's
   `qtloader.js`, the icon, and an `.htaccess` for Apache.
@@ -44,6 +53,27 @@ python tools/web/deploy_web.py           # phoenixanimate.com/webeditor
   allows it; `--configure-apache` instead adds them to Apache's own
   configuration for `/webeditor` (with sudo, once). `deploy_site.py
   --mirror` leaves the `webeditor` folder alone.
+
+## Trying settings from the address
+
+The page takes settings in its address, for measuring what makes the editor
+faster before building it in (`resources/web/index.html`):
+
+| Setting | What it does |
+|---|---|
+| `?dpr=1` | the whole window at 1 pixel per point, whatever the screen |
+| `?stagescale=1` | the stage alone drawn at 1 pixel per point and scaled up |
+| `?memory=1024` | start with that many MB of memory rather than growing to it |
+| `?threads=4` | the threads Phoenix draws and decodes with (1 for none) |
+| `?guithreads=0` | without Qt's threaded image and painting helpers |
+
+Settings combine (`?dpr=1&memory=2048`), and the browser console lists the
+ones in use. Measured on 2026-10-19 playing a 1920×1080 production scene
+(25 fps, with sound) in headless Edge at 2 device pixels per point, in
+frames reaching the screen each second: Qt's prebuilt kit 12.7; the kit
+setup_web.py builds 16.5; that without Qt's painting threads 11.0; with
+`?stagescale=1` 17.5; with `?dpr=1` 21.7; `?memory=2048` and `?threads=1`
+made no difference.
 
 ## Wasm32 and wasm64
 
@@ -131,6 +161,16 @@ gives Qt only a light one.
 ### Threads
 
 Threads are web workers the page makes when it loads
-(`QT_WASM_PTHREAD_POOL_SIZE`, 8); `src/util/parallel.cpp` keeps its pool to
-six of them. Joining a thread from the page's own thread blocks it, so keep
-such waits short.
+(`QT_WASM_PTHREAD_POOL_SIZE`, 16): `src/util/parallel.cpp` keeps its pool to
+six of them, and Qt's painting helpers use up to eight. A thread asked for
+beyond those waits for the page's own thread to make a worker, so code on
+that thread must not wait for one. Joining a thread from the page's own
+thread blocks it, so keep such waits short.
+
+### main() returns
+
+A page cannot stay in an event loop, so on the web `main()` makes the
+application and the main window on the heap and returns; the page goes on
+handing Phoenix its events. (`QApplication::exec()` gets the same effect by
+throwing past `main()`, which with WebAssembly's own exceptions would
+destroy everything on the way.)

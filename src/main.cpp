@@ -221,7 +221,15 @@ int main(int argc, char *argv[])
             qputenv("QT_SCALE_FACTOR", QByteArray::number(scale));
     }
 
+#ifdef PHOENIX_WEB
+    // In a browser main() returns while the page goes on running Phoenix
+    // (see its end), so the application outlives it, and the count of
+    // arguments it keeps a reference to with it.
+    static int webArgc = argc;
+    QApplication& a = *new QApplication(webArgc, argv);
+#else
     QApplication a(argc, argv);
+#endif
     // Qt takes the system's locale on Linux and macOS, and with it a comma
     // for the decimal point in printf and strtod: files would be written
     // with "0,5" and read back wrong. Numbers in files are always "C".
@@ -450,7 +458,11 @@ int main(int argc, char *argv[])
     app_identity::apply();
     theme::applySaved();
     releaseOwnConsole();
+#ifdef PHOENIX_WEB
+    MainWindow& window = *new MainWindow(initialFile);
+#else
     MainWindow window(initialFile);
+#endif
     window.show();
     if (!script.isEmpty())
         QTimer::singleShot(300, &window, [&window, script]() { window.scripts()->runFile(script); });
@@ -461,10 +473,18 @@ int main(int argc, char *argv[])
     if (mcp)
         window.serveMcpOnStdio();
 
+#ifdef PHOENIX_WEB
+    // A browser page cannot stay in an event loop: main returns, and the
+    // page hands Phoenix its events from then on. (Qt's exec() gets there
+    // by throwing past main, which with WebAssembly's own exceptions would
+    // destroy the window on the way.)
+    return 0;
+#else
     // On macOS a file opened from Finder arrives as an event, not as an
     // argument.
     FileOpenHandler fileOpen([&window](const QString& path) { window.openDocumentPath(path); });
     a.installEventFilter(&fileOpen);
 
     return a.exec();
+#endif
 }
