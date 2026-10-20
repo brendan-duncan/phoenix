@@ -130,7 +130,7 @@ public:
     void setSoundProvider(SoundProvider provider) { _soundProvider = std::move(provider); update(); }
 
 public slots:
-    void onPlayerFrameChanged(int frame) { update(); }
+    void onPlayerFrameChanged(int frame);
 
 signals:
     /// Ctrl+wheel zoomed the frames.
@@ -181,6 +181,9 @@ private:
     QImage thumbnailOf(const fla::Layer* layer, const fla::Frame* frame, QSize size) const;
     const fla::FLADocument* _flaDocument;
     Player* _player;
+    /// The frame the playhead was last drawn at, so moving it draws again
+    /// only where it was and where it is.
+    int _drawnFrame = -1;
     bool _isDragging = false;
     const fla::Timeline* _timeline = nullptr;
     std::vector<LayerRow> _rows;

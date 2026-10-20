@@ -56,6 +56,32 @@ QT_PATCHES = [
     ("qtbase", "src/gui/configure.cmake",
      '    PURPOSE "Multi-threaded image transforms and QPainter fills."\n    CONDITION QT_FEATURE_thread AND NOT WASM',
      '    PURPOSE "Multi-threaded image transforms and QPainter fills."\n    CONDITION QT_FEATURE_thread'),
+    # A window with no transparency paints into an opaque image (RGBX rather
+    # than RGBA: the same bytes for the page's canvas), so QPainter's fills
+    # and blends take their fast paths and nothing is cleared before each
+    # paint. Profiled, the non-premultiplied fills were most of the cost of
+    # repainting the interface.
+    ("qtbase", "src/plugins/platforms/wasm/qwasmbackingstore.cpp",
+     "    QImage::Format format = QImage::Format_RGBA8888;\n",
+     "    QImage::Format format = window()->format().hasAlpha() ? QImage::Format_RGBA8888 : QImage::Format_RGBX8888;\n"),
+    # Only the part of the window that changed goes to the canvas each
+    # frame, not the whole window (about 25 MB a frame on a high-DPI
+    # screen); all of it when nothing is marked changed.
+    ("qtbase", 'src/plugins/platforms/wasm/qwasmbackingstore.h',
+     '    emscripten::val getUpdatedWebImage(QWasmWindow *window);\n',
+     "    emscripten::val getUpdatedWebImage(QWasmWindow *window);\n    // The part of the image getUpdatedWebImage() last brought up to date,\n    // in device pixels; empty when nothing changed (Phoenix's patch).\n    QRect lastUpdate() const { return m_lastUpdate; }\n"),
+    ("qtbase", 'src/plugins/platforms/wasm/qwasmbackingstore.h',
+     '    QRegion m_dirty;\n',
+     '    QRegion m_dirty;\n    QRect m_lastUpdate;\n'),
+    ("qtbase", 'src/plugins/platforms/wasm/qwasmbackingstore.cpp',
+     '    for (const QRect &dirtyRect : clippedDpiScaledRegion)\n        dom::drawImageToWebImageDataArray(m_image, m_webImageDataArray, dirtyRect);\n',
+     '    for (const QRect &dirtyRect : clippedDpiScaledRegion)\n        dom::drawImageToWebImageDataArray(m_image, m_webImageDataArray, dirtyRect);\n    m_lastUpdate = clippedDpiScaledRegion.boundingRect();\n'),
+    ("qtbase", 'src/plugins/platforms/wasm/qwasmbackingstore.cpp',
+     'emscripten::val QWasmBackingStore::getUpdatedWebImage(QWasmWindow *window)\n{\n    updateTexture(window);\n',
+     'emscripten::val QWasmBackingStore::getUpdatedWebImage(QWasmWindow *window)\n{\n    m_lastUpdate = QRect();\n    updateTexture(window);\n'),
+    ("qtbase", 'src/plugins/platforms/wasm/qwasmwindow.cpp',
+     '    m_context2d.call<void>("putImageData", image, emscripten::val(0), emscripten::val(0));\n',
+     '    // Only the part that changed goes to the canvas, which keeps the rest;\n    // all of it when nothing is marked changed (Phoenix\'s patch).\n    const QRect changed = m_backingStore->lastUpdate();\n    if (changed.isEmpty())\n        m_context2d.call<void>("putImageData", image, emscripten::val(0), emscripten::val(0));\n    else\n        m_context2d.call<void>("putImageData", image, emscripten::val(0), emscripten::val(0),\n                               emscripten::val(changed.x()), emscripten::val(changed.y()),\n                               emscripten::val(changed.width()), emscripten::val(changed.height()));\n'),
 ]
 
 

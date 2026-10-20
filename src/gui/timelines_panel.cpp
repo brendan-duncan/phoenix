@@ -704,6 +704,24 @@ void TimelinesPanel::onPlayerFrameChanged(int frame)
     _scrollArea->ensureVisible(playheadX, 0, 50, 0);
 }
 
+void TimelineGrid::onPlayerFrameChanged(int frame)
+{
+    // Playing moves the playhead every frame: only its column where it was
+    // drawn and where it is now are drawn again (a cell either side for its
+    // head), with the ruler, which also shows the onion skin range.
+    if (_drawnFrame < 0)
+    {
+        update();
+        return;
+    }
+    const int stride = cellStride();
+    const auto column = [this, stride](int index) { return QRect((index - 1) * stride, 0, 3 * stride, height()); };
+    QRegion changed(QRect(0, rulerTop(), width(), kRulerHeight));
+    changed += column(_drawnFrame);
+    changed += column(frame);
+    update(changed);
+}
+
 TimelineGrid::TimelineGrid(Player* player, QWidget* parent)
     : QWidget(parent)
     , _flaDocument(nullptr)
@@ -1725,6 +1743,7 @@ void TimelineGrid::paintEvent(QPaintEvent* event)
         // frames.
         const int currentFrame = _player->currentFrame();
         const int x = currentFrame * cellStride;
+        _drawnFrame = currentFrame;
 
         // A narrow rounded head in the ruler, tapering to a point, over a
         // hairline down through the frames.

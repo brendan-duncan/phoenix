@@ -122,19 +122,27 @@ bool labelsOpenPanel(const QTabBar* bar, const QList<QDockWidget*>& docks)
 // out its panels, but never moves them, so they are moved off the window as
 // the window itself puts away the bars it no longer uses (hiding them blinks,
 // shown again by the next layout and hidden after). After any change to a
-// main window's panels, once it is done, tab bars over no open panel of
-// theirs go, and the whole window is drawn again.
+// main window's panels (a panel or tab bar shown, hidden, moved or
+// resized, or the window's own layout), once it is done, tab bars over no
+// open panel of theirs go. A panel's contents changing are not watched:
+// playing changes some every frame.
 class RedrawAfterPanelChanges : public QObject
 {
 protected:
     bool eventFilter(QObject* watched, QEvent* event) override
     {
         const QEvent::Type type = event->type();
-        if (type != QEvent::LayoutRequest && type != QEvent::Resize && type != QEvent::Move &&
-            type != QEvent::Show && type != QEvent::Hide)
-            return false;
-        if (!qobject_cast<QDockWidget*>(watched) && !qobject_cast<QTabBar*>(watched) &&
-            !qobject_cast<QMainWindow*>(watched))
+        if (qobject_cast<QMainWindow*>(watched))
+        {
+            if (type != QEvent::LayoutRequest && type != QEvent::Resize)
+                return false;
+        }
+        else if (qobject_cast<QDockWidget*>(watched) || qobject_cast<QTabBar*>(watched))
+        {
+            if (type != QEvent::Resize && type != QEvent::Move && type != QEvent::Show && type != QEvent::Hide)
+                return false;
+        }
+        else
             return false;
         QWidget* window = static_cast<QWidget*>(watched)->window();
         if (!qobject_cast<QMainWindow*>(window) || _pending.contains(window))
@@ -149,7 +157,6 @@ protected:
             for (QTabBar* bar : guarded->findChildren<QTabBar*>(Qt::FindDirectChildrenOnly))
                 if (bar->isVisible() && bar->count() > 0 && bar->x() >= 0 && !labelsOpenPanel(bar, docks))
                     bar->move(-500 - bar->width(), -500 - bar->height());
-            guarded->update();
             // ?debugdocks: what the panels and their tab bars are doing.
             if (qEnvironmentVariableIsSet("PHOENIX_DEBUG_DOCKS"))
             {
