@@ -18,6 +18,7 @@
 #include "../src/play/movie_runtime.h"
 #include "../src/util/swf_writer.h"
 
+#include <functional>
 #include <map>
 #include <memory>
 #include <string>
@@ -112,7 +113,8 @@ std::vector<uint8_t> published(const fla::Document& document, std::vector<std::s
 
 /// A document played: what it traces and its errors, over \a frames frames,
 /// with the button named \a button clicked after them when there is one.
-std::string play(const fla::Document& document, int frames, const std::string& button = std::string())
+std::string play(const fla::Document& document, int frames, const std::string& button = std::string(),
+    std::function<std::string(const std::string&)> mmExecute = {})
 {
     std::vector<const fla::Timeline*> scenes(document.timelines.begin(), document.timelines.end());
     fla::play::MovieRuntime runtime(scenes, 12);
@@ -124,6 +126,7 @@ std::string play(const fla::Document& document, int frames, const std::string& b
     runtime.error = [&out](const std::string& line) { out += "error: " + line + "\n"; };
     runtime.setLibrary(library, {}, {});
     runtime.setActionScriptVersion(2);
+    runtime.mmExecute = std::move(mmExecute);
     runtime.start();
     for (int i = 1; i < frames; ++i)
         runtime.step();
@@ -287,6 +290,39 @@ TEST(swf_actions_play_as_the_document_does)
     CHECK(got == wanted);
     if (got != wanted)
         std::printf("    the document:\n%s    the movie:\n%s", wanted.c_str(), got.c_str());
+}
+
+TEST(swf_actions_reach_the_editor_through_mmexecute)
+{
+    // A panel written in ActionScript 2, played from its source and as the
+    // movie it publishes to: MMExecute gives the editor its JSFL either way.
+    std::map<std::string, std::vector<uint8_t>> files;
+    files["DOMDocument.xml"] = bytesOf(
+        "<DOMDocument xmlns=\"http://ns.adobe.com/xfl/2008/\" width=\"200\" height=\"100\" frameRate=\"12\">"
+        "<timelines><DOMTimeline name=\"Scene 1\"><layers><DOMLayer name=\"actions\"><frames>"
+        "<DOMFrame index=\"0\" duration=\"1\"><Actionscript><script><![CDATA["
+        "trace('got ' + MMExecute('fl.getDocumentDOM().name'));\nMMEndCommand(true, '');\nstop();\n"
+        "]]></script></Actionscript><elements/></DOMFrame>"
+        "</frames></DOMLayer></layers></DOMTimeline></timelines></DOMDocument>");
+    Parsed source = parse(files);
+    if (!source.document)
+        return;
+    std::vector<std::string> asked;
+    const auto editor = [&asked](const std::string& code) {
+        asked.push_back(code);
+        return std::string("shot.fla");
+    };
+    const std::string fromSource = play(*source.document, 1, std::string(), editor);
+    CHECK(fromSource == "got shot.fla\n");
+    if (fromSource != "got shot.fla\n")
+        std::printf("    from the source:\n%s", fromSource.c_str());
+    Reopened movie;
+    reopen(*source.document, movie);
+    CHECK(movie.ok && movie.parsed.document);
+    if (!movie.ok || !movie.parsed.document)
+        return;
+    CHECK(play(*movie.parsed.document, 1, std::string(), editor) == "got shot.fla\n");
+    CHECK(asked.size() == 2 && asked[1] == "fl.getDocumentDOM().name");
 }
 
 TEST(swf_actions_run_classes_init_actions_and_prototypes)

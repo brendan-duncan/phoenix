@@ -1024,7 +1024,9 @@ void MovieRuntime::setupGlobals()
             trace("fscommand(" + arg(args, 0)->toString() + ", " + arg(args, 1)->toString() + ")");
         return Value::makeUndefined();
     });
-    // A panel's way to the editor holding it.
+    // A panel's way to the editor holding it; MMEndCommand ends a command
+    // the panel was opened for, which a panel left open has none of.
+    vm.registerBuiltin("MMEndCommand", [](const Args&) { return Value::makeUndefined(); });
     vm.registerBuiltin("MMExecute", [this, arg](const Args& args) {
         return Value::makeString(mmExecute ? mmExecute(arg(args, 0)->toString()) : std::string());
     });

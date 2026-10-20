@@ -347,6 +347,12 @@ public:
         return static_cast<double>(std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::steady_clock::now() - _runtime._started).count());
     }
+    // A panel compiled elsewhere reaches Phoenix's JSFL, as one Phoenix
+    // compiled does.
+    std::string mmExecute(const std::string& code) override
+    {
+        return _runtime.mmExecute ? _runtime.mmExecute(code) : std::string();
+    }
     void targetChanged(const as3::Val& value) override
     {
         if (Clip* clip = clipOf(value))
