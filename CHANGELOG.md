@@ -2,7 +2,7 @@
 
 What changed in each release of Phoenix, newest first.
 
-## Unreleased
+## 0.21.3
 
 - SWF panels in the Configuration folder's WindowSWF show under Window > Extensions, and their buttons run JSFL through MMExecute
 - SWF movies in script dialogs can call JSFL too, reaching the dialog's controls through fl.xmlui
