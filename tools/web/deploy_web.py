@@ -19,9 +19,10 @@ The page only works with the Cross-Origin-Opener-Policy and
 Cross-Origin-Embedder-Policy headers. The package's .htaccess sends them when
 Apache lets the folder have one (AllowOverride) and mod_headers is on; after
 uploading, this checks the live page and says if they are missing.
---configure-apache instead puts them in Apache's own configuration for
-/webeditor (a conf-available file, with mod_headers and mod_deflate enabled)
-and reloads Apache; it needs sudo on the server, and is only needed once.
+--configure-apache lets that folder have its .htaccess (a conf-available
+file) and enables what it uses (mod_headers, mod_rewrite for the compressed
+copies, mod_deflate), then reloads Apache; it needs sudo on the server, and
+is only needed once.
 """
 
 import argparse
@@ -40,16 +41,13 @@ CONFIG = ROOT / "tools" / "deploy_site.ini"
 FOLDER = "webeditor"
 SITE_URL = "https://phoenixanimate.com/" + FOLDER + "/"
 
+# The editor's folder may have its .htaccess (the headers, and the compressed
+# copies of the program); the modules it uses are enabled with it.
 APACHE_CONF = """\
 # Phoenix's web editor (tools/web/deploy_web.py --configure-apache).
-<Location "/webeditor">
-    Header always set Cross-Origin-Opener-Policy "same-origin"
-    Header always set Cross-Origin-Embedder-Policy "require-corp"
-    Header always set Cross-Origin-Resource-Policy "same-origin"
-    Header set Cache-Control "no-cache"
-    AddOutputFilterByType DEFLATE application/wasm text/javascript application/javascript text/html
-</Location>
-AddType application/wasm .wasm
+<Directory "{folder}">
+    AllowOverride All
+</Directory>
 """
 
 
@@ -159,8 +157,8 @@ def main():
     if args.configure_apache:
         conf = "/etc/apache2/conf-available/phoenix-webeditor.conf"
         steps += [
-            f"printf %s {q(APACHE_CONF)} | sudo tee {conf} > /dev/null",
-            "sudo a2enmod -q headers deflate",
+            f"printf %s {q(APACHE_CONF.format(folder=site))} | sudo tee {conf} > /dev/null",
+            "sudo a2enmod -q headers deflate rewrite",
             "sudo a2enconf -q phoenix-webeditor",
             "sudo apache2ctl configtest",
             "sudo systemctl reload apache2",

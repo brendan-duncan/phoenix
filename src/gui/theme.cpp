@@ -245,7 +245,13 @@ void apply(const Theme& theme)
 #endif
 
     QFont font = qApp->font();
+#ifdef PHOENIX_WEB
+    // A browser tells Qt no size for the interface's text, and Qt's own
+    // default, 12 points, is larger than any desktop's.
+    static const int systemSize = 10;
+#else
     static const int systemSize = font.pointSize();
+#endif
     font.setPointSize(theme.fontSize > 0 ? theme.fontSize : systemSize);
     qApp->setFont(font);
     // Widgets with a style sheet hold on to the colors they were polished

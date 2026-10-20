@@ -60,6 +60,8 @@
   }
   if (options.has("threads"))
     environment.PHOENIX_THREADS = String(Math.max(1, Math.round(Number(options.get("threads")) || 1)));
+  if (options.has("debugdocks"))
+    environment.PHOENIX_DEBUG_DOCKS = "1";
   if (options.get("guithreads") === "0")
     environment.QT_NO_GUI_THREADPOOL = "1";
   if (options.size)

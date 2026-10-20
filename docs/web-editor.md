@@ -33,7 +33,10 @@ python tools/web/deploy_web.py         # put that build on phoenixanimate.com/we
   Ninja, Release unless `--config` says otherwise, then packages what the
   site needs into `<build>/webeditor`: the page
   (`resources/web/index.html`), `Phoenix.js`, `Phoenix.wasm`, Qt's
-  `qtloader.js`, the icon, and an `.htaccess` for Apache. `--serve` then
+  `qtloader.js`, the icon, and an `.htaccess` for Apache, with Brotli and
+  gzip copies of the program and scripts beside them (`Phoenix.wasm` is
+  about 36 MB, 11 MB as Brotli; Brotli needs `pip install brotli`, and
+  without it only gzip copies are made). `--serve` then
   serves that folder and opens it in the browser. Besides Emscripten and the
   wasm kit it needs the desktop Qt of the same version, for moc, rcc and
   uic. It finds all three in `tools/web/web.ini`, which setup_web.py writes
@@ -44,16 +47,18 @@ python tools/web/deploy_web.py         # put that build on phoenixanimate.com/we
   JavaScript exceptions with a prebuilt one.
 - **serve.py** serves a build folder (or the package) on localhost with the
   `Cross-Origin-Opener-Policy` and `Cross-Origin-Embedder-Policy` headers,
-  uncached. Threads need those headers: without them the page has no
+  uncached, and the compressed copies where the browser takes them, as the
+  site does. Threads need those headers: without them the page has no
   SharedArrayBuffer and says so instead of starting. Any host for the
   editor has to send them.
 - **deploy_web.py** uploads the last build's package (what `--serve`
   tried; `--build` builds it again first) to the `webeditor` folder of the
   site, using the server in `tools/deploy_site.ini` (as `deploy_site.py`
   does), and swaps it in whole. It then checks that the live page sends the
-  isolation headers. The package's `.htaccess` sets them where Apache
-  allows it; `--configure-apache` instead adds them to Apache's own
-  configuration for `/webeditor` (with sudo, once). `deploy_site.py
+  isolation headers. The package's `.htaccess` sets them, and serves the
+  compressed copies (mod_rewrite), where Apache lets the folder have one;
+  `--configure-apache` lets it, and enables mod_headers, mod_rewrite and
+  mod_deflate (with sudo, once). `deploy_site.py
   --mirror` leaves the `webeditor` folder alone.
 
 ## Trying settings from the address
@@ -68,6 +73,7 @@ faster before building it in (`resources/web/index.html`):
 | `?memory=1024` | start with that many MB of memory rather than growing to it |
 | `?threads=4` | the threads Phoenix draws and decodes with (1 for none) |
 | `?guithreads=0` | without Qt's threaded image and painting helpers |
+| `?debugdocks` | log the panels and their tab bars to the console after each change to them |
 
 Settings combine (`?dpr=1&memory=2048`), and the browser console lists the
 ones in use. Measured on 2026-10-19 playing a 1920×1080 production scene
@@ -159,6 +165,17 @@ and floating panels as HTML in a shadow root; `src/gui/web_page.cpp` styles
 them in the theme's colors and keeps pop-up menus above floating panels.
 The theme's dark palette is Phoenix's own on the web, since the browser
 gives Qt only a light one.
+
+### Panels
+
+Qt's main window leaves the tab bars of panel groups up in a page after the
+panels in them close or move: a second row of tabs beside the real one, or
+the tabs of hidden panels over the stage. `src/gui/web_page.cpp` hides any
+tab bar over no open panel of its own after each change to the panels,
+draws the window again, keeps every main window filling the page (a saved
+size taken back would leave part of the page undrawn), and turns panel
+animation off. The interface's font is 10 points: a browser gives Qt no
+size of its own, and Qt's default, 12, is larger than any desktop's.
 
 ### Threads
 

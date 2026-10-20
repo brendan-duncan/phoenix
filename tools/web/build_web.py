@@ -37,6 +37,7 @@ Qt kit it is given.
 import argparse
 import configparser
 import glob
+import gzip
 import os
 import shutil
 import subprocess
@@ -51,9 +52,16 @@ SETTINGS = Path(__file__).resolve().with_name("web.ini")
 PACKAGE_FILES = ["index.html", "Phoenix.js", "Phoenix.wasm", "qtloader.js", "phoenix.png"]
 PACKAGE_FOLDER = "webeditor"
 
-# Apache: the headers that let the page use threads, the wasm type, and the
-# program compressed on the way (it shrinks to about a quarter). Revalidated
-# on every visit, so a new build is picked up at once.
+# The program and the scripts also go compressed beside themselves, as
+# Brotli (.br, needs the brotli module: pip install brotli) and gzip (.gz),
+# and the server hands over whichever the browser takes. Phoenix.wasm is
+# about 36 MB, 11 as Brotli and 14 as gzip.
+COMPRESSED = ["Phoenix.wasm", "Phoenix.js", "qtloader.js"]
+
+# Apache: the headers that let the page use threads; the compressed copies
+# for browsers that take them (mod_rewrite), sent as what they hold, and
+# compressed on the way otherwise (mod_deflate). Revalidated on every
+# visit, so a new build is picked up at once.
 HTACCESS = """\
 # Phoenix's web editor (tools/web/build_web.py).
 AddType application/wasm .wasm
@@ -62,6 +70,29 @@ AddType application/wasm .wasm
     Header always set Cross-Origin-Embedder-Policy "require-corp"
     Header always set Cross-Origin-Resource-Policy "same-origin"
     Header set Cache-Control "no-cache"
+</IfModule>
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteCond %{HTTP:Accept-Encoding} \\bbr\\b
+    RewriteCond %{REQUEST_FILENAME}.br -f
+    RewriteRule ^(.+\\.(wasm|js))$ $1.br [L,E=no-gzip:1]
+    RewriteCond %{HTTP:Accept-Encoding} \\bgzip\\b
+    RewriteCond %{REQUEST_FILENAME}.gz -f
+    RewriteRule ^(.+\\.(wasm|js))$ $1.gz [L,E=no-gzip:1]
+    <FilesMatch "\\.wasm\\.(br|gz)$">
+        ForceType application/wasm
+    </FilesMatch>
+    <FilesMatch "\\.js\\.(br|gz)$">
+        ForceType text/javascript
+    </FilesMatch>
+    <FilesMatch "\\.br$">
+        Header set Content-Encoding br
+        Header append Vary Accept-Encoding
+    </FilesMatch>
+    <FilesMatch "\\.gz$">
+        Header set Content-Encoding gzip
+        Header append Vary Accept-Encoding
+    </FilesMatch>
 </IfModule>
 <IfModule mod_deflate.c>
     AddOutputFilterByType DEFLATE application/wasm text/javascript application/javascript text/html
@@ -159,8 +190,20 @@ def package(build):
             sys.exit("%s is missing: build first" % source)
         shutil.copy2(source, out / name)
     (out / ".htaccess").write_text(HTACCESS, encoding="utf-8", newline="\n")
-    size = sum(path.stat().st_size for path in out.iterdir())
-    print("Packaged %s (%.1f MB)" % (out, size / 1e6))
+    try:
+        import brotli
+    except ImportError:
+        brotli = None
+        print("No brotli module (pip install brotli): the site gets gzip copies only")
+    for name in COMPRESSED:
+        data = (out / name).read_bytes()
+        (out / (name + ".gz")).write_bytes(gzip.compress(data, compresslevel=9, mtime=0))
+        if brotli:
+            (out / (name + ".br")).write_bytes(brotli.compress(data, quality=9))
+    wasm = out / "Phoenix.wasm"
+    smallest = min((path for path in out.glob("Phoenix.wasm*")), key=lambda path: path.stat().st_size)
+    print("Packaged %s: Phoenix.wasm %.1f MB, %.1f MB as %s" % (out, wasm.stat().st_size / 1e6,
+          smallest.stat().st_size / 1e6, smallest.suffix.lstrip(".")))
     return out
 
 
