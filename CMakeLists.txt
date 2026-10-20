@@ -706,20 +706,31 @@ if(PHOENIX_WEB)
         src/gui/main_window_phone.cpp)
 endif()
 
-# The GPU stage renderer (cmake/gpu.cmake), off while it is being built.
-option(PHOENIX_GPU "Draw the stage on the GPU through WebGPU (Dawn)" OFF)
+# The GPU stage renderer (cmake/gpu.cmake): WebGPU through Dawn, natively
+# and in the browser.
+option(PHOENIX_GPU "Draw the stage on the GPU through WebGPU (Dawn)" ON)
 if(PHOENIX_GPU)
     include(cmake/gpu.cmake)
-    list(APPEND SOURCES src/gpu/gpu_device.cpp src/gpu/thorvg_backend.cpp src/gpu/rive_canvas.cpp
-        src/gpu/rive_backend.cpp src/gpu/gpu_bakeoff.cpp)
-    list(APPEND HEADERS src/gpu/gpu_device.h src/gpu/vector_backend.h src/gpu/rive_canvas.h
-        src/gpu/gpu_bakeoff.h)
+    list(APPEND SOURCES src/gpu/gpu_device.cpp src/gpu/rive_canvas.cpp)
+    list(APPEND HEADERS src/gpu/gpu_device.h src/gpu/rive_canvas.h)
+    # The comparison of renderers (Phoenix gpu-bakeoff) is the desktop's.
+    if(NOT PHOENIX_WEB)
+        list(APPEND SOURCES src/gpu/thorvg_backend.cpp src/gpu/rive_backend.cpp src/gpu/gpu_bakeoff.cpp)
+        list(APPEND HEADERS src/gpu/vector_backend.h src/gpu/gpu_bakeoff.h)
+    else()
+        list(APPEND SOURCES src/gpu/web_stage.cpp)
+        list(APPEND HEADERS src/gpu/web_stage.h)
+    endif()
 endif()
 
 qt6_add_executable(Phoenix MANUAL_FINALIZATION ${SOURCES} ${HEADERS})
 if(PHOENIX_GPU)
-    target_link_libraries(Phoenix PRIVATE dawn::webgpu_dawn thorvg rive_renderer)
+    target_link_libraries(Phoenix PRIVATE phoenix_webgpu rive_renderer)
     target_compile_definitions(Phoenix PRIVATE PHOENIX_GPU)
+    if(NOT PHOENIX_WEB)
+        target_link_libraries(Phoenix PRIVATE thorvg)
+        target_compile_definitions(Phoenix PRIVATE PHOENIX_GPU_BAKEOFF)
+    endif()
 endif()
 
 # On macOS, Phoenix.app with its icon. The bundle identifier is how macOS

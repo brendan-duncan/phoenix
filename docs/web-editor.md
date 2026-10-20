@@ -15,9 +15,10 @@ python tools/web/build_web.py --serve  # build, then try it at http://localhost:
 python tools/web/deploy_web.py         # put that build on phoenixanimate.com/webeditor
 ```
 
-- **setup_web.py** clones emsdk into `third_party/emsdk` and activates the
-  Emscripten the Qt release was built with (Qt 6.11 uses 4.0.7; the two
-  have to match), then builds Qt 6.11.2 for WebAssembly from source (qtbase
+- **setup_web.py** clones emsdk into `third_party/emsdk` and activates
+  Emscripten 4.0.23, the first with the `emdawnwebgpu` port the stage's
+  WebGPU renderer needs (Qt 6.11 itself is released for 4.0.7, so its
+  prebuilt kits do not match), then builds Qt 6.11.2 for WebAssembly from source (qtbase
   and qtsvg, about ten minutes) into `third_party/qt/wasm32`. Qt's prebuilt
   kits are slower for Phoenix, so the build turns on what they leave out:
   WebAssembly's own exceptions (the prebuilt kits emulate them in
@@ -75,6 +76,7 @@ faster before building it in (`resources/web/index.html`):
 | `?guithreads=0` | without Qt's threaded image and painting helpers |
 | `?audiobuffer=8192` | the sound buffer in frames (256 to 16384; 4096 by default) |
 | `?debugdocks` | log the panels and their tab bars to the console after each change to them |
+| `?renderer=qpainter` | the stage drawn by QPainter rather than Rive on WebGPU (`?renderer=rive` the other way) |
 
 Settings combine (`?dpr=1&memory=2048`), and the browser console lists the
 ones in use. Measured on 2026-10-19 playing a 1920×1080 production scene
@@ -166,6 +168,24 @@ and floating panels as HTML in a shadow root; `src/gui/web_page.cpp` styles
 them in the theme's colors and keeps pop-up menus above floating panels.
 The theme's dark palette is Phoenix's own on the web, since the browser
 gives Qt only a light one.
+
+### The stage on WebGPU
+
+The stage is drawn by the Rive renderer on WebGPU (`src/gpu`, as on the
+desktop), through Emscripten's `emdawnwebgpu` port. The browser gives no
+way to wait for the GPU without Asyncify, so the frame is not read back
+into Qt's window as it is on the desktop: `src/gpu/web_stage.cpp` lays a
+canvas of its own over the stage widget, inside the main window's element
+in Qt's shadow root, and the whole view (art, handles, rulers) is painted
+into it through Rive's paint engine. The canvas lets the pointer through,
+so the widget under it still takes the clicks and keys, and panels, menus
+and dialogs, which are windows of their own, stay above it. It hides when
+the widget does.
+
+The adapter and device come back from the browser's promises after the
+page starts (`GpuDevice::whenReady`); until then, and in a browser without
+WebGPU, QPainter draws the stage as before. View > Stage Renderer switches
+between them, and so does `?renderer=` for one visit.
 
 ### Panels
 

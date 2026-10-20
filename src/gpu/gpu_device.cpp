@@ -4,6 +4,7 @@
 
 #include <cstring>
 #include <memory>
+#include <vector>
 
 namespace {
 
@@ -31,6 +32,7 @@ QString backendName(WGPUBackendType type)
 
 } // namespace
 
+#ifndef __EMSCRIPTEN__
 GpuDevice* GpuDevice::get(QString* error)
 {
     static std::unique_ptr<GpuDevice> made;
@@ -50,6 +52,118 @@ GpuDevice* GpuDevice::get(QString* error)
     return made.get();
 }
 
+void GpuDevice::whenReady(const std::function<void(bool)>& done)
+{
+    done(get() != nullptr);
+}
+#else
+namespace {
+
+enum class State
+{
+    NotAsked,
+    Asking,
+    Ready,
+    Failed
+};
+State state = State::NotAsked;
+GpuDevice* made = nullptr;
+QString why;
+std::vector<std::function<void(bool)>> waiting;
+
+void settle(bool ready, const QString& error = QString())
+{
+    state = ready ? State::Ready : State::Failed;
+    why = error;
+    if (!ready)
+        qWarning("GPU: %s", qPrintable(error));
+    std::vector<std::function<void(bool)>> told;
+    told.swap(waiting);
+    for (const auto& done : told)
+        done(ready);
+}
+
+} // namespace
+
+GpuDevice* GpuDevice::get(QString* error)
+{
+    if (state == State::NotAsked)
+    {
+        state = State::Asking;
+        made = new GpuDevice();
+        made->request();
+    }
+    if (error)
+        *error = state == State::Asking ? QStringLiteral("The browser is still starting WebGPU.") : why;
+    return state == State::Ready ? made : nullptr;
+}
+
+void GpuDevice::whenReady(const std::function<void(bool)>& done)
+{
+    get();
+    if (state == State::Ready || state == State::Failed)
+        done(state == State::Ready);
+    else
+        waiting.push_back(done);
+}
+
+void GpuDevice::request()
+{
+    _instance = wgpuCreateInstance(nullptr);
+    if (!_instance)
+    {
+        settle(false, "This browser has no WebGPU.");
+        return;
+    }
+    WGPURequestAdapterOptions options = WGPU_REQUEST_ADAPTER_OPTIONS_INIT;
+    options.powerPreference = WGPUPowerPreference_HighPerformance;
+    WGPURequestAdapterCallbackInfo adapterCallback = WGPU_REQUEST_ADAPTER_CALLBACK_INFO_INIT;
+    // Answered when the page's promise settles, with nothing waiting on it.
+    adapterCallback.mode = WGPUCallbackMode_AllowSpontaneous;
+    adapterCallback.callback = [](WGPURequestAdapterStatus status, WGPUAdapter adapter, WGPUStringView message,
+                                   void* userdata1, void*) {
+        auto* self = static_cast<GpuDevice*>(userdata1);
+        if (status != WGPURequestAdapterStatus_Success || !adapter)
+        {
+            settle(false, "No WebGPU adapter: " + text(message));
+            return;
+        }
+        self->_adapter = adapter;
+        WGPUAdapterInfo info = WGPU_ADAPTER_INFO_INIT;
+        if (wgpuAdapterGetInfo(adapter, &info) == WGPUStatus_Success)
+        {
+            self->_description = text(info.description).isEmpty() ? text(info.vendor) + " " + text(info.architecture)
+                                                                   : text(info.description);
+            self->_description += " (WebGPU)";
+            wgpuAdapterInfoFreeMembers(info);
+        }
+        WGPUDeviceDescriptor deviceDescriptor = WGPU_DEVICE_DESCRIPTOR_INIT;
+        deviceDescriptor.uncapturedErrorCallbackInfo.callback = [](WGPUDevice const*, WGPUErrorType,
+                                                                    WGPUStringView message, void*, void*) {
+            qWarning("GPU: %s", qPrintable(text(message)));
+        };
+        WGPURequestDeviceCallbackInfo deviceCallback = WGPU_REQUEST_DEVICE_CALLBACK_INFO_INIT;
+        deviceCallback.mode = WGPUCallbackMode_AllowSpontaneous;
+        deviceCallback.callback = [](WGPURequestDeviceStatus status, WGPUDevice device, WGPUStringView message,
+                                      void* userdata1, void*) {
+            auto* self = static_cast<GpuDevice*>(userdata1);
+            if (status != WGPURequestDeviceStatus_Success || !device)
+            {
+                settle(false, "No WebGPU device: " + text(message));
+                return;
+            }
+            self->_device = device;
+            self->_queue = wgpuDeviceGetQueue(device);
+            settle(true);
+        };
+        deviceCallback.userdata1 = self;
+        wgpuAdapterRequestDevice(adapter, &deviceDescriptor, deviceCallback);
+    };
+    adapterCallback.userdata1 = this;
+    wgpuInstanceRequestAdapter(_instance, &options, adapterCallback);
+}
+#endif
+
 GpuDevice::~GpuDevice()
 {
     if (_queue)
@@ -62,6 +176,7 @@ GpuDevice::~GpuDevice()
         wgpuInstanceRelease(_instance);
 }
 
+#ifndef __EMSCRIPTEN__
 void GpuDevice::wait(WGPUFuture future) const
 {
     WGPUFutureWaitInfo info = {future, false};
@@ -144,6 +259,7 @@ bool GpuDevice::make(QString& error)
     _queue = wgpuDeviceGetQueue(_device);
     return true;
 }
+#endif
 
 WGPUTexture GpuDevice::makeTarget(const QSize& size) const
 {
@@ -157,6 +273,7 @@ WGPUTexture GpuDevice::makeTarget(const QSize& size) const
     return wgpuDeviceCreateTexture(_device, &descriptor);
 }
 
+#ifndef __EMSCRIPTEN__
 void GpuDevice::finish() const
 {
     WGPUQueueWorkDoneCallbackInfo callback = WGPU_QUEUE_WORK_DONE_CALLBACK_INFO_INIT;
@@ -213,3 +330,4 @@ QImage GpuDevice::read(WGPUTexture texture, const QSize& size) const
     wgpuBufferRelease(buffer);
     return image;
 }
+#endif

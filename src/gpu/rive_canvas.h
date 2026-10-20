@@ -1,5 +1,7 @@
 #pragma once
 
+#include <webgpu/webgpu.h>
+
 #include <QColor>
 #include <QImage>
 #include <QSize>
@@ -9,6 +11,9 @@
 
 class QPainter;
 class GpuDevice;
+namespace wgpu {
+class CommandBuffer;
+}
 
 /// The stage drawn by the Rive renderer on the GPU (WebGPU through Dawn).
 /// What is painted with QPainter on its device goes straight to Rive: paths
@@ -39,10 +44,18 @@ public:
 
     bool valid() const;
 
+#ifndef __EMSCRIPTEN__
     /// A frame of \a pixels device pixels (\a ratio of them to a logical
     /// pixel) cleared to \a clear, painted by \a paint on a QPainter whose
-    /// device measures in logical pixels as a widget does; its pixels.
+    /// device measures in logical pixels as a widget does; its pixels, read
+    /// back from the GPU.
     QImage draw(const QSize& pixels, qreal ratio, const QColor& clear, const std::function<void(QPainter&)>& paint);
+#endif
+    /// The same frame drawn into \a texture (of \a format), such as a page
+    /// canvas's, and handed to the GPU: the browser shows it once the paint
+    /// is done. False when it could not be drawn.
+    bool drawInto(WGPUTexture texture, WGPUTextureFormat format, const QSize& pixels, qreal ratio, const QColor& clear,
+        const std::function<void(QPainter&)>& paint);
 
     const Timing& timing() const { return _timing; }
     /// Forgets the converted paths and uploaded images (after an edit that
@@ -51,6 +64,9 @@ public:
 
 private:
     class Impl;
+    /// The frame drawn into \a texture, as commands for the GPU.
+    wgpu::CommandBuffer render(WGPUTexture texture, WGPUTextureFormat format, const QSize& pixels, qreal ratio,
+        const QColor& clear, const std::function<void(QPainter&)>& paint);
     std::unique_ptr<Impl> _impl;
     Timing _timing;
 };

@@ -1,6 +1,6 @@
 #include "main_window.h"
 #include "sample_profiler.h"
-#ifdef PHOENIX_GPU
+#ifdef PHOENIX_GPU_BAKEOFF
 #include "../gpu/gpu_bakeoff.h"
 #endif
 #include "convert_to_symbol_dialog.h"
@@ -8261,7 +8261,7 @@ void MainWindow::setupMenus()
         };
         // PHOENIX_STAGE_RENDERER=rive or qpainter picks it for this run alone.
         const QString wanted = qEnvironmentVariableIsSet("PHOENIX_STAGE_RENDERER")
-            ? qEnvironmentVariable("PHOENIX_STAGE_RENDERER") : settings.value("view/stageRenderer").toString();
+            ? qEnvironmentVariable("PHOENIX_STAGE_RENDERER") : settings.value("view/stageRenderer", "rive").toString();
         choose(PhoenixView::gpuStageBuilt() && wanted == "rive");
         connect(group, &QActionGroup::triggered, this, [choose, riveAction](QAction* action) {
             choose(action == riveAction);
@@ -9736,7 +9736,7 @@ std::vector<QImage> MainWindow::renderSamples(const QString& path, std::vector<i
     return images;
 }
 
-#ifdef PHOENIX_GPU
+#ifdef PHOENIX_GPU_BAKEOFF
 int MainWindow::gpuBakeoffCommand(const QString& source, const QStringList& options)
 {
     loadFLAFile(source);

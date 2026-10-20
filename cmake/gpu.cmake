@@ -1,11 +1,19 @@
-# The GPU stage renderer (PHOENIX_GPU): WebGPU through Dawn, with the vector
-# renderers being compared on it. Off by default while it is being built.
+# The GPU stage renderer (PHOENIX_GPU): WebGPU through Dawn, natively and in
+# the browser, drawn by the Rive renderer. ThorVG is built too on the
+# desktop, for Phoenix gpu-bakeoff.
 #
-# Dawn comes as Google's prebuilt release package for the platform, pinned
-# to one tag; ThorVG is built from its sources, its core and WebGPU engine
-# only (its own build is meson).
+# Natively Dawn comes as Google's prebuilt release package for the platform,
+# pinned to one tag. In the browser it is Emscripten's emdawnwebgpu port,
+# Dawn's webgpu.h over the browser's WebGPU. The target phoenix_webgpu is
+# whichever it is.
 
 include(FetchContent)
+
+if(EMSCRIPTEN)
+    add_library(phoenix_webgpu INTERFACE)
+    target_compile_options(phoenix_webgpu INTERFACE --use-port=emdawnwebgpu)
+    target_link_options(phoenix_webgpu INTERFACE --use-port=emdawnwebgpu)
+else()
 
 set(PHOENIX_DAWN_TAG v20261016.190333)
 set(PHOENIX_DAWN_COMMIT 67d4d6e64b0755d638f76549794692badfdbc8ab)
@@ -31,6 +39,8 @@ if(NOT dawn_prebuilt_POPULATED)
     FetchContent_Populate(dawn_prebuilt)
 endif()
 find_package(Dawn CONFIG REQUIRED PATHS ${dawn_prebuilt_SOURCE_DIR}/lib/cmake/Dawn NO_DEFAULT_PATH)
+add_library(phoenix_webgpu INTERFACE)
+target_link_libraries(phoenix_webgpu INTERFACE dawn::webgpu_dawn)
 
 # ThorVG: the core, the raw image loader and the WebGPU engine.
 FetchContent_Declare(
@@ -65,6 +75,7 @@ target_link_libraries(thorvg PUBLIC dawn::webgpu_dawn)
 if(MSVC)
     target_compile_options(thorvg PRIVATE /W0 /utf-8)
 endif()
+endif() # not EMSCRIPTEN
 
 # The Rive renderer: its core, the WebGPU backend and the math it needs, at
 # one commit (as an archive, since a shallow clone cannot name a commit).
@@ -112,12 +123,16 @@ add_library(rive_renderer STATIC ${_rive_sources})
 target_include_directories(rive_renderer
     PUBLIC ${_rive}/include ${_rive}/renderer/include
     PRIVATE ${_rive}/renderer/src ${_rive}/decoders/include ${CMAKE_CURRENT_SOURCE_DIR}/third_party/rive_shaders)
-# As its own build defines them for Dawn (and for MSVC).
-target_compile_definitions(rive_renderer
-    PUBLIC RIVE_DAWN NOMINMAX _USE_MATH_DEFINES
-    PRIVATE _CRT_SECURE_NO_WARNINGS _SILENCE_ALL_CXX20_DEPRECATION_WARNINGS)
+# As its own build defines them for Dawn, or for emdawnwebgpu (its "WebGPU
+# version 2"), and for MSVC.
+if(EMSCRIPTEN)
+    target_compile_definitions(rive_renderer PUBLIC RIVE_WEBGPU=2)
+else()
+    target_compile_definitions(rive_renderer PUBLIC RIVE_DAWN NOMINMAX _USE_MATH_DEFINES
+        PRIVATE _CRT_SECURE_NO_WARNINGS _SILENCE_ALL_CXX20_DEPRECATION_WARNINGS)
+endif()
 target_compile_features(rive_renderer PUBLIC cxx_std_20)
-target_link_libraries(rive_renderer PUBLIC dawn::webgpu_dawn)
+target_link_libraries(rive_renderer PUBLIC phoenix_webgpu)
 if(MSVC)
     target_compile_options(rive_renderer PRIVATE /W0 /utf-8 /bigobj /Zc:__cplusplus)
 endif()

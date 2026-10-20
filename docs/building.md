@@ -106,7 +106,7 @@ QT_QPA_PLATFORM=offscreen build/Release/Phoenix --export-image my.fla frame1.png
 Phoenix also builds for browsers with Qt for WebAssembly, as the web editor at [phoenixanimate.com/webeditor](https://phoenixanimate.com/webeditor/). It needs Emscripten and Qt for WebAssembly as well as the desktop Qt above (for its tools); `tools/web/setup_web.py` installs Emscripten and builds Qt for WebAssembly from source into `third_party/` (about ten minutes, and it needs 7-Zip), with the features that make the editor fast.
 
 ```sh
-python tools/web/setup_web.py          # once: Emscripten 4.0.7, and Qt 6.11.2 built for WebAssembly
+python tools/web/setup_web.py          # once: Emscripten 4.0.23, and Qt 6.11.2 built for WebAssembly
 python tools/web/build_web.py --serve  # build, then try it at http://localhost:8000/
 python tools/web/deploy_web.py         # put that build on phoenixanimate.com/webeditor
 ```

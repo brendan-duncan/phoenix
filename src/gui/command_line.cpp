@@ -1622,7 +1622,7 @@ int run(const QStringList& arguments)
     // Scripts run without the native libraries in External Libraries.
     if (args.removeAll("--no-native-extensions") > 0)
         jsfl::native::setEnabled(false);
-#ifdef PHOENIX_GPU
+#ifdef PHOENIX_GPU_BAKEOFF
     if (name == "gpu-bakeoff")
     {
         if (args.isEmpty())

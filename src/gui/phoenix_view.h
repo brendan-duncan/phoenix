@@ -867,6 +867,7 @@ public slots:
 
 protected:
     void paintEvent(QPaintEvent *event) override;
+    void hideEvent(QHideEvent* event) override;
     /// The pixels per point the stage is drawn at: the screen's, or fewer
     /// where the web editor's page asks for it.
     qreal stagePixelRatio() const;
@@ -934,12 +935,20 @@ private:
     /// The last paint's time to draw the stage, and as the corner shows it.
     StageTimes _stageTimes;
     QString _stageTiming;
-#ifdef PHOENIX_GPU
+    /// Painting into a GPU device that draws everything itself (the
+    /// browser's stage): no pictures to speed it up, masks as clip paths.
+    bool _onGpuDevice = false;
+    /// The view's painting, onto the widget or another device.
+    void paintView(QPainter& painter);
+#if defined(PHOENIX_GPU) && !defined(__EMSCRIPTEN__)
     std::unique_ptr<RiveCanvas> _riveCanvas;
     bool _riveFailed = false;
     /// Draws the stage with Rive, and the tools over it; false when there
     /// is no GPU for it (the stage is then drawn by QPainter).
     bool drawStageOnGpu(QPainter& painter, const fla::Document* document, const QColor& background);
+#endif
+#if defined(PHOENIX_GPU) && defined(__EMSCRIPTEN__)
+    std::unique_ptr<class WebStage> _webStage;
 #endif
 
     /// Whether the view is mid-gesture, and so should render for speed rather

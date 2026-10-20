@@ -41,6 +41,9 @@
 #ifdef PHOENIX_GPU
 #include "../gpu/gpu_device.h"
 #include "../gpu/rive_canvas.h"
+#ifdef __EMSCRIPTEN__
+#include "../gpu/web_stage.h"
+#endif
 #endif
 #include "library_panel.h"
 #include <QMimeData>
@@ -996,6 +999,46 @@ void PhoenixView::paintEvent(QPaintEvent *event)
         emit zoomChanged();
     }
 
+#if defined(PHOENIX_GPU) && defined(__EMSCRIPTEN__)
+    // In the browser, Rive draws the whole view into a WebGPU canvas over
+    // the widget; while there is no device yet, QPainter draws it here.
+    if (_stageRenderer == StageRenderer::Rive && !_grayscale)
+    {
+        if (!_webStage)
+            _webStage = std::make_unique<WebStage>(this);
+        QElapsedTimer clock;
+        clock.start();
+        _onGpuDevice = true;
+        const bool drawn = _webStage->paint(QColor(37, 37, 37), [this](QPainter& painter) { paintView(painter); });
+        _onGpuDevice = false;
+        if (drawn)
+        {
+            if (const RiveCanvas::Timing* t = _webStage->timing())
+            {
+                _stageTimes = StageTimes();
+                _stageTimes.totalMs = clock.nsecsElapsed() / 1.0e6;
+                _stageTimes.paintMs = t->paintMs;
+                _stageTimes.flushMs = t->flushMs;
+                _stageTimes.gpuMs = t->gpuMs;
+                _stageTimes.paths = t->paths;
+                _stageTimes.pathsMade = t->pathsMade;
+                _stageTimes.gpu = true;
+                if (_showStageTiming)
+                    _stageTiming = QString("Rive  %1 ms\npaint %2  flush %3  submit %4\n%5 paths, %6 new")
+                                       .arg(_stageTimes.totalMs, 0, 'f', 1)
+                                       .arg(t->paintMs, 0, 'f', 1)
+                                       .arg(t->flushMs, 0, 'f', 1)
+                                       .arg(t->gpuMs, 0, 'f', 1)
+                                       .arg(t->paths)
+                                       .arg(t->pathsMade);
+            }
+            return;
+        }
+    }
+    if (_webStage)
+        _webStage->hide();
+#endif
+
     // A value check: the stage is drawn into a picture first and turned
     // gray, then the tools' handles go over it in their own colors. A stage
     // drawn at fewer pixels than the screen has (the web editor's
@@ -1027,6 +1070,11 @@ void PhoenixView::paintEvent(QPaintEvent *event)
     }
 
     QPainter painter(_grayPass ? static_cast<QPaintDevice*>(_grayPass) : this);
+    paintView(painter);
+}
+
+void PhoenixView::paintView(QPainter& painter)
+{
     painter.setRenderHint(QPainter::Antialiasing, true);
     painter.setRenderHint(QPainter::TextAntialiasing, true);
     painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
@@ -1096,7 +1144,7 @@ void PhoenixView::paintEvent(QPaintEvent *event)
     QElapsedTimer stageClock;
     stageClock.start();
     bool gpuDrawn = false;
-#ifdef PHOENIX_GPU
+#if defined(PHOENIX_GPU) && !defined(__EMSCRIPTEN__)
     if (_stageRenderer == StageRenderer::Rive && !_grayPass)
         gpuDrawn = drawStageOnGpu(painter, document, backgroundColor);
 #endif
@@ -1106,7 +1154,7 @@ void PhoenixView::paintEvent(QPaintEvent *event)
     // much to allocate every time), and when there is no room for it the
     // stage is drawn straight to the window.
     bool supersampled = false;
-    if (!gpuDrawn && _highQualityAntiAliasing && !_interacting)
+    if (!gpuDrawn && !_onGpuDevice && _highQualityAntiAliasing && !_interacting)
     {
         const QSize wanted(width() * supersampleFactor, height() * supersampleFactor);
         if (_supersample.size() != wanted)
@@ -1147,7 +1195,7 @@ void PhoenixView::paintEvent(QPaintEvent *event)
         // While something is being dragged, the rest of the stage is drawn
         // once into an image and reused for every frame of the drag, and
         // only what moves is drawn each time.
-        const std::vector<const fla::Element*> moving = _interacting
+        const std::vector<const fla::Element*> moving = _interacting && !_onGpuDevice
             ? movingElements() : std::vector<const fla::Element*>();
 
         painter.save();
@@ -1219,7 +1267,12 @@ void PhoenixView::paintEvent(QPaintEvent *event)
         else
         {
             painter.setTransform(rootToWidget(), true);
+            // Drawn on the GPU, masks are clip paths, as an export that
+            // writes vectors has them.
+            const bool vectors = _vectorMasks;
+            _vectorMasks = vectors || _onGpuDevice;
             drawStageContents(painter, document);
+            _vectorMasks = vectors;
         }
         _moving = nullptr;
         painter.setTransform(documentToWidget(), false);
@@ -1227,7 +1280,7 @@ void PhoenixView::paintEvent(QPaintEvent *event)
             drawToolOverlay(painter);
         painter.restore();
     }
-    if (!gpuDrawn)
+    if (!gpuDrawn && !_onGpuDevice)
     {
         _stageTimes = StageTimes();
         _stageTimes.totalMs = stageClock.nsecsElapsed() / 1.0e6;
@@ -1328,10 +1381,24 @@ void PhoenixView::paintEvent(QPaintEvent *event)
     }
 }
 
+void PhoenixView::hideEvent(QHideEvent* event)
+{
+#if defined(PHOENIX_GPU) && defined(__EMSCRIPTEN__)
+    // The stage's canvas goes with it, or it would float over what shows.
+    if (_webStage)
+        _webStage->hide();
+#endif
+    QWidget::hideEvent(event);
+}
+
 void PhoenixView::setStageRenderer(StageRenderer renderer)
 {
+#ifndef __EMSCRIPTEN__
+    // In the browser the device comes later; each paint falls back to
+    // QPainter until it has.
     if (renderer == StageRenderer::Rive && !gpuStageAvailable())
         renderer = StageRenderer::QPainter;
+#endif
     if (_stageRenderer == renderer)
         return;
     _stageRenderer = renderer;
@@ -1366,7 +1433,7 @@ bool PhoenixView::gpuStageAvailable(QString* why)
 #endif
 }
 
-#ifdef PHOENIX_GPU
+#if defined(PHOENIX_GPU) && !defined(__EMSCRIPTEN__)
 bool PhoenixView::drawStageOnGpu(QPainter& painter, const fla::Document* document, const QColor& background)
 {
     if (_riveFailed)

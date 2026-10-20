@@ -107,6 +107,9 @@ public:
     rive::rcp<rive::gpu::RenderTargetWebGPU> target;
     WGPUTexture texture = nullptr;
     QSize size;
+    /// What the render target was made for.
+    QSize targetSize;
+    WGPUTextureFormat targetFormat = WGPUTextureFormat_Undefined;
     std::unique_ptr<Engine> engine;
     std::unique_ptr<Device> device;
     rive::RiveRenderer* renderer = nullptr;
@@ -805,23 +808,20 @@ void RiveCanvas::forget()
     _impl->images.clear();
 }
 
-QImage RiveCanvas::draw(const QSize& pixels, qreal ratio, const QColor& clear, const std::function<void(QPainter&)>& paint)
+wgpu::CommandBuffer RiveCanvas::render(WGPUTexture texture, WGPUTextureFormat format, const QSize& pixels, qreal ratio,
+    const QColor& clear, const std::function<void(QPainter&)>& paint)
 {
     Impl& d = *_impl;
-    if (!d.context || pixels.isEmpty())
-        return QImage();
     auto* impl = d.context->static_impl_cast<rive::gpu::RenderContextWebGPUImpl>();
-    if (pixels != d.size)
+    if (pixels != d.targetSize || format != d.targetFormat || !d.target)
     {
-        if (d.texture)
-            wgpuTextureRelease(d.texture);
-        d.texture = d.gpu.makeTarget(pixels);
-        d.size = pixels;
-        d.target = impl->makeRenderTarget(wgpu::TextureFormat::BGRA8Unorm, static_cast<uint32_t>(pixels.width()),
+        d.target = impl->makeRenderTarget(static_cast<wgpu::TextureFormat>(format), static_cast<uint32_t>(pixels.width()),
             static_cast<uint32_t>(pixels.height()));
-        wgpu::Texture texture(d.texture);
-        d.target->setTargetTextureView(texture.CreateView(), texture);
+        d.targetSize = pixels;
+        d.targetFormat = format;
     }
+    wgpu::Texture target(texture);
+    d.target->setTargetTextureView(target.CreateView(), target);
     ++d.frame;
     d.pathsUsed = 0;
     d.pathsMade = 0;
@@ -857,7 +857,43 @@ QImage RiveCanvas::draw(const QSize& pixels, qreal ratio, const QColor& clear, c
     d.context->flush(flush);
     wgpu::CommandBuffer commands = encoder.Finish();
     _timing.flushMs = clock.nsecsElapsed() / 1.0e6;
-    clock.restart();
+    _timing.paths = d.pathsUsed;
+    _timing.pathsMade = d.pathsMade;
+    return commands;
+}
+
+bool RiveCanvas::drawInto(WGPUTexture texture, WGPUTextureFormat format, const QSize& pixels, qreal ratio,
+    const QColor& clear, const std::function<void(QPainter&)>& paint)
+{
+    Impl& d = *_impl;
+    if (!d.context || !texture || pixels.isEmpty())
+        return false;
+    wgpu::CommandBuffer commands = render(texture, format, pixels, ratio, clear, paint);
+    QElapsedTimer clock;
+    clock.start();
+    wgpu::Queue(d.gpu.queue()).Submit(1, &commands);
+    _timing.gpuMs = clock.nsecsElapsed() / 1.0e6;
+    _timing.readMs = 0.0;
+    d.sweep();
+    return true;
+}
+
+#ifndef __EMSCRIPTEN__
+QImage RiveCanvas::draw(const QSize& pixels, qreal ratio, const QColor& clear, const std::function<void(QPainter&)>& paint)
+{
+    Impl& d = *_impl;
+    if (!d.context || pixels.isEmpty())
+        return QImage();
+    if (pixels != d.size)
+    {
+        if (d.texture)
+            wgpuTextureRelease(d.texture);
+        d.texture = d.gpu.makeTarget(pixels);
+        d.size = pixels;
+    }
+    wgpu::CommandBuffer commands = render(d.texture, WGPUTextureFormat_BGRA8Unorm, pixels, ratio, clear, paint);
+    QElapsedTimer clock;
+    clock.start();
     wgpu::Queue(d.gpu.queue()).Submit(1, &commands);
     d.gpu.finish();
     _timing.gpuMs = clock.nsecsElapsed() / 1.0e6;
@@ -865,8 +901,7 @@ QImage RiveCanvas::draw(const QSize& pixels, qreal ratio, const QColor& clear, c
     QImage image = d.gpu.read(d.texture, pixels);
     image.setDevicePixelRatio(ratio);
     _timing.readMs = clock.nsecsElapsed() / 1.0e6;
-    _timing.paths = d.pathsUsed;
-    _timing.pathsMade = d.pathsMade;
     d.sweep();
     return image;
 }
+#endif
