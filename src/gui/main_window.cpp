@@ -10715,6 +10715,9 @@ void MainWindow::restoreLayout()
     if (_layoutRestored)
         return;
     _layoutRestored = true;
+    // Properties in front of its group, not the panel added to it last.
+    if (QDockWidget* properties = findChild<QDockWidget*>("propertiesDock"))
+        properties->raise();
     _defaultLayout = saveState(kLayoutVersion);
     const QByteArray kept = QSettings().value("window/state").toByteArray();
     if (!kept.isEmpty())
