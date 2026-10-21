@@ -280,14 +280,20 @@ void DisplayObject::setRotation(double degrees)
     invalidate();
 }
 
+// A size as a player gives it: in whole twips (twentieths of a pixel).
+static double inTwips(double size)
+{
+    return std::round(size * 20.0) / 20.0;
+}
+
 double DisplayObject::width() const
 {
-    return boundsThrough(matrix(), true).width;
+    return inTwips(boundsThrough(matrix(), true).width);
 }
 
 double DisplayObject::height() const
 {
-    return boundsThrough(matrix(), true).height;
+    return inTwips(boundsThrough(matrix(), true).height);
 }
 
 void DisplayObject::setWidth(double width)

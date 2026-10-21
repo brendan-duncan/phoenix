@@ -1804,6 +1804,8 @@ private:
 
     void drawElement(QPainter& painter, const fla::Element* element, const fla::Element* tweenElement, double tweenProgress);
 
+    /// Which way and how often  frame's classic tween turns.
+    static void tweenTurnOf(const fla::Frame& frame, fla::TweenRotation& rotation, int& turns);
     fla::Transform interpolateTransform(const fla::Transform& a, const fla::Transform& b, double t);
 
     int calculateLayerDuration(const fla::Layer* layer);

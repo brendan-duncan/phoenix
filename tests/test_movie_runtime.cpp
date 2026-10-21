@@ -20,6 +20,7 @@
 #include <fstream>
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -1070,6 +1071,34 @@ TEST(movie_runtime_holds_a_clip_where_its_time_remap_says)
     runtime.heldFrame = nullptr;
     runtime.step();
     CHECK(clip->frame == 6);
+}
+
+TEST(movie_runtime_scripts_read_a_tweened_clip_where_it_is_placed_now)
+{
+    // One keyframe of ten frames holding a box; whatever draws the movie
+    // says it is 10 px further along each frame, as a tween would have it.
+    // enterFrame reads it there before the frame is drawn, as a player does.
+    Movie movie;
+    fla::Symbol* box = movie.symbol("Box", fla::SymbolType::MovieClip, 1);
+    fla::Layer* art = movie.layer(*movie.root, "art");
+    movie.place(*movie.frame(*art, 0, 10), *box, "box");
+    fla::Layer* actions = movie.layer(*movie.root, "actions");
+    movie.frame(*actions, 0, 10, "this.onEnterFrame = function() { trace(box._x); };\n");
+    std::vector<std::string> traced;
+    fla::play::MovieRuntime runtime(*movie.root, 24.0);
+    runtime.trace = [&traced](const std::string& line) { traced.push_back(line); };
+    runtime.placedTransform = [](const fla::play::Clip& clip) -> std::optional<fla::Transform> {
+        if (!clip.parent)
+            return std::nullopt;
+        fla::Transform at;
+        at.tx = 10.0 * clip.parent->frame;
+        return at;
+    };
+    runtime.start();
+    runtime.step();
+    runtime.step();
+    runtime.step();
+    CHECK(traced.size() == 3 && traced[0] == "10" && traced[1] == "20" && traced[2] == "30");
 }
 
 TEST(movie_runtime_puts_timeline_and_script_children_on_the_display_list)

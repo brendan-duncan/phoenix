@@ -383,12 +383,18 @@ PhoenixView::PhoenixView(Player* player, QWidget *parent)
     _displayPainter->drawTimeline = [this](QPainter& painter, const fla::display::DisplayObject& object) {
         drawDisplayTimeline(painter, object);
     };
+    // Scripts measure the art itself (width, getBounds), as a player does:
+    // no margin for antialiasing.
     _displayPainter->timelineArtBounds = [this](const fla::display::TimelineArt& art, bool) {
         if (art.element)
-            return getElementBounds(art.element);
-        if (art.frameOf && art.clip && art.clip->symbol)
-            return symbolFramesBounds(art.clip->symbol, art.frame, art.frame);
-        return QRectF();
+            return elementBounds(art.element);
+        if (!art.frameOf || !art.clip || !art.clip->symbol)
+            return QRectF();
+        const bool wasTight = _tightBounds;
+        _tightBounds = true;
+        const QRectF bounds = symbolFramesBounds(art.clip->symbol, art.frame, art.frame);
+        _tightBounds = wasTight;
+        return bounds;
     };
     _displayPainter->timelineArtHits = [this](const fla::display::TimelineArt& art, double x, double y) {
         if (art.element)
@@ -5233,21 +5239,26 @@ void PhoenixView::drawLayer(QPainter& painter, const fla::Layer* layer, fla::Loo
     _outlineColor = previousOutline;
 }
 
+void PhoenixView::tweenTurnOf(const fla::Frame& frame, fla::TweenRotation& rotation, int& turns)
+{
+    rotation = fla::TweenRotation::Auto;
+    turns = 0;
+    if (frame.motionTweenRotate == "clockwise")
+        rotation = fla::TweenRotation::Clockwise;
+    else if (frame.motionTweenRotate == "counter-clockwise")
+        rotation = fla::TweenRotation::CounterClockwise;
+    else if (frame.motionTweenRotate == "none")
+        rotation = fla::TweenRotation::None;
+    if (rotation == fla::TweenRotation::Clockwise || rotation == fla::TweenRotation::CounterClockwise)
+        turns = std::max(0, frame.motionTweenRotateTimes);
+}
+
 void PhoenixView::drawFrame(QPainter& painter, const fla::Frame* frame, const fla::Frame* nextTweenFrame, double tweenProgress)
 {
     // The keyframe says which way its tween turns.
     const fla::TweenRotation savedRotation = _tweenRotation;
     const int savedTurns = _tweenTurns;
-    _tweenRotation = fla::TweenRotation::Auto;
-    _tweenTurns = 0;
-    if (frame->motionTweenRotate == "clockwise")
-        _tweenRotation = fla::TweenRotation::Clockwise;
-    else if (frame->motionTweenRotate == "counter-clockwise")
-        _tweenRotation = fla::TweenRotation::CounterClockwise;
-    else if (frame->motionTweenRotate == "none")
-        _tweenRotation = fla::TweenRotation::None;
-    if (_tweenRotation == fla::TweenRotation::Clockwise || _tweenRotation == fla::TweenRotation::CounterClockwise)
-        _tweenTurns = std::max(0, frame->motionTweenRotateTimes);
+    tweenTurnOf(*frame, _tweenRotation, _tweenTurns);
     struct Restore
     {
         PhoenixView& view;
@@ -9171,6 +9182,26 @@ void PhoenixView::setMovie(fla::play::MovieRuntime* movie)
             const fla::behaviors::Copies copies =
                 behaviorCopies(*clip.placed, clip.placed->transform, clip.parent->frame);
             return copies.empty() ? -1 : copies.front().hold;
+        };
+        // Where a timeline has a clip on its parent's frame, as it is drawn
+        // there: what its scripts read before it is drawn.
+        _movie->placedTransform = [this](const fla::play::Clip& clip) -> std::optional<fla::Transform> {
+            const auto* frame = clip.placed ? dynamic_cast<const fla::Frame*>(clip.placed->parent) : nullptr;
+            if (!frame || !clip.layer || !clip.parent || clip.parent->button)
+                return std::nullopt;
+            const LayerFrame state = resolveLayerFrame(clip.layer, fla::LoopType::SingleFrame, clip.parent->frame);
+            const auto found = std::find(frame->elements.begin(), frame->elements.end(), clip.placed);
+            if (state.frame != frame || found == frame->elements.end())
+                return std::nullopt;
+            ElapsedScope elapsed(_elapsed, state.offset);
+            const fla::TweenRotation savedRotation = _tweenRotation;
+            const int savedTurns = _tweenTurns;
+            tweenTurnOf(*frame, _tweenRotation, _tweenTurns);
+            const fla::Transform shown =
+                shownTransform(state, static_cast<size_t>(found - frame->elements.begin()));
+            _tweenRotation = savedRotation;
+            _tweenTurns = savedTurns;
+            return shown;
         };
     }
     clearCaches();

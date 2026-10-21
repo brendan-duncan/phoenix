@@ -541,6 +541,13 @@ Transform Clip::transform(const Transform& placedTransform) const
     return toTransform(display->matrixOver(toMatrix(placedTransform)));
 }
 
+Transform Clip::placedTransform() const
+{
+    if (display)
+        return toTransform(display->placedMatrix());
+    return placed ? placed->transform : Transform();
+}
+
 bool Clip::shown() const
 {
     return !display || display->visible();
@@ -1352,8 +1359,7 @@ Transform MovieRuntime::toStage(const Clip& clip) const
 {
     Transform parent = clip.placement.known ? clip.placement.parentToStage
                                              : (clip.parent ? toStage(*clip.parent) : Transform());
-    const Transform placed = clip.placed ? clip.placed->transform : Transform();
-    return parent.concatenate(clip.transform(placed));
+    return parent.concatenate(clip.transform(clip.placedTransform()));
 }
 
 void MovieRuntime::stageToClip(const Clip& clip, double& x, double& y) const
@@ -1425,7 +1431,7 @@ void MovieRuntime::startDrag(Clip& clip, bool lockCenter, const std::vector<doub
     double px = _mouseX, py = _mouseY;
     if (clip.parent)
         stageToClip(*clip.parent, px, py);
-    const Transform shown = clip.transform(clip.placed ? clip.placed->transform : Transform());
+    const Transform shown = clip.transform(clip.placedTransform());
     if (!lockCenter)
     {
         _drag.dx = shown.tx - px;
@@ -2176,6 +2182,12 @@ void MovieRuntime::syncChildren(Clip& clip, std::vector<Clip*>& entered)
     }
     clip.children = std::move(kept);
     syncDisplay(clip);
+    // Each where its timeline has it now, a tween's in-between too.
+    if (placedTransform)
+        for (const auto& child : clip.children)
+            if (child && !child->made && child->placed && child->display)
+                if (const std::optional<Transform> shown = placedTransform(*child))
+                    child->display->setPlacedMatrix(toMatrix(*shown));
 }
 
 void MovieRuntime::revive(Clip& clip, std::vector<Clip*>& entered)
@@ -3335,8 +3347,7 @@ Clip* MovieRuntime::resolve(Clip& from, const std::string& target)
 as3::ValuePtr MovieRuntime::property(Clip& clip, const std::string& name)
 {
     using as3::Value;
-    const Transform placed = clip.placed ? clip.placed->transform : Transform();
-    const Transform shown = clip.transform(placed);
+    const Transform shown = clip.transform(clip.placedTransform());
     if (name == "_x")
         return Value::makeNumber(shown.tx);
     if (name == "_y")
@@ -3371,8 +3382,12 @@ as3::ValuePtr MovieRuntime::property(Clip& clip, const std::string& name)
     }
     if (name == "_width" || name == "width" || name == "_height" || name == "height")
     {
-        const Clip::Placement& box = clip.placement;
+        // Measured as it is now, not as last drawn: a script reads it
+        // before the frame is drawn.
         const bool across = name == "_width" || name == "width";
+        if (clip.display)
+            return Value::makeNumber(across ? clip.display->width() : clip.display->height());
+        const Clip::Placement& box = clip.placement;
         return Value::makeNumber(box.known ? (across ? box.right - box.left : box.bottom - box.top) : 0.0);
     }
     if (name == "_droptarget" || name == "dropTarget")
@@ -3544,7 +3559,7 @@ as3::ValuePtr MovieRuntime::property(Clip& clip, const std::string& name)
             if (!self || self->gone || !self->symbol || !self->parent)
                 return Value::makeUndefined();
             Clip* made = makeClip(self->parent, *self->symbol, args.empty() ? std::string() : args[0]->toString());
-            made->made->transform = self->placed ? self->placed->transform : Transform();
+            made->made->transform = self->placedTransform();
             if (made->display && self->display)
             {
                 made->display->setPlacedMatrix(toMatrix(made->made->transform));
