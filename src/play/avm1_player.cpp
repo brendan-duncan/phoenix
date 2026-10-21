@@ -198,8 +198,19 @@ public:
         const std::shared_ptr<display::TextField> field = textFieldOfObject(value);
         return field && field->parent() ? field->parent()->clip : nullptr;
     }
-    as3::Val root(const as3::Val&) override { return objectOf(_runtime._root.get()); }
-    as3::Val level(int number) override { return number == 0 ? objectOf(_runtime._root.get()) : as3::Val(); }
+    // A clip's _root is the main timeline of the level it is on.
+    as3::Val root(const as3::Val& value) override
+    {
+        Clip* clip = clipOf(value);
+        if (!clip)
+            clip = ownerOfField(value);
+        if (!clip)
+            return objectOf(_runtime._root.get());
+        while (clip->parent)
+            clip = clip->parent;
+        return objectOf(clip->level >= 0 ? clip : _runtime._root.get());
+    }
+    as3::Val level(int number) override { return objectOf(_runtime.level(number, false)); }
     as3::Val parent(const as3::Val& value) override
     {
         if (Clip* owner = ownerOfField(value))
@@ -233,9 +244,13 @@ public:
         Clip* clip = clipOf(value);
         if (!clip)
             return std::string();
+        const Clip* top = clip;
+        while (top->parent)
+            top = top->parent;
+        const std::string level = "_level" + std::to_string(std::max(0, top->level));
         std::string path = _runtime.slashPath(*clip);
         std::replace(path.begin(), path.end(), '/', '.');
-        return path == "." ? std::string("_level0") : "_level0" + path;
+        return path == "." ? level : level + path;
     }
     void childNames(const as3::Val& value, std::vector<std::string>& names) override
     {
@@ -358,10 +373,24 @@ public:
                 _runtime.trace("fscommand(" + url.substr(10) + ", " + target + ")");
             return;
         }
-        if (loadTarget || loadVariables || target.rfind("_level", 0) == 0)
+        // Loads: into a clip the target names, or a level ("_level2").
+        if ((loadTarget || loadVariables || target.rfind("_level", 0) == 0) && _runtime._actions)
         {
-            if (_runtime.notice)
-                _runtime.notice("The movie asked to load " + url + ", which playing it here does not do.");
+            Clip* from = _runtime._current ? _runtime._current : _runtime._root.get();
+            Clip* into = nullptr;
+            if (target.rfind("_level", 0) == 0 && target.find_first_not_of("0123456789", 6) == std::string::npos &&
+                target.size() > 6)
+                into = _runtime.level(std::atoi(target.c_str() + 6), !url.empty() && !loadVariables);
+            else
+                into = _runtime.resolve(*from, target);
+            if (!into)
+                return;
+            if (loadVariables)
+                _runtime._actions->loadVariables(url, *into, method);
+            else if (url.empty())
+                _runtime.loadInto(*into, nullptr);
+            else
+                _runtime._actions->loadMovie(url, *into, as3::Val());
             return;
         }
         if (_runtime.getURL)
@@ -599,6 +628,7 @@ as3::Val ActionsPlayer::natives()
     });
     natives->properties["bitmap"] = bitmapNatives();
     natives->properties["clip"] = clipNatives();
+    natives->properties["load"] = loadNatives();
     natives->properties["text"] = textNatives();
     const as3::Val filters = filterNatives();
     for (const auto& [name, function] : filters->properties)
@@ -652,6 +682,11 @@ void ActionsPlayer::broadcast(const std::string& broadcaster, const std::string&
     all.insert(all.end(), args.begin(), args.end());
     ++_runtime._scriptRuns;
     _interpreter->callMethod(object, "broadcastMessage", all, broadcaster + " listener, " + message);
+}
+
+void ActionsPlayer::broadcast(const std::string& broadcaster, const std::string& message)
+{
+    broadcast(broadcaster, message, {});
 }
 
 void ActionsPlayer::callHandler(Clip& clip, const std::string& name)

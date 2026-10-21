@@ -3,6 +3,7 @@
 #include "../data/document.h"
 #include "../data/fla_document.h"
 #include "../edit/canvas_document.h"
+#include "../parser/fla_parser.h"
 #include "../play/movie_runtime.h"
 #include "../play/script/class_path.h"
 
@@ -108,6 +109,41 @@ void connectMovie(fla::play::MovieRuntime& movie, const fla::FLADocument& docume
         }
         return true;
     };
+
+    // Movies it loads as it plays (loadMovie, MovieClipLoader), read as
+    // a published movie opened is.
+    movie.readMovie = [](const std::vector<uint8_t>& bytes, const std::string& url)
+        -> std::shared_ptr<fla::play::LoadedMovie> {
+        FLAParser parser;
+        std::shared_ptr<fla::FLADocument> read(parser.parseSwf(bytes, url));
+        if (!read || !read->document)
+            return nullptr;
+        const fla::Document& data = *read->document;
+        auto loaded = std::make_shared<fla::play::LoadedMovie>();
+        loaded->holder = read;
+        loaded->scenes.assign(data.timelines.begin(), data.timelines.end());
+        if (data.symbolList)
+            loaded->library.assign(data.symbolList->symbols.begin(), data.symbolList->symbols.end());
+        loaded->url = url;
+        loaded->width = data.width;
+        loaded->height = data.height;
+        loaded->frameRate = data.frameRate;
+        loaded->version = bytes.size() > 3 ? bytes[3] : 0;
+        loaded->bytes = bytes.size();
+        return loaded;
+    };
+    // Its size, as an SWF movie's header gives it.
+    if (info.suffix().compare("swf", Qt::CaseInsensitive) == 0)
+    {
+        QFile swf(file);
+        if (swf.open(QIODevice::ReadOnly))
+        {
+            const QByteArray head = swf.read(8);
+            if (head.size() == 8)
+                movie.bytesTotal = static_cast<uint8_t>(head[4]) | (static_cast<uint8_t>(head[5]) << 8) |
+                    (static_cast<uint8_t>(head[6]) << 16) | (static_cast<size_t>(static_cast<uint8_t>(head[7])) << 24);
+        }
+    }
 
     // SharedObjects, kept with Phoenix's settings.
     const QString apart = qEnvironmentVariable("PHOENIX_SETTINGS_DIR");

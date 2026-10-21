@@ -727,6 +727,8 @@ void MovieRuntime::start()
     _focus = TextFocus();
     _madeToEnter.clear();
     _offStage.clear();
+    _levels.clear();
+    _firstFrames.clear();
     _gone.clear();
     _madeCount = 0;
     _instanceCount = 0;
@@ -756,6 +758,9 @@ void MovieRuntime::start()
     _root->timeline = _scenes.empty() ? nullptr : _scenes.front();
     _root->length = lengthOf(_root->timeline);
     _root->name = "_level0";
+    _root->level = 0;
+    // What the last run loaded goes once nothing plays it.
+    _loadedMovies.clear();
     attachDisplay(*_root);
     _stage->addChildAt(_root->display, 0);
     _stage->setRootObject(_root->display.get());
@@ -1499,10 +1504,16 @@ void MovieRuntime::pointerAt(double x, double y)
     settle();
 }
 
-const Symbol* MovieRuntime::linked(const std::string& linkage) const
+const Symbol* MovieRuntime::linked(const std::string& linkage, const Clip* from) const
 {
     if (linkage.empty())
         return nullptr;
+    // A loaded movie's own library, then the movie's.
+    if (from && from->movie)
+        for (const Symbol* symbol : from->movie->library)
+            if (symbol && (attributeOf(symbol->extraAttributes, "linkageIdentifier") == linkage ||
+                              attributeOf(symbol->extraAttributes, "linkageClassName") == linkage))
+                return symbol;
     for (const Symbol* symbol : _library)
     {
         if (attributeOf(symbol->extraAttributes, "linkageIdentifier") == linkage ||
@@ -1524,6 +1535,7 @@ Clip* MovieRuntime::makeClip(Clip* parent, const Symbol& symbol, const std::stri
     made->symbol = &symbol;
     made->timeline = symbol.timelines.empty() ? nullptr : symbol.timelines.front();
     made->parent = parent;
+    made->movie = parent ? parent->movie : nullptr;
     made->placed = instance.get();
     made->made = instance;
     made->name = name;
@@ -1877,6 +1889,79 @@ void MovieRuntime::type(int code, int character)
     setFieldText(clip, field, text);
 }
 
+void MovieRuntime::loadInto(Clip& clip, const std::shared_ptr<LoadedMovie>& movie)
+{
+    if (movie)
+        _loadedMovies.push_back(movie);
+    // What it had goes: its children, art and variables; where it is and
+    // its object stay.
+    std::vector<std::unique_ptr<Clip>> children;
+    children.swap(clip.children);
+    for (auto& child : children)
+        if (child)
+        {
+            forget(*child);
+            _gone.push_back(std::move(child));
+        }
+    clip.parked.clear();
+    clip.scriptRemoved.clear();
+    clip.timelineObjects.clear();
+    clip.timelineFrames.clear();
+    clip.texts.clear();
+    clip.frameScripts.clear();
+    if (clip.display && clip.display->isContainer())
+        static_cast<display::DisplayObjectContainer*>(clip.display.get())->removeChildren();
+    if (auto* drawing = dynamic_cast<display::Sprite*>(clip.display.get()))
+        drawing->graphics.clear();
+    if (clip.object && !clip.object->properties.empty())
+        clip.object->properties = as3::PropertyMap();
+    clip.movie = movie.get();
+    clip.symbol = nullptr;
+    clip.timeline = movie && !movie->scenes.empty() ? movie->scenes.front() : emptySymbol().timelines.front();
+    clip.length = lengthOf(clip.timeline);
+    clip.frame = 0;
+    clip.playing = true;
+    clip.freshlyLoaded = true;
+    // A movie in place of the root's: its scenes play.
+    if (&clip == _root.get())
+    {
+        _scenes.assign(1, clip.timeline);
+        if (movie && !movie->scenes.empty())
+            _scenes = movie->scenes;
+        _scene = 0;
+    }
+    display::markDisplayChanged();
+    if (changed)
+        changed();
+}
+
+Clip* MovieRuntime::level(int number, bool make)
+{
+    if (number == 0)
+        return _root.get();
+    const auto found = _levels.find(number);
+    if (found != _levels.end())
+        return found->second.get();
+    if (!make || number < 0 || !_stage)
+        return nullptr;
+    auto made = std::make_unique<Clip>();
+    made->timeline = emptySymbol().timelines.front();
+    made->name = "_level" + std::to_string(number);
+    made->key = made->name;
+    made->level = number;
+    made->length = 1;
+    attachDisplay(*made);
+    _stage->placeAtDepth(made->display, number);
+    Clip* clip = made.get();
+    _levels[number] = std::move(made);
+    return clip;
+}
+
+void MovieRuntime::afterFirstFrame(Clip& clip, std::function<void()> then)
+{
+    _firstFrames.push_back(FirstFrame{clip.life, std::move(then)});
+}
+
 void MovieRuntime::eachClip(const std::function<void(Clip&)>& visit)
 {
     std::function<void(Clip&)> walk = [&](Clip& clip) {
@@ -1891,6 +1976,11 @@ void MovieRuntime::eachClip(const std::function<void(Clip&)>& visit)
                 walk(*child);
     };
     walk(*_root);
+    std::vector<Clip*> levels;
+    for (const auto& [number, level] : _levels)
+        levels.push_back(level.get());
+    for (Clip* level : levels)
+        walk(*level);
 }
 
 void MovieRuntime::runFunction(const as3::ValuePtr& function, const std::vector<as3::ValuePtr>& args, Clip& scope,
@@ -2248,6 +2338,7 @@ void MovieRuntime::syncChildren(Clip& clip, std::vector<Clip*>& entered)
             made->layer = layer;
             made->placed = instance;
             made->name = instance->name;
+            made->movie = clip.movie;
             // ActionScript 2 names what has no name of its own.
             if (made->name.empty() && !_as3 && !_canvas)
                 made->name = "instance" + std::to_string(++_instanceCount);
@@ -2896,6 +2987,14 @@ void MovieRuntime::settle()
 
 void MovieRuntime::advance(Clip& clip, std::vector<Clip*>& entered, std::vector<Clip*>& scripts)
 {
+    // A movie just loaded into it: its first frame entered, not moved on
+    // from.
+    if (clip.freshlyLoaded)
+    {
+        clip.freshlyLoaded = false;
+        entered.push_back(&clip);
+        return;
+    }
     // Children already about go on; new ones are entered after.
     std::vector<Clip*> before;
     for (const auto& child : clip.children)
@@ -2987,6 +3086,11 @@ void MovieRuntime::step()
     std::vector<Clip*> entered;
     std::vector<Clip*> scripts;
     advance(*_root, entered, scripts);
+    std::vector<Clip*> levels;
+    for (const auto& [number, level] : _levels)
+        levels.push_back(level.get());
+    for (Clip* level : levels)
+        advance(*level, entered, scripts);
     // enterFrame for every clip about, AS2's handlers and AS3's listeners,
     // before the frames' scripts.
     _stage->enterFrame();
@@ -3010,6 +3114,18 @@ void MovieRuntime::step()
         if (!clip->gone)
             runFrameScripts(*clip);
     enter(entered);
+    // What waited for a loaded movie's first frame.
+    std::vector<FirstFrame> waiting;
+    waiting.swap(_firstFrames);
+    for (FirstFrame& each : waiting)
+    {
+        Clip* clip = *each.clip;
+        if (clip && clip->freshlyLoaded)
+            _firstFrames.push_back(std::move(each));
+        else if (clip && !clip->gone)
+            each.then();
+    }
+    settle();
     // ActionScript 2's text fields show their variables as the frame's
     // scripts left them.
     if (_actions && !_as3)
@@ -3502,7 +3618,10 @@ Clip* MovieRuntime::resolve(Clip& from, const std::string& target)
     {
         if (part.empty())
             continue;
-        if (part == "_root" || part == "_level0")
+        if (part.size() > 6 && part.compare(0, 6, "_level") == 0 &&
+            part.find_first_not_of("0123456789", 6) == std::string::npos)
+            at = level(std::atoi(part.c_str() + 6), false);
+        else if (part == "_root")
             at = _root.get();
         else if (part == "_parent" || part == "..")
             at = at->parent ? at->parent : at;

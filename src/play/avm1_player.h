@@ -112,6 +112,9 @@ private:
     as3::Val clipNatives();
     /// Those of TextField.prototype (as2_text_field.cpp).
     as3::Val textNatives();
+    /// Those of loading: MovieClip's loadMovie and the rest,
+    /// MovieClipLoader (as2_loading.cpp).
+    as3::Val loadNatives();
     /// The clip a path given BitmapData.draw names, from the root.
     Clip* drawTarget(const std::string& path);
     /// Those of flash.filters (as2_filters.cpp).
@@ -135,9 +138,16 @@ public:
     as3::Val textFieldNamed(Clip& clip, const std::string& name);
     /// The text fields showing a variable show what it holds now.
     void updateTextBindings();
+    /// Loads the movie or image at \a url into \a clip; with a
+    /// MovieClipLoader as \a loader, tells its listeners how it goes.
+    void loadMovie(const std::string& url, Clip& clip, const as3::Val& loader);
+    /// Loads the variables at \a url (name=value&...) onto \a clip;
+    /// \a method 2 posts the clip's own.
+    void loadVariables(const std::string& url, Clip& clip, int method);
     /// \a message to the listeners of the global \a broadcaster (Key,
     /// Mouse) with \a args, through its broadcastMessage.
-    void broadcast(const std::string& broadcaster, const std::string& message, const std::vector<as3::Val>& args = {});
+    void broadcast(const std::string& broadcaster, const std::string& message, const std::vector<as3::Val>& args);
+    void broadcast(const std::string& broadcaster, const std::string& message);
     /// A timeline placed \a field: one showing a variable takes its value,
     /// or gives it its text.
     void fieldPlaced(const std::shared_ptr<display::TextField>& field);
@@ -162,7 +172,7 @@ private:
     std::vector<std::function<void()>> _posted;
     std::shared_ptr<bool> _alive = std::make_shared<bool>(true);
     /// The objects scripts have had for text fields, while the fields live.
-    std::vector<std::pair<std::weak_ptr<display::DisplayObject>, as3::Val>> _textObjects;
+    std::vector<std::pair<std::weak_ptr<display::DisplayObject>, as3::ValuePtr>> _textObjects;
 };
 
 } // namespace play

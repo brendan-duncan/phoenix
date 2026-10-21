@@ -28,6 +28,8 @@ What changed in each release of Phoenix, newest first.
 - ActionScript 2 has the drawing API (lineStyle, beginFill, beginGradientFill, beginBitmapFill, moveTo, lineTo, curveTo, endFill, clear), localToGlobal, globalToLocal, getBounds and getRect worked out to the twip as SWF movies do, setMask, getSWFVersion, and a movie clip's blendMode, cacheAsBitmap, opaqueBackground and scrollRect
 - ActionScript 2 has TextField and TextFormat: createTextField, every text field's properties and methods (text, htmlText, textColor, border, autoSize, scroll, maxChars, setTextFormat, getTextFormat, replaceText and the rest), the variable a field shows kept in step with the field, and its _x, _alpha and other properties, as SWF movies have them; an imported SWF's HTML text fields keep their HTML, and its text fields with no font are in Times New Roman, as SWF movies show them
 - ActionScript 1 and 2 have AsBroadcaster, and Key, Mouse, Selection and text fields broadcast through it: Mouse's listeners hear onMouseDown, onMouseUp and onMouseMove
+- Test Movie loads other movies and images as SWF movies ask: loadMovie, loadMovieNum and unloadMovie into clips and levels, MovieClipLoader with its onLoadStart, onLoadProgress, onLoadComplete, onLoadInit and onLoadError, loadVariables, and getBytesLoaded and getBytesTotal; a loaded movie's clips find its own library
+- Phoenix's SWF movies write loadMovie, loadVariables and getURL's method as SWF players read them, so they load into the right target
 
 ## 0.23.0
 

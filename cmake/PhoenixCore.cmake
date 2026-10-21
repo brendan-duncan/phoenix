@@ -245,6 +245,7 @@ set(PHOENIX_CORE_PLAY_SOURCES
     play/as2_movie_clip.cpp
     play/as2_filters.cpp
     play/as2_library.cpp
+    play/as2_loading.cpp
     play/as2_shared_object.cpp
     play/as2_text_field.cpp
     play/as2_xml.cpp

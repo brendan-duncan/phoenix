@@ -14,6 +14,10 @@ public:
     /// Reads the document at \a filePath; null, with errorString(), when it
     /// cannot. Never throws.
     fla::FLADocument* parse(const std::string& filePath);
+    /// Reads the SWF movie \a swf as a document named \a filePath (a movie
+    /// loaded by another as it plays); null, with errorString(), when it
+    /// cannot. Never throws.
+    fla::FLADocument* parseSwf(const std::vector<uint8_t>& swf, const std::string& filePath);
 
     const std::string& errorString() const
     {
@@ -28,7 +32,9 @@ public:
     }
 
 private:
-    fla::FLADocument* parseUnguarded(const std::string& filePath);
+    template <typename Read>
+    fla::FLADocument* guarded(Read read);
+    fla::FLADocument* parseUnguarded(const std::string& filePath, const std::vector<uint8_t>* swf = nullptr);
     static void keepUnreadFiles(const ZipReader& zipReader, fla::Document& document);
 
     std::string _errorString;

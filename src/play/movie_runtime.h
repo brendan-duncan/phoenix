@@ -61,6 +61,23 @@ class ActionsHost;
 class ActionsPlayer;
 struct CompiledActions;
 
+/// A movie another loads as it plays (loadMovie, MovieClipLoader): its
+/// scenes and library, kept while the movie playing it lives.
+struct LoadedMovie
+{
+    /// What keeps the rest: the document read from it.
+    std::shared_ptr<void> holder;
+    std::vector<const Timeline*> scenes;
+    std::vector<const Symbol*> library;
+    std::string url;
+    double width = 0.0;
+    double height = 0.0;
+    double frameRate = 0.0;
+    int version = 0;
+    /// Its size, as getBytesTotal gives it.
+    size_t bytes = 0;
+};
+
 /// The root timeline, or a movie clip or button on it as it plays: which
 /// frame it is on, whether it plays on, and what scripts have set on it.
 /// What a script has not set comes from the timeline as drawn.
@@ -159,6 +176,15 @@ struct Clip
     /// Whether its ActionScript 3 class (its symbol's, or the document
     /// class for the root) has been run on it.
     bool classed = false;
+    /// The movie it plays when one was loaded into it (or into what holds
+    /// it); null for the movie that started.
+    const LoadedMovie* movie = nullptr;
+    /// A movie was loaded into it: its first frame is entered as the next
+    /// frame plays, not moved on from.
+    bool freshlyLoaded = false;
+    /// The level it is, for a level's main timeline (_level0, _level1...);
+    /// -1 for the rest.
+    int level = -1;
     /// What addFrameScript gave its frames (from 0), run in place of the
     /// frame's own script.
     std::map<int, as3::ValuePtr> frameScripts;
@@ -331,6 +357,11 @@ public:
         std::string error;
     };
     std::function<void(const Request& request, std::function<void(const Response&)> done)> fetch;
+    /// A movie it loads, read from its bytes; null when they are not a
+    /// movie. Unset, it loads none.
+    std::function<std::shared_ptr<LoadedMovie>(const std::vector<uint8_t>& bytes, const std::string& url)> readMovie;
+    /// The size of the movie as getBytesTotal gives it.
+    size_t bytesTotal = 0;
     /// An image file's pixels (premultiplied ARGB, a row after another):
     /// false when it cannot be read. PNG is read without it.
     std::function<bool(const std::vector<uint8_t>& bytes, int& width, int& height, std::vector<uint32_t>& pixels)>
@@ -538,8 +569,19 @@ private:
     void startDrag(Clip& clip, bool lockCenter, const std::vector<double>& bounds);
     void stopDrag();
 
-    /// The symbol a linkage names, or null.
-    const Symbol* linked(const std::string& linkage) const;
+    /// The symbol a linkage names, or null: in \a from's movie first when
+    /// one was loaded into it.
+    const Symbol* linked(const std::string& linkage, const Clip* from = nullptr) const;
+    /// \a movie in \a clip in place of what it had (its children, art
+    /// and variables), its first frame entered as the next frame plays;
+    /// with none, the clip is left empty (unloadMovie).
+    void loadInto(Clip& clip, const std::shared_ptr<LoadedMovie>& movie);
+    /// The main timeline of level \a number (0 the root), made when
+    /// \a make and there is none; null when there is none.
+    Clip* level(int number, bool make);
+    /// \a then once \a clip has played the first frame of the movie
+    /// loaded into it.
+    void afterFirstFrame(Clip& clip, std::function<void()> then);
     /// A new clip of \a symbol named \a name on \a parent (null: not on the
     /// stage yet, as ActionScript 3's new makes it), its first frame
     /// entered once the script making it is done. With \a depth
@@ -629,6 +671,16 @@ private:
     /// a hidden layer of a scene when hidden layers are left out.
     bool playing(const Timeline& timeline, const Layer& layer) const;
     std::unique_ptr<Clip> _root;
+    /// The levels over the root's (_level1...), by number.
+    std::map<int, std::unique_ptr<Clip>> _levels;
+    /// The movies loaded as it plays, kept while it does.
+    std::vector<std::shared_ptr<LoadedMovie>> _loadedMovies;
+    struct FirstFrame
+    {
+        std::shared_ptr<Clip*> clip;
+        std::function<void()> then;
+    };
+    std::vector<FirstFrame> _firstFrames;
     /// The clip whose script runs: what a bare stop() or gotoAndPlay()
     /// moves (tellTarget changes it).
     Clip* _current = nullptr;

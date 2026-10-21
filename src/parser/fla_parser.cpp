@@ -20,12 +20,28 @@ using namespace fla;
 
 fla::FLADocument* FLAParser::parse(const std::string& filePath)
 {
+    return guarded([&]() { return parseUnguarded(filePath); });
+}
+
+fla::FLADocument* FLAParser::parseSwf(const std::vector<uint8_t>& swf, const std::string& filePath)
+{
+    if (!SwfImport::isSwf(swf.data(), swf.size()))
+    {
+        _errorString = "It is not an SWF movie.";
+        return nullptr;
+    }
+    return guarded([&]() { return parseUnguarded(filePath, &swf); });
+}
+
+template <typename Read>
+fla::FLADocument* FLAParser::guarded(Read read)
+{
     // A damaged or hostile file must never take Phoenix down: anything
     // thrown while reading (a bad number, a size too big to allocate) ends
     // the read with an error instead.
     try
     {
-        return parseUnguarded(filePath);
+        return read();
     }
     catch (const std::bad_alloc&)
     {
@@ -42,7 +58,7 @@ fla::FLADocument* FLAParser::parse(const std::string& filePath)
     return nullptr;
 }
 
-fla::FLADocument* FLAParser::parseUnguarded(const std::string& filePath)
+fla::FLADocument* FLAParser::parseUnguarded(const std::string& filePath, const std::vector<uint8_t>* swf)
 {
     // A .fla from Flash CS4 or earlier is not a zip at all but a Microsoft
     // compound document holding a binary format: it is converted to the
@@ -50,6 +66,16 @@ fla::FLADocument* FLAParser::parseUnguarded(const std::string& filePath)
     ZipReader zipReader;
     bool fromBinary = false;
     bool fromSwf = false;
+    if (swf)
+    {
+        std::map<std::string, std::vector<uint8_t>> files;
+        if (!SwfImport::convert(*swf, files, _errorString, &_warningString))
+            return nullptr;
+        zipReader.openMemory(std::move(files));
+        fromBinary = true;
+        fromSwf = true;
+    }
+    else
     {
         std::ifstream file(filePath, std::ios::binary);
         unsigned char magic[8] = {};
