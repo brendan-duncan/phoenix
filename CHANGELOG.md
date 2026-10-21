@@ -2,7 +2,7 @@
 
 What changed in each release of Phoenix, newest first.
 
-## Unreleased
+## 0.22.0
 
 - The web editor has a phone layout: the stage, large buttons for the common tools and playing (with loop, onion skin and a time slider), the timeline and Properties as drawers that slide over the stage and close when you tap off them, and the other panels one at a time; a long press on the stage opens the pop-up palette, and a button sets a turned stage straight; phones get it the first time, and View > Phone Layout switches it
 - The web editor asks before a tab with unsaved changes closes, starts tablets in the Simple workspace, plays sound more smoothly, and gives the commands on keys the browser keeps (Ctrl+N, Ctrl+W, Ctrl+T, Ctrl+Tab) keys with Alt
