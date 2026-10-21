@@ -7,6 +7,7 @@ What changed in each release of Phoenix, newest first.
 - ActionScript 2 has flash.geom's Point, Rectangle, Matrix, ColorTransform and Transform (and a movie clip's transform) in movies made for SWF 8 or later; x, y, alpha and the other ActionScript 3 names are ordinary variables in a movie's compiled ActionScript 2; for-in visits properties newest first, NaN equals NaN, and joining an array writes undefined as undefined, as SWF movies have them
 - ActionScript 2 has flash.display.BitmapData in movies made for SWF 8 or later, with the numbers its methods give in place of errors, and BitmapData.loadBitmap for a library bitmap; bitmaps read back the exact colors SWF movies give, and copyPixels, threshold, getColorBoundsRect, noise, perlinNoise and pixelDissolve work as they do in SWF movies, in ActionScript 3 too
 - ActionScript 2 has flash.filters (Bevel, Blur, ColorMatrix, Convolution, DisplacementMap, DropShadow, Glow, GradientBevel and GradientGlow) and a movie clip's filters, keeping each number as SWF movies do, and BitmapData.applyFilter and generateFilterRect; an imported SWF's filter angles, strengths and blurs come in exactly
+- ActionScript 2 has flash.external.ExternalInterface, which says it is not available (there is no web page around a movie in Phoenix), with its helpers that write values as XML and read them back
 
 ## 0.23.0
 
