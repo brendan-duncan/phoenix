@@ -2852,7 +2852,8 @@ void MovieRuntime::step()
     }
     else if (_actions)
     {
-        // ActionScript 1's setInterval and setTimeout.
+        // Loads finished, then ActionScript 1's setInterval and setTimeout.
+        _actions->frameStarted();
         _vm->runTimers(static_cast<double>(
             std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - _started).count()));
         settle();

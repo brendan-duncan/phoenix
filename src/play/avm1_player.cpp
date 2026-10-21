@@ -388,9 +388,9 @@ ActionsPlayer::ActionsPlayer(MovieRuntime& runtime, as3::VM& vm, int version)
     , _host(std::make_unique<ActionsHost>(runtime, version))
     , _interpreter(std::make_unique<as3::avm1::Interpreter>(vm, *_host, version))
 {
-    // The player's own ActionScript 2 classes: SharedObject from SWF 6,
-    // flash.geom and the rest of flash.* from SWF 8.
-    if (version >= 6)
+    // The player's own ActionScript 1 and 2 classes: XML from SWF 5,
+    // SharedObject from 6, flash.geom and the rest of flash.* from 8.
+    if (version >= 5)
     {
         static const std::shared_ptr<const std::vector<uint8_t>> library = []() {
             as3::avm1::Compiler compiler;
@@ -563,6 +563,7 @@ as3::Val ActionsPlayer::natives()
     natives->properties["noObject"] = _interpreter->noObject();
     natives->properties["version"] = as3::Val::number(_interpreter->version());
     natives->properties["sharedObject"] = sharedObjectNatives();
+    natives->properties["xml"] = xmlNatives();
     return natives;
 }
 
@@ -570,6 +571,8 @@ ActionsPlayer::~ActionsPlayer()
 {
     // What scripts kept in SharedObjects is saved as the movie ends.
     saveSharedObjects();
+    *_alive = false;
+    _posted.clear();
     _interpreter.reset();
 }
 

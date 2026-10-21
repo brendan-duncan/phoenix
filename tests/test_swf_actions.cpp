@@ -406,6 +406,42 @@ TEST(swf_actions_have_the_players_filters)
     }
 }
 
+TEST(swf_actions_have_the_players_xml)
+{
+    // ActionScript 1 and 2's XML: a tree of XMLNodes, parsed leniently, a
+    // status for what went wrong.
+    std::map<std::string, std::vector<uint8_t>> files;
+    files["DOMDocument.xml"] = bytesOf(
+        "<DOMDocument xmlns=\"http://ns.adobe.com/xfl/2008/\" width=\"200\" height=\"100\" frameRate=\"12\">"
+        "<timelines><DOMTimeline name=\"Scene 1\"><layers><DOMLayer name=\"actions\"><frames>"
+        "<DOMFrame index=\"0\" duration=\"1\"><Actionscript><script><![CDATA["
+        "var x = new XML('<?xml version=\"1.0\"?><list a=\"1\" b=\"two\"><item id=\"i\">A &amp; B</item><empty/></list>');\n"
+        "trace(x.status + ' ' + x.xmlDecl + ' ' + x.firstChild.nodeName + ' ' + x.firstChild.attributes.b);\n"
+        "var item = x.firstChild.firstChild;\n"
+        "trace(item.firstChild.nodeValue + ' ' + item.nextSibling.nodeName + ' ' + x.idMap.i.nodeName);\n"
+        "trace(x.firstChild.childNodes.length + ' ' + x);\n"
+        "x.firstChild.appendChild(x.createElement('more'));\n"
+        "trace(x.firstChild.lastChild.previousSibling.nodeName + ' ' + new XML('<a><b></a>').status);\nstop();\n"
+        "]]></script></Actionscript><elements/></DOMFrame>"
+        "</frames></DOMLayer></layers></DOMTimeline></timelines></DOMDocument>");
+    Parsed source = parse(files);
+    if (!source.document)
+        return;
+    Reopened movie;
+    reopen(*source.document, movie);
+    CHECK(movie.ok && movie.parsed.document);
+    if (!movie.ok || !movie.parsed.document)
+        return;
+    const std::string got = play(*movie.parsed.document, 1, std::string());
+    const std::string wanted = "0 <?xml version=\"1.0\"?> list two\n"
+                               "A & B empty item\n"
+                               "2 <list a=\"1\" b=\"two\"><item id=\"i\">A &amp; B</item><empty /></list>\n"
+                               "empty -10\n";
+    CHECK(got == wanted);
+    if (got != wanted)
+        std::printf("    got:\n%s", got.c_str());
+}
+
 TEST(swf_actions_keep_shared_objects)
 {
     // SharedObject in ActionScript 2: kept in a .sol file and read back the

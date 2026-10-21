@@ -15,6 +15,7 @@ What changed in each release of Phoenix, newest first.
 - ActionScript 3's ByteArray writes and reads objects (writeObject, readObject) in AMF3 and AMF0, with registerClassAlias, getClassByAlias, ObjectEncoding and IExternalizable; for-in over an array in a movie's compiled ActionScript 3 gives its indexes as numbers
 - ActionScript 3's SharedObject keeps its data in .sol files, as SharedObjects in SWF movies are kept, so dates, byte arrays and typed objects come back as they were; its size is its file's, and data saved by earlier versions of Phoenix is still read
 - ActionScript 1 and 2 have SharedObject in movies made for SWF 6 or later: getLocal, data, flush, getSize and clear, kept in .sol files as SWF movies keep them and saved again as the movie ends
+- ActionScript 1 and 2 have XML and XMLNode in movies made for SWF 5 or later: parsing as SWF movies do (leniently, with a status for what went wrong, the XML declaration and DOCTYPE kept), the node tree with its attributes, siblings, namespaces and idMap, toString, and XML.load and sendAndLoad from a file or the web
 - In a movie's compiled ActionScript 3, a name in more than one private namespace (a class's and its file's) is found in any of them, such as a helper class written after a package in the same file
 - Test Movie says when a document class does not extend Sprite (the main timeline cannot be one), as SWF movies do
 

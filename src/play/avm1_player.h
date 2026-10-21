@@ -1,6 +1,9 @@
 #pragma once
 
+#include "movie_runtime.h"
+
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <string>
 #include <vector>
@@ -86,6 +89,8 @@ public:
     /// Calls the function \a clip's object has as \a name (onEnterFrame,
     /// onLoad), as ActionScript 1 finds it, when it has one.
     void callHandler(Clip& clip, const std::string& name);
+    /// What waits for the frame to start (loads finished), done.
+    void frameStarted();
 
 private:
     /// The player's side of the library's classes, as an object of functions.
@@ -100,6 +105,10 @@ private:
     /// hold as the movie ends.
     as3::Val sharedObjectNatives();
     void saveSharedObjects();
+    /// Those of XML (as2_xml.cpp), and loading for it: a file or the web,
+    /// told on the frame after.
+    as3::Val xmlNatives();
+    void load(const MovieRuntime::Request& request, std::function<void(const MovieRuntime::Response&)> done);
     /// A flash.filters object's filter: false for anything else.
     bool filterOf(const as3::Val& value, display::BitmapFilter& out);
 
@@ -114,6 +123,10 @@ private:
     /// The SharedObjects scripts opened, to save as the movie ends.
     struct SharedObjects;
     std::shared_ptr<SharedObjects> _sharedObjects;
+    /// Loads finished, to tell of as the next frame starts; and whether
+    /// the player is still about for them.
+    std::vector<std::function<void()>> _posted;
+    std::shared_ptr<bool> _alive = std::make_shared<bool>(true);
 };
 
 } // namespace play
