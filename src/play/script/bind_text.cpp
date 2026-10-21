@@ -1,6 +1,7 @@
 // flash.text: TextField, TextFormat, Font and the constants classes.
 
 #include "native.h"
+#include "../css.h"
 
 #include <algorithm>
 
@@ -97,6 +98,42 @@ Val Bindings::newTextFormat(const display::TextFormat& value)
 
 void Bindings::defineText()
 {
+    // What flash.text.StyleSheet (resources/as3/flash/text) reads CSS with:
+    // each selector and its properties (camelCase) in the order written, or
+    // null when it does not parse; a color (#rrggbb, else 0); a font-family
+    // list as a font.
+    vm.defineFunction("flash.text.__parseCSS", NATIVE() {
+        std::vector<CssRule> rules;
+        if (!parseCss(args.empty() ? std::string() : vm.toString(args[0]), rules))
+            return Val::null();
+        std::vector<Val> out;
+        for (const CssRule& rule : rules)
+        {
+            Val properties = vm.newObject();
+            for (const auto& [name, value] : rule.properties)
+                vm.setProperty(properties, camelCase(name), text(value));
+            out.push_back(text(rule.selector));
+            out.push_back(properties);
+        }
+        return vm.newArray(std::move(out));
+    }, 1);
+    vm.defineFunction("flash.text.__parseColor", NATIVE() {
+        std::string color = args.empty() ? std::string() : vm.toString(args[0]);
+        if (color.empty() || color[0] != '#')
+            return number(0);
+        color = color.substr(1);
+        while (!color.empty() && std::isspace(static_cast<unsigned char>(color.back())))
+            color.pop_back();
+        if (color.empty() || color.size() > 6 || !std::all_of(color.begin(), color.end(), [](char c) {
+                return std::isxdigit(static_cast<unsigned char>(c)) != 0;
+            }))
+            return number(0);
+        return number(static_cast<double>(std::strtoul(color.c_str(), nullptr, 16)));
+    }, 1);
+    vm.defineFunction("flash.text.__fontList", NATIVE() {
+        return text(fontList(args.empty() ? std::string() : vm.toString(args[0])));
+    }, 1);
+
     const auto constants = [this](const char* name, std::initializer_list<std::pair<const char*, const char*>> values) {
         NativeClassBuilder builder = vm.defineNativeClass(name);
         for (const auto& [constant, value] : values)
@@ -234,8 +271,11 @@ void Bindings::defineText()
             changed(f);
             return Val();
         })
-        .property("htmlText", NATIVE() { return text(field(vm, self).htmlText()); }, NATIVE() {
+        .property("htmlText", NATIVE() { return text(field(vm, self).htmlText()); }, NATIVE(this) {
             display::TextField& f = field(vm, self);
+            // A style sheet's styles as they are now.
+            if (const Val* sheet = self->properties.lookup("$styleSheet"); sheet && sheet->isObject())
+                f.setStyles(stylesOf(*sheet));
             f.setHtmlText(args[0].isNullish() ? std::string() : vm.toString(args[0]));
             changed(f);
             return Val();
@@ -417,7 +457,38 @@ void Bindings::defineText()
         .property("gridFitType", NATIVE() { return text("pixel"); }, ignore)
         .property("sharpness", NATIVE() { return number(0); }, ignore)
         .property("thickness", NATIVE() { return number(0); }, ignore)
-        .property("styleSheet", NATIVE() { return Val::null(); }, ignore)
+        // The runs of characters of one format each, as TextRuns (a method
+        // the player has without saying so).
+        .method("getTextRuns", NATIVE(this) {
+            display::TextField& f = field(vm, self);
+            const int length = f.length();
+            const int begin = std::max(0, given(args, 0) ? intArg(args, 0) : 0);
+            const int end = std::min(length, given(args, 1) ? intArg(args, 1) : length);
+            std::vector<Val> runs;
+            const Val runClass = vm.classValue(classNamed("flash.text.TextRun").get());
+            for (int at = begin; at < end;)
+            {
+                int next = at + 1;
+                while (next < end && f.formatAt(next) == f.formatAt(at))
+                    ++next;
+                runs.push_back(vm.construct(runClass,
+                    std::vector<Val>{number(at), number(next), newTextFormat(f.formatAt(at))}));
+                at = next;
+            }
+            return vm.newArray(std::move(runs));
+        })
+        .property("styleSheet", NATIVE() {
+            const Val* sheet = self->properties.lookup("$styleSheet");
+            return sheet ? *sheet : Val::null();
+        }, NATIVE(this) {
+            self->properties["$styleSheet"] = args[0];
+            display::TextField& f = field(vm, self);
+            if (args[0].isObject())
+                f.setStyles(stylesOf(args[0]));
+            else
+                f.setStyles(std::nullopt);
+            return Val();
+        })
         .property("useRichTextClipboard", NATIVE() { return boolean(false); }, ignore)
         .getter("textSnapshot", NATIVE() { return Val::null(); })
         .define();

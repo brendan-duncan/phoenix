@@ -10,6 +10,8 @@ What changed in each release of Phoenix, newest first.
 - ActionScript 2 has flash.external.ExternalInterface, which says it is not available (there is no web page around a movie in Phoenix), with its helpers that write values as XML and read them back
 - ActionScript 3 has Namespace and QName, and a movie's namespace constants are Namespace objects
 - ActionScript 3 has flash.xml's XMLDocument, XMLNode and XMLNodeType, parsing as ActionScript 1 and 2's XML does
+- ActionScript 3 has flash.text.StyleSheet (parseCSS, setStyle, getStyle, transform) and TextField.styleSheet: HTML text set after takes each tag's and class's styles, as SWF movies show it; TextField.getTextRuns too
+- Text with characters past the Basic Multilingual Plane (emoji) comes through ActionScript 3 whole, built a character at a time or compiled in halves
 - Malformed XML in ActionScript 3 throws the error SWF movies throw for each mistake (an unclosed element, comment, CDATA section, attribute or processing instruction, a bad name, markup after the root), and an end tag may have spaces or attributes after its name
 - In ActionScript 3, a class's prototype is one object whose properties its instances find, set or deleted, and whose constructor is the class
 - ActionScript 3 has flash.utils.Proxy: a subclass's getProperty, setProperty, callProperty, hasProperty, deleteProperty and nextNameIndex, nextName and nextValue answer for the names it does not declare and for for-in and for each

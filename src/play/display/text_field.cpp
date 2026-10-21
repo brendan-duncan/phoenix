@@ -6,6 +6,7 @@
 #include "../../data/static_text.h"
 
 #include <algorithm>
+#include <set>
 #include <cctype>
 #include <cmath>
 #include <cstdio>
@@ -335,6 +336,13 @@ std::string TextField::text() const
 
 void TextField::setText(const std::string& text)
 {
+    // With a style sheet, text is HTML.
+    if (_styled)
+    {
+        setHtmlText(text);
+        return;
+    }
+    _given = text;
     std::u32string chars = toCodePoints(text);
     std::u32string normalized;
     for (size_t i = 0; i < chars.size(); ++i)
@@ -355,6 +363,7 @@ void TextField::appendText(const std::string& text)
 
 void TextField::replaceText(int begin, int end, const std::string& text)
 {
+    _given.reset();
     begin = std::max(0, std::min(begin, length()));
     end = std::max(begin, std::min(end, length()));
     std::u32string chars;
@@ -469,6 +478,9 @@ void TextField::setTextColor(uint32_t color)
 
 std::string TextField::htmlText() const
 {
+    // With a style sheet: what was given, as it was.
+    if (_styled && _given)
+        return *_given;
     std::string html;
     int at = 0;
     const int n = length();
@@ -515,16 +527,34 @@ std::string TextField::htmlText() const
         }
         html += "</P>";
         at = end + 1;
-    } while (at <= n && at > 0 && at - 1 < n);
+        // A last empty paragraph (after a final line break) is not written.
+    } while (at < n);
     return html;
+}
+
+void TextField::setStyles(std::optional<std::map<std::string, Style>> styles)
+{
+    // What was given before reads back as it was laid out.
+    if (styles && !_styled)
+        _given.reset();
+    _styled = styles.has_value();
+    _styles = styles ? std::move(*styles) : std::map<std::string, Style>();
 }
 
 void TextField::setHtmlText(const std::string& html)
 {
+    // With a style sheet, the same HTML again changes nothing.
+    if (_styled && _given && *_given == html)
+        return;
+    _given = html;
     std::u32string chars;
     std::vector<TextFormat> formats;
     std::vector<TextFormat> stack{_default};
     std::vector<std::string> open;
+    // Each open tag's style display, and how many open tags hide what they
+    // hold (display: none).
+    std::vector<std::string> openDisplay;
+    int hidden = 0;
     // A paragraph's formats (align) go on all of its characters as it ends.
     size_t paragraphStart = 0;
     std::optional<std::string> paragraphAlign;
@@ -535,6 +565,8 @@ void TextField::setHtmlText(const std::string& html)
         paragraphAlign.reset();
     };
     const auto add = [&](const std::u32string& text) {
+        if (hidden > 0)
+            return;
         for (char32_t c : text)
         {
             if (c == U'\n' || c == U'\r')
@@ -585,20 +617,27 @@ void TextField::setHtmlText(const std::string& html)
         const std::string name = lower(tag.substr(0, nameEnd));
         if (name == "br")
         {
-            breakLine();
+            if (hidden == 0)
+                breakLine();
             continue;
         }
         if (closing)
         {
             // Back to the format outside the tag closed.
+            std::string display;
             for (size_t i = open.size(); i-- > 0;)
                 if (open[i] == name)
                 {
+                    display = openDisplay[i];
+                    for (size_t k = i; k < openDisplay.size(); ++k)
+                        if (openDisplay[k] == "none")
+                            --hidden;
                     open.resize(i);
+                    openDisplay.resize(i);
                     stack.resize(i + 1);
                     break;
                 }
-            if (name == "p" || name == "li")
+            if (hidden == 0 && (_styled ? display == "block" : (name == "p" || name == "li")))
                 breakLine();
             continue;
         }
@@ -618,8 +657,9 @@ void TextField::setHtmlText(const std::string& html)
             format.underline = true;
         else if (name == "p")
         {
-            // A paragraph starts on a line of its own.
-            if (!chars.empty() && chars.back() != U'\r')
+            // A paragraph starts on a line of its own (with a style sheet,
+            // unless its style shows it inline).
+            if (!_styled && !chars.empty() && chars.back() != U'\r')
                 breakLine();
             if (auto align = attribute("align"))
                 paragraphAlign = lower(*align);
@@ -672,15 +712,46 @@ void TextField::setHtmlText(const std::string& html)
             if (auto v = attribute("blockindent"))
                 format.blockIndent = std::atof(v->c_str());
         }
+        // A StyleSheet's styles: the tag's, then its class's.
+        std::string display;
+        if (!_styles.empty())
+        {
+            // How it shows is the tag's style's to say (a class's display
+            // can only hide it).
+            const auto apply = [&](const std::string& selector, bool tag) {
+                const auto found = _styles.find(selector);
+                if (found == _styles.end())
+                    return;
+                format.merge(found->second.format);
+                if (!found->second.display.empty() && (tag || found->second.display == "none"))
+                    display = found->second.display;
+            };
+            apply(name, true);
+            if (auto cls = attribute("class"))
+                apply("." + lower(*cls), false);
+        }
+        // With a style sheet, a tag the player does not know shows on lines
+        // of its own unless its style says otherwise; the rest inline.
+        if (_styled && display.empty())
+        {
+            static const std::set<std::string> known = {"a", "b", "i", "u", "font", "span", "img", "textformat", "p",
+                "li"};
+            display = known.count(name) ? "inline" : "block";
+        }
+        if (display == "block" && hidden == 0 && !chars.empty() && chars.back() != U'\r')
+            breakLine();
         if (!selfClosing)
         {
             open.push_back(name);
+            openDisplay.push_back(display);
             stack.push_back(format);
+            if (display == "none")
+                ++hidden;
         }
     }
     endParagraph();
-    // The last paragraph's end is not kept.
-    if (!chars.empty() && chars.back() == U'\r')
+    // The last paragraph's end is not kept (with a style sheet, it is).
+    if (!_styled && !chars.empty() && chars.back() == U'\r')
     {
         chars.pop_back();
         formats.pop_back();

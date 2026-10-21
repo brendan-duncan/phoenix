@@ -970,6 +970,33 @@ Val Bindings::newByteArray(std::vector<uint8_t> bytes)
     return instance("flash.utils.ByteArray", host);
 }
 
+std::map<std::string, display::TextField::Style> Bindings::stylesOf(const Val& sheet)
+{
+    std::map<std::string, display::TextField::Style> styles;
+    if (!sheet.isObject())
+        return styles;
+    const Val names = vm.getProperty(sheet, "styleNames");
+    if (!names.isObject())
+        return styles;
+    for (const Val& name : std::vector<Val>(names->elements))
+    {
+        const Val style = vm.callMethod(sheet, "getStyle", std::vector<Val>{name});
+        display::TextField::Style made;
+        if (const TextFormatHost* format = vm.callMethod(sheet, "transform", std::vector<Val>{style}).host<TextFormatHost>())
+            made.format = format->format;
+        if (style.isObject())
+        {
+            const Val display = vm.getProperty(style, "display");
+            if (display.isString())
+                made.display = display.str();
+        }
+        std::string key = vm.toString(name);
+        std::transform(key.begin(), key.end(), key.begin(), [](unsigned char c) { return char(std::tolower(c)); });
+        styles[key] = made;
+    }
+    return styles;
+}
+
 std::string Bindings::aliasOf(const as3::ClassInfo* cls) const
 {
     for (const auto& [alias, aliased] : classAliases)

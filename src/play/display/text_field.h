@@ -2,6 +2,7 @@
 
 #include "display_object.h"
 
+#include <map>
 #include <optional>
 #include <string>
 #include <vector>
@@ -94,6 +95,20 @@ public:
     /// make the formats.
     std::string htmlText() const;
     void setHtmlText(const std::string& html);
+
+    /// A StyleSheet's style: the format it gives, and how it shows
+    /// ("block" on lines of its own, "none" hidden, or inline).
+    struct Style
+    {
+        TextFormat format;
+        std::string display;
+    };
+    /// A style sheet's styles, by selector: a tag's name ("p") or a class
+    /// (".note"), lower case; none for no style sheet. HTML text set after
+    /// takes them, and with a style sheet htmlText reads back the text as it
+    /// was given.
+    void setStyles(std::optional<std::map<std::string, Style>> styles);
+    bool styled() const { return _styled; }
     void appendText(const std::string& text);
     /// replaceText: [\a begin, \a end) replaced, in the format of the first
     /// character replaced (or the default format).
@@ -225,6 +240,11 @@ private:
     std::u32string _chars;
     std::vector<TextFormat> _formats;
     TextFormat _default;
+    std::map<std::string, Style> _styles;
+    bool _styled = false;
+    /// The text given last, HTML or plain, as htmlText reads it back with
+    /// a style sheet.
+    std::optional<std::string> _given;
     Type _type = Type::Dynamic;
     AutoSize _autoSize = AutoSize::None;
     bool _multiline = false;

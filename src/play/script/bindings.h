@@ -276,6 +276,9 @@ public:
     as3::Val newFilter(const display::BitmapFilter& filter);
     as3::Val newTextFormat(const display::TextFormat& format);
     as3::Val newByteArray(std::vector<uint8_t> bytes);
+    /// A StyleSheet's styles as a text field takes them, by selector; none
+    /// for anything else.
+    std::map<std::string, display::TextField::Style> stylesOf(const as3::Val& sheet);
     /// registerClassAlias: the alias a class is written with (empty for
     /// none), and the class an alias reads back as (null for none).
     std::string aliasOf(const as3::ClassInfo* cls) const;
