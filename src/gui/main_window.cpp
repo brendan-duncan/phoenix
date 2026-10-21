@@ -46,6 +46,7 @@
 #include "../edit/behaviors.h"
 #include "../edit/bone_corrections.h"
 #include "../edit/controllers.h"
+#include "../edit/slices.h"
 #include "../jsfl/behavior_frames.h"
 #include "../edit/shape_operators.h"
 #include "../edit/text_animators.h"
@@ -12746,12 +12747,30 @@ void MainWindow::setupPropertiesPanel()
             slices->setChecked(symbol->scale9);
             slices->setToolTip("Scale a movie clip by its middle and edges, keeping its corners: edit the symbol to place the guides");
             form->addRow(QString(), slices);
+            // More guides each way: the strips between them take turns,
+            // kept at their size and stretched.
+            auto* across = new QSpinBox(dialog);
+            auto* down = new QSpinBox(dialog);
+            for (QSpinBox* box : {across, down})
+            {
+                box->setRange(2, 20);
+                box->setEnabled(symbol->scale9);
+                connect(slices, &QCheckBox::toggled, box, &QWidget::setEnabled);
+            }
+            across->setValue(static_cast<int>(fla::slices::across(*symbol).size()));
+            down->setValue(static_cast<int>(fla::slices::down(*symbol).size()));
+            across->setToolTip("How many guides cut the symbol across: the strips between them take turns, the first "
+                               "keeping its size, the next stretching. Two is 9-slice scaling");
+            down->setToolTip("How many guides cut the symbol down: the strips between them take turns, the first "
+                             "keeping its size, the next stretching. Two is 9-slice scaling");
+            form->addRow("Guides across:", across);
+            form->addRow("Guides down:", down);
             auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, dialog);
             connect(buttons, &QDialogButtonBox::accepted, dialog, &QDialog::accept);
             connect(buttons, &QDialogButtonBox::rejected, dialog, &QDialog::reject);
             form->addRow(buttons);
             const fla::FLADocument* asked = _flaDocument;
-            modal::open(dialog, [this, afterLibraryEdit, asked, symbol, type, className, slices](int result) {
+            modal::open(dialog, [this, afterLibraryEdit, asked, symbol, type, className, slices, across, down](int result) {
                 if (result != QDialog::Accepted || _flaDocument != asked)
                     return;
 
@@ -12786,6 +12805,23 @@ void MainWindow::setupPropertiesPanel()
                         for (int i = 0; i < 4; ++i)
                             stack.push(fla::CommandPtr(new fla::SetPropertyCommand<double>(
                                 *fields[i], *fields[i], std::round(values[i] * 20.0) / 20.0, "9-Slice Scaling")));
+                    }
+                }
+                // Guides added or taken away: spread evenly over the art,
+                // each way whose count changed.
+                const std::vector<double> xs = fla::slices::across(*symbol);
+                const std::vector<double> ys = fla::slices::down(*symbol);
+                if (symbol->scale9 && (across->value() != static_cast<int>(xs.size()) || down->value() != static_cast<int>(ys.size())))
+                {
+                    const QRectF art = _phoenixView ? _phoenixView->symbolFramesBounds(symbol, 0, 0) : QRectF();
+                    if (art.isValid() && !art.isEmpty())
+                    {
+                        const std::vector<double> newXs = across->value() == static_cast<int>(xs.size())
+                            ? xs : fla::slices::spread(art.left(), art.right(), across->value());
+                        const std::vector<double> newYs = down->value() == static_cast<int>(ys.size())
+                            ? ys : fla::slices::spread(art.top(), art.bottom(), down->value());
+                        if (fla::CommandPtr command = fla::slices::set(*symbol, newXs, newYs, "Slice Guides"))
+                            stack.push(std::move(command));
                     }
                 }
                 stack.endMacro();

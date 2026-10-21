@@ -160,26 +160,42 @@ function renderObject(ctx, object, parentM, parentC, r) {
 /// the corners kept at their size, the edges stretched one way and the
 /// middle both, to fill the box its scale gives it. Each cell is its
 /// content drawn through that cell's own stretch, clipped to the cell.
+/// With more guides, the strips between them take turns, the first kept at
+/// its size, the next stretched, and so on.
 function drawNineSlice(ctx, object, parentM, c, r) {
     var box = object._localBounds(false), grid = object._scale9Grid;
     if (!box)
         return false;
     var m = object._m;
-    var cut = function (low, high, first, last, scale) {
-        var from = [low, Math.max(low, Math.min(high, first)), Math.max(low, Math.min(high, last)), high];
+    var cut = function (low, high, guides, scale) {
+        var from = [low];
+        for (var g = 0; g < guides.length; ++g)
+            from.push(Math.max(low, Math.min(high, guides[g])));
+        from.push(high);
         var reach = (high - low) * Math.abs(scale);
-        var fixed = (from[1] - from[0]) + (from[3] - from[2]);
+        var fixed = 0, stretching = 0;
+        for (var s = 0; s + 1 < from.length; ++s) {
+            if (s % 2 === 0)
+                fixed += from[s + 1] - from[s];
+            else
+                stretching += from[s + 1] - from[s];
+        }
         var k = fixed > reach && fixed > 0 ? reach / fixed : 1;
-        var start = low * scale;
+        var room = Math.max(0, reach - fixed * k);
         var sign = scale < 0 ? -1 : 1;
-        var to = [start, start + sign * (from[1] - from[0]) * k, start + (high - low) * scale - sign * (from[3] - from[2]) * k,
-            start + (high - low) * scale];
+        var to = [low * scale];
+        for (var t = 0; t + 1 < from.length; ++t) {
+            var width = from[t + 1] - from[t];
+            var placed = t % 2 === 0 ? width * k : (stretching > 0 ? width / stretching * room : 0);
+            to.push(to[t] + sign * placed);
+        }
         return {from: from, to: to};
     };
-    var xs = cut(box[0], box[2], grid.x, grid.x + grid.width, m[0]);
-    var ys = cut(box[1], box[3], grid.y, grid.y + grid.height, m[3]);
-    for (var j = 0; j < 3; ++j) {
-        for (var i = 0; i < 3; ++i) {
+    var slices = object._slices;
+    var xs = cut(box[0], box[2], slices ? slices[0] : [grid.x, grid.x + grid.width], m[0]);
+    var ys = cut(box[1], box[3], slices ? slices[1] : [grid.y, grid.y + grid.height], m[3]);
+    for (var j = 0; j + 1 < ys.from.length; ++j) {
+        for (var i = 0; i + 1 < xs.from.length; ++i) {
             var fx = xs.from[i + 1] - xs.from[i], fy = ys.from[j + 1] - ys.from[j];
             var tx = xs.to[i + 1] - xs.to[i], ty = ys.to[j + 1] - ys.to[j];
             if (fx <= 0 || fy <= 0 || !tx || !ty)

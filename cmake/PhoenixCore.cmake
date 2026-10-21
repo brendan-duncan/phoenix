@@ -58,6 +58,7 @@ set(PHOENIX_CORE_SOURCES
     edit/color_art.cpp
     edit/combine_objects.cpp
     edit/feather.cpp
+    edit/slices.cpp
     edit/command_stack.cpp
     edit/controllers.cpp
     edit/curve_fit.cpp

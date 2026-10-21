@@ -1112,6 +1112,9 @@ private:
     void drawSliceGuides(QPainter& painter);
     /// The guide being dragged (1 left, 2 right, 3 top, 4 bottom; 0 none)
     /// and where it is, in the symbol's space.
+    /// The slice guide being dragged: 1 and up across, kSliceDown + 1 and
+    /// up down; 0 for none.
+    static constexpr int kSliceDown = 1000;
     int _sliceDrag = 0;
     double _sliceValue = 0.0;
     void drawRulersAndGuides(QPainter& painter);

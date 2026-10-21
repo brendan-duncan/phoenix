@@ -13,6 +13,7 @@ What changed in each release of Phoenix, newest first.
 - The Subtract blend mode is exact where art is see-through or soft-edged, and the Alpha blend mode leaves what is under it alone where the instance is clear or absent, as SWF movies have them
 - In Test Movie, scripts read a tweened movie clip's position and alpha where the tween has them on that frame, and its width and height as an SWF movie measures them, without the margin left for smoothing edges
 - Color Matrix and Convolution filters, added from Add Filter or brought in with an imported SWF movie, and published to SWF; an SWF's color matrix comes back as Adjust Color where it is one
+- More slice guides: a symbol can have any number of guides across and down, the strips between them taking turns keeping their size and stretching, such as a panel whose top edge has a tab that keeps its size
 - Soft edges on vector art: Feather in the Properties panel fades a fill's or a stroke's edge over the pixels you choose, for soft shading, glows and shadows that stay vectors
 - Joysticks in the Controllers panel: a handle dragged about a square drives some properties across and others down, such as a head that turns and nods, and can pick a graphic's drawing from a grid of them
 

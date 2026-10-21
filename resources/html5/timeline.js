@@ -53,6 +53,8 @@ phoenix._.initTimeline = function (object, cls) {
     object._scriptFrame = -1;
     if (def && def.scale9)
         object._scale9Grid = new flash.geom.Rectangle(def.scale9[0], def.scale9[1], def.scale9[2] - def.scale9[0], def.scale9[3] - def.scale9[1]);
+    // More guides than the grid's: across and down.
+    object._slices = def && def.slices ? def.slices : null;
     if (def) {
         // Its frame script runs before those of the children it makes.
         if (object instanceof MovieClip)

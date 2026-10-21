@@ -283,8 +283,14 @@ grace,Grace Hopper,Rear Admiral,#C02040</code></pre>
   <li>Right-click the symbol in the library and choose <strong>Properties...</strong>.</li>
   <li>Check <strong>Enable guides for 9-slice scaling</strong> and click OK. The guides start a third of the way in from each edge of the art.</li>
   <li>Edit the symbol (double-click it in the library, or an instance on the stage). The four guides show as dashed lines.</li>
-  <li>With the Selection tool, drag each guide to where the corner should end: the left and right guides across, the top and bottom ones up and down. Each move is one step to undo, and a guide stops short of its partner.</li>
+  <li>With the Selection tool, drag each guide to where the corner should end: the left and right guides across, the top and bottom ones up and down. Each move is one step to undo, and a guide stops short of its neighbors.</li>
 </ol>
+
+<h3 id="more-slice-guides">More guides</h3>
+
+<p>A symbol can have more than two guides each way. The strips between them take turns: the first keeps its size, the next stretches, the next keeps its size again, and so on. Four guides across a panel keep a tab in the middle of its top edge at its size while the edge on either side of it stretches; six keep two such parts. Set <strong>Guides across</strong> and <strong>Guides down</strong> in Symbol Properties: the guides are spread evenly over the art, and you drag each into place as above. The stretching strips share the room there is as they share the art, and with too little room the strips that keep their size shrink together.</p>
+
+<p>The first and last guide each way are the symbol's 9-slice guides, so other apps that open the FLA, and SWF movies, scale it by those; the stage, exported images and movies, and HTML5 pages use them all.</p>
 
 <h2>Symbol properties and linkage</h2>
 
@@ -294,6 +300,7 @@ grace,Grace Hopper,Rear Admiral,#C02040</code></pre>
   <dt>Type</dt><dd>Movie clip, button or graphic. Instances placed from now on take the new type; those already placed keep their own <strong>Type</strong> until you change it in the Properties panel.</dd>
   <dt>Class</dt><dd>The name scripts create the symbol by, which exports it for ActionScript. Leave it empty for none. <strong>Linkage...</strong> on the same menu sets just this, and the name shows in the library's Linkage column. See <a href="actionscript.html#actionscript-3">ActionScript 3</a>.</dd>
   <dt>Enable guides for 9-slice scaling</dt><dd>See <a href="#9-slice-scaling">9-slice scaling</a> above.</dd>
+  <dt>Guides across, Guides down</dt><dd>How many slice guides cut the symbol each way; two is 9-slice scaling. See <a href="#more-slice-guides">More guides</a>.</dd>
 </dl>
 
 <p>Each change is one step to undo. To rename the symbol, use <strong>Rename</strong> on the library's menu.</p>

@@ -280,7 +280,7 @@ class DisplayObject extends EventDispatcher {
         this._changed();
     }
     get scale9Grid() { return this._scale9Grid ? this._scale9Grid.clone() : null; }
-    set scale9Grid(value) { this._scale9Grid = value ? value.clone() : null; this._changed(); }
+    set scale9Grid(value) { this._scale9Grid = value ? value.clone() : null; this._slices = null; this._changed(); }
     get transform() {
         if (!this._transform)
             this._transform = new Transform(this);

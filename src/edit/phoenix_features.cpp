@@ -100,6 +100,8 @@ const std::vector<Feature>& all()
             "the instances without those filters, which show as an Adjust Color and a Blur that change nothing",
             {"phoenixColorMatrix", "phoenixConvolution"}},
         {"vector-feather", "Feathered fills and strokes", "fills and strokes with hard edges", {"phoenixFeather"}},
+        {"slice-guides", "More slice guides", "9-slice scaling by the first and last guide each way",
+            {"phoenixSlicesX", "phoenixSlicesY"}},
         {"interactive-states", "Interactive states",
             "the scripts the states were turned into, which play the same, but no States panel to change them in",
             {"phoenixStates"}},

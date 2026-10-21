@@ -65,7 +65,7 @@ void writeSample(const fs::path& folder)
         "</layers></DOMTimeline></timelines></DOMDocument>");
     writeText(folder / "LIBRARY" / "Peg.xml",
         "<DOMSymbolItem xmlns=\"http://ns.adobe.com/xfl/2008/\" name=\"Peg\" symbolType=\"graphic\" "
-        "phoenixPeg=\"true\" phoenixMouthChart=\"A=1\"><timeline><DOMTimeline name=\"Peg\"><layers>"
+        "phoenixPeg=\"true\" phoenixMouthChart=\"A=1\" phoenixSlicesX=\"0,10,20,30\"><timeline><DOMTimeline name=\"Peg\"><layers>"
         "<DOMLayer name=\"Layer 1\"><frames><DOMFrame index=\"0\"><elements/></DOMFrame></frames></DOMLayer>"
         "</layers></DOMTimeline></timeline></DOMSymbolItem>");
 }

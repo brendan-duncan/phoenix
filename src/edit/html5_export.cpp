@@ -6,6 +6,7 @@
 #include "deformers.h"
 #include "depth_sort.h"
 #include "feather.h"
+#include "slices.h"
 #include "frame_bake.h"
 #include "frame_sound.h"
 #include "graphic_loop.h"
@@ -703,7 +704,9 @@ private:
         const std::string base = attributeOf(symbol.extraAttributes, "linkageBaseClass");
         if (!base.empty())
             out += ",\"base\":" + quoted(base);
-        if (symbol.scale9)
+        if (symbol.scale9 && slices::more(symbol))
+        out += ",\"slices\":[[" + slices::encode(slices::across(symbol)) + "],[" + slices::encode(slices::down(symbol)) + "]]";
+    if (symbol.scale9)
             out += ",\"scale9\":[" + number(symbol.scaleGridLeft) + "," + number(symbol.scaleGridTop) + "," +
                 number(symbol.scaleGridRight) + "," + number(symbol.scaleGridBottom) + "]";
         std::vector<const Timeline*> timelines;

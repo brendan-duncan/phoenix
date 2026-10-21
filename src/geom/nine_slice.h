@@ -50,6 +50,14 @@ struct Cell
 std::vector<Cell> cells(const Rect& bounds, double left, double top, double right, double bottom,
     const AxisScale& scale);
 
+/// The same with any number of guides \a across and \a down (each in
+/// order): the strips between them take turns, the first keeping its size,
+/// the next stretching, and so on, the stretching ones sharing what is left
+/// as they share the art. With too little room for the strips that keep
+/// their size, they shrink together and nothing stretches.
+std::vector<Cell> cells(const Rect& bounds, const std::vector<double>& across, const std::vector<double>& down,
+    const AxisScale& scale);
+
 } // namespace nineslice
 
 } // namespace fla
