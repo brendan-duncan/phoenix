@@ -53,6 +53,7 @@ set(TEST_SOURCES
     test_tool_hints.cpp
     test_pegs.cpp
     test_controllers.cpp
+    test_feather.cpp
     test_state_graph.cpp
     test_palettes.cpp
     test_color_art.cpp

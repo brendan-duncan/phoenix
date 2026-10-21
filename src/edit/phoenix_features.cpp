@@ -5,6 +5,8 @@
 #include "../data/frame.h"
 #include "../data/group.h"
 #include "../data/layer.h"
+#include "../data/oval_primitive.h"
+#include "../data/rectangle_primitive.h"
 #include "../data/shape.h"
 #include "../data/static_text.h"
 #include "../data/stroke_style.h"
@@ -97,6 +99,7 @@ const std::vector<Feature>& all()
         {"color-matrix-convolution", "Color matrix and convolution filters",
             "the instances without those filters, which show as an Adjust Color and a Blur that change nothing",
             {"phoenixColorMatrix", "phoenixConvolution"}},
+        {"vector-feather", "Feathered fills and strokes", "fills and strokes with hard edges", {"phoenixFeather"}},
         {"interactive-states", "Interactive states",
             "the scripts the states were turned into, which play the same, but no States panel to change them in",
             {"phoenixStates"}},
@@ -185,6 +188,22 @@ std::vector<Use> used(const Document& document)
             for (const TextRun& run : static_cast<const StaticText*>(item)->runs)
                 note(run.extraAttributes, where);
             break;
+        case Element::Type::Rectangle:
+        {
+            const auto* rectangle = static_cast<const RectanglePrimitive*>(item);
+            fill(rectangle->fillStyle, where);
+            if (rectangle->strokeStyle)
+                note(rectangle->strokeStyle->extraAttributes, where);
+            break;
+        }
+        case Element::Type::Oval:
+        {
+            const auto* oval = static_cast<const OvalPrimitive*>(item);
+            fill(oval->fillStyle, where);
+            if (oval->strokeStyle)
+                note(oval->strokeStyle->extraAttributes, where);
+            break;
+        }
         case Element::Type::Group:
             for (const Element* member : static_cast<const Group*>(item)->members)
                 element(member, where);

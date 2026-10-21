@@ -24,6 +24,7 @@
 #include "../edit/three_d.h"
 #include "../edit/layer_effects.h"
 #include "../edit/image_blur.h"
+#include "../edit/feather.h"
 
 #include <optional>
 
@@ -6428,18 +6429,14 @@ void PhoenixView::drawElement(QPainter& painter, const fla::Element* element, co
         const fla::RectanglePrimitive* rectangle = static_cast<const fla::RectanglePrimitive*>(element);
         QPen pen = getPen(rectangle->strokeStyle);
         QBrush brush = getFillBrush(rectangle->fillStyle, rectangle->localBounds);
-        painter.setPen(pen);
-        painter.setBrush(brush);
-        painter.drawPath(roundedRectanglePath(*rectangle));
+        drawPrimitive(painter, roundedRectanglePath(*rectangle), brush, pen, rectangle->fillStyle, rectangle->strokeStyle);
     }
     else if (type == fla::Element::Type::Oval)
     {
         const fla::OvalPrimitive* oval = static_cast<const fla::OvalPrimitive*>(element);
         QPen pen = getPen(oval->strokeStyle);
         QBrush brush = ovalIsOpen(*oval) ? QBrush(Qt::NoBrush) : getFillBrush(oval->fillStyle, oval->localBounds);
-        painter.setPen(pen);
-        painter.setBrush(brush);
-        painter.drawPath(ovalPrimitivePath(*oval));
+        drawPrimitive(painter, ovalPrimitivePath(*oval), brush, pen, oval->fillStyle, oval->strokeStyle);
     }
     else if (type == fla::Element::Type::StaticText)
     {
@@ -6683,6 +6680,87 @@ QPen PhoenixView::getPen(const fla::StrokeStyle* strokeStyle, bool scaleForEleme
     return pen;
 }
 
+namespace {
+
+/// \a path painted with \a brush and \a pen, its edges fading out over
+/// \a feather (in the painter's coordinates): by the GPU stage itself, or
+/// else drawn sharp on a picture of its own, blurred, and laid down.
+void drawFeathered(QPainter& painter, const QPainterPath& path, const QBrush& brush, const QPen& pen, double feather)
+{
+    if (auto* engine = dynamic_cast<ColoringEngine*>(painter.paintEngine()); engine && engine->setFeather(feather))
+    {
+        painter.setBrush(brush);
+        painter.setPen(pen);
+        painter.drawPath(path);
+        engine->setFeather(0.0);
+        return;
+    }
+    const QTransform device = painter.deviceTransform();
+    const double scale = std::sqrt(std::fabs(device.determinant()));
+    // Three passes of a box this wide come close to a Gaussian with half
+    // of it as its deviation.
+    const double blur = feather * scale;
+    if (blur < 0.5 || path.isEmpty())
+    {
+        painter.setBrush(brush);
+        painter.setPen(pen);
+        painter.drawPath(path);
+        return;
+    }
+    double line = 0.0;
+    if (pen.style() != Qt::NoPen)
+        line = (pen.isCosmetic() ? std::max(1.0, pen.widthF()) : pen.widthF() * scale) / 2.0 + 2.0;
+    const double reach = 1.5 * blur + line;
+    QRectF area = device.mapRect(path.boundingRect()).adjusted(-reach, -reach, reach, reach);
+    // Only what the device shows, and what blurs into it.
+    if (QPaintDevice* target = painter.device())
+    {
+        const double ratio = target->devicePixelRatioF();
+        const QRectF shown(-1.5 * blur, -1.5 * blur, target->width() * ratio + 3.0 * blur, target->height() * ratio + 3.0 * blur);
+        area = area.intersected(shown);
+    }
+    const QRect pixels = area.toAlignedRect();
+    if (pixels.isEmpty() || static_cast<qint64>(pixels.width()) * pixels.height() > 64ll * 1024 * 1024)
+        return;
+    QImage art(pixels.size(), QImage::Format_ARGB32_Premultiplied);
+    art.fill(Qt::transparent);
+    {
+        QPainter on(&art);
+        on.setRenderHints(painter.renderHints());
+        on.setTransform(device * QTransform::fromTranslate(-pixels.left(), -pixels.top()));
+        on.setBrush(brush);
+        on.setPen(pen);
+        on.drawPath(path);
+    }
+    fla::boxBlur(reinterpret_cast<uint32_t*>(art.bits()), art.width(), art.height(), blur, blur, 3);
+    painter.save();
+    const double ratio = painter.device() ? painter.device()->devicePixelRatioF() : 1.0;
+    painter.setWorldTransform(QTransform::fromScale(1.0 / ratio, 1.0 / ratio));
+    painter.drawImage(QPointF(pixels.topLeft()), art);
+    painter.restore();
+}
+
+} // namespace
+
+void PhoenixView::drawPrimitive(QPainter& painter, const QPainterPath& path, const QBrush& brush, const QPen& pen,
+    const fla::FillStyle* fill, const fla::StrokeStyle* stroke)
+{
+    const double fillFeather = fill && !_outlineColor.isValid() && !_maskPass ? fla::feather::of(*fill) : 0.0;
+    const double strokeFeather = stroke && !_outlineColor.isValid() && !_maskPass ? fla::feather::of(*stroke) : 0.0;
+    if (fillFeather <= 0.0 && strokeFeather <= 0.0)
+    {
+        painter.setPen(pen);
+        painter.setBrush(brush);
+        painter.drawPath(path);
+        return;
+    }
+    // The fill and the line each with its own edge.
+    if (brush.style() != Qt::NoBrush)
+        drawFeathered(painter, path, brush, Qt::NoPen, fillFeather);
+    if (pen.style() != Qt::NoPen)
+        drawFeathered(painter, path, Qt::NoBrush, pen, strokeFeather);
+}
+
 void PhoenixView::paintEntry(QPainter& painter, const PathCacheEntry& entry)
 {
     // A compositing pass: the lines alone, or the color alone.
@@ -6717,6 +6795,11 @@ void PhoenixView::paintEntry(QPainter& painter, const PathCacheEntry& entry)
     }
     if (!entry.effectPath.isEmpty())
     {
+        if (entry.feather > 0.0 && !_maskPass)
+        {
+            drawFeathered(painter, entry.effectPath, entry.pen.brush(), Qt::NoPen, entry.feather);
+            return;
+        }
         painter.setPen(Qt::NoPen);
         painter.setBrush(entry.pen.brush());
         painter.drawPath(entry.effectPath);
@@ -6760,9 +6843,20 @@ void PhoenixView::paintEntry(QPainter& painter, const PathCacheEntry& entry)
             entry.strokeOutline = stroker.createStroke(entry.painterPath);
             entry.strokeOutlineWidth = pen.widthF();
         }
+        if (entry.feather > 0.0)
+        {
+            drawFeathered(painter, entry.strokeOutline, pen.brush(), Qt::NoPen, entry.feather);
+            return;
+        }
         painter.setPen(Qt::NoPen);
         painter.setBrush(pen.brush());
         painter.drawPath(entry.strokeOutline);
+        return;
+    }
+    if (entry.feather > 0.0)
+    {
+        // A soft edge has no seam to close.
+        drawFeathered(painter, entry.painterPath, painter.brush(), pen, entry.feather);
         return;
     }
     painter.setPen(pen);
@@ -7496,12 +7590,14 @@ void PhoenixView::buildShapePaths(const fla::Shape* shape, PathCacheList& cacheE
                 brush = texturedBrush(brush.color(), spec);
             PathCacheEntry entry{ brush, Qt::NoPen, compoundPath, nullptr, fillIdx };
             entry.fixedGrain = spec.valid() && spec.fixed;
+            entry.feather = fla::feather::of(*fillStyle);
             if (seams.count(fillIdx) && opaque(brush))
                 entry.seamPath = seams[fillIdx];
             cacheEntries.push_back(entry);
             continue;
         }
         PathCacheEntry entry{ brush, Qt::NoPen, compoundPath, nullptr, fillIdx };
+        entry.feather = fla::feather::of(*fillStyle);
         if (seams.count(fillIdx) && opaque(brush))
             entry.seamPath = seams[fillIdx];
         cacheEntries.push_back(entry);
@@ -7620,6 +7716,7 @@ void PhoenixView::buildShapePaths(const fla::Shape* shape, PathCacheList& cacheE
                 strokePath.closeSubpath();
 
             PathCacheEntry entry{ QBrush(Qt::NoBrush), pen, strokePath, strokeStyle };
+            entry.feather = fla::feather::of(*strokeStyle);
             if (StrokeEffects::isProcedural(*strokeStyle))
                 entry.effectPath = StrokeEffects::outline(strokePath, *strokeStyle);
             if (strokeStyle->style() == fla::StrokeStyle::Style::PaintBrush)

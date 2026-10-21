@@ -1,4 +1,5 @@
 #include "swatches.h"
+#include "feather.h"
 
 #include "../data/document.h"
 #include "../data/oval_primitive.h"
@@ -601,6 +602,8 @@ void paintFills(Shape& shape, const Gradient& gradient)
         FillStyle* fill = gradientFill(gradient, &shape);
         if (!fill)
             continue;
+        if (entry.second)
+            feather::set(*fill, feather::of(*entry.second));
         std::replace(shape.fills.begin(), shape.fills.end(), entry.second, fill);
         delete entry.second;
         entry.second = fill;
@@ -616,6 +619,8 @@ void paintFills(Shape& shape, const Color& color)
         if (!solid)
         {
             solid = new SolidColor(&shape);
+            if (entry.second)
+                feather::set(*solid, feather::of(*entry.second));
             std::replace(shape.fills.begin(), shape.fills.end(), entry.second, static_cast<FillStyle*>(solid));
             delete entry.second;
             entry.second = solid;

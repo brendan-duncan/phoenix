@@ -13,4 +13,12 @@ public:
     virtual ~ColoringEngine() = default;
     virtual void pushColor(const fla::ColorTransform& color) = 0;
     virtual void popColor() = 0;
+    /// Softens the edges of what is drawn next by \a feather, in the
+    /// coordinates of the painter's transform (0 for sharp edges again);
+    /// false when the engine cannot, and the caller softens them itself.
+    virtual bool setFeather(double feather)
+    {
+        (void)feather;
+        return false;
+    }
 };

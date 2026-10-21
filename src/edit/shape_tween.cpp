@@ -1,5 +1,6 @@
 #include "shape_tween.h"
 
+#include "feather.h"
 #include "shape_merge.h"
 #include "transform_blend.h"
 
@@ -55,13 +56,10 @@ void blendEntries(std::vector<Entry>& entries, const std::vector<Entry>& others,
 
 } // namespace
 
-FillStyle* blendFills(const FillStyle* a, const FillStyle* b, double t, DOMElement* parent)
-{
-    if (!a)
-        return b ? cloneFill(b, parent) : nullptr;
-    if (!b || b->type() != a->type())
-        return cloneFill(a, parent);
+namespace {
 
+FillStyle* blendFillContents(const FillStyle* a, const FillStyle* b, double t, DOMElement* parent)
+{
     switch (a->type())
     {
     case FillStyle::Type::SolidColor:
@@ -71,6 +69,7 @@ FillStyle* blendFills(const FillStyle* a, const FillStyle* b, double t, DOMEleme
         SolidColor* result = new SolidColor(parent);
         for (int c = 0; c < 4; ++c)
             result->color[c] = mixByte(from->color[c], to->color[c], t);
+        result->extraAttributes = from->extraAttributes;
         return result;
     }
 
@@ -107,6 +106,21 @@ FillStyle* blendFills(const FillStyle* a, const FillStyle* b, double t, DOMEleme
     return cloneFill(a, parent);
 }
 
+} // namespace
+
+FillStyle* blendFills(const FillStyle* a, const FillStyle* b, double t, DOMElement* parent)
+{
+    if (!a)
+        return b ? cloneFill(b, parent) : nullptr;
+    if (!b || b->type() != a->type())
+        return cloneFill(a, parent);
+    FillStyle* result = blendFillContents(a, b, t, parent);
+    // A soft edge softens or sharpens through the tween.
+    if (result)
+        feather::set(*result, mix(feather::of(*a), feather::of(*b), t));
+    return result;
+}
+
 StrokeStyle* blendStrokes(const StrokeStyle* a, const StrokeStyle* b, double t, DOMElement* parent)
 {
     if (!a)
@@ -116,6 +130,7 @@ StrokeStyle* blendStrokes(const StrokeStyle* a, const StrokeStyle* b, double t, 
         return result;
 
     result->weight = mix(a->weight, b->weight, t);
+    feather::set(*result, mix(feather::of(*a), feather::of(*b), t));
     if (a->fill)
     {
         delete result->fill;

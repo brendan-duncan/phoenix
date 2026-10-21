@@ -133,7 +133,14 @@ public:
     int pathsMade = 0;
 
     /// \a path as Rive's, converted the first time it is drawn.
-    rive::RenderPath* pathOf(const QPainterPath& path);
+    /// With \a clockwiseRule, filled by the clockwise rule (for a path
+    /// clockwiseOf() made).
+    rive::RenderPath* pathOf(const QPainterPath& path, bool clockwiseRule = false);
+    /// \a path with the same area, its outlines running clockwise and its
+    /// holes the other way, for the clockwise fill rule; kept for the next
+    /// time it is drawn.
+    const QPainterPath& clockwiseOf(const QPainterPath& path);
+    QHash<quint64, QPainterPath> clockwise;
     /// \a image as Rive's, uploaded the first time it is drawn (by its
     /// cache key \a key, its pixels made by \a pixels only then).
     rive::RenderImage* imageOf(qint64 key, const std::function<QImage()>& pixels);
@@ -195,6 +202,11 @@ public:
             _colors.pop_back();
         _colorsKey = keyOf(_colors);
     }
+    bool setFeather(double feather) override
+    {
+        _feather = static_cast<float>(std::max(0.0, feather));
+        return true;
+    }
 
     explicit Engine(Impl& impl)
         : QPaintEngine(QPaintEngine::AllFeatures)
@@ -213,6 +225,7 @@ public:
         _pen = QPen();
         _colors.clear();
         _colorsKey = 0;
+        _feather = 0.0f;
         return true;
     }
     bool end() override { return true; }
@@ -558,8 +571,26 @@ private:
         float additive;
         if (!blendOf(_mode, blend, additive))
             ++unsupportedModes;
-        rive::RenderPath* made = _impl.pathOf(path);
-        rive::RenderPaint* paint = paintFor(brush, blend, additive);
+        rive::RenderPath* made = nullptr;
+        rive::RenderPaint* paint = nullptr;
+        if (_feather > 0.0f)
+        {
+            // Rive feathers a fill only by the clockwise rule: outlines
+            // turned clockwise, holes the other way.
+            made = _impl.pathOf(_impl.clockwiseOf(path), true);
+            _scratch = _impl.context->makeRenderPaint();
+            _scratch->style(rive::RenderPaintStyle::fill);
+            _scratch->blendMode(blend);
+            _scratch->additiveness(additive);
+            shade(*_scratch, brush);
+            _scratch->feather(_feather);
+            paint = _scratch.get();
+        }
+        else
+        {
+            made = _impl.pathOf(path);
+            paint = paintFor(brush, blend, additive);
+        }
         start(*renderer, matrixOf(_transform));
         renderer->drawPath(made, paint);
         renderer->restore();
@@ -590,7 +621,7 @@ private:
                                                                        : rive::StrokeJoin::miter;
         rive::RenderPaint* paint = nullptr;
         const QBrush& brush = _pen.brush();
-        if (brush.style() == Qt::SolidPattern)
+        if (brush.style() == Qt::SolidPattern && _feather <= 0.0f)
         {
             QByteArray key(sizeof(uint32_t) + sizeof(float) + 4, 0);
             const uint32_t color = colorOf(colored(brush.color()));
@@ -626,6 +657,8 @@ private:
             _scratch->blendMode(blend);
             _scratch->additiveness(additive);
             shade(*_scratch, brush);
+            if (_feather > 0.0f)
+                _scratch->feather(_feather);
             paint = _scratch.get();
         }
         // Dashes are drawn solid: Rive's renderer has none of its own.
@@ -665,6 +698,8 @@ private:
     QBrush _brush;
     QPen _pen;
     rive::rcp<rive::RenderPaint> _scratch;
+    /// The feather of what is drawn next, in the painter's coordinates.
+    float _feather = 0.0f;
     std::vector<fla::ColorTransform> _colors;
     quint64 _colorsKey = 0;
 };
@@ -689,16 +724,57 @@ RiveCanvas::Impl::~Impl()
     images.clear();
     fills.clear();
     strokes.clear();
+    clockwise.clear();
     target.reset();
     context.reset();
     if (texture)
         wgpuTextureRelease(texture);
 }
 
-rive::RenderPath* RiveCanvas::Impl::pathOf(const QPainterPath& path)
+const QPainterPath& RiveCanvas::Impl::clockwiseOf(const QPainterPath& path)
+{
+    const quint64 key = contentKey(path);
+    auto found = clockwise.find(key);
+    if (found != clockwise.end())
+        return *found;
+    if (clockwise.size() > 4096)
+        clockwise.clear();
+    // The area as outlines that do not cross, each turned by how deep it
+    // lies inside the others: even depths are outlines, odd ones holes.
+    const QList<QPolygonF> polygons = path.simplified().toSubpathPolygons();
+    QPainterPath turned;
+    turned.setFillRule(Qt::WindingFill);
+    for (qsizetype i = 0; i < polygons.size(); ++i)
+    {
+        QPolygonF polygon = polygons[i];
+        if (polygon.size() < 3)
+            continue;
+        int depth = 0;
+        for (qsizetype j = 0; j < polygons.size(); ++j)
+            if (j != i && polygons[j].size() >= 3 && polygons[j].containsPoint(polygon.front(), Qt::OddEvenFill))
+                ++depth;
+        double area = 0.0;
+        for (qsizetype k = 0; k < polygon.size(); ++k)
+        {
+            const QPointF& a = polygon[k];
+            const QPointF& b = polygon[(k + 1) % polygon.size()];
+            area += a.x() * b.y() - b.x() * a.y();
+        }
+        // With y down, a positive area runs clockwise on the screen.
+        const bool clockwiseNow = area > 0.0;
+        const bool outline = depth % 2 == 0;
+        if (clockwiseNow != outline)
+            std::reverse(polygon.begin(), polygon.end());
+        turned.addPolygon(polygon);
+        turned.closeSubpath();
+    }
+    return *clockwise.insert(key, turned);
+}
+
+rive::RenderPath* RiveCanvas::Impl::pathOf(const QPainterPath& path, bool clockwiseRule)
 {
     ++pathsUsed;
-    const quint64 key = contentKey(path);
+    const quint64 key = contentKey(path) ^ (clockwiseRule ? 0xC10C4715E0000000ull : 0ull);
     auto found = paths.find(key);
     if (found != paths.end())
     {
@@ -739,8 +815,9 @@ rive::RenderPath* RiveCanvas::Impl::pathOf(const QPainterPath& path)
     if (count > 1 && last == start)
         raw.close();
     CachedPath cached;
-    cached.path = context->makeRenderPath(raw, path.fillRule() == Qt::OddEvenFill ? rive::FillRule::evenOdd
-                                                                                   : rive::FillRule::nonZero);
+    cached.path = context->makeRenderPath(raw, clockwiseRule            ? rive::FillRule::clockwise
+            : path.fillRule() == Qt::OddEvenFill ? rive::FillRule::evenOdd
+                                                 : rive::FillRule::nonZero);
     cached.frame = frame;
     return paths.insert(key, std::move(cached))->path.get();
 }

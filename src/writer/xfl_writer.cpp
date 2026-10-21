@@ -402,6 +402,7 @@ void XFLWriter::writeFillStyle(const FillStyle& fill, XMLElement* parent)
         XMLElement* node = doc->NewElement("LinearGradient");
         setString(node, "spreadMethod", gradient.spreadMethod);
         setString(node, "interpolationMethod", gradient.interpolationMethod);
+        writeKept(node, gradient.extraAttributes);
         writeMatrix(gradient.transform, node);
         for (const GradientEntry& entry : gradient.entries)
         {
@@ -421,6 +422,7 @@ void XFLWriter::writeFillStyle(const FillStyle& fill, XMLElement* parent)
         setDouble(node, "focalPointRatio", gradient.focalPointRatio, 0.0);
         setString(node, "spreadMethod", gradient.spreadMethod);
         setString(node, "interpolationMethod", gradient.interpolationMethod);
+        writeKept(node, gradient.extraAttributes);
         writeMatrix(gradient.transform, node);
         for (const RadialEntry& entry : gradient.entries)
         {
@@ -439,6 +441,7 @@ void XFLWriter::writeFillStyle(const FillStyle& fill, XMLElement* parent)
         XMLElement* node = doc->NewElement("BitmapFill");
         setString(node, "bitmapPath", bitmap.bitmapPath);
         setBool(node, "bitmapIsClipped", bitmap.bitmapIsClipped, false);
+        writeKept(node, bitmap.extraAttributes);
         writeMatrix(bitmap.transform, node);
         parent->InsertEndChild(node);
         break;

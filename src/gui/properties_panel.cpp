@@ -48,6 +48,7 @@
 #include "../edit/edit_context.h"
 #include "../edit/element_clone.h"
 #include "../edit/element_commands.h"
+#include "../edit/feather.h"
 #include "../edit/frame_commands.h"
 #include "../edit/frame_sound.h"
 #include "../edit/property_command.h"
@@ -2113,6 +2114,30 @@ void PropertiesPanel::addPrimitiveSections(QVBoxLayout* layout, fla::Element* el
             },
             stroke->weight);
     }
+    // Soft edges for the fill and the line, each its own.
+    for (const bool lines : {false, true})
+    {
+        fla::DOMElement* style = lines ? static_cast<fla::DOMElement*>(*strokeSlot) : static_cast<fla::DOMElement*>(*fillSlot);
+        if (!style)
+            continue;
+        HotText* amount = makeHotText(0.0, 500.0, 1, " px");
+        amount->setValue(fla::feather::of(*style));
+        amount->setStep(0.5);
+        amount->setToolTip(lines ? QString("How far the line's edges fade out, in pixels: 0 for a sharp line")
+                                 : QString("How far the fill's edges fade out, in pixels: 0 for sharp edges"));
+        bindLive(amount, []() {}, [](double) {}, [=, this]() {
+            fla::DOMElement* now = lines ? static_cast<fla::DOMElement*>(*strokeSlot) : static_cast<fla::DOMElement*>(*fillSlot);
+            if (!now)
+                return;
+            push(std::unique_ptr<fla::Command>(new fla::SetPropertyCommand<std::vector<std::pair<std::string, std::string>>>(
+                now->extraAttributes, now->extraAttributes, fla::feather::with(*now, amount->value()),
+                lines ? "Stroke Feather" : "Fill Feather")));
+            emit documentEdited();
+        });
+        section->addField(row, lines ? 1 : 0, lines ? "Line feather" : "Feather", amount);
+        if (lines || !*strokeSlot)
+            ++row;
+    }
     if (row == 0)
         section->addWide(row++, fieldLabel("No fill or stroke", this));
 }
@@ -2295,6 +2320,44 @@ void PropertiesPanel::addShapeSections(QVBoxLayout* layout, fla::Shape* shape)
                 });
             },
             stroke->weight);
+    }
+
+    // Soft edges: how far the fills' and the lines' edges fade out.
+    if (anyFill || stroke)
+    {
+        QWidget* featherRow = new QWidget(this);
+        QHBoxLayout* featherLayout = new QHBoxLayout(featherRow);
+        featherLayout->setContentsMargins(0, 0, 0, 0);
+        featherLayout->setSpacing(6);
+        featherLayout->addWidget(fieldLabel("Feather", featherRow));
+        featherLayout->addStretch();
+        const auto addFeather = [&, this](bool strokes) {
+            bool mixed = false;
+            const double now = strokes ? fla::feather::ofStrokes(*shape, &mixed) : fla::feather::ofFills(*shape, &mixed);
+            HotText* amount = makeHotText(0.0, 500.0, 1, " px");
+            amount->setValue(now);
+            amount->setStep(0.5);
+            amount->setToolTip(strokes ? QString("How far the lines' edges fade out, in pixels: 0 for sharp lines")
+                                       : QString("How far the fills' edges fade out, in pixels: 0 for sharp edges"));
+            if (mixed)
+                amount->setToolTip(amount->toolTip() + " (they differ now)");
+            bindLive(amount, []() {}, [](double) {}, [=]() {
+                const double value = amount->value();
+                restyle(strokes ? "Stroke Feather" : "Fill Feather", [&](fla::Shape& after) {
+                    if (strokes)
+                        fla::feather::setStrokes(after, value);
+                    else
+                        fla::feather::setFills(after, value);
+                });
+            });
+            featherLayout->addWidget(fieldLabel(strokes ? "Stroke" : "Fill", featherRow));
+            featherLayout->addWidget(amount);
+        };
+        if (anyFill)
+            addFeather(false);
+        if (stroke)
+            addFeather(true);
+        section->addWide(row++, featherRow);
     }
 
     // A gradient or bitmap fill: what it is, and Edit to take it to the

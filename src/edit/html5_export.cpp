@@ -5,6 +5,7 @@
 #include "command.h"
 #include "deformers.h"
 #include "depth_sort.h"
+#include "feather.h"
 #include "frame_bake.h"
 #include "frame_sound.h"
 #include "graphic_loop.h"
@@ -536,6 +537,12 @@ std::vector<BakedRun> bakedRuns(const Timeline& timeline)
                                            shapeops::any(*static_cast<const Shape*>(element)));
         if (operated)
             add(i, i + 1, "shape operators");
+        bool feathered = false;
+        for (const Frame* frame : layer->frames)
+            for (const Element* element : frame ? frame->elements : std::vector<Element*>())
+                feathered = feathered || (element && feather::any(*element));
+        if (feathered)
+            add(i, i + 1, "feathered fills or strokes");
         if (uncarriedEffects(*layer))
             add(i, i + 1, "effects on instances no filter carries");
     }

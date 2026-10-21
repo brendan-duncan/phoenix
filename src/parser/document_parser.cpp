@@ -195,6 +195,9 @@ void parseFillStyle(const tinyxml2::XMLElement* element, fla::FillStyle* fillSty
 {
     fillStyle->spreadMethod = getAttribute(element, "spreadMethod");
     fillStyle->interpolationMethod = getAttribute(element, "interpolationMethod");
+    // Phoenix's own, such as a feather, kept for the save.
+    if (const char* feather = element->Attribute("phoenixFeather"))
+        fillStyle->extraAttributes.emplace_back("phoenixFeather", feather);
 
     const tinyxml2::XMLElement* matrixNode = element->FirstChildElement("matrix");
     if (matrixNode)

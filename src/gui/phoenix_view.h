@@ -1575,6 +1575,10 @@ private:
         /// the brush's art laid along it: areas, each filled in its own
         /// color, bottom first. Made once with the entry.
         std::shared_ptr<const std::vector<std::pair<QPainterPath, QColor>>> paintBrushArt;
+
+        /// How far its edge fades out, in the shape's pixels; 0 for a
+        /// hard edge.
+        double feather = 0.0;
     };
 
     /// \a centerline drawn with \a stroke's paint brush, as
@@ -1586,6 +1590,10 @@ private:
     /// Paints one cached entry: its fill and stroke, or its procedural
     /// marks, or in outline view its outline.
     void paintEntry(QPainter& painter, const PathCacheEntry& entry);
+    /// A rectangle or oval primitive's \a path painted with \a brush and
+    /// \a pen, each softened by its style's feather.
+    void drawPrimitive(QPainter& painter, const QPainterPath& path, const QBrush& brush, const QPen& pen,
+        const fla::FillStyle* fill, const fla::StrokeStyle* stroke);
     /// \a entry as the shape's operators (Trim Paths, Wiggle Path...) leave
     /// it on frame \a at of its timeline.
     PathCacheEntry operatedEntry(const fla::Shape& shape, const PathCacheEntry& entry, int at) const;
