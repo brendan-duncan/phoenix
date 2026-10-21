@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../data/color_transform.h"
 #include "../data/transform.h"
 
 #include <algorithm>
@@ -342,12 +343,17 @@ public:
     /// the movie. A held clip goes to that frame as the movie steps, its
     /// scripts there run when it gets there.
     std::function<int(const Clip& clip)> heldFrame;
-    /// Where  clip's timeline places it on its parent's frame now: part
-    /// way along a tween, on a motion path or posed by bones; nothing to
-    /// leave it where its keyframe has it. Set by whatever draws the movie,
-    /// so scripts read a tweened clip's x where it is drawn, as a player
-    /// has it before enterFrame.
-    std::function<std::optional<Transform>(const Clip& clip)> placedTransform;
+    /// Where and how  clip's timeline places it on its parent's frame
+    /// now: part way along a tween (its place and its color), on a motion
+    /// path or posed by bones; nothing to leave it as its keyframe has it.
+    /// Set by whatever draws the movie, so scripts read a tweened clip's x
+    /// and alpha as it is drawn, as a player has them before enterFrame.
+    struct PlacedNow
+    {
+        Transform transform;
+        ColorTransform color;
+    };
+    std::function<std::optional<PlacedNow>(const Clip& clip)> placedNow;
     /// Whether \a clip's art is at (\a x, \a y) on the stage, as drawn; set
     /// by whatever draws the movie. Without it, its box counts.
     std::function<bool(const Clip& clip, double x, double y)> hitShape;

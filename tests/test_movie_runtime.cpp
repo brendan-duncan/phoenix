@@ -1083,22 +1083,23 @@ TEST(movie_runtime_scripts_read_a_tweened_clip_where_it_is_placed_now)
     fla::Layer* art = movie.layer(*movie.root, "art");
     movie.place(*movie.frame(*art, 0, 10), *box, "box");
     fla::Layer* actions = movie.layer(*movie.root, "actions");
-    movie.frame(*actions, 0, 10, "this.onEnterFrame = function() { trace(box._x); };\n");
+    movie.frame(*actions, 0, 10, "this.onEnterFrame = function() { trace(box._x + ' ' + box._alpha); };\n");
     std::vector<std::string> traced;
     fla::play::MovieRuntime runtime(*movie.root, 24.0);
     runtime.trace = [&traced](const std::string& line) { traced.push_back(line); };
-    runtime.placedTransform = [](const fla::play::Clip& clip) -> std::optional<fla::Transform> {
+    runtime.placedNow = [](const fla::play::Clip& clip) -> std::optional<fla::play::MovieRuntime::PlacedNow> {
         if (!clip.parent)
             return std::nullopt;
-        fla::Transform at;
-        at.tx = 10.0 * clip.parent->frame;
-        return at;
+        fla::play::MovieRuntime::PlacedNow now;
+        now.transform.tx = 10.0 * clip.parent->frame;
+        now.color.alphaMultiplier = 1.0 - 0.25 * clip.parent->frame;
+        return now;
     };
     runtime.start();
     runtime.step();
     runtime.step();
     runtime.step();
-    CHECK(traced.size() == 3 && traced[0] == "10" && traced[1] == "20" && traced[2] == "30");
+    CHECK(traced.size() == 3 && traced[0] == "10 75" && traced[1] == "20 50" && traced[2] == "30 25");
 }
 
 TEST(movie_runtime_puts_timeline_and_script_children_on_the_display_list)

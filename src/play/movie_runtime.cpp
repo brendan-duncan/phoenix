@@ -220,6 +220,11 @@ display::ColorTransform toColor(const ColorTransform& color)
     }
     out.alphaMultiplier = color.alphaMultiplier;
     out.alphaOffset = color.alphaOffset;
+    // As a published movie holds it: multipliers in 256ths, offsets whole.
+    for (double* multiplier : {&out.redMultiplier, &out.greenMultiplier, &out.blueMultiplier, &out.alphaMultiplier})
+        *multiplier = std::round(*multiplier * 256.0) / 256.0;
+    for (double* offset : {&out.redOffset, &out.greenOffset, &out.blueOffset, &out.alphaOffset})
+        *offset = std::round(*offset);
     return out;
 }
 
@@ -2182,12 +2187,15 @@ void MovieRuntime::syncChildren(Clip& clip, std::vector<Clip*>& entered)
     }
     clip.children = std::move(kept);
     syncDisplay(clip);
-    // Each where its timeline has it now, a tween's in-between too.
-    if (placedTransform)
+    // Each where and as its timeline has it now, a tween's in-between too.
+    if (placedNow)
         for (const auto& child : clip.children)
             if (child && !child->made && child->placed && child->display)
-                if (const std::optional<Transform> shown = placedTransform(*child))
-                    child->display->setPlacedMatrix(toMatrix(*shown));
+                if (const std::optional<PlacedNow> shown = placedNow(*child))
+                {
+                    child->display->setPlacedMatrix(toMatrix(shown->transform));
+                    child->display->setPlacedColorTransform(toColor(shown->color));
+                }
 }
 
 void MovieRuntime::revive(Clip& clip, std::vector<Clip*>& entered)
@@ -3355,8 +3363,7 @@ as3::ValuePtr MovieRuntime::property(Clip& clip, const std::string& name)
     if (name == "_visible")
         return Value::makeBoolean(clip.shown());
     if (name == "_alpha")
-        return Value::makeNumber(clip.display && clip.display->alphaScripted()
-                ? clip.display->alpha() * 100.0
+        return Value::makeNumber(clip.display ? clip.display->alpha() * 100.0
                 : (clip.placed ? clip.placed->colorTransform.alphaMultiplier * 100.0 : 100.0));
     if (name == "_xscale")
         return Value::makeNumber(scaleOf(shown.m11, shown.m12) * 100.0);
@@ -3413,8 +3420,7 @@ as3::ValuePtr MovieRuntime::property(Clip& clip, const std::string& name)
     if (name == "visible")
         return Value::makeBoolean(clip.shown());
     if (name == "alpha")
-        return Value::makeNumber(clip.display && clip.display->alphaScripted()
-                ? clip.display->alpha()
+        return Value::makeNumber(clip.display ? clip.display->alpha()
                 : (clip.placed ? clip.placed->colorTransform.alphaMultiplier : 1.0));
     if (name == "scaleX")
         return Value::makeNumber(scaleOf(shown.m11, shown.m12));

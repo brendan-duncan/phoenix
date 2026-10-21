@@ -9187,9 +9187,9 @@ void PhoenixView::setMovie(fla::play::MovieRuntime* movie)
                 behaviorCopies(*clip.placed, clip.placed->transform, clip.parent->frame);
             return copies.empty() ? -1 : copies.front().hold;
         };
-        // Where a timeline has a clip on its parent's frame, as it is drawn
-        // there: what its scripts read before it is drawn.
-        _movie->placedTransform = [this](const fla::play::Clip& clip) -> std::optional<fla::Transform> {
+        // Where and how a timeline has a clip on its parent's frame, as it
+        // is drawn there: what its scripts read before it is drawn.
+        _movie->placedNow = [this](const fla::play::Clip& clip) -> std::optional<fla::play::MovieRuntime::PlacedNow> {
             const auto* frame = clip.placed ? dynamic_cast<const fla::Frame*>(clip.placed->parent) : nullptr;
             if (!frame || !clip.layer || !clip.parent || clip.parent->button)
                 return std::nullopt;
@@ -9197,15 +9197,38 @@ void PhoenixView::setMovie(fla::play::MovieRuntime* movie)
             const auto found = std::find(frame->elements.begin(), frame->elements.end(), clip.placed);
             if (state.frame != frame || found == frame->elements.end())
                 return std::nullopt;
+            const size_t index = static_cast<size_t>(found - frame->elements.begin());
             ElapsedScope elapsed(_elapsed, state.offset);
+            fla::play::MovieRuntime::PlacedNow now;
             const fla::TweenRotation savedRotation = _tweenRotation;
             const int savedTurns = _tweenTurns;
             tweenTurnOf(*frame, _tweenRotation, _tweenTurns);
-            const fla::Transform shown =
-                shownTransform(state, static_cast<size_t>(found - frame->elements.begin()));
+            now.transform = shownTransform(state, index);
             _tweenRotation = savedRotation;
             _tweenTurns = savedTurns;
-            return shown;
+            // Its color: a motion tween's curves, or part way to the next
+            // keyframe's in a classic tween.
+            now.color = clip.placed->colorTransform;
+            if (const fla::MotionObject* motion = motionOf(frame))
+            {
+                if (motion->animatesColor())
+                {
+                    const double rate = _flaDocument && _flaDocument->document &&
+                            _flaDocument->document->frameRate > 0.0
+                        ? _flaDocument->document->frameRate : 24.0;
+                    now.color = motion->colorAt(state.offset, rate, clip.placed->colorTransform);
+                }
+            }
+            else if (state.tweenFrame && frame->tweenType == fla::TweenType::Motion)
+            {
+                const std::vector<int> pairs = fla::pairTweenElements(frame->elements, state.tweenFrame->elements);
+                const int paired = index < pairs.size() ? pairs[index] : -1;
+                if (paired >= 0)
+                    if (const auto* end = dynamic_cast<const fla::SymbolInstance*>(
+                            state.tweenFrame->elements[static_cast<size_t>(paired)]))
+                        now.color = fla::blendColorTransforms(now.color, end->colorTransform, state.tweenProgress);
+            }
+            return now;
         };
     }
     clearCaches();

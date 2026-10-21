@@ -10,7 +10,7 @@ What changed in each release of Phoenix, newest first.
 - Adjust Color makes the same colors as in Animate, on the stage, in Test Movie and in published SWF and HTML5 movies; an imported SWF's Adjust Color comes back with its settings
 - Gradients blend from stop to stop as Flash Player does: a gradient from clear black to white passes through a see-through gray, so it darkens what is under it, rather than fading white
 - The Subtract blend mode is exact where art is see-through or soft-edged, and the Alpha blend mode leaves what is under it alone where the instance is clear or absent, as in Flash Player
-- In Test Movie, scripts read a tweened movie clip's position where the tween has it on that frame, and its width and height as Flash Player measures them, without the margin left for smoothing edges
+- In Test Movie, scripts read a tweened movie clip's position and alpha where the tween has them on that frame, and its width and height as Flash Player measures them, without the margin left for smoothing edges
 - Color Matrix and Convolution filters, added from Add Filter or brought in with an imported SWF movie, and published to SWF; an SWF's color matrix comes back as Adjust Color where it is one
 
 ## 0.22.0
