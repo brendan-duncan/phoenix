@@ -26,3 +26,7 @@ tools/web/web.ini
 
 # Local analytics collector data (database, geo.db)
 analytics/collector/data/
+
+# Cloud server local development data and secrets
+cloud/dev-data/
+cloud/dev.env
