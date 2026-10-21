@@ -806,6 +806,14 @@ Phoenix headless and need Ruffle's source (`RUFFLE_SOURCE`, default
   `--mode play`), scores how much they differ away from edges, and lists the
   movies that differ most, with side-by-side pictures. Point it at a folder of
   real movies to find import bugs.
+- `tools/flash_player_check.py` plays movies in Adobe's Flash Player debug
+  projector (`flashplayer_32_sa_debug.exe`, in `build/flashplayer` or at
+  `FLASH_PLAYER`) and compares their trace with Test Movie's: for a document,
+  its exported SWF in Flash Player against the document in `Phoenix play`;
+  for an SWF, Flash Player against Phoenix playing the imported movie. The
+  projector runs on a desktop of its own, so no window shows; it reads the
+  script's mm.cfg but logs to `%APPDATA%\Macromedia\Flash Player\Logs`, so
+  movies run one at a time, in real time.
 
 To look at a real export, write it with `Phoenix --export-movie file.fla
 out.swf` (headless with `QT_QPA_PLATFORM=offscreen`), then decode it with the
