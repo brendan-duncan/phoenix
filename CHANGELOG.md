@@ -9,6 +9,7 @@ What changed in each release of Phoenix, newest first.
 - ActionScript 2 has flash.filters (Bevel, Blur, ColorMatrix, Convolution, DisplacementMap, DropShadow, Glow, GradientBevel and GradientGlow) and a movie clip's filters, keeping each number as SWF movies do, and BitmapData.applyFilter and generateFilterRect; an imported SWF's filter angles, strengths and blurs come in exactly
 - ActionScript 2 has flash.external.ExternalInterface, which says it is not available (there is no web page around a movie in Phoenix), with its helpers that write values as XML and read them back
 - ActionScript 3 has Namespace and QName, and a movie's namespace constants are Namespace objects
+- In ActionScript 3, a class's prototype is one object whose properties its instances find, set or deleted, and whose constructor is the class
 - Test Movie says when a document class does not extend Sprite (the main timeline cannot be one), as SWF movies do
 
 ## 0.23.0
