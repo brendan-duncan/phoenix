@@ -252,6 +252,11 @@ as3::Val ActionsPlayer::textObject(const std::shared_ptr<display::TextField>& fi
     field->swfVersion = _interpreter->version();
     found = as3::Value::makeHostObject(host);
     _textObjects.emplace_back(field, found);
+    // It hears what it broadcasts itself, out of sight as the player has it.
+    _interpreter->setMember(found, "_listeners", _vm.newArray({found}));
+    const as3::Val flags = _interpreter->getMember(_interpreter->global(), "ASSetPropFlags");
+    if (flags.isFunction())
+        _interpreter->call(flags, as3::Val(), {found, as3::Val::string("_listeners"), as3::Val::number(3)});
     return found;
 }
 

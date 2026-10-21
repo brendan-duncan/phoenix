@@ -642,6 +642,18 @@ as3::Val ActionsPlayer::handler(const std::vector<const CompiledActions::Block*>
     });
 }
 
+void ActionsPlayer::broadcast(const std::string& broadcaster, const std::string& message,
+    const std::vector<as3::Val>& args)
+{
+    const as3::Val object = _interpreter->getMember(_interpreter->global(), broadcaster);
+    if (!object.isObject())
+        return;
+    std::vector<as3::Val> all{as3::Val::string(message)};
+    all.insert(all.end(), args.begin(), args.end());
+    ++_runtime._scriptRuns;
+    _interpreter->callMethod(object, "broadcastMessage", all, broadcaster + " listener, " + message);
+}
+
 void ActionsPlayer::callHandler(Clip& clip, const std::string& name)
 {
     if (!clip.object)

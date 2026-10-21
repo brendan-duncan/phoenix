@@ -135,6 +135,9 @@ public:
     as3::Val textFieldNamed(Clip& clip, const std::string& name);
     /// The text fields showing a variable show what it holds now.
     void updateTextBindings();
+    /// \a message to the listeners of the global \a broadcaster (Key,
+    /// Mouse) with \a args, through its broadcastMessage.
+    void broadcast(const std::string& broadcaster, const std::string& message, const std::vector<as3::Val>& args = {});
     /// A timeline placed \a field: one showing a variable takes its value,
     /// or gives it its text.
     void fieldPlaced(const std::shared_ptr<display::TextField>& field);

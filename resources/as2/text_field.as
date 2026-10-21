@@ -162,6 +162,8 @@
     _global.TextField = TextField;
     TextField.getFontList = natives.getFontList;
     var p = TextField.prototype;
+    // Each field listens to itself (onChanged, onScroller...).
+    AsBroadcaster.initialize(p);
     // In the player's order (for-in visits them last first); a name
     // without a setter is read only.
     var names = ["gridFitType", "antiAliasType", "thickness", "sharpness", "filters", "scroll", "maxscroll",

@@ -1494,6 +1494,8 @@ void MovieRuntime::pointerAt(double x, double y)
         if (clip.listensFor("mouseMove"))
             dispatch(clip, "mouseMove", false);
     });
+    if (_actions && !_as3)
+        _actions->broadcast("Mouse", "onMouseMove");
     settle();
 }
 
@@ -3066,6 +3068,8 @@ void MovieRuntime::keyDown(int code, int character, bool shift, bool ctrl, bool 
                 event->setProperty("charCode", as3::Value::makeNumber(character));
             });
     });
+    if (_actions && !_as3)
+        _actions->broadcast("Key", "onKeyDown");
     const std::vector<as3::ValuePtr> listeners = _keyListeners;
     for (const as3::ValuePtr& listener : listeners)
         runFunction(listener->getProperty("onKeyDown"), {}, *_root, "Key listener, onKeyDown");
@@ -3086,6 +3090,8 @@ void MovieRuntime::keyUp(int code, int character, bool shift, bool ctrl, bool al
                 event->setProperty("charCode", as3::Value::makeNumber(character));
             });
     });
+    if (_actions && !_as3)
+        _actions->broadcast("Key", "onKeyUp");
     const std::vector<as3::ValuePtr> listeners = _keyListeners;
     for (const as3::ValuePtr& listener : listeners)
         runFunction(listener->getProperty("onKeyUp"), {}, *_root, "Key listener, onKeyUp");
@@ -3259,11 +3265,14 @@ void MovieRuntime::pointerOver(Clip* button)
 
 void MovieRuntime::pointerDown()
 {
-    // AS2's mouseDown clip events, wherever the pointer is.
+    // AS2's mouseDown clip events, wherever the pointer is, and Mouse's
+    // listeners.
     eachClip([this](Clip& clip) {
         if (!clip.clipEvents.empty())
             runClipEvent(clip, "mouseDown");
     });
+    if (_actions && !_as3)
+        _actions->broadcast("Mouse", "onMouseDown");
     _pressed = _hovered;
     if (_as3 && !_stagePointer)
     {
@@ -3293,6 +3302,8 @@ void MovieRuntime::pointerUp()
         if (!clip.clipEvents.empty())
             runClipEvent(clip, "mouseUp");
     });
+    if (_actions && !_as3)
+        _actions->broadcast("Mouse", "onMouseUp");
     Clip* pressed = _pressed;
     _pressed = nullptr;
     if (_as3 && !_stagePointer)
