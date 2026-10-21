@@ -208,7 +208,10 @@ def main():
     for n in range(args.jobs):
         temp = os.path.join(args.out, "temp", str(n))
         os.makedirs(temp, exist_ok=True)
-        environments.append(dict(os.environ, QT_QPA_PLATFORM="offscreen", TEMP=temp, TMP=temp))
+        settings = os.path.join(args.out, "settings", str(n))
+        os.makedirs(settings, exist_ok=True)
+        environments.append(dict(os.environ, QT_QPA_PLATFORM="offscreen", TEMP=temp, TMP=temp,
+                                 PHOENIX_SETTINGS_DIR=settings))
     free = list(environments)
 
     def task(swf):

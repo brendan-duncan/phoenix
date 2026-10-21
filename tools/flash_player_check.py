@@ -213,7 +213,10 @@ def main():
         f.write("ErrorReportingEnable=1\nTraceOutputFileEnable=1\n")
     temp = os.path.join(args.out, "temp")
     os.makedirs(temp, exist_ok=True)
-    env = dict(os.environ, QT_QPA_PLATFORM="offscreen", TEMP=temp, TMP=temp)
+    # Phoenix's settings and SharedObjects apart from yours.
+    settings = os.path.join(args.out, "settings")
+    os.makedirs(settings, exist_ok=True)
+    env = dict(os.environ, QT_QPA_PLATFORM="offscreen", TEMP=temp, TMP=temp, PHOENIX_SETTINGS_DIR=settings)
 
     sources = find_sources(args.inputs)
     desktop = Desktop("PhoenixFlashCheck%d" % os.getpid())

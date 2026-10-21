@@ -26,6 +26,7 @@ import concurrent.futures
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -139,6 +140,7 @@ def run_test(args, name, worker_env):
     if config.get("known_failure"):
         result["ruffle_known_failure"] = True
     frames = max(1, int(config.get("num_frames", config.get("num_ticks", 1))))
+    shutil.rmtree(os.path.join(worker_env["PHOENIX_SETTINGS_DIR"], "SharedObjects"), ignore_errors=True)
     swf = os.path.join(folder, "test.swf")
     out = os.path.join(args.out, "results", name)
     os.makedirs(out, exist_ok=True)
@@ -231,7 +233,12 @@ def main():
     for n in range(args.jobs):
         temp = os.path.join(args.out, "temp", str(n))
         os.makedirs(temp, exist_ok=True)
-        environments.append(dict(os.environ, QT_QPA_PLATFORM="offscreen", TEMP=temp, TMP=temp))
+        # And its own settings, where SharedObjects are kept: one test's
+        # are not another's, and none are left with yours.
+        settings = os.path.join(args.out, "settings", str(n))
+        os.makedirs(settings, exist_ok=True)
+        environments.append(dict(os.environ, QT_QPA_PLATFORM="offscreen", TEMP=temp, TMP=temp,
+                                 PHOENIX_SETTINGS_DIR=settings))
     free = list(environments)
 
     def task(name):
