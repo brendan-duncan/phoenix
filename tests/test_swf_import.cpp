@@ -336,7 +336,7 @@ TEST(swf_import_keeps_color_matrix_and_convolution_filters)
 
 TEST(swf_import_reads_animates_adjust_color_matrix_back)
 {
-    // What Animate published for Adjust Color with brightness -76, contrast
+    // What an SWF published from an FLA carries for Adjust Color with brightness -76, contrast
     // 25, saturation -46 and hue 122 (Ruffle's visual/filters/color_matrix).
     const float animate[20] = {-0.08813f, 0.72842f, 0.69972f, 0.0f, -123.43f, 0.51377f, 0.86964f, -0.04341f, 0.0f,
         -123.42999f, -0.05692f, 1.60593f, -0.20901f, 0.0f, -123.42998f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f};

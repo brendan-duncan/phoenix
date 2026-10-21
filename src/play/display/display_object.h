@@ -98,6 +98,16 @@ public:
     /// The main timeline for one on the stage; off it, the topmost of what
     /// holds it (itself when nothing does).
     DisplayObject* root() const;
+
+    /// transform.perspectiveProjection: a field of view (degrees) and a
+    /// center, shared by each object a script reads it as; null for none.
+    struct Perspective
+    {
+        double fieldOfView = 55.0;
+        double centerX = 250.0;
+        double centerY = 250.0;
+    };
+    std::shared_ptr<Perspective> perspective;
     EventDispatcher* eventParent() const override;
 
     const std::string& name() const { return _name; }

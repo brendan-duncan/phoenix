@@ -24,6 +24,7 @@ screen.
 import argparse
 import concurrent.futures
 import json
+import math
 import os
 import re
 import shutil
@@ -91,11 +92,53 @@ def normalized(text, play_output=False):
     return lines
 
 
-def first_difference(expected, actual):
+def close(a, b, approximations):
+    """Whether two numbers agree within a test's [approximations]."""
+    if math.isnan(a) or math.isnan(b):
+        return math.isnan(a) and math.isnan(b)
+    if a == b:
+        return True
+    epsilon = approximations.get("epsilon", 0.0)
+    relative = approximations.get("max_relative", 0.0)
+    gap = abs(a - b)
+    return gap <= epsilon or gap <= relative * max(abs(a), abs(b))
+
+
+def same_line(expected, actual, approximations):
+    """Equal, or equal but for numbers within the test's approximations."""
+    if expected == actual:
+        return True
+    if not approximations:
+        return False
+
+    def number(text):
+        try:
+            return float(text)
+        except ValueError:
+            return float("nan") if text == "NaN" else None
+
+    if approximations.get("bare_numbers"):
+        a, b = number(expected.strip()), number(actual.strip())
+        if a is not None and b is not None:
+            return close(a, b, approximations)
+    for pattern in approximations.get("number_patterns", []):
+        regex = re.compile(pattern)
+        if regex.sub("#", expected) != regex.sub("#", actual):
+            continue
+        ours = [m.group(1) if m.groups() else m.group(0) for m in regex.finditer(expected)]
+        theirs = [m.group(1) if m.groups() else m.group(0) for m in regex.finditer(actual)]
+        if len(ours) == len(theirs) and all(
+                number(x) is not None and number(y) is not None and close(number(x), number(y), approximations)
+                for x, y in zip(ours, theirs)):
+            return True
+    return False
+
+
+def first_difference(expected, actual, approximations=None):
     for i in range(max(len(expected), len(actual))):
         a = expected[i] if i < len(expected) else "<end>"
         b = actual[i] if i < len(actual) else "<end>"
-        if a != b:
+        if not same_line(a, b, approximations or {}):
             return {"line": i + 1, "expected": a, "actual": b}
     return None
 
@@ -180,7 +223,7 @@ def run_test(args, name, worker_env):
         with open(expected_path, encoding="utf-8", errors="replace") as f:
             expected = normalized(f.read())
         actual = normalized(trace, True)
-        difference = first_difference(expected, actual)
+        difference = first_difference(expected, actual, config.get("approximations"))
         if difference:
             result["trace"] = "fail"
             result["difference"] = difference

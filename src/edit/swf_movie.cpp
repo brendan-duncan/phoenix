@@ -581,7 +581,7 @@ std::vector<swf::Filter> filters(const std::vector<Filter>& list)
             break;
         case Filter::Type::AdjustColor:
         {
-            // The matrix Animate publishes for it (fl.motion.AdjustColor).
+            // The matrix an FLA's Adjust Color is published as (fl.motion.AdjustColor).
             s.type = swf::Filter::Type::ColorMatrix;
             const std::vector<double> m =
                 display::BitmapFilter::adjustColor(f.brightness, f.contrast, f.saturation, f.hue).matrix;

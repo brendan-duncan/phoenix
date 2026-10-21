@@ -166,6 +166,11 @@ display::ColorTransform Bindings::colorTransformOf(const Val& value)
 
 void Bindings::defineGeom()
 {
+    // A number as a 32-bit float holds it, for Matrix3D's arithmetic.
+    vm.defineFunction("flash.geom.__f32", NATIVE() {
+        return number(static_cast<double>(static_cast<float>(args.empty() ? 0.0 : vm.toNumber(args[0]))));
+    }, 1);
+
     // Point.
     vm.defineNativeClass("flash.geom.Point")
         .constructor(NATIVE() {
@@ -511,6 +516,61 @@ void Bindings::defineGeom()
             matrix(vm, self) = matrixOf(args[0]);
             return Val();
         }, 1)
+        // As a 3 by 3: rows (a, c, tx), (b, d, ty), (0, 0, 1); a row or
+        // column past the last is the last.
+        .method("copyRowTo", NATIVE() {
+            const display::Matrix& m = matrix(vm, self);
+            const int row = static_cast<int>(numberArg(vm, args, 0));
+            const double values[3][3] = {{m.a, m.c, m.tx}, {m.b, m.d, m.ty}, {0, 0, 1}};
+            const double* at = values[std::clamp(row, 0, 2)];
+            if (args.size() > 1 && !args[1].isNullish())
+            {
+                vm.setProperty(args[1], "x", number(at[0]));
+                vm.setProperty(args[1], "y", number(at[1]));
+                vm.setProperty(args[1], "z", number(at[2]));
+            }
+            return Val();
+        }, 2)
+        .method("copyColumnTo", NATIVE() {
+            const display::Matrix& m = matrix(vm, self);
+            const int column = static_cast<int>(numberArg(vm, args, 0));
+            const double values[3][3] = {{m.a, m.b, 0}, {m.c, m.d, 0}, {m.tx, m.ty, 1}};
+            const double* at = values[std::clamp(column, 0, 2)];
+            if (args.size() > 1 && !args[1].isNullish())
+            {
+                vm.setProperty(args[1], "x", number(at[0]));
+                vm.setProperty(args[1], "y", number(at[1]));
+                vm.setProperty(args[1], "z", number(at[2]));
+            }
+            return Val();
+        }, 2)
+        // A row from x, y and z; the player's copyColumnFrom does the same.
+        .method("copyRowFrom", NATIVE() {
+            display::Matrix& m = matrix(vm, self);
+            const int row = static_cast<int>(numberArg(vm, args, 0));
+            if (args.size() < 2 || args[1].isNullish() || row < 0 || row > 1)
+                return Val();
+            const double x = vm.toNumber(vm.getProperty(args[1], "x"));
+            const double y = vm.toNumber(vm.getProperty(args[1], "y"));
+            const double z = vm.toNumber(vm.getProperty(args[1], "z"));
+            (row == 0 ? m.a : m.b) = x;
+            (row == 0 ? m.c : m.d) = y;
+            (row == 0 ? m.tx : m.ty) = z;
+            return Val();
+        }, 2)
+        .method("copyColumnFrom", NATIVE() {
+            display::Matrix& m = matrix(vm, self);
+            const int column = static_cast<int>(numberArg(vm, args, 0));
+            if (args.size() < 2 || args[1].isNullish() || column < 0 || column > 1)
+                return Val();
+            const double x = vm.toNumber(vm.getProperty(args[1], "x"));
+            const double y = vm.toNumber(vm.getProperty(args[1], "y"));
+            const double z = vm.toNumber(vm.getProperty(args[1], "z"));
+            (column == 0 ? m.a : m.b) = x;
+            (column == 0 ? m.c : m.d) = y;
+            (column == 0 ? m.tx : m.ty) = z;
+            return Val();
+        }, 2)
         .method("toString", NATIVE() {
             const display::Matrix& m = matrix(vm, self);
             return text("(a=" + numberText(m.a) + ", b=" + numberText(m.b) + ", c=" + numberText(m.c) + ", d=" +
@@ -629,8 +689,112 @@ void Bindings::defineGeom()
             return newRectangle(bounds);
         })
         .property("matrix3D", NATIVE() { return Val::null(); }, NATIVE() { return Val(); })
-        .property("perspectiveProjection", NATIVE() { return Val::null(); }, NATIVE() { return Val(); })
+        // The stage's and the main timeline's are there from the start;
+        // another object has one once a script gives it one. Each read is a
+        // new object onto the same projection.
+        .property("perspectiveProjection",
+            NATIVE(this, transformed) {
+                display::DisplayObject& object = transformed(vm, self);
+                const display::Stage& stage = runtime.stage();
+                const bool isStage = object.kind() == display::ObjectKind::Stage;
+                const bool isRoot = !isStage && object.parent() &&
+                    object.parent()->kind() == display::ObjectKind::Stage && object.root() == &object;
+                if (!object.perspective)
+                {
+                    if (!isStage && !isRoot)
+                        return Val::null();
+                    object.perspective = std::make_shared<display::DisplayObject::Perspective>();
+                    if (isRoot)
+                    {
+                        object.perspective->centerX = stage.stageWidth() / 2.0;
+                        object.perspective->centerY = stage.stageHeight() / 2.0;
+                    }
+                }
+                return newPerspective(object.perspective, isStage ? 500.0 : stage.stageWidth());
+            },
+            NATIVE(this, transformed) {
+                display::DisplayObject& object = transformed(vm, self);
+                const auto* given = args.empty() ? nullptr : args[0].host<PerspectiveHost>();
+                if (!given)
+                {
+                    object.perspective.reset();
+                    return Val();
+                }
+                object.perspective = std::make_shared<display::DisplayObject::Perspective>(*given->state);
+                return Val();
+            })
         .define();
+
+    // PerspectiveProjection: a field of view onto a width, which gives the
+    // focal length (a float, as the player keeps it): 500 for one made on
+    // its own, the stage's for one an object has.
+    const auto perspective = [](VM& vm, const Val& self) -> PerspectiveHost& {
+        return hostOf<PerspectiveHost>(vm, self, "PerspectiveProjection");
+    };
+    // In floats, as the player works it out.
+    const auto focalOf = [](const PerspectiveHost& p) {
+        const double turned = (display::kPi - p.state->fieldOfView * display::kPi / 180.0) / 2.0;
+        return static_cast<double>(static_cast<float>(p.width / 2.0) * static_cast<float>(std::tan(turned)));
+    };
+    vm.defineNativeClass("flash.geom.PerspectiveProjection")
+        .constructor(NATIVE() {
+            if (!self.host<PerspectiveHost>())
+            {
+                auto host = std::make_shared<PerspectiveHost>();
+                host->state = std::make_shared<display::DisplayObject::Perspective>();
+                self->host = host;
+            }
+            return Val();
+        })
+        .property("fieldOfView", NATIVE(perspective) { return number(perspective(vm, self).state->fieldOfView); },
+            NATIVE(perspective) {
+                const double fieldOfView = vm.toNumber(args[0]);
+                if (!(fieldOfView > 0.0 && fieldOfView < 180.0))
+                    vm.throwError("ArgumentError",
+                        "Error #2182: Invalid fieldOfView value.  The value must be greater than 0 and less than 180.",
+                        2182);
+                perspective(vm, self).state->fieldOfView = fieldOfView;
+                return Val();
+            })
+        .property("focalLength", NATIVE(perspective, focalOf) { return number(focalOf(perspective(vm, self))); },
+            NATIVE(perspective) {
+                PerspectiveHost& p = perspective(vm, self);
+                const double focal = vm.toNumber(args[0]);
+                if (!(focal > 0.0))
+                    vm.throwError("ArgumentError", "Error #2186: Invalid focalLength " + vm.toString(args[0]) + ".", 2186);
+                p.state->fieldOfView = 2.0 * std::atan(p.width / 2.0 / focal) * 180.0 / display::kPi;
+                return Val();
+            })
+        .property("projectionCenter",
+            NATIVE(this, perspective) {
+                const PerspectiveHost& p = perspective(vm, self);
+                return newPoint(p.state->centerX, p.state->centerY);
+            },
+            NATIVE(this, perspective) {
+                PerspectiveHost& p = perspective(vm, self);
+                const display::Point at = pointOf(args[0]);
+                p.state->centerX = at.x;
+                p.state->centerY = at.y;
+                return Val();
+            })
+        .method("toMatrix3D", NATIVE(this, perspective, focalOf) {
+            const double focal = focalOf(perspective(vm, self));
+            const Val cls = vm.applyType(vm.classValue(vm.builtins().vector.get()),
+                {vm.classValue(vm.builtins().number.get())});
+            Val raw = vm.construct(cls);
+            for (double value : {focal, 0.0, 0.0, 0.0, 0.0, focal, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0})
+                raw->elements.push_back(number(value));
+            return vm.construct(vm.lookupQualified("flash.geom.Matrix3D", true), {raw});
+        })
+        .define();
+}
+
+Val Bindings::newPerspective(std::shared_ptr<display::DisplayObject::Perspective> state, double width)
+{
+    auto host = std::make_shared<PerspectiveHost>();
+    host->state = std::move(state);
+    host->width = width;
+    return instance("flash.geom.PerspectiveProjection", host);
 }
 
 } // namespace script

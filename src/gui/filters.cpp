@@ -352,7 +352,7 @@ QImage gradientBevel(const QImage& image, const fla::Filter& filter, double scal
 /// straight RGB, the way Flash's Adjust Color builds its color matrix.
 QImage adjustColor(const QImage& image, const fla::Filter& filter)
 {
-    // The matrix Animate makes of the four (fl.motion.AdjustColor), as the
+    // The matrix fl.motion.AdjustColor makes of the four, as the
     // movie it publishes has it.
     const std::vector<double> m =
         fla::display::BitmapFilter::adjustColor(filter.brightness, filter.contrast, filter.saturation, filter.hue).matrix;

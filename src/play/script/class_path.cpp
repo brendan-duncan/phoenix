@@ -160,9 +160,11 @@ std::optional<ClassFile> ClassPath::find(const std::string& qualifiedName) const
         text << in.rdbuf();
         return ClassFile{text.str(), fileName};
     }
+    // Phoenix's own flash.* classes stand for the player's, which name no
+    // file in a stack trace.
     if (builtIn)
         if (std::optional<std::string> source = builtIn(relative))
-            return ClassFile{*source, fileName};
+            return ClassFile{*source, relative.compare(0, 6, "flash/") == 0 ? std::string() : fileName};
     return std::nullopt;
 }
 

@@ -101,6 +101,13 @@ struct ColorTransformHost : as3::HostObject
     display::ColorTransform transform;
 };
 /// flash.geom.Transform: a display object's, read and set through it.
+/// A PerspectiveProjection: the projection it reads and sets (a display
+/// object's, or its own), and the width its focal length is for.
+struct PerspectiveHost : as3::HostObject
+{
+    std::shared_ptr<display::DisplayObject::Perspective> state;
+    double width = 500.0;
+};
 struct TransformHost : as3::HostObject
 {
     std::shared_ptr<display::DisplayObject> object;
@@ -254,6 +261,7 @@ public:
     as3::Val newRectangle(const display::Rect& rect);
     as3::Val newMatrix(const display::Matrix& matrix);
     as3::Val newColorTransform(const display::ColorTransform& transform);
+    as3::Val newPerspective(std::shared_ptr<display::DisplayObject::Perspective> state, double width);
     as3::Val newBitmapData(std::shared_ptr<display::BitmapData> data);
     /// What a Point, Rectangle, Matrix or ColorTransform holds; a plain
     /// object's x, y, width... when it is not one.

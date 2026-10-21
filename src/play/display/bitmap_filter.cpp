@@ -99,7 +99,8 @@ BitmapFilter BitmapFilter::colorMatrix(const std::vector<double>& matrix)
 
 BitmapFilter BitmapFilter::adjustColor(double brightness, double contrast, double saturation, double hue)
 {
-    // As Animate makes it (fl.motion.AdjustColor): brightness added, then
+    // As fl.motion.AdjustColor makes it, and an FLA's Adjust Color is
+    // published: brightness added, then
     // contrast about the middle by its table, saturation about luminance,
     // then the hue turned; each a 5 by 5 matrix, applied in that order.
     static constexpr double kContrast[101] = {0, 0.01, 0.02, 0.04, 0.05, 0.06, 0.07, 0.08, 0.1, 0.11, 0.12, 0.14,
@@ -131,7 +132,7 @@ BitmapFilter BitmapFilter::adjustColor(double brightness, double contrast, doubl
     M lift = identity();
     for (int r = 0; r < 3; ++r)
         lift[r][4] = b;
-    // The table is read at whole numbers, as Animate reads it.
+    // The table is read at whole numbers.
     const double spread = c > 0.0 ? kContrast[static_cast<int>(c)] * 127.0 + 127.0 : c / 100.0 * 127.0 + 127.0;
     M stretch = identity();
     for (int r = 0; r < 3; ++r)

@@ -275,7 +275,7 @@ non-normal blend or bitmap caching; otherwise `PlaceObject2` (26).
 - `filters()` maps enabled filters: drop shadow, blur, glow, bevel, gradient
   glow, gradient bevel directly (angle to radians, quality to passes 1 to 3,
   bevel type to inner/onTop); Adjust Color becomes a 4x5 color matrix built
-  as Animate builds it (fl.motion.AdjustColor: brightness, contrast by its
+  as fl.motion.AdjustColor builds it (brightness, contrast by its
   table, saturation about luminance 0.3086, 0.6094, 0.0820, then hue;
   `display::BitmapFilter::adjustColor`, which the stage and Test Movie draw
   with too). Phoenix's own Color Matrix and Convolution filters are written
@@ -688,7 +688,7 @@ DefineBitsJPEG2) go through the decoder `main.cpp` installs with
 
 Filters come back as the FLA has them. A color matrix becomes Adjust Color
 when some brightness, contrast, saturation and hue make that matrix as
-Animate does (`adjustColorOf`, fitted once per matrix);
+fl.motion.AdjustColor does (`adjustColorOf`, fitted once per matrix);
 otherwise it, and a convolution, become Phoenix's own Color Matrix and
 Convolution filters, which an FLA keeps as `phoenixColorMatrix` on an
 `AdjustColorFilter` and `phoenixConvolution` (with `phoenixMatrixX`,
@@ -787,15 +787,16 @@ Useful helpers, all file-local in the tests (copy what you need):
 
 ### Comparing with Ruffle
 
-[Ruffle](https://github.com/ruffle-rs/ruffle) (MIT/Apache-2.0) plays SWF
-closely to Flash Player, and two scripts use it as a reference. Both run
+[Ruffle](https://github.com/ruffle-rs/ruffle) (MIT/Apache-2.0), an
+independent SWF player with a large suite of reference movies, is what two
+scripts check against. Both run
 Phoenix headless and need Ruffle's source (`RUFFLE_SOURCE`, default
 `D:/src/ruffle`).
 
 - `tools/ruffle_tests.py` plays Ruffle's regression SWFs
   (`tests/tests/swfs`, about 4,500: AVM1, AVM2, timelines, filters, text)
   with `Phoenix play`, compares the trace with each test's `output.txt`
-  (what Flash Player traced) and the last frame with its expected images,
+  (the trace expected) and the last frame with its expected images,
   and prints a summary by folder. A run takes about two minutes. Tests that
   play recorded input, AIR-only and JPEG XR tests are skipped. Keep a
   report.json as a baseline and pass it as `--baseline` after a change: the
