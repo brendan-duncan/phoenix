@@ -37,7 +37,7 @@ FetchContent_MakeAvailable(libas3)
 add_library(libas3 INTERFACE)
 target_link_libraries(libas3 INTERFACE as3_parser)
 
-project(Phoenix VERSION 0.22.0 LANGUAGES C CXX)
+project(Phoenix VERSION 0.23.0 LANGUAGES C CXX)
 
 # The web build: Qt for WebAssembly's toolchain (tools/web/build_web.py,
 # docs/web-editor.md). What a browser cannot do (other programs, Python, sockets,

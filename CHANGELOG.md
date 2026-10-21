@@ -2,7 +2,7 @@
 
 What changed in each release of Phoenix, newest first.
 
-## Unreleased
+## 0.23.0
 
 - The web editor's phone layout has the stroke and fill colors on its tools row
 - Drawing guides and the symmetry axis show in the web editor when the GPU draws the stage

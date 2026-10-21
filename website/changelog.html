@@ -34,11 +34,27 @@
 
 <p class="lead">What changed in each release of Phoenix, newest first.</p>
 
-<h2 id="vunreleased">Unreleased</h2>
+<h2 id="v0-23-0">0.23.0</h2>
 
 <ul>
   <li>The web editor's phone layout has the stroke and fill colors on its tools row</li>
   <li>Drawing guides and the symmetry axis show in the web editor when the GPU draws the stage</li>
+  <li>An imported SWF masks only on the frames where a mask is placed, so art at a depth used as a mask elsewhere in the movie no longer disappears</li>
+  <li>ActionScript 3 has Vector3D, Matrix3D, PerspectiveProjection, Utils3D and Orientation3D, Matrix's row and column methods, and transform.perspectiveProjection; stack traces name classes as pkg::Class, static methods as Class$/method, and include the movie's own functions; large numbers print to fifteen digits</li>
+  <li>Adjust Color makes the colors SWF movies published from FLA files show, on the stage, in Test Movie and in Phoenix's own SWF and HTML5 movies; an imported SWF's Adjust Color comes back with its settings</li>
+  <li>Gradients blend from stop to stop as SWF movies have them: a gradient from clear black to white passes through a see-through gray, so it darkens what is under it, rather than fading white</li>
+  <li>The Subtract blend mode is exact where art is see-through or soft-edged, and the Alpha blend mode leaves what is under it alone where the instance is clear or absent, as SWF movies have them</li>
+  <li>In Test Movie, scripts read a tweened movie clip's position and alpha where the tween has them on that frame, and its width and height as an SWF movie measures them, without the margin left for smoothing edges</li>
+  <li>Color Matrix and Convolution filters, added from Add Filter or brought in with an imported SWF movie, and published to SWF; an SWF's color matrix comes back as Adjust Color where it is one</li>
+  <li>Pins in the States panel keep instances at their distance from the window's edges, or stretch them between two edges, so a published page lays itself out to fill any window</li>
+  <li>Scrolling in the States panel: a movie clip scrolls inside a box, dragged, flicked or wheeled, gliding to a stop and springing back from its ends</li>
+  <li>Bindings in the States panel show an input on the stage, kept up to date: a text field's text, or a movie clip's frame, place, turn, fade, size or visibility</li>
+  <li>Published HTML5 pages let the page read and set the movie's inputs, fire its triggers and hear when its state changes</li>
+  <li>States can follow a number: a state shows the frame a number input picks and keeps up as it changes, for gauges, dials and faces from sad to happy</li>
+  <li>Layers of states: a movie clip on the timeline gets states of its own that play at the same time as the timeline's, going by the same inputs</li>
+  <li>More slice guides: a symbol can have any number of guides across and down, the strips between them taking turns keeping their size and stretching, such as a panel whose top edge has a tab that keeps its size</li>
+  <li>Soft edges on vector art: Feather in the Properties panel fades a fill's or a stroke's edge over the pixels you choose, for soft shading, glows and shadows that stay vectors</li>
+  <li>Joysticks in the Controllers panel: a handle dragged about a square drives some properties across and others down, such as a head that turns and nods, and can pick a graphic's drawing from a grid of them</li>
 </ul>
 
 <h2 id="v0-22-0">0.22.0</h2>
