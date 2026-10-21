@@ -317,11 +317,17 @@ public:
 signals:
     /// The frame view was changed from its menu or by zooming.
     void frameViewChanged();
+    /// Loop Playback was turned on or off.
+    void loopPlaybackChanged(bool on);
 
 public:
 
     /// Reflects the onion skin state set from elsewhere (the View menu).
     void setOnionSkin(bool on, int before, int after);
+
+    /// The header with the frame shown and the frame view only, for a
+    /// phone, whose own bar plays, loops and turns the onion skin on.
+    void setCompactHeader(bool on);
 
     void setSoundProvider(TimelineGrid::SoundProvider provider) { _gridContainer->setSoundProvider(std::move(provider)); }
 

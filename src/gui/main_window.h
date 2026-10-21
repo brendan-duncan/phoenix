@@ -1174,10 +1174,21 @@ private:
     bool _phoneLayout = false;
     /// The panels as they were before the phone layout, as they come back.
     QJsonObject _phoneSavedWorkspace;
-    /// Its two rows: the tools, and playing with the menu.
+    /// Its rows: the tools, playing with the menu, the timeline's bar and
+    /// the Properties bar at the side.
     QList<class QToolBar*> _phoneBars;
     QPointer<QDockWidget> _phoneSheet;
     QAction* _phoneLayoutAction = nullptr;
+    /// The timeline and Properties as drawers over the stage, a long press
+    /// on the stage for the pop-up palette, and the button over the stage
+    /// that sets it straight once turned.
+    class PhoneDrawers* _phoneDrawers = nullptr;
+    class StageHold* _stageHold = nullptr;
+    QWidget* _phoneStraighten = nullptr;
+    void placePhoneStraighten();
+    /// The stage is fitted to the view until the window has come down to
+    /// the page's size.
+    bool _phoneFitPending = false;
 #endif
     /// False when the docks' arrangement could not be used.
     bool applyWorkspace(const QJsonObject& workspace);

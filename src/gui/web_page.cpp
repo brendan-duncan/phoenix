@@ -65,6 +65,9 @@ protected:
         case QEvent::Resize:
         case QEvent::Move:
         case QEvent::WindowStateChange:
+        // A window once held wider than the page by its least size stays
+        // that wide when the least size comes down: nothing else resizes it.
+        case QEvent::LayoutRequest:
             break;
         default:
             return false;

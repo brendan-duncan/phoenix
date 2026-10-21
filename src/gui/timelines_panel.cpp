@@ -540,6 +540,16 @@ void TimelinesPanel::goToLast()
         _player->setCurrentFrame(std::max(0, _gridContainer->frameCount() - 1));
 }
 
+void TimelinesPanel::setCompactHeader(bool on)
+{
+    for (const char* name : {"timelineFirstFrame", "timelineStepBack", "timelinePlay", "timelineStepForward",
+             "timelineOnionSkin", "timelineLoop"})
+        if (QWidget* button = _header->findChild<QWidget*>(name))
+            button->setVisible(!on);
+    _fpsLabel->setVisible(!on);
+    _timeLabel->setVisible(!on);
+}
+
 void TimelinesPanel::setLoopPlayback(bool on)
 {
     if (_loopButton && _loopButton->isChecked() != on)
@@ -552,6 +562,7 @@ void TimelinesPanel::setLoopPlayback(bool on)
     if (!on)
     {
         _gridContainer->setLoop(false, _gridContainer->loopFirst(), _gridContainer->loopLast());
+        emit loopPlaybackChanged(false);
         return;
     }
     const FrameSelection selected = _gridContainer->selection();
@@ -559,6 +570,7 @@ void TimelinesPanel::setLoopPlayback(bool on)
         _gridContainer->setLoop(true, selected.first, selected.last);
     else
         _gridContainer->setLoop(true, 0, std::max(0, _gridContainer->frameCount() - 1));
+    emit loopPlaybackChanged(true);
 }
 
 bool TimelinesPanel::loopPlayback() const

@@ -66,6 +66,11 @@ public:
     /// The frames side, for playback and the loop range.
     TimelinesPanel* timelines() const { return _timelinesPanel; }
 
+    /// The phone view: rows and frames large enough for a finger and a
+    /// narrow layers list, none of it kept as the frame view; off, the
+    /// frame view as it was.
+    void setPhoneView(bool on);
+
 signals:
     void layerVisibilityChanged(const QString& timelineName, int layerIndex, bool visible);
 
@@ -99,6 +104,10 @@ protected:
 
 private:
     int _layersWidth = 250;
+    bool _phoneView = false;
+    /// The frame view and layers width the phone view stands in for.
+    TimelineGrid::View _beforePhone;
+    int _layersWidthBeforePhone = 250;
     const fla::FLADocument* _flaDocument;
     QSplitter* _splitter;
     LayersPanel* _layersPanel;

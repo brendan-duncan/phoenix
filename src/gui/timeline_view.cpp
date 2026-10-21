@@ -46,7 +46,8 @@ TimelineView::TimelineView(Player* player, QWidget *parent)
     _layersWidth = std::max(QSettings().value("timeline/layersWidth", 250).toInt(), 150);
     connect(_splitter, &QSplitter::splitterMoved, this, [this]() {
         _layersWidth = layersWidth();
-        QSettings().setValue("timeline/layersWidth", _layersWidth);
+        if (!_phoneView)
+            QSettings().setValue("timeline/layersWidth", _layersWidth);
     });
 
     connect(_layersPanel, &LayersPanel::layerVisibilityChanged,
@@ -87,13 +88,15 @@ TimelineView::TimelineView(Player* player, QWidget *parent)
     }
     connect(_timelinesPanel, &TimelinesPanel::frameViewChanged, this, [this]() {
         const TimelineGrid::View& view = _timelinesPanel->grid()->view();
+        _layersPanel->setRowHeight(view.rowHeight);
+        if (_phoneView)
+            return;
         QSettings settings;
         settings.setValue("timeline/frameWidth", view.frameWidth);
         settings.setValue("timeline/rowHeight", view.rowHeight);
         settings.setValue("timeline/seconds", view.seconds);
         settings.setValue("timeline/preview", view.preview);
         settings.setValue("timeline/spanSelection", view.spanSelection);
-        _layersPanel->setRowHeight(view.rowHeight);
     });
     // The grid draws the rows the list shows, so folders fold their lanes.
     connect(_layersPanel, &LayersPanel::rowsChanged, this, [this]() {
@@ -226,6 +229,33 @@ void TimelineView::setLayersWidth(int width)
     const int total = _splitter->width();
     if (total > _layersWidth)
         _splitter->setSizes({_layersWidth, total - _layersWidth});
+}
+
+void TimelineView::setPhoneView(bool on)
+{
+    if (on == _phoneView)
+        return;
+    TimelineGrid* grid = _timelinesPanel->grid();
+    if (on)
+    {
+        _beforePhone = grid->view();
+        _layersWidthBeforePhone = _layersWidth;
+        _phoneView = true;
+        TimelineGrid::View view = _beforePhone;
+        view.frameWidth = 26;
+        view.rowHeight = 34;
+        view.preview = 0;
+        grid->setView(view);
+        setLayersWidth(150);
+    }
+    else
+    {
+        _phoneView = false;
+        grid->setView(_beforePhone);
+        setLayersWidth(_layersWidthBeforePhone);
+    }
+    _layersPanel->setRowHeight(grid->view().rowHeight);
+    _timelinesPanel->setCompactHeader(on);
 }
 
 void TimelineView::resizeEvent(QResizeEvent* event)
