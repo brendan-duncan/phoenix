@@ -86,6 +86,8 @@ const char* classOf(Filter::Type type)
         return "flash.filters.ColorMatrixFilter";
     case Filter::Type::Convolution:
         return "flash.filters.ConvolutionFilter";
+    case Filter::Type::DisplacementMap:
+        return "flash.filters.DisplacementMapFilter";
     }
     return "flash.filters.BlurFilter";
 }
@@ -503,6 +505,83 @@ void Bindings::defineFilters()
         .property("clamp", getBool(&Filter::clamp), setBool(&Filter::clamp))
         .property("color", color.first, color.second)
         .property("alpha", alpha.first, alpha.second)
+        .define();
+
+    // DisplacementMapFilter: its map kept as given; its point in whole
+    // pixels, its scales as 32-bit floats.
+    vm.defineNativeClass("flash.filters.DisplacementMapFilterMode")
+        .constant("WRAP", text("wrap"))
+        .constant("CLAMP", text("clamp"))
+        .constant("IGNORE", text("ignore"))
+        .constant("COLOR", text("color"))
+        .final()
+        .define();
+    const auto host = [](VM& vm, const Val& self) -> FilterHost& { return hostOf<FilterHost>(vm, self, "BitmapFilter"); };
+    const auto f32 = [](double value) { return static_cast<double>(static_cast<float>(value)); };
+    const auto whole = [](double value) { return std::isnan(value) ? 0.0 : std::trunc(value); };
+    const auto checkedMode = [](VM& vm, const std::string& mode) {
+        if (mode != "wrap" && mode != "clamp" && mode != "ignore" && mode != "color")
+            vm.throwError("ArgumentError", "Error #2008: Parameter mode must be one of the accepted values.", 2008);
+        return mode;
+    };
+    vm.defineNativeClass("flash.filters.DisplacementMapFilter")
+        .extends("flash.filters.BitmapFilter")
+        .final()
+        .constructor(NATIVE(this, make, f32, whole, checkedMode) {
+            if (self.host<FilterHost>())
+                return Val();
+            const display::Point point = args[1].isObject() ? pointOf(args[1]) : display::Point();
+            make(self, Filter::displacementMap(bitmapDataOf(args[0]), display::Point(whole(point.x), whole(point.y)),
+                           uintArg(args, 2), uintArg(args, 3), f32(numberArg(vm, args, 4)), f32(numberArg(vm, args, 5)),
+                           given(args, 6) ? checkedMode(vm, vm.toString(args[6])) : std::string("wrap"),
+                           uintArg(args, 7), numberArg(vm, args, 8)));
+            self.host<FilterHost>()->map = args[0].isObject() ? args[0] : Val::null();
+            return Val();
+        })
+        .property("mapBitmap", NATIVE(host) {
+            const Val& map = host(vm, self).map;
+            return map.isObject() ? map : Val::null();
+        }, NATIVE(this, host) {
+            host(vm, self).map = args[0].isObject() ? args[0] : Val::null();
+            host(vm, self).filter.mapBitmap = bitmapDataOf(args[0]);
+            return Val();
+        })
+        .property("mapPoint", NATIVE(this, host) {
+            const display::Point& p = host(vm, self).filter.mapPoint;
+            return newPoint(p.x, p.y);
+        }, NATIVE(this, host, whole) {
+            const display::Point p = args[0].isObject() ? pointOf(args[0]) : display::Point();
+            host(vm, self).filter.mapPoint = display::Point(whole(p.x), whole(p.y));
+            return Val();
+        })
+        .property("componentX", NATIVE(host) { return number(host(vm, self).filter.componentX); }, NATIVE(host) {
+            host(vm, self).filter.componentX = args[0].toUint32();
+            return Val();
+        })
+        .property("componentY", NATIVE(host) { return number(host(vm, self).filter.componentY); }, NATIVE(host) {
+            host(vm, self).filter.componentY = args[0].toUint32();
+            return Val();
+        })
+        .property("scaleX", NATIVE(host) { return number(host(vm, self).filter.scaleX); }, NATIVE(host, f32) {
+            host(vm, self).filter.scaleX = f32(vm.toNumber(args[0]));
+            return Val();
+        })
+        .property("scaleY", NATIVE(host) { return number(host(vm, self).filter.scaleY); }, NATIVE(host, f32) {
+            host(vm, self).filter.scaleY = f32(vm.toNumber(args[0]));
+            return Val();
+        })
+        .property("mode", NATIVE(host) { return text(host(vm, self).filter.mode); }, NATIVE(host, checkedMode) {
+            host(vm, self).filter.mode = checkedMode(vm, vm.toString(args[0]));
+            return Val();
+        })
+        .property("color", NATIVE(host) { return number(host(vm, self).filter.color); }, NATIVE(host) {
+            host(vm, self).filter.color = args[0].toUint32() & 0xffffff;
+            return Val();
+        })
+        .property("alpha", NATIVE(host) { return number(host(vm, self).filter.alpha); }, NATIVE(host) {
+            host(vm, self).filter.alpha = std::clamp(vm.toNumber(args[0]), 0.0, 1.0);
+            return Val();
+        })
         .define();
 
     // fl.motion.DynamicMatrix and ColorMatrix.

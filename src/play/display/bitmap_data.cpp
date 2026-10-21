@@ -634,7 +634,7 @@ void BitmapData::applyFilter(const BitmapData& source, const Rect& sourceRect, c
     if (disposed() || source.disposed())
         return;
     if (filter.type == BitmapFilter::Type::ColorMatrix || filter.type == BitmapFilter::Type::Convolution ||
-        filter.type == BitmapFilter::Type::Blur)
+        filter.type == BitmapFilter::Type::Blur || filter.type == BitmapFilter::Type::DisplacementMap)
     {
         // Worked here: the source's rectangle copied out, filtered and put
         // back at the destination.
@@ -651,6 +651,8 @@ void BitmapData::applyFilter(const BitmapData& source, const Rect& sourceRect, c
             applyColorMatrix(work.data(), w, h, w, filter.matrix);
         else if (filter.type == BitmapFilter::Type::Convolution)
             applyConvolution(work.data(), w, h, w, filter);
+        else if (filter.type == BitmapFilter::Type::DisplacementMap)
+            applyDisplacementMap(work.data(), w, h, w, filter);
         else
             applyBoxBlur(work.data(), w, h, w, filter.blurX, filter.blurY, std::max(1, filter.quality));
         const int dx = static_cast<int>(std::floor(destPoint.x)) + (sx0 - static_cast<int>(std::floor(sourceRect.x)));

@@ -196,6 +196,9 @@ void DisplayPainter::applyFilters(QImage& image, const std::vector<BitmapFilter>
         else if (filter.type == BitmapFilter::Type::Convolution)
             applyConvolution(reinterpret_cast<uint32_t*>(image.bits()), image.width(), image.height(),
                 static_cast<int>(image.bytesPerLine() / 4), filter);
+        else if (filter.type == BitmapFilter::Type::DisplacementMap)
+            applyDisplacementMap(reinterpret_cast<uint32_t*>(image.bits()), image.width(), image.height(),
+                static_cast<int>(image.bytesPerLine() / 4), filter, scale);
         else
             image = Filters::apply(image, {toFla(filter)}, scale);
     }

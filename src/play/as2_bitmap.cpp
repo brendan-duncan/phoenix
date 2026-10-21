@@ -52,6 +52,14 @@ std::string attributeOf(const std::vector<std::pair<std::string, std::string>>& 
 
 } // namespace
 
+std::shared_ptr<display::BitmapData> bitmapOfHolder(const as3::Val& holder)
+{
+    if (!holder.isObject())
+        return nullptr;
+    const Pixels* pixels = dynamic_cast<const Pixels*>(holder->host.get());
+    return pixels ? pixels->data : nullptr;
+}
+
 as3::Val ActionsPlayer::bitmapNatives()
 {
     as3::VM& vm = _vm;

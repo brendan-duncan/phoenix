@@ -75,6 +75,8 @@ const char* kindOf(display::BitmapFilter::Type type)
         return "colorMatrix";
     case Type::Convolution:
         return "convolution";
+    case Type::DisplacementMap:
+        return "displacementMap";
     }
     return "blur";
 }
@@ -159,8 +161,15 @@ bool ActionsPlayer::filterOf(const as3::Val& value, display::BitmapFilter& out)
     else if (kind == "convolution")
         out = Filter::convolution(quality(0), quality(1), list(2), at(3), at(4), flag(5), flag(6), color(7),
             at(8) / 255.0);
+    else if (kind == "displacementMap")
+    {
+        // [mapBitmap's holder, x, y, componentX, componentY, scaleX,
+        // scaleY, mode, color, alpha in 255ths]
+        const std::shared_ptr<display::BitmapData> map = v.empty() ? nullptr : bitmapOfHolder(v[0]);
+        out = Filter::displacementMap(map, display::Point(at(1), at(2)), as3::toUint32(at(3)), as3::toUint32(at(4)),
+            at(5), at(6), text(7), color(8), at(9) / 255.0);
+    }
     else
-        // A displacement map: none drawn yet.
         return false;
     return true;
 }

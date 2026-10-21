@@ -150,6 +150,8 @@ struct BitmapDataHost : as3::HostObject
 struct FilterHost : as3::HostObject
 {
     display::BitmapFilter filter;
+    /// A DisplacementMapFilter's mapBitmap, as given.
+    as3::Val map;
 };
 struct TextFormatHost : as3::HostObject
 {

@@ -20,6 +20,7 @@ namespace fla {
 
 namespace display {
 struct BitmapFilter;
+class BitmapData;
 }
 
 namespace play {
@@ -66,6 +67,10 @@ std::shared_ptr<const CompiledActions> compiledActionsIn(const std::vector<std::
 /// those of a button's handler, from its conditions.
 std::vector<std::string> clipEventNames(uint32_t events, int key);
 std::vector<std::string> buttonEventNames(uint32_t conditions);
+
+/// The pixels an ActionScript 2 BitmapData keeps (its $bitmap), null for
+/// anything else.
+std::shared_ptr<display::BitmapData> bitmapOfHolder(const as3::Val& holder);
 
 /// Runs compiled actions on a MovieRuntime's clips: the AVM1 interpreter,
 /// with the runtime answering for the clips, their timelines and the player.

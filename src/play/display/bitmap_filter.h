@@ -4,11 +4,14 @@
 #include "graphics.h"
 
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <vector>
 
 namespace fla {
 namespace display {
+
+class BitmapData;
 
 /// One of flash.filters' filters, with ActionScript's defaults: BlurFilter,
 /// DropShadowFilter, GlowFilter, BevelFilter, GradientGlowFilter,
@@ -26,7 +29,8 @@ struct BitmapFilter
         GradientGlow,
         GradientBevel,
         ColorMatrix,
-        Convolution
+        Convolution,
+        DisplacementMap
     };
     Type type = Type::Blur;
 
@@ -71,6 +75,19 @@ struct BitmapFilter
     bool preserveAlpha = true;
     bool clamp = true;
 
+    /// DisplacementMapFilter: each pixel taken from as far away as the
+    /// map's componentX and componentY channels (1 red, 2 green, 4 blue, 8
+    /// alpha; 128 none) say, times scaleX and scaleY in 256ths, the map
+    /// placed at mapPoint; past the edge, by mode ("wrap", "clamp",
+    /// "ignore", or "color" for color and alpha).
+    std::shared_ptr<const BitmapData> mapBitmap;
+    Point mapPoint;
+    uint32_t componentX = 0;
+    uint32_t componentY = 0;
+    double scaleX = 0.0;
+    double scaleY = 0.0;
+    std::string mode = "wrap";
+
     static BitmapFilter blur(double blurX = 4.0, double blurY = 4.0, int quality = 1);
     static BitmapFilter dropShadow(double distance = 4.0, double angle = 45.0, uint32_t color = 0, double alpha = 1.0,
         double blurX = 4.0, double blurY = 4.0, double strength = 1.0, int quality = 1, bool inner = false,
@@ -91,6 +108,10 @@ struct BitmapFilter
         double divisor = 1.0, double bias = 0.0, bool preserveAlpha = true, bool clamp = true, uint32_t color = 0,
         double alpha = 0.0);
 
+    static BitmapFilter displacementMap(std::shared_ptr<const BitmapData> mapBitmap, const Point& mapPoint,
+        uint32_t componentX, uint32_t componentY, double scaleX, double scaleY, const std::string& mode, uint32_t color,
+        double alpha);
+
     /// How far past the object's own pixels it can reach on each side, in
     /// the object's pixels: left, top, right, bottom.
     void reach(double& left, double& top, double& right, double& bottom) const;
@@ -106,6 +127,9 @@ Rect filteredRect(const Rect& rect, const std::vector<BitmapFilter>& filters);
 void applyColorMatrix(uint32_t* pixels, int width, int height, int stride, const std::vector<double>& matrix);
 void applyConvolution(uint32_t* pixels, int width, int height, int stride, const BitmapFilter& filter);
 void applyBoxBlur(uint32_t* pixels, int width, int height, int stride, double blurX, double blurY, int passes);
+/// DisplacementMapFilter in place, \a scale pixels to the object's.
+void applyDisplacementMap(uint32_t* pixels, int width, int height, int stride, const BitmapFilter& filter,
+    double scale = 1.0);
 
 } // namespace display
 } // namespace fla

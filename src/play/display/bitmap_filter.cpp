@@ -1,5 +1,7 @@
 #include "bitmap_filter.h"
 
+#include "bitmap_data.h"
+
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -185,10 +187,95 @@ BitmapFilter BitmapFilter::convolution(int matrixX, int matrixY, const std::vect
     return filter;
 }
 
+BitmapFilter BitmapFilter::displacementMap(std::shared_ptr<const BitmapData> mapBitmap, const Point& mapPoint,
+    uint32_t componentX, uint32_t componentY, double scaleX, double scaleY, const std::string& mode, uint32_t color,
+    double alpha)
+{
+    BitmapFilter filter;
+    filter.type = Type::DisplacementMap;
+    filter.mapBitmap = std::move(mapBitmap);
+    filter.mapPoint = mapPoint;
+    filter.componentX = componentX;
+    filter.componentY = componentY;
+    filter.scaleX = scaleX;
+    filter.scaleY = scaleY;
+    filter.mode = mode;
+    filter.color = color & 0xffffff;
+    filter.alpha = std::max(0.0, std::min(1.0, alpha));
+    filter.blurX = filter.blurY = 0.0;
+    return filter;
+}
+
+void applyDisplacementMap(uint32_t* pixels, int width, int height, int stride, const BitmapFilter& filter, double scale)
+{
+    if (width <= 0 || height <= 0)
+        return;
+    std::vector<uint32_t> source(static_cast<size_t>(width) * height);
+    for (int y = 0; y < height; ++y)
+        std::copy(pixels + static_cast<size_t>(y) * stride, pixels + static_cast<size_t>(y) * stride + width,
+            source.begin() + static_cast<ptrdiff_t>(y) * width);
+    const BitmapData* map = filter.mapBitmap.get();
+    const auto channel = [](uint32_t pixel, uint32_t component) -> double {
+        switch (component)
+        {
+        case 1:
+            return (pixel >> 16) & 0xff;
+        case 2:
+            return (pixel >> 8) & 0xff;
+        case 4:
+            return pixel & 0xff;
+        case 8:
+            return pixel >> 24;
+        default:
+            return 128.0;
+        }
+    };
+    // What shows where a pixel is taken from past the edge, in color mode.
+    const uint32_t a = static_cast<uint32_t>(std::lround(filter.alpha * 255.0));
+    const auto byte = [a](uint32_t c) { return (c * a + 127) / 255; };
+    const uint32_t substitute = (a << 24) | (byte((filter.color >> 16) & 0xff) << 16) |
+        (byte((filter.color >> 8) & 0xff) << 8) | byte(filter.color & 0xff);
+    for (int y = 0; y < height; ++y)
+    {
+        for (int x = 0; x < width; ++x)
+        {
+            // The map's pixel here (none past its edge: no move).
+            uint32_t at = 0x80808080;
+            if (map && !map->disposed())
+            {
+                const int mx = static_cast<int>(std::floor((x - filter.mapPoint.x * scale) / scale));
+                const int my = static_cast<int>(std::floor((y - filter.mapPoint.y * scale) / scale));
+                if (mx >= 0 && my >= 0 && mx < map->width() && my < map->height())
+                    at = map->bits()[static_cast<size_t>(my) * map->width() + mx];
+            }
+            // Moved by whole pixels, to the nearest.
+            int px = x + static_cast<int>(std::lround((channel(at, filter.componentX) - 128.0) * filter.scaleX * scale / 256.0));
+            int py = y + static_cast<int>(std::lround((channel(at, filter.componentY) - 128.0) * filter.scaleY * scale / 256.0));
+            const bool outside = px < 0 || py < 0 || px >= width || py >= height;
+            uint32_t pixel;
+            if (!outside)
+                pixel = source[static_cast<size_t>(py) * width + px];
+            else if (filter.mode == "clamp")
+                pixel = source[static_cast<size_t>(std::clamp(py, 0, height - 1)) * width + std::clamp(px, 0, width - 1)];
+            else if (filter.mode == "ignore")
+                pixel = source[static_cast<size_t>(y) * width + x];
+            else if (filter.mode == "color")
+                pixel = substitute;
+            else
+            {
+                px = ((px % width) + width) % width;
+                py = ((py % height) + height) % height;
+                pixel = source[static_cast<size_t>(py) * width + px];
+            }
+            pixels[static_cast<size_t>(y) * stride + x] = pixel;
+        }
+    }
+}
+
 void BitmapFilter::reach(double& left, double& top, double& right, double& bottom) const
 {
     left = top = right = bottom = 0.0;
-    if (type == Type::ColorMatrix)
+    if (type == Type::ColorMatrix || type == Type::DisplacementMap)
         return;
     if (type == Type::Convolution)
     {
