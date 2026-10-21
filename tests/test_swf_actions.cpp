@@ -369,6 +369,46 @@ TEST(swf_actions_have_the_players_bitmaps)
     }
 }
 
+TEST(swf_actions_put_clips_at_depths_and_draw_in_them)
+{
+    // ActionScript 2's depths, drawing API and coordinates, as a published
+    // movie's actions find them on MovieClip.prototype.
+    std::map<std::string, std::vector<uint8_t>> files;
+    files["DOMDocument.xml"] = bytesOf(
+        "<DOMDocument xmlns=\"http://ns.adobe.com/xfl/2008/\" width=\"200\" height=\"100\" frameRate=\"12\">"
+        "<timelines><DOMTimeline name=\"Scene 1\"><layers><DOMLayer name=\"actions\"><frames>"
+        "<DOMFrame index=\"0\" duration=\"1\"><Actionscript><script><![CDATA["
+        "var a = this.createEmptyMovieClip('one', 5);\nvar b = this.createEmptyMovieClip('two', 2);\n"
+        "trace(a.getDepth() + ' ' + b.getDepth() + ' ' + this.getNextHighestDepth());\n"
+        "a.swapDepths(b);\ntrace(a.getDepth() + ' ' + b.getDepth() + ' ' + this.getInstanceAtDepth(5)._name);\n"
+        "this.createEmptyMovieClip('c', 5);\ntrace(typeof this.two + ' ' + this.c.getDepth());\n"
+        "a.lineStyle(2, 0xFF0000);\na.beginFill(0x00FF00, 50);\na.moveTo(0, 0);\na.lineTo(10, 0);\n"
+        "a.lineTo(10, 20);\na.lineTo(0, 20);\na.endFill();\na._x = 100;\n"
+        "var box = a.getBounds(this);\ntrace(box.xMin + ' ' + box.xMax + ' ' + box.yMin + ' ' + box.yMax);\n"
+        "var p = {x: 5, y: 5};\na.localToGlobal(p);\ntrace(p.x + ' ' + p.y);\n"
+        "var keys = '';\nfor (var k in MovieClip.prototype) keys += k;\ntrace('[' + keys + ']');\n"
+        "a.removeMovieClip();\ntrace(typeof this.one);\nstop();\n"
+        "]]></script></Actionscript><elements/></DOMFrame>"
+        "</frames></DOMLayer></layers></DOMTimeline></timelines></DOMDocument>");
+    Parsed source = parse(files);
+    if (!source.document)
+        return;
+    Reopened movie;
+    reopen(*source.document, movie);
+    CHECK(movie.ok && movie.parsed.document);
+    if (!movie.ok || !movie.parsed.document)
+        return;
+    const std::string got = play(*movie.parsed.document, 1, std::string());
+    const std::string wanted = "5 2 6\n2 5 two\nundefined 5\n99 111 -1 21\n105 5\n[]\nundefined\n";
+    CHECK(got == wanted);
+    if (got != wanted)
+    {
+        std::printf("    got:\n%s", got.c_str());
+        for (const std::string& problem : movie.problems)
+            std::printf("    problem: %s\n", problem.c_str());
+    }
+}
+
 TEST(swf_actions_have_the_players_filters)
 {
     // ActionScript 2's flash.filters: values kept as the player keeps them,
