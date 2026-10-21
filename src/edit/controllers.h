@@ -27,22 +27,40 @@ struct Binding
     /// "scene:N" for a scene's layer, "symbol:Name" for one inside a symbol.
     std::string timeline;
     std::string layer;
-    /// x, y, rotation, scale, scaleX, scaleY, alpha (percent) or
-    /// frame (a graphic's first frame, from 1).
+    /// x, y, rotation, scale, scaleX, scaleY, alpha (percent), frame (a
+    /// graphic's first frame, from 1) or, for a joystick, frameGrid.
     std::string property;
     double from = 0.0;
     double to = 0.0;
+    /// A joystick's axis that drives it: 'x' (from at the left, to at the
+    /// right) or 'y' (from at the top, to at the bottom). A slider's
+    /// bindings all follow its one value.
+    char axis = 'x';
+    /// For a joystick's frameGrid: a graphic's drawings from frame \a from
+    /// to \a to laid out in rows of this many, the handle picking the one
+    /// under it (a head drawn turned left to right across each row and up
+    /// to down from row to row). Both axes drive it.
+    int columns = 0;
 };
 
 struct Controller
 {
     std::string name;
+    /// A slider's value, or a joystick's across, both 0 to 1.
     double value = 0.0;
     std::vector<Binding> bindings;
+    /// A joystick: a handle dragged about a square, its across and down
+    /// each driving the bindings on that axis (a head turning left and
+    /// right, and up and down, at once).
+    bool joystick = false;
+    /// A joystick's down, 0 at the top to 1 at the bottom.
+    double valueY = 0.5;
 };
 
 /// The properties a binding can drive, in menu order.
 const std::vector<std::string>& properties();
+/// The same for a joystick's bindings, with frameGrid.
+const std::vector<std::string>& joystickProperties();
 
 /// The controllers kept in \a document.
 std::vector<Controller> load(const Document& document);
@@ -56,6 +74,9 @@ std::string nameOf(const Document& document, const Timeline* timeline);
 
 /// The value \a binding gives its property at controller value \a value.
 double valueAt(const Binding& binding, double value);
+/// The value \a binding gives its property with a joystick at \a x, \a y
+/// (a slider's binding takes \a x).
+double valueAt(const Controller& controller, const Binding& binding, double x, double y);
 
 /// The property's value on the first symbol instance of \a layer's frame
 /// \a frame, for a binding's starting values; false when there is none.
@@ -65,6 +86,8 @@ bool currentValue(const Layer& layer, int frame, const std::string& property, do
 /// gets a keyframe there (made when there is none) and its instances the
 /// values. One undoable step; null when it drives nothing that is there.
 CommandPtr apply(Document& document, const Controller& controller, double value, int frame);
+/// The same for a joystick put at \a x, \a y.
+CommandPtr apply(Document& document, const Controller& controller, double x, double y, int frame);
 
 } // namespace controllers
 

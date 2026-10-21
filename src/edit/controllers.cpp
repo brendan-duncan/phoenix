@@ -131,7 +131,7 @@ void set(SymbolInstance& instance, const std::string& property, double value)
     }
     else if (property == "alpha")
         instance.colorTransform.alphaMultiplier = std::clamp(value / 100.0, 0.0, 1.0);
-    else if (property == "frame")
+    else if (property == "frame" || property == "frameGrid")
         instance.firstFrame = std::max(0, static_cast<int>(std::lround(value)) - 1);
 }
 
@@ -151,7 +151,7 @@ double get(const SymbolInstance& instance, const std::string& property)
         return parts.scaleY;
     if (property == "alpha")
         return instance.colorTransform.alphaMultiplier * 100.0;
-    if (property == "frame")
+    if (property == "frame" || property == "frameGrid")
         return instance.firstFrame + 1;
     return 0.0;
 }
@@ -313,6 +313,13 @@ const std::vector<std::string>& properties()
     return list;
 }
 
+const std::vector<std::string>& joystickProperties()
+{
+    static const std::vector<std::string> list = {
+        "x", "y", "rotation", "scale", "scaleX", "scaleY", "alpha", "frame", "frameGrid"};
+    return list;
+}
+
 std::vector<Controller> load(const Document& document)
 {
     std::vector<Controller> controllers;
@@ -329,6 +336,8 @@ std::vector<Controller> load(const Document& document)
         Controller controller;
         controller.name = unescaped(head.empty() ? std::string() : head[0]);
         controller.value = head.size() > 1 ? std::atof(head[1].c_str()) : 0.0;
+        controller.joystick = head.size() > 2 && head[2] == "joystick";
+        controller.valueY = head.size() > 3 ? std::atof(head[3].c_str()) : 0.5;
         for (size_t i = 1; i < parts.size(); ++i)
         {
             const std::vector<std::string> fields = split(parts[i], '|');
@@ -340,6 +349,8 @@ std::vector<Controller> load(const Document& document)
             binding.property = unescaped(fields[2]);
             binding.from = std::atof(fields[3].c_str());
             binding.to = std::atof(fields[4].c_str());
+            binding.axis = fields.size() > 5 && fields[5] == "y" ? 'y' : 'x';
+            binding.columns = fields.size() > 6 ? std::atoi(fields[6].c_str()) : 0;
             controller.bindings.push_back(binding);
         }
         if (!controller.name.empty())
@@ -356,9 +367,18 @@ std::vector<std::pair<std::string, std::string>> saved(const Document& document,
         if (!text.empty())
             text += '~';
         text += escaped(controller.name) + "|" + number(controller.value);
+        // A slider is written as before, so older versions read it.
+        if (controller.joystick)
+            text += "|joystick|" + number(controller.valueY);
         for (const Binding& binding : controller.bindings)
+        {
             text += ";" + escaped(binding.timeline) + "|" + escaped(binding.layer) + "|" + escaped(binding.property) +
                     "|" + number(binding.from) + "|" + number(binding.to);
+            if (controller.joystick && (binding.axis == 'y' || binding.columns > 0))
+                text += std::string("|") + binding.axis;
+            if (controller.joystick && binding.columns > 0)
+                text += "|" + std::to_string(binding.columns);
+        }
     }
     std::vector<std::pair<std::string, std::string>> attributes = document.extraAttributes;
     attributes.erase(std::remove_if(attributes.begin(), attributes.end(),
@@ -403,6 +423,25 @@ double valueAt(const Binding& binding, double value)
     return binding.from + (binding.to - binding.from) * std::clamp(value, 0.0, 1.0);
 }
 
+double valueAt(const Controller& controller, const Binding& binding, double x, double y)
+{
+    if (!controller.joystick)
+        return valueAt(binding, x);
+    if (binding.property == "frameGrid")
+    {
+        // The drawings from the first frame to the last, a row of
+        // columns at a time: the handle picks the one under it.
+        const int first = static_cast<int>(std::lround(std::min(binding.from, binding.to)));
+        const int last = static_cast<int>(std::lround(std::max(binding.from, binding.to)));
+        const int columns = std::clamp(binding.columns, 1, last - first + 1);
+        const int rows = std::max(1, (last - first + 1 + columns - 1) / columns);
+        const int column = static_cast<int>(std::lround(std::clamp(x, 0.0, 1.0) * (columns - 1)));
+        const int row = static_cast<int>(std::lround(std::clamp(y, 0.0, 1.0) * (rows - 1)));
+        return std::min(last, first + row * columns + column);
+    }
+    return valueAt(binding, binding.axis == 'y' ? y : x);
+}
+
 bool currentValue(const Layer& layer, int frame, const std::string& property, double& value)
 {
     for (const Frame* key : layer.frames)
@@ -421,6 +460,11 @@ bool currentValue(const Layer& layer, int frame, const std::string& property, do
 
 CommandPtr apply(Document& document, const Controller& controller, double value, int frame)
 {
+    return apply(document, controller, value, controller.valueY, frame);
+}
+
+CommandPtr apply(Document& document, const Controller& controller, double x, double y, int frame)
+{
     std::vector<std::pair<Layer*, int>> keys;
     std::vector<std::pair<Binding, double>> targets;
     for (const Binding& binding : controller.bindings)
@@ -431,7 +475,7 @@ CommandPtr apply(Document& document, const Controller& controller, double value,
             continue;
         if (std::find_if(keys.begin(), keys.end(), [layer](const auto& key) { return key.first == layer; }) == keys.end())
             keys.emplace_back(layer, frame);
-        targets.emplace_back(binding, valueAt(binding, value));
+        targets.emplace_back(binding, valueAt(controller, binding, x, y));
     }
     if (targets.empty())
         return nullptr;

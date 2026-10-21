@@ -43,6 +43,14 @@
 
 <p>Dragging the slider sets every property it drives on the frame shown, as one undo step. A layer with no keyframe there gets one; cut into a tween, the new keyframe takes the in-between and both halves keep tweening. What is saved is ordinary keyframes; the controllers themselves are kept with the document for the next time you open it in Phoenix. To rig a cat's head turn on one, step by step, follow the <a href="tutorial-head-turn.html">A head turn on a controller</a> tutorial.</p>
 
+<h3 id="joysticks">Joysticks</h3>
+
+<p>A joystick is a controller you move in two directions at once: a handle in a square, its across driving some properties and its down others, such as a head that turns left and right and nods up and down. Choose <strong>New</strong> &rsaquo; <strong>Joystick...</strong> in the Controllers panel. When you bind a property to it, also choose its <strong>Axis</strong>: <strong>Across</strong> sets the value at the left and at the right, <strong>Down</strong> the value at the top and at the bottom.</p>
+
+<p>A joystick can also pick drawings from a grid. Draw the head turned every way in one graphic, a row at a time: frames 1 to 3 looking up (left, center, right), 4 to 6 straight ahead, 7 to 9 looking down. Bind the graphic's layer with <strong>Frame grid (graphic)</strong>, a first frame of 1, a last frame of 9 and 3 drawings a row. The handle then shows the drawing under it: top left is frame 1, the middle frame 5.</p>
+
+<p>Drag the handle to set everything it drives on the frame shown, as one undo step; hold Shift to keep to the quarters, and double-click to center it.</p>
+
 <p>To have a bone drive drawings, fades or a shape's corrections as it turns, rather than a slider, see <a href="bones.html#corrections">Bone corrections</a>.</p>
 
 <h2>Deformers</h2>

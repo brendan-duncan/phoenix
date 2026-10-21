@@ -112,3 +112,78 @@ TEST(undoing_a_controller_puts_the_frames_back_exactly)
         CHECK(layer->frames.size() >= 2);
     }
 }
+
+// A joystick: across drives one property and down another, and a frame
+// grid picks the drawing under the handle; it is kept as it was set.
+TEST(a_joystick_drives_its_axes_and_picks_from_a_frame_grid)
+{
+    std::unique_ptr<fla::Document> document(new fla::Document(nullptr));
+    document->symbolList = new fla::SymbolList(document.get());
+    fla::Symbol* head = new fla::Symbol(document->symbolList);
+    head->name = "Head";
+    document->symbolList->symbols.push_back(head);
+    document->symbolList->symbolMap["Head"] = head;
+    fla::Timeline* scene = new fla::Timeline(document.get());
+    document->timelines.push_back(scene);
+    for (const char* name : {"head", "face"})
+    {
+        fla::Layer* layer = new fla::Layer(scene);
+        layer->name = name;
+        fla::Frame* frame = new fla::Frame(layer);
+        frame->duration = 10;
+        fla::SymbolInstance* instance = new fla::SymbolInstance(frame);
+        instance->libraryItemName = "Head";
+        instance->symbol = head;
+        frame->elements.push_back(instance);
+        layer->frames.push_back(frame);
+        scene->layers.push_back(layer);
+    }
+
+    fla::controllers::Controller look;
+    look.name = "Look";
+    look.joystick = true;
+    fla::controllers::Binding across{"scene:0", "head", "x", -20.0, 20.0};
+    fla::controllers::Binding down{"scene:0", "head", "y", -10.0, 10.0};
+    down.axis = 'y';
+    // Nine drawings, frames 1 to 9, three a row.
+    fla::controllers::Binding grid{"scene:0", "face", "frameGrid", 1.0, 9.0};
+    grid.columns = 3;
+    look.bindings = {across, down, grid};
+
+    CHECK_NEAR(fla::controllers::valueAt(look, across, 0.75, 0.0), 10.0);
+    CHECK_NEAR(fla::controllers::valueAt(look, down, 0.75, 0.0), -10.0);
+    CHECK_NEAR(fla::controllers::valueAt(look, grid, 0.0, 0.0), 1.0);
+    CHECK_NEAR(fla::controllers::valueAt(look, grid, 1.0, 0.0), 3.0);
+    CHECK_NEAR(fla::controllers::valueAt(look, grid, 0.5, 0.5), 5.0);
+    CHECK_NEAR(fla::controllers::valueAt(look, grid, 1.0, 1.0), 9.0);
+    CHECK_NEAR(fla::controllers::valueAt(look, grid, 0.1, 0.9), 7.0);
+
+    // Kept and read back: a joystick, where its handle is, the axes and the grid.
+    look.value = 0.25;
+    look.valueY = 0.8;
+    document->extraAttributes = fla::controllers::saved(*document, {look});
+    const std::vector<fla::controllers::Controller> loaded = fla::controllers::load(*document);
+    CHECK(loaded.size() == 1 && loaded[0].joystick);
+    CHECK_NEAR(loaded[0].value, 0.25);
+    CHECK_NEAR(loaded[0].valueY, 0.8);
+    CHECK(loaded[0].bindings.size() == 3);
+    CHECK(loaded[0].bindings[0].axis == 'x' && loaded[0].bindings[1].axis == 'y');
+    CHECK(loaded[0].bindings[2].property == "frameGrid" && loaded[0].bindings[2].columns == 3);
+
+    // A slider is written as before.
+    fla::controllers::Controller slide;
+    slide.name = "Slide";
+    slide.bindings.push_back({"scene:0", "head", "x", 0.0, 1.0});
+    std::string text;
+    for (const auto& [key, value] : fla::controllers::saved(*document, {slide}))
+        if (key == "phoenixControllers")
+            text = value;
+    CHECK(text == "Slide|0;scene:0|head|x|0|1");
+
+    fla::CommandStack stack;
+    stack.push(fla::controllers::apply(*document, look, 1.0, 0.0, 4));
+    const auto* moved = dynamic_cast<const fla::SymbolInstance*>(scene->layers[0]->frames[1]->elements.front());
+    CHECK(moved && std::abs(moved->transform.tx - 20.0) < 1e-6 && std::abs(moved->transform.ty + 10.0) < 1e-6);
+    const auto* face = dynamic_cast<const fla::SymbolInstance*>(scene->layers[1]->frames[1]->elements.front());
+    CHECK(face && face->firstFrame == 2);
+}
