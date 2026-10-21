@@ -65,6 +65,7 @@ private:
         Transition,
         Input,
         Listener,
+        Binding,
     };
 
     fla::Timeline* timeline() const;
@@ -88,6 +89,7 @@ private:
     void addTransition(int from, int to);
     void addInput();
     void addListener();
+    void addBinding();
     void removePicked();
     void updateScripts();
 
@@ -100,6 +102,8 @@ private:
     QWidget* buildTransitionEditor();
     QWidget* buildInputEditor();
     QWidget* buildListenerEditor();
+    QWidget* buildBindingEditor();
+    void bindingEdited();
     void stateEdited();
     void transitionEdited();
     void inputEdited();
@@ -123,6 +127,7 @@ private:
     QPushButton* _remove;
     QListWidget* _inputs;
     QListWidget* _listeners;
+    QListWidget* _bindings;
     QStackedWidget* _editors;
 
     // The state editor.
@@ -167,4 +172,16 @@ private:
     QComboBox* _listenerChange;
     QDoubleSpinBox* _listenerValue;
     QFormLayout* _listenerForm;
+
+    // The binding editor.
+    QComboBox* _bindInput;
+    QComboBox* _bindTarget;
+    QComboBox* _bindProperty;
+    QWidget* _bindRangeRow;
+    QDoubleSpinBox* _bindLow;
+    QDoubleSpinBox* _bindHigh;
+    QWidget* _bindValuesRow;
+    QDoubleSpinBox* _bindFrom;
+    QDoubleSpinBox* _bindTo;
+    QFormLayout* _bindForm;
 };

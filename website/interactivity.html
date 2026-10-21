@@ -128,11 +128,41 @@
 
 <p>Listeners and transitions together make small games: a listener adds 1 to <i>score</i> each time a coin is clicked, and a transition goes to <i>win</i> when <i>score is at least 10</i>.</p>
 
+<h2 id="bindings">Bindings</h2>
+
+<p>A binding shows an input on the stage, and keeps it up to date as the input changes. Click <strong>Add Binding</strong>, choose the <strong>Input</strong>, the instance it is <strong>Shown in</strong> (a movie clip, or a dynamic text field with an instance name; select one on the stage and click <strong>Use Selected</strong>), and what it sets <strong>As its</strong>:</p>
+
+<table>
+  <thead><tr><th>As its</th><th>What it does</th></tr></thead>
+  <tbody>
+    <tr><td>text</td><td class="wrap">The text field shows the input's value: a score, a count of lives.</td></tr>
+    <tr><td>visibility</td><td class="wrap">The movie clip shows while a switch is on (or a number is not 0), and hides otherwise.</td></tr>
+    <tr><td>frame, x, y, turn, fade (%), size (%)</td><td class="wrap">A number sets it in proportion: <strong>Input from</strong> 0 <strong>to</strong> 10 <strong>sets it from</strong> 20 <strong>to</strong> 320 moves the clip from x 20 at 0 to x 320 at 10, held at the ends. A health bar, a needle, a fade.</td></tr>
+  </tbody>
+</table>
+
+<p>A movie needs no states for bindings: inputs, listeners and bindings alone make a counter, a slider or a scoreboard.</p>
+
 <h2 id="test">Try it</h2>
 
 <p>Click <strong>Test</strong> at the top of the panel. The movie plays in <a href="actionscript.html#test-movie">Test Movie</a>, where you can click and press keys and watch the states change.</p>
 
 <p>Each change in the panel is one step that <span class="menu-path">Edit &rsaquo; Undo</span> takes back. <strong>Remove</strong> takes out the state, arrow, input or listener picked; a state's frame label stays on the timeline.</p>
+
+<h2 id="web-page">On a web page</h2>
+
+<p>A movie published as an <a href="export.html#html5">HTML5 page</a> lets the page around it read and set its inputs, so a form, a button of the page's own or live data can drive the animation. <code>phoenix.start</code> gives the page the player:</p>
+
+<pre><code>phoenix.start({container: "phoenix-stage"}).then(function (player) {
+    player.setInput("score", 3);        // bindings show it, transitions may go
+    player.fire("poke");                // a trigger
+    console.log(player.input("score"), player.state);
+    player.onChange(function (now) {    // whenever the state or an input changes
+        console.log(now.state, now.inputs);
+    });
+});</code></pre>
+
+<p><code>inputs()</code> gives all of them at once. The movie's own scripts see the same values.</p>
 
 <h2 id="what-phoenix-writes">What Phoenix writes</h2>
 

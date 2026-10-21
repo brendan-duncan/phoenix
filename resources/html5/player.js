@@ -143,6 +143,50 @@ function tick() {
     }
     ++frameCount;
     requestDraw();
+    statesChanged();
+}
+
+/// What keeps the States panel's inputs and state: the main timeline, or
+/// its ActionScript 1 and 2 face; null for a movie with no states.
+function statesHolder() {
+    if (!rootClip)
+        return null;
+    if (rootClip.phxInputs)
+        return rootClip;
+    var face = typeof phoenix.as2Face === "function" ? phoenix.as2Face(rootClip) : null;
+    return face && face.phxInputs ? face : null;
+}
+/// Runs one of the states' functions (phxBind, phxCheck), if the movie has it.
+function callStates(holder, name) {
+    if (typeof holder[name] !== "function")
+        return;
+    try {
+        holder[name].call(holder);
+    } catch (error) {
+        phoenix._.reportError(error, "the states");
+    }
+}
+var stateListeners = [];
+var lastStates = null;
+/// Tells the page's listeners when the state or an input has changed.
+function statesChanged() {
+    if (!stateListeners.length)
+        return;
+    var holder = statesHolder();
+    if (!holder)
+        return;
+    var now = {state: holder.phxState === undefined ? null : holder.phxState, inputs: Object.assign({}, holder.phxInputs)};
+    var key = JSON.stringify(now);
+    if (key === lastStates)
+        return;
+    lastStates = key;
+    stateListeners.slice().forEach(function (listener) {
+        try {
+            listener(now);
+        } catch (error) {
+            phoenix._.reportError(error, "a page's state listener");
+        }
+    });
 }
 
 // Sounds on frames.
@@ -1134,6 +1178,42 @@ phoenix.player = {
     get root() { return rootClip; },
     draw: drawNow,
     errors: function () { return (phoenix._.errors || []).slice(); },
+    /// The States panel's inputs (README.md, "Inputs"): one by name, or
+    /// all of them as an object.
+    input: function (name) {
+        var holder = statesHolder();
+        return holder ? holder.phxInputs[name] : undefined;
+    },
+    inputs: function () {
+        var holder = statesHolder();
+        return holder ? Object.assign({}, holder.phxInputs) : {};
+    },
+    /// Sets an input: what it is bound to shows it, and the transitions
+    /// waiting on it may go. False for a movie with no states.
+    setInput: function (name, value) {
+        var holder = statesHolder();
+        if (!holder)
+            return false;
+        holder.phxInputs[name] = value;
+        callStates(holder, "phxBind");
+        callStates(holder, "phxCheck");
+        requestDraw();
+        statesChanged();
+        return true;
+    },
+    /// Fires a trigger input.
+    fire: function (name) { return phoenix.player.setInput(name, true); },
+    /// The state the main timeline is in, or null.
+    get state() {
+        var holder = statesHolder();
+        return holder && holder.phxState !== undefined ? holder.phxState : null;
+    },
+    /// Calls \a listener with {state, inputs} whenever either changes.
+    onChange: function (listener) {
+        stateListeners.push(listener);
+        lastStates = null;
+        statesChanged();
+    },
     /// Where a point of the stage is on the page (client coordinates), for
     /// tests that send the pointer there.
     pagePoint: function (x, y) {

@@ -8,6 +8,7 @@
 #include "../src/data/fla_document.h"
 #include "../src/data/frame.h"
 #include "../src/data/layer.h"
+#include "../src/data/static_text.h"
 #include "../src/data/timeline.h"
 #include "../src/edit/command_stack.h"
 #include "../src/edit/html5_actionscript2.h"
@@ -16,10 +17,13 @@
 #include "../src/edit/swf_actionscript3.h"
 #include "../src/parser/document_parser.h"
 #include "../src/parser/zip_reader.h"
+#include "../src/play/display/display_object.h"
+#include "../src/play/display/text_field.h"
 #include "../src/play/movie_runtime.h"
 
 #include <quickjs.h>
 
+#include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <map>
@@ -355,6 +359,115 @@ std::unique_ptr<Movie> layeredMovie(int version)
     return made;
 }
 
+/// A movie whose input score shows in the text field "label" and moves
+/// the movie clip "face" (0 to 10 as 0 to 100 across); A adds 1 to it.
+std::unique_ptr<Movie> boundMovie(int version)
+{
+    const std::string square = "<DOMShape><fills><FillStyle index=\"1\"><SolidColor color=\"#FF0000\"/></FillStyle></fills>"
+                               "<edges><Edge fillStyle1=\"1\" edges=\"!0 0|800 0!800 0|800 800!800 800|0 800!0 800|0 0\"/>"
+                               "</edges></DOMShape>";
+    std::map<std::string, std::vector<uint8_t>> files;
+    files["DOMDocument.xml"] = bytesOf(
+        "<DOMDocument xmlns=\"http://ns.adobe.com/xfl/2008/\" width=\"200\" height=\"100\" frameRate=\"12\">"
+        "<symbols><Include href=\"Face.xml\"/></symbols>"
+        "<timelines><DOMTimeline name=\"Scene 1\"><layers>"
+        "<DOMLayer name=\"art\"><frames><DOMFrame index=\"0\" duration=\"10\"><elements>"
+        "<DOMSymbolInstance libraryItemName=\"Face\" name=\"face\" symbolType=\"movie clip\"/>"
+        "<DOMDynamicText name=\"label\" width=\"80\" height=\"20\"><matrix><Matrix tx=\"100\" ty=\"10\"/></matrix>"
+        "<textRuns><DOMTextRun><characters>0</characters><textAttrs><DOMTextAttrs face=\"Arial\" size=\"12\"/>"
+        "</textAttrs></DOMTextRun></textRuns></DOMDynamicText>"
+        "</elements></DOMFrame></frames></DOMLayer>"
+        "</layers></DOMTimeline></timelines></DOMDocument>");
+    files["LIBRARY/Face.xml"] = bytesOf(
+        "<DOMSymbolItem xmlns=\"http://ns.adobe.com/xfl/2008/\" name=\"Face\" symbolType=\"movie clip\">"
+        "<timeline><DOMTimeline name=\"Face\"><layers><DOMLayer name=\"art\"><frames>"
+        "<DOMFrame index=\"0\"><elements>" +
+        square + "</elements></DOMFrame></frames></DOMLayer></layers></DOMTimeline></timeline></DOMSymbolItem>");
+    const std::string settings =
+        "<flash_profiles><flash_profile name=\"Default\" current=\"true\"><PublishFlashProperties enabled=\"true\">"
+        "<ActionScriptVersion>" +
+        std::to_string(version) +
+        "</ActionScriptVersion><Version>10</Version></PublishFlashProperties></flash_profile></flash_profiles>";
+
+    auto made = std::make_unique<Movie>();
+    made->reader.reset(new ZipReader());
+    made->reader->openMemory(files);
+    made->root.reset(new fla::FLADocument(nullptr));
+    DocumentParser parser(made->reader.get());
+    const auto xml = files.at("DOMDocument.xml");
+    made->document = parser.parse(std::string(xml.begin(), xml.end()), made->root.get());
+    made->root->document = made->document;
+    if (!made->document || made->document->timelines.empty())
+        return nullptr;
+    made->document->extraFiles.emplace_back("PublishSettings.xml", fla::LazyBytes(bytesOf(settings)));
+
+    // Bindings and no states at all.
+    st::Graph graph;
+    graph.inputs = {{"score", st::InputKind::Number, 0}};
+    graph.listeners = {{st::When::Key, "A", "score", st::Change::Add, 1}};
+    st::Binding text;
+    text.input = "score";
+    text.target = "label";
+    text.property = "text";
+    st::Binding across;
+    across.input = "score";
+    across.target = "face";
+    across.property = "x";
+    across.low = 0.0;
+    across.high = 10.0;
+    across.from = 0.0;
+    across.to = 100.0;
+    graph.bindings = {text, across};
+    st::apply(made->stack, *made->document->timelines[0], graph, st::Edit(), version, 12.0, "States");
+    return made;
+}
+
+void playBindings(int version)
+{
+    std::unique_ptr<Movie> made = boundMovie(version);
+    CHECK(made != nullptr);
+    if (!made)
+        return;
+    fla::Timeline& scene = *made->document->timelines[0];
+    const fla::StaticText* field = nullptr;
+    for (const fla::Layer* layer : scene.layers)
+        for (const fla::Frame* frame : layer->frames)
+            for (const fla::Element* element : frame->elements)
+                if (element->elementType() == fla::Element::Type::StaticText)
+                    field = static_cast<const fla::StaticText*>(element);
+    CHECK(field != nullptr);
+    fla::play::MovieRuntime runtime(scene, 12.0);
+    runtime.setActionScriptVersion(version);
+    std::vector<std::string> errors;
+    runtime.error = [&errors](const std::string& line) { errors.push_back(line); };
+    runtime.start();
+    fla::play::Clip& root = runtime.root();
+    fla::play::Clip* face = root.named("face");
+    CHECK(face != nullptr && face->display != nullptr);
+    if (!face || !face->display || !field)
+        return;
+    runtime.step();
+    for (int i = 0; i < 3; ++i)
+    {
+        runtime.keyDown(65, 'a');
+        runtime.keyUp(65, 'a');
+    }
+    runtime.afterEvents();
+    runtime.step();
+    std::optional<std::string> shown = runtime.textOf(root, *field);
+    // ActionScript 3 sets the display text field itself.
+    if (!shown)
+        if (const fla::display::TextField* display = runtime.displayField(root, *field))
+            shown = display->text();
+    CHECK(shown && *shown == "3");
+    if (shown && *shown != "3")
+        std::printf("    the label shows %s\n", shown->c_str());
+    CHECK(std::abs(face->display->x() - 30.0) < 1e-6);
+    CHECK(errors.empty());
+    for (const std::string& error : errors)
+        std::printf("    %s\n", error.c_str());
+}
+
 void playLayers(int version)
 {
     std::unique_ptr<Movie> made = layeredMovie(version);
@@ -409,6 +522,58 @@ TEST(state_layers_and_blends_play_as_actionscript_3)
 TEST(state_layers_and_blends_play_as_actionscript_2)
 {
     playLayers(2);
+}
+
+TEST(state_bindings_show_inputs_as_actionscript_3)
+{
+    playBindings(3);
+}
+
+TEST(state_bindings_show_inputs_as_actionscript_2)
+{
+    playBindings(2);
+}
+
+TEST(a_page_sets_and_reads_the_inputs)
+{
+    std::unique_ptr<Movie> made = boundMovie(2);
+    CHECK(made != nullptr);
+    if (!made)
+        return;
+    FakeArt art;
+    fla::html5::ActionScript2 scripts;
+    fla::html5::Options options;
+    options.actionScript2 = &scripts;
+    std::vector<std::string> notes;
+    const std::string content = fla::html5::content(*made->document, art, options, &notes);
+    const fla::html5as2::Result translated = fla::html5as2::translate(*made->document, scripts,
+        [](const std::string&) { return std::optional<std::string>(); }, &notes);
+    for (const std::string& note : notes)
+        std::printf("    note: %s\n", note.c_str());
+    Runtime js;
+    CHECK(js.ok);
+    if (!js.ok)
+        return;
+    CHECK(js.eval("phoenix.content(" + content + ");", "content"));
+    CHECK(js.eval(translated.code, "movie.as.js"));
+    CHECK(js.eval(R"JS(
+phoenix.start({}).then(function (player) {
+    player.pause();
+    player.tick();
+    var changes = [];
+    player.onChange(function (now) { changes.push(now.inputs.score); });
+    player.setInput("score", 7);
+    var root = phoenix.as2Face(player.root);
+    console.log("score " + player.input("score") + " label " + root.label.text + " x " + root.face._x +
+        " changes " + changes.join(","));
+});
+)JS", "<test>"));
+    if (!js.error.empty())
+        std::printf("    %s\n", js.error.c_str());
+    const std::string out = js.output();
+    CHECK(out.find("score 7 label 7 x 70 changes 0,7") != std::string::npos);
+    if (out.find("score 7 label 7 x 70 changes 0,7") == std::string::npos)
+        std::printf("%s\n", out.c_str());
 }
 
 TEST(state_layers_compile_for_swf_and_html5)

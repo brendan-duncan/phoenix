@@ -63,6 +63,27 @@ with Phoenix's render of the same frame in a headless browser.
 a point of the stage is on the page, for tests that send the pointer
 there).
 
+### Inputs
+
+A movie made with the States panel keeps its inputs on the main timeline
+(`phxInputs`, with its state in `phxState`). The page reads and sets them
+through the player:
+
+- `input(name)`, `inputs()`: an input's value, or all of them.
+- `setInput(name, value)`: sets one; bindings show it at once and
+  transitions waiting on it may go. False when the movie has no states.
+- `fire(name)`: fires a trigger.
+- `state`: the state the main timeline is in.
+- `onChange(listener)`: calls `listener({state, inputs})` whenever either
+  changes, and once at once.
+
+```js
+phoenix.start({container: "phoenix-stage"}).then(function (player) {
+    player.setInput("score", 3);
+    player.onChange(function (now) { console.log(now.state, now.inputs.score); });
+});
+```
+
 ## The runtime
 
 | File | Holds |

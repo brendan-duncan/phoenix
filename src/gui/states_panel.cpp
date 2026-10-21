@@ -171,6 +171,7 @@ StatesPanel::StatesPanel(StatesLinks links, QWidget* parent)
     _editors->addWidget(buildTransitionEditor());
     _editors->addWidget(buildInputEditor());
     _editors->addWidget(buildListenerEditor());
+    _editors->addWidget(buildBindingEditor());
     pickedLayout->addWidget(_editors);
     column->addWidget(picked);
     column->addStretch(1);
@@ -209,6 +210,25 @@ StatesPanel::StatesPanel(StatesLinks links, QWidget* parent)
     listenersLayout->addWidget(_listeners);
     listenersLayout->addWidget(addListener, 0, Qt::AlignLeft);
     listsColumn->addWidget(listeners);
+
+    QGroupBox* bindings = new QGroupBox("Bindings", lists);
+    bindings->setToolTip("Inputs shown on the stage: a text field's text, or a movie clip's place, turn, fade, size, "
+                         "frame or visibility, kept up as the input changes");
+    QVBoxLayout* bindingsLayout = new QVBoxLayout(bindings);
+    _bindings = new QListWidget(bindings);
+    _bindings->setObjectName("statesBindings");
+    _bindings->setMinimumHeight(48);
+    _bindings->setWordWrap(true);
+    QPushButton* addBinding = new QPushButton("Add Binding", bindings);
+    addBinding->setObjectName("statesAddBinding");
+    bindingsLayout->addWidget(_bindings);
+    bindingsLayout->addWidget(addBinding, 0, Qt::AlignLeft);
+    listsColumn->addWidget(bindings);
+    connect(addBinding, &QPushButton::clicked, this, &StatesPanel::addBinding);
+    connect(_bindings, &QListWidget::currentRowChanged, this, [this](int row) {
+        if (!_refreshing && row >= 0)
+            pick(Picked::Binding, row);
+    });
     listsArea->setWidget(lists);
     split->addWidget(listsArea);
     split->setStretchFactor(0, 4);
@@ -364,6 +384,7 @@ void StatesPanel::refresh()
         : _kind == Picked::Transition         ? static_cast<int>(_graph.transitions.size())
         : _kind == Picked::Input              ? static_cast<int>(_graph.inputs.size())
         : _kind == Picked::Listener           ? static_cast<int>(_graph.listeners.size())
+        : _kind == Picked::Binding            ? static_cast<int>(_graph.bindings.size())
                                               : 0;
     if (_index < 0 || _index >= count)
     {
@@ -385,6 +406,10 @@ void StatesPanel::refresh()
     for (const st::Listener& listener : _graph.listeners)
         _listeners->addItem(QString::fromStdString(st::describe(listener)));
     _listeners->setCurrentRow(_kind == Picked::Listener ? _index : -1);
+    _bindings->clear();
+    for (const st::Binding& binding : _graph.bindings)
+        _bindings->addItem(QString::fromStdString(st::describe(binding)));
+    _bindings->setCurrentRow(_kind == Picked::Binding ? _index : -1);
 
     QString notice;
     if (!missing.isEmpty())
@@ -409,6 +434,8 @@ void StatesPanel::pick(Picked kind, int index)
         _inputs->setCurrentRow(-1);
     if (_kind != Picked::Listener)
         _listeners->setCurrentRow(-1);
+    if (_kind != Picked::Binding)
+        _bindings->setCurrentRow(-1);
     if (_kind != Picked::State && _kind != Picked::Transition)
         _view->setPicked(StatesView::Pick::None, -1);
     _refreshing = false;
@@ -663,6 +690,66 @@ QWidget* StatesPanel::buildListenerEditor()
     return page;
 }
 
+QWidget* StatesPanel::buildBindingEditor()
+{
+    QWidget* page = new QWidget();
+    _bindForm = new QFormLayout(page);
+    _bindForm->setContentsMargins(0, 0, 0, 0);
+    _bindInput = new QComboBox(page);
+    QWidget* targetRow = new QWidget(page);
+    QHBoxLayout* targetLayout = new QHBoxLayout(targetRow);
+    targetLayout->setContentsMargins(0, 0, 0, 0);
+    _bindTarget = new QComboBox(targetRow);
+    _bindTarget->setEditable(true);
+    _bindTarget->setToolTip("The instance name of the movie clip or text field on the stage");
+    QPushButton* useSelected = new QPushButton("Use Selected", targetRow);
+    useSelected->setToolTip("The movie clip or text field selected on the stage (give it an instance name first)");
+    targetLayout->addWidget(_bindTarget, 1);
+    targetLayout->addWidget(useSelected);
+    _bindProperty = new QComboBox(page);
+    for (const std::string& property : st::bindProperties())
+        _bindProperty->addItem(QString::fromStdString(st::words(property)), QString::fromStdString(property));
+    _bindProperty->setToolTip("What the input sets: a text field's text, or a movie clip's visibility, frame, place, "
+                              "turn, fade or size");
+    const auto pair = [page](QWidget*& row, QDoubleSpinBox*& first, QDoubleSpinBox*& second, const QString& tip) {
+        row = new QWidget(page);
+        QHBoxLayout* layout = new QHBoxLayout(row);
+        layout->setContentsMargins(0, 0, 0, 0);
+        first = new QDoubleSpinBox(row);
+        second = new QDoubleSpinBox(row);
+        for (QDoubleSpinBox* box : {first, second})
+        {
+            box->setRange(-99999.0, 99999.0);
+            box->setDecimals(2);
+            box->setKeyboardTracking(false);
+            box->setToolTip(tip);
+        }
+        layout->addWidget(first, 1);
+        layout->addWidget(new QLabel("to", row));
+        layout->addWidget(second, 1);
+    };
+    pair(_bindRangeRow, _bindLow, _bindHigh, "The input's values that map onto the property's");
+    pair(_bindValuesRow, _bindFrom, _bindTo, "The property's values for the input's (held at the ends)");
+    _bindForm->addRow("Input", _bindInput);
+    _bindForm->addRow("Shown in", targetRow);
+    _bindForm->addRow("As its", _bindProperty);
+    _bindForm->addRow("Input from", _bindRangeRow);
+    _bindForm->addRow("Sets it from", _bindValuesRow);
+    for (QComboBox* combo : {_bindInput, _bindProperty, _bindTarget})
+        connect(combo, qOverload<int>(&QComboBox::currentIndexChanged), this, &StatesPanel::bindingEdited);
+    connect(_bindTarget->lineEdit(), &QLineEdit::editingFinished, this, &StatesPanel::bindingEdited);
+    for (QDoubleSpinBox* box : {_bindLow, _bindHigh, _bindFrom, _bindTo})
+        connect(box, qOverload<double>(&QDoubleSpinBox::valueChanged), this, &StatesPanel::bindingEdited);
+    connect(useSelected, &QPushButton::clicked, this, [this]() {
+        const QString name = _links.selectedInstance ? _links.selectedInstance() : QString();
+        if (name.isEmpty())
+            return;
+        _bindTarget->setCurrentText(name);
+        bindingEdited();
+    });
+    return page;
+}
+
 void StatesPanel::showEditor()
 {
     const bool was = _refreshing;
@@ -775,6 +862,28 @@ void StatesPanel::showEditor()
         _listenerForm->setRowVisible(_listenerValue,
             listener.change == st::Change::Set || listener.change == st::Change::Add);
         _editors->setCurrentIndex(4);
+        break;
+    }
+    case Picked::Binding:
+    {
+        const st::Binding& binding = _graph.bindings[static_cast<size_t>(_index)];
+        fillInputs(_bindInput, binding.input, false);
+        _bindTarget->clear();
+        if (edited)
+            for (const std::string& name : st::bindableNames(*edited))
+                _bindTarget->addItem(QString::fromStdString(name));
+        if (!binding.target.empty() && _bindTarget->findText(QString::fromStdString(binding.target)) < 0)
+            _bindTarget->addItem(QString::fromStdString(binding.target));
+        _bindTarget->setCurrentText(QString::fromStdString(binding.target));
+        setCurrentData(_bindProperty, QString::fromStdString(binding.property));
+        _bindLow->setValue(binding.low);
+        _bindHigh->setValue(binding.high);
+        _bindFrom->setValue(binding.from);
+        _bindTo->setValue(binding.to);
+        const bool mapped = st::mapped(binding.property);
+        _bindForm->setRowVisible(_bindRangeRow, mapped);
+        _bindForm->setRowVisible(_bindValuesRow, mapped);
+        _editors->setCurrentIndex(5);
         break;
     }
     case Picked::None:
@@ -897,14 +1006,8 @@ void StatesPanel::inputEdited()
             _inputName->setText(QString::fromStdString(input.name));
             return;
         }
-        // What tests or sets it follows it.
-        for (st::Transition& transition : graph.transitions)
-            if (transition.condition.input == input.name)
-                transition.condition.input = name;
-        for (st::Listener& listener : graph.listeners)
-            if (listener.input == input.name)
-                listener.input = name;
-        input.name = name;
+        // What tests, sets or shows it follows it.
+        graph.renameInput(input.name, name);
     }
     const st::InputKind kind = static_cast<st::InputKind>(_inputKind->currentData().toInt());
     if (kind != input.kind)
@@ -1197,6 +1300,63 @@ void StatesPanel::addListener()
     _listeners->setCurrentRow(_index);
 }
 
+void StatesPanel::bindingEdited()
+{
+    if (_refreshing || _kind != Picked::Binding)
+        return;
+    st::Graph graph = _graph;
+    st::Binding& binding = graph.bindings[static_cast<size_t>(_index)];
+    binding.input = _bindInput->currentData().toString().toStdString();
+    binding.target = _bindTarget->currentText().trimmed().toStdString();
+    const std::string property = _bindProperty->currentData().toString().toStdString();
+    if (property != binding.property && property == "alpha")
+    {
+        // A fade starts out from hidden to whole.
+        _bindFrom->setValue(0.0);
+        _bindTo->setValue(100.0);
+    }
+    else if (property != binding.property && property == "scale")
+    {
+        _bindFrom->setValue(50.0);
+        _bindTo->setValue(150.0);
+    }
+    binding.property = property;
+    binding.low = _bindLow->value();
+    binding.high = _bindHigh->value();
+    binding.from = _bindFrom->value();
+    binding.to = _bindTo->value();
+    if (graph == _graph)
+        return;
+    commit(graph, st::Edit(), "Change Binding");
+}
+
+void StatesPanel::addBinding()
+{
+    const fla::Timeline* edited = timeline();
+    if (!edited)
+        return;
+    st::Graph graph = _graph;
+    if (graph.inputs.empty())
+    {
+        st::Input input;
+        input.name = "input 1";
+        input.kind = st::InputKind::Number;
+        graph.inputs.push_back(input);
+    }
+    st::Binding binding;
+    binding.input = graph.inputs.front().name;
+    binding.property = "text";
+    binding.high = 10.0;
+    binding.to = 100.0;
+    const std::vector<std::string> names = st::bindableNames(*edited);
+    if (!names.empty())
+        binding.target = names.front();
+    graph.bindings.push_back(binding);
+    commit(graph, st::Edit(), "Add Binding");
+    pick(Picked::Binding, static_cast<int>(_graph.bindings.size()) - 1);
+    _bindings->setCurrentRow(_index);
+}
+
 void StatesPanel::removePicked()
 {
     st::Graph graph = _graph;
@@ -1218,6 +1378,10 @@ void StatesPanel::removePicked()
     case Picked::Listener:
         graph.listeners.erase(graph.listeners.begin() + _index);
         name = "Remove Listener";
+        break;
+    case Picked::Binding:
+        graph.bindings.erase(graph.bindings.begin() + _index);
+        name = "Remove Binding";
         break;
     case Picked::None:
         return;

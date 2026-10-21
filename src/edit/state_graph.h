@@ -64,6 +64,25 @@ struct State
     double high = 1.0;
 };
 
+/// An input shown on the stage: a named text field's text, or a named
+/// movie clip's place, turn, fade, size, frame or visibility, kept up as
+/// the input changes. A number maps from \a low .. \a high onto \a from ..
+/// \a to (held at the ends); text shows the value, visible goes by
+/// whether it is on (or not 0).
+struct Binding
+{
+    std::string input;
+    /// The instance name of the clip or text field.
+    std::string target;
+    /// text, visible, frame, x, y, rotation, alpha (percent) or scale
+    /// (percent).
+    std::string property;
+    double low = 0.0;
+    double high = 1.0;
+    double from = 0.0;
+    double to = 1.0;
+};
+
 /// A layer of states playing alongside the timeline's own: the movie clip
 /// named \a target on the timeline moves through its own labels, by
 /// transitions of its own, at the same time.
@@ -177,8 +196,10 @@ struct Graph
     std::vector<Listener> listeners;
     /// The layers beyond the timeline's own (layer 1 is layers[0]).
     std::vector<StateLayer> layers;
+    std::vector<Binding> bindings;
 
-    bool empty() const { return states.empty(); }
+    /// Nothing to turn into a script: no states and no bindings.
+    bool empty() const { return states.empty() && bindings.empty(); }
     int stateNamed(const std::string& label) const;
     /// The state of layer \a layer with label \a label, or -1.
     int stateNamed(const std::string& label, int layer) const;
@@ -189,8 +210,12 @@ struct Graph
     void removeState(int index);
     /// Takes out layer \a layer (1 and up) and its states.
     void removeLayer(int layer);
-    /// Takes out input \a name and the conditions and listeners on it.
+    /// Takes out input \a name and the conditions, listeners and bindings
+    /// on it.
     void removeInput(const std::string& name);
+    /// Every condition, listener, blend and binding on input \a from goes
+    /// by \a to instead.
+    void renameInput(const std::string& from, const std::string& to);
     bool operator==(const Graph& other) const;
 };
 
@@ -218,6 +243,14 @@ std::string words(InputKind kind);
 /// "hungry is on", "after 2 s"...
 std::string describe(const Graph& graph, const Transition& transition);
 std::string describe(const Listener& listener);
+/// "score shows in scoreText", "happy sets face's x (0 to 10 as 0 to 200)".
+std::string describe(const Binding& binding);
+
+/// The properties a binding can set, in menu order, and their words.
+const std::vector<std::string>& bindProperties();
+std::string words(const std::string& property);
+/// Whether \a property takes a number mapped between two values.
+bool mapped(const std::string& property);
 
 /// A timeline's frame labels (comments left out) and the frames they
 /// start at (from 0), in frame order; each name once, at its first frame.
@@ -229,6 +262,8 @@ int length(const Timeline& timeline);
 bool range(const Timeline& timeline, const State& state, int& first, int& last);
 /// The names of the movie clip and button instances on \a timeline, sorted.
 std::vector<std::string> instanceNames(const Timeline& timeline);
+/// Those and the named text fields: what a binding can show an input in.
+std::vector<std::string> bindableNames(const Timeline& timeline);
 /// The timeline of the movie clip named \a instance on \a timeline, or
 /// null.
 const Timeline* clipTimeline(const Timeline& timeline, const std::string& instance);

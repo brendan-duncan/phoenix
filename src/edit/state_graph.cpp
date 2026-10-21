@@ -9,6 +9,7 @@
 #include "../data/action_script.h"
 #include "../data/frame.h"
 #include "../data/layer.h"
+#include "../data/static_text.h"
 #include "../data/symbol.h"
 #include "../data/symbol_instance.h"
 #include "../data/timeline.h"
@@ -229,6 +230,9 @@ public:
             hook(listener.when, listener.target);
             _keys = _keys || listener.when == When::Key;
         }
+        for (const Binding& binding : graph.bindings)
+            if (!binding.target.empty() && graph.input(binding.input))
+                _binds.push_back(binding);
         // The timeline's own states, then each layer whose clip is there.
         const int layers = static_cast<int>(graph.layers.size());
         _own.timeline = &timeline;
@@ -568,10 +572,55 @@ private:
             line("}");
     }
 
+    /// The value binding \a binding gives its property now.
+    std::string bound(const Binding& binding) const
+    {
+        const std::string value = input(binding.input);
+        if (!mapped(binding.property))
+            return value;
+        const double span = binding.high != binding.low ? binding.high - binding.low : 1.0;
+        return numberText(binding.from) + " + " + numberText(binding.to - binding.from) + " * Math.max(0, Math.min(1, (" +
+            value + " - " + numberText(binding.low) + ") / " + numberText(span) + "))";
+    }
+
+    /// The line setting \a binding's property on o.
+    std::string setter(const Binding& binding) const
+    {
+        const std::string value = bound(binding);
+        const std::string& p = binding.property;
+        if (p == "text")
+            return "o.text = String(" + value + ");";
+        if (p == "visible")
+            return std::string(_as3 ? "o.visible" : "o._visible") + " = Boolean(" + value + ");";
+        if (p == "frame")
+            return "o.gotoAndStop(" + std::string(_as3 ? "int(Math.round(" + value + "))" : "Math.round(" + value + ")") + ");";
+        if (p == "alpha")
+            return _as3 ? "o.alpha = (" + value + ") / 100;" : "o._alpha = " + value + ";";
+        if (p == "scale")
+            return _as3 ? "o.scaleX = o.scaleY = (" + value + ") / 100;" : "o._xscale = o._yscale = " + value + ";";
+        return "o." + std::string(_as3 ? "" : "_") + p + " = " + value + ";";
+    }
+
+    void bindBody()
+    {
+        line(_as3 ? "var o:Object;" : "var o;");
+        for (size_t i = 0; i < _binds.size(); ++i)
+        {
+            if (i == 0 || _binds[i].target != _binds[i - 1].target)
+                line(_as3 ? "o = getChildByName(" + quoted(_binds[i].target) + ");"
+                          : "o = phxT[" + quoted(_binds[i].target) + "];");
+            open(std::string(_as3 ? "if (o != null) {" : "if (o != undefined) {"));
+            line(setter(_binds[i]));
+            close();
+        }
+    }
+
     void frameBody()
     {
         line(me("phxTicks") + "++;");
         line(me("phxHook") + "();");
+        if (!_binds.empty())
+            line(me("phxBind") + "();");
         line(std::string(_as3 ? "var f:int = " : "var f = ") + me(_as3 ? "currentFrame" : "_currentframe") + ";");
         playBody(_own);
         line(me("phxAt") + " = f;");
@@ -620,6 +669,8 @@ private:
     void eventBody()
     {
         listeners();
+        if (!_binds.empty())
+            line(me("phxBind") + "();");
         for (const Lane& lane : _lanes)
             line(mine(lane, "phxEvent") + "(target, what);");
         open("if (" + me("phxWait") + " == null) {");
@@ -729,6 +780,13 @@ private:
         open("function phxCheck():void {");
         checkBody(_own);
         close();
+        if (!_binds.empty())
+        {
+            line("// Shows the inputs in the named clips and text fields.");
+            open("function phxBind():void {");
+            bindBody();
+            close();
+        }
         for (const Lane& lane : _lanes)
         {
             line("// The " + quoted(lane.target) + " layer: the same for that movie clip's states.");
@@ -758,6 +816,8 @@ private:
         line("phxGo(" + entry(_own) + ");");
         for (const Lane& lane : _lanes)
             line("phxGo" + lane.suffix + "(" + entry(lane) + ");");
+        if (!_binds.empty())
+            line("phxBind();");
         close();
     }
 
@@ -808,6 +868,13 @@ private:
         open("phxT.phxCheck = function () {");
         checkBody(_own);
         close("};");
+        if (!_binds.empty())
+        {
+            line("// Shows the inputs in the named clips and text fields.");
+            open("phxT.phxBind = function () {");
+            bindBody();
+            close("};");
+        }
         for (const Lane& lane : _lanes)
         {
             line("// The " + quoted(lane.target) + " layer: the same for that movie clip's states.");
@@ -844,6 +911,8 @@ private:
         line("phxT.phxGo(" + entry(_own) + ");");
         for (const Lane& lane : _lanes)
             line("phxT.phxGo" + lane.suffix + "(" + entry(lane) + ");");
+        if (!_binds.empty())
+            line("phxT.phxBind();");
         close();
     }
 
@@ -857,6 +926,7 @@ private:
     int _depth = 0;
     Lane _own;
     std::vector<Lane> _lanes;
+    std::vector<Binding> _binds;
 };
 
 } // namespace
@@ -946,10 +1016,34 @@ void Graph::removeLayer(int layer)
             --state.layer;
 }
 
+void Graph::renameInput(const std::string& from, const std::string& to)
+{
+    for (Input& input : inputs)
+        if (input.name == from)
+            input.name = to;
+    for (Transition& transition : transitions)
+        if (transition.condition.input == from)
+            transition.condition.input = to;
+    for (Listener& listener : listeners)
+        if (listener.input == from)
+            listener.input = to;
+    for (State& state : states)
+        if (state.blend == from)
+            state.blend = to;
+    for (Binding& binding : bindings)
+        if (binding.input == from)
+            binding.input = to;
+}
+
 void Graph::removeInput(const std::string& name)
 {
     inputs.erase(std::remove_if(inputs.begin(), inputs.end(), [&](const Input& each) { return each.name == name; }),
         inputs.end());
+    bindings.erase(std::remove_if(bindings.begin(), bindings.end(), [&](const Binding& each) { return each.input == name; }),
+        bindings.end());
+    for (State& state : states)
+        if (state.blend == name)
+            state.blend.clear();
     for (Transition& transition : transitions)
         if (transition.condition.input == name)
             transition.condition = Condition();
@@ -986,6 +1080,20 @@ std::string encode(const Graph& graph)
             e->SetAttribute("blend", state.blend.c_str());
             e->SetAttribute("low", numberText(state.low).c_str());
             e->SetAttribute("high", numberText(state.high).c_str());
+        }
+    }
+    for (const Binding& binding : graph.bindings)
+    {
+        tinyxml2::XMLElement* e = root->InsertNewChildElement("bind");
+        e->SetAttribute("input", binding.input.c_str());
+        e->SetAttribute("target", binding.target.c_str());
+        e->SetAttribute("property", binding.property.c_str());
+        if (mapped(binding.property))
+        {
+            e->SetAttribute("low", numberText(binding.low).c_str());
+            e->SetAttribute("high", numberText(binding.high).c_str());
+            e->SetAttribute("from", numberText(binding.from).c_str());
+            e->SetAttribute("to", numberText(binding.to).c_str());
         }
     }
     for (const StateLayer& layer : graph.layers)
@@ -1060,6 +1168,18 @@ bool decode(const std::string& text, Graph& graph)
             state.low = numberOf(e->Attribute("low"), 0.0);
             state.high = numberOf(e->Attribute("high"), 1.0);
             read.states.push_back(state);
+        }
+        else if (name == "bind")
+        {
+            Binding binding;
+            binding.input = e->Attribute("input") ? e->Attribute("input") : "";
+            binding.target = e->Attribute("target") ? e->Attribute("target") : "";
+            binding.property = e->Attribute("property") ? e->Attribute("property") : "text";
+            binding.low = numberOf(e->Attribute("low"), 0.0);
+            binding.high = numberOf(e->Attribute("high"), 1.0);
+            binding.from = numberOf(e->Attribute("from"), 0.0);
+            binding.to = numberOf(e->Attribute("to"), 1.0);
+            read.bindings.push_back(binding);
         }
         else if (name == "layer")
         {
@@ -1287,6 +1407,46 @@ std::string describe(const Listener& listener)
     return "When " + eventWords(listener.when, listener.target, 0.0) + ": " + change;
 }
 
+const std::vector<std::string>& bindProperties()
+{
+    static const std::vector<std::string> list = {"text", "visible", "frame", "x", "y", "rotation", "alpha", "scale"};
+    return list;
+}
+
+std::string words(const std::string& property)
+{
+    if (property == "text")
+        return "text";
+    if (property == "visible")
+        return "visibility";
+    if (property == "frame")
+        return "frame";
+    if (property == "rotation")
+        return "turn";
+    if (property == "alpha")
+        return "fade (%)";
+    if (property == "scale")
+        return "size (%)";
+    return property;
+}
+
+bool mapped(const std::string& property)
+{
+    return property != "text" && property != "visible";
+}
+
+std::string describe(const Binding& binding)
+{
+    const std::string input = binding.input.empty() ? std::string("?") : binding.input;
+    const std::string target = binding.target.empty() ? std::string("?") : binding.target;
+    if (binding.property == "text")
+        return input + " shows in " + target;
+    if (binding.property == "visible")
+        return input + " shows or hides " + target;
+    return input + " sets " + target + "'s " + words(binding.property) + " (" + numberText(binding.low) + " to " +
+        numberText(binding.high) + " as " + numberText(binding.from) + " to " + numberText(binding.to) + ")";
+}
+
 std::vector<std::pair<std::string, int>> labels(const Timeline& timeline)
 {
     std::map<std::string, int> first;
@@ -1368,6 +1528,23 @@ std::vector<std::string> instanceNames(const Timeline& timeline)
             }
         }
     }
+    return std::vector<std::string>(names.begin(), names.end());
+}
+
+std::vector<std::string> bindableNames(const Timeline& timeline)
+{
+    std::set<std::string> names;
+    for (const std::string& name : instanceNames(timeline))
+        names.insert(name);
+    for (const Layer* layer : timeline.layers)
+        for (const Frame* frame : layer ? layer->frames : std::vector<Frame*>())
+            for (const Element* element : frame ? frame->elements : std::vector<Element*>())
+                if (element && element->elementType() == Element::Type::StaticText)
+                {
+                    const auto* text = static_cast<const StaticText*>(element);
+                    if (!text->instanceName.empty())
+                        names.insert(text->instanceName);
+                }
     return std::vector<std::string>(names.begin(), names.end());
 }
 
