@@ -912,8 +912,9 @@ private:
     /// end.
     Tool* _toolBeforeEraserPen = nullptr;
     /// Opens the color dialog for the stroke or the fill and applies the
-    /// choice everywhere the color shows.
-    void chooseStyleColor(bool stroke);
+    /// choice everywhere the color shows; the pop-up comes up at \a anchor,
+    /// else at the toolbox's swatch.
+    void chooseStyleColor(bool stroke, QWidget* anchor = nullptr);
     std::unique_ptr<PenTool> _penTool;
     std::unique_ptr<PencilTool> _pencilTool;
     std::unique_ptr<TextTool> _textTool;
@@ -1186,6 +1187,9 @@ private:
     class StageHold* _stageHold = nullptr;
     QWidget* _phoneStraighten = nullptr;
     void placePhoneStraighten();
+    /// The stroke and fill swatches on the tools row.
+    class ColorSwatch* _phoneStroke = nullptr;
+    class ColorSwatch* _phoneFill = nullptr;
     /// The stage is fitted to the view until the window has come down to
     /// the page's size.
     bool _phoneFitPending = false;

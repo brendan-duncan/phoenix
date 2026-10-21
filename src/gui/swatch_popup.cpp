@@ -513,7 +513,11 @@ void SwatchPopup::popupUnder(QWidget* anchor)
 {
     adjustSize();
     QPoint at = anchor ? anchor->mapToGlobal(QPoint(0, anchor->height())) : QCursor::pos();
-    if (const QScreen* screen = QGuiApplication::screenAt(at))
+    // Under a swatch at the foot of the screen is off it: the swatch's own.
+    const QScreen* screen = QGuiApplication::screenAt(at);
+    if (!screen && anchor)
+        screen = anchor->screen();
+    if (screen)
     {
         // Kept on its screen: above the swatch when there is no room under it.
         const QRect room = screen->availableGeometry();

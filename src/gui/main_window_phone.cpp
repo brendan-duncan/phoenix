@@ -1,6 +1,7 @@
 // The phone layout of the web editor (View > Phone Layout): the stage alone,
-// two rows of large buttons along the bottom (the common tools with undo
-// and redo; playing, looping, onion skin, a time slider and a menu holding
+// two rows of large buttons along the bottom (the common tools, the stroke
+// and fill colors, undo and redo; playing, looping, onion skin, a time
+// slider and a menu holding
 // the other panels and the menu bar's menus), the timeline as a drawer
 // that comes up from a bar over them, Properties as one from a bar at the
 // side, and the other panels one at a time as a sheet over the bottom of
@@ -10,6 +11,7 @@
 // the web build (CMakeLists.txt).
 
 #include "main_window.h"
+#include "color_well.h"
 #include "phoenix_view.h"
 #include "timeline_view.h"
 #include "timelines_panel.h"
@@ -20,6 +22,7 @@
 #include <QAction>
 #include <QApplication>
 #include <QDockWidget>
+#include <QHBoxLayout>
 #include <QLabel>
 #include <QMenu>
 #include <QMenuBar>
@@ -576,6 +579,25 @@ void MainWindow::buildPhoneBar()
             }
         }
     }
+    // The stroke and fill colors, as the toolbox's swatches: a tap opens
+    // the swatches over them.
+    _phoneBar->addSeparator();
+    QList<QWidget*> swatchCells;
+    for (const bool stroke : {true, false})
+    {
+        QWidget* cell = new QWidget(_phoneBar);
+        QHBoxLayout* centered = new QHBoxLayout(cell);
+        centered->setContentsMargins(0, 0, 0, 0);
+        ColorSwatch* swatch = new ColorSwatch(stroke, cell);
+        swatch->setObjectName(stroke ? "phoneStroke" : "phoneFill");
+        swatch->setFixedSize(26, 26);
+        centered->addWidget(swatch, 0, Qt::AlignCenter);
+        connect(swatch, &ColorSwatch::clicked, this, [this, stroke, swatch]() { chooseStyleColor(stroke, swatch); });
+        (stroke ? _phoneStroke : _phoneFill) = swatch;
+        _phoneBar->addWidget(cell);
+        swatchCells << cell;
+    }
+    refreshStyleSwatches();
     _phoneBar->addSeparator();
     _phoneBar->addAction(phoneIcon(PhoneIcon::Undo), "Undo", _undoAction, &QAction::trigger);
     _phoneBar->addAction(phoneIcon(PhoneIcon::Redo), "Redo", _redoAction, &QAction::trigger);
@@ -679,10 +701,17 @@ void MainWindow::buildPhoneBar()
     panels->setMenu(menu);
     _phoneBar->addWidget(panels);
 
-    // Large enough for a finger.
+    // Large enough for a finger; the tools row's eleven share the screen's
+    // width, narrower than the others' on a narrow phone.
     for (QToolBar* bar : _phoneBars)
         for (QToolButton* button : bar->findChildren<QToolButton*>())
             button->setMinimumSize(kButtonSize, kButtonSize);
+    const int across = screen() ? screen()->geometry().width() : 390;
+    const int cellWidth = std::clamp((across - 16) / 11, 30, kButtonSize);
+    for (QToolButton* button : tools->findChildren<QToolButton*>())
+        button->setFixedSize(cellWidth, kButtonSize);
+    for (QWidget* cell : swatchCells)
+        cell->setFixedSize(cellWidth, kButtonSize);
 
     _phoneDrawers = new PhoneDrawers(this, _phoenixView);
 

@@ -11871,7 +11871,7 @@ void MainWindow::setupToolBar()
     _toolbox->setExtras(extras);
 }
 
-void MainWindow::chooseStyleColor(bool stroke)
+void MainWindow::chooseStyleColor(bool stroke, QWidget* anchor)
 {
     // The swatch pop-up under the swatch clicked: colors for either, and
     // for the fill the gradient swatches too (new strokes take one color).
@@ -11879,7 +11879,8 @@ void MainWindow::chooseStyleColor(bool stroke)
     SwatchPopup::Offer offer;
     offer.gradients = !stroke;
     offer.none = true;
-    QWidget* anchor = _colorWell ? static_cast<QWidget*>(stroke ? _colorWell->strokeSwatch() : _colorWell->fillSwatch()) : this;
+    if (!anchor)
+        anchor = _colorWell ? static_cast<QWidget*>(stroke ? _colorWell->strokeSwatch() : _colorWell->fillSwatch()) : this;
     SwatchPopup* popup = SwatchPopup::open(anchor, _flaDocument ? _flaDocument->document : nullptr,
         QColor(target[0], target[1], target[2], target[3]), stroke ? "Stroke Color" : "Fill Color", offer);
     if (!stroke && _drawingStyle.fillKind != fla::DrawingStyle::FillKind::Solid)
@@ -14195,10 +14196,8 @@ void MainWindow::refreshStyleSwatches()
 {
     if (_propertiesPanel)
         _propertiesPanel->refreshStyleSwatches();
-    if (!_colorWell)
-        return;
     const auto colorOf = [](const uint8_t rgba[4]) { return QColor(rgba[0], rgba[1], rgba[2], rgba[3]); };
-    _colorWell->setStroke(_drawingStyle.hasStroke ? QBrush(colorOf(_drawingStyle.strokeColor)) : QBrush());
+    const QBrush stroke = _drawingStyle.hasStroke ? QBrush(colorOf(_drawingStyle.strokeColor)) : QBrush();
     // The fill as new art gets it: a gradient drawn as one.
     QBrush fill;
     if (_drawingStyle.hasFill)
@@ -14221,7 +14220,18 @@ void MainWindow::refreshStyleSwatches()
             fill = QBrush(colorOf(_drawingStyle.fillColor));
         }
     }
-    _colorWell->setFill(fill);
+    if (_colorWell)
+    {
+        _colorWell->setStroke(stroke);
+        _colorWell->setFill(fill);
+    }
+#ifdef PHOENIX_WEB
+    if (_phoneStroke)
+    {
+        _phoneStroke->setBrush(stroke);
+        _phoneFill->setBrush(fill);
+    }
+#endif
 }
 
 void MainWindow::selectAll()

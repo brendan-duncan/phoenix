@@ -210,7 +210,7 @@ size of its own, and Qt's default, 12, is larger than any desktop's.
 A touch screen (the browser reports a coarse pointer) whose shorter side is
 under 600 points gets the phone layout (`src/gui/main_window_phone.cpp`):
 the stage alone, two rows of large buttons along the bottom (the common
-tools with undo and redo; step, play, the frame, Loop Playback, Onion Skin,
+tools, the stroke and fill swatches, undo and redo; step, play, the frame, Loop Playback, Onion Skin,
 a slider through the frames and a menu), and a bar over them for the timeline and one down the right
 for Properties. Each bar opens its panel as a drawer over the stage
 (`PhoneDrawers`): the timeline from the bottom, in its phone view (taller
