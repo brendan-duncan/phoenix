@@ -221,6 +221,12 @@ Rect filteredRect(const Rect& rect, const std::vector<BitmapFilter>& filters)
     Rect grown = rect;
     for (const BitmapFilter& filter : filters)
     {
+        // An inner shadow, glow or bevel stays inside the object's own
+        // pixels.
+        const bool typed = filter.type == BitmapFilter::Type::Bevel ||
+            filter.type == BitmapFilter::Type::GradientBevel || filter.type == BitmapFilter::Type::GradientGlow;
+        if (typed ? filter.bevelType == "inner" : filter.inner)
+            continue;
         double l, t, r, b;
         filter.reach(l, t, r, b);
         grown = Rect(grown.x - l, grown.y - t, grown.width + l + r, grown.height + t + b);

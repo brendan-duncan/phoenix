@@ -12,6 +12,7 @@
 #include "bytecode/vm.h"
 #include "runtime/value.h"
 #include "display/bitmap_data.h"
+#include "display/bitmap_filter.h"
 #include "display/display_object.h"
 #include "script/bindings.h"
 
@@ -591,8 +592,18 @@ as3::Val ActionsPlayer::bitmapNatives()
         data->dispose();
         return as3::Val();
     });
-    define("generateFilterRect", [pixelsOf, minusOne](as3::VM&, const as3::Val& self, as3::Args) {
-        return pixelsOf(self) == State::Valid ? as3::Val() : minusOne;
+    // The source rectangle grown by what the filter reaches past it.
+    define("generateFilterRect", [this, &vm, pixelsOf, &in, member, minusOne](
+                                     as3::VM&, const as3::Val& self, as3::Args args) {
+        if (pixelsOf(self) != State::Valid)
+            return minusOne;
+        display::BitmapFilter filter;
+        if (!filterOf(args[1], filter))
+            return as3::Val();
+        const auto at = [&](const char* name) { return in.toNumber(member(args[0], name)); };
+        const display::Rect box = display::filteredRect(display::Rect(at("x"), at("y"), at("width"), at("height")), {filter});
+        return vm.newArray({as3::Val::number(box.x), as3::Val::number(box.y), as3::Val::number(box.width),
+            as3::Val::number(box.height)});
     });
     define("compare", [pixelsOf, holding, minusOne](as3::VM&, const as3::Val& self, as3::Args args) {
         std::shared_ptr<display::BitmapData> data, other;
@@ -640,13 +651,6 @@ as3::Val ActionsPlayer::bitmapNatives()
         return as3::Val();
     });
     return natives;
-}
-
-bool ActionsPlayer::filterOf(const as3::Val& value, display::BitmapFilter& out)
-{
-    (void)value;
-    (void)out;
-    return false;
 }
 
 Clip* ActionsPlayer::drawTarget(const std::string& path)

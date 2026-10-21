@@ -94,6 +94,8 @@ private:
     as3::Val bitmapNatives();
     /// The clip a path given BitmapData.draw names, from the root.
     Clip* drawTarget(const std::string& path);
+    /// Those of flash.filters (as2_filters.cpp).
+    as3::Val filterNatives();
     /// A flash.filters object's filter: false for anything else.
     bool filterOf(const as3::Val& value, display::BitmapFilter& out);
 
@@ -101,6 +103,10 @@ private:
     as3::VM& _vm;
     std::unique_ptr<ActionsHost> _host;
     std::unique_ptr<as3::avm1::Interpreter> _interpreter;
+    /// The filters scripts gave display objects, as they gave them, for
+    /// reading back (as2_filters.cpp).
+    struct ScriptFilters;
+    std::shared_ptr<ScriptFilters> _scriptFilters;
 };
 
 } // namespace play

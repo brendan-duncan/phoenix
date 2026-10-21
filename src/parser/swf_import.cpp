@@ -1548,11 +1548,11 @@ private:
                 const double strength = tag.fixed8();
                 set("color", hexColor(color));
                 set("alpha", number(color.a / 255.0));
-                set("blurX", number(blurX));
-                set("blurY", number(blurY));
-                set("angle", number(angle * degrees));
-                set("distance", number(distance));
-                set("strength", number(strength));
+                set("blurX", number(blurX, 10));
+                set("blurY", number(blurY, 10));
+                set("angle", number(angle * degrees, 10));
+                set("distance", number(distance, 10));
+                set("strength", number(strength, 10));
                 const auto flags = flagsOf(false);
                 if (flags.first)
                     set("inner", "true");
@@ -1561,8 +1561,8 @@ private:
             case 1: // blur
             {
                 filter.element = "BlurFilter";
-                set("blurX", number(tag.fixed16()));
-                set("blurY", number(tag.fixed16()));
+                set("blurX", number(tag.fixed16(), 10));
+                set("blurY", number(tag.fixed16(), 10));
                 tag.align();
                 set("quality", std::to_string(std::max(1, std::min(3, static_cast<int>(tag.ub(5))))));
                 tag.ub(3);
@@ -1574,9 +1574,9 @@ private:
                 const Rgba color = readRgb(tag, true);
                 set("color", hexColor(color));
                 set("alpha", number(color.a / 255.0));
-                set("blurX", number(tag.fixed16()));
-                set("blurY", number(tag.fixed16()));
-                set("strength", number(tag.fixed8()));
+                set("blurX", number(tag.fixed16(), 10));
+                set("blurY", number(tag.fixed16(), 10));
+                set("strength", number(tag.fixed8(), 10));
                 if (flagsOf(false).first)
                     set("inner", "true");
                 break;
@@ -1592,11 +1592,11 @@ private:
                 set("shadowAlpha", number(shadow.a / 255.0));
                 set("highlightColor", hexColor(highlight));
                 set("highlightAlpha", number(highlight.a / 255.0));
-                set("blurX", number(tag.fixed16()));
-                set("blurY", number(tag.fixed16()));
-                set("angle", number(tag.fixed16() * degrees));
-                set("distance", number(tag.fixed16()));
-                set("strength", number(tag.fixed8()));
+                set("blurX", number(tag.fixed16(), 10));
+                set("blurY", number(tag.fixed16(), 10));
+                set("angle", number(tag.fixed16() * degrees, 10));
+                set("distance", number(tag.fixed16(), 10));
+                set("strength", number(tag.fixed8(), 10));
                 const auto flags = flagsOf(true);
                 set("type", flags.second ? "full" : flags.first ? "inner" : "outer");
                 break;
@@ -1611,11 +1611,11 @@ private:
                     list.push_back(readRgb(tag, true));
                 for (int c = 0; c < colors; ++c)
                     filter.entries.emplace_back(list[static_cast<size_t>(c)], tag.u8());
-                set("blurX", number(tag.fixed16()));
-                set("blurY", number(tag.fixed16()));
-                set("angle", number(tag.fixed16() * degrees));
-                set("distance", number(tag.fixed16()));
-                set("strength", number(tag.fixed8()));
+                set("blurX", number(tag.fixed16(), 10));
+                set("blurY", number(tag.fixed16(), 10));
+                set("angle", number(tag.fixed16() * degrees, 10));
+                set("distance", number(tag.fixed16(), 10));
+                set("strength", number(tag.fixed8(), 10));
                 const auto flags = flagsOf(true);
                 set("type", flags.second ? "full" : flags.first ? "inner" : "outer");
                 break;

@@ -367,6 +367,43 @@ TEST(swf_actions_have_the_players_bitmaps)
     }
 }
 
+TEST(swf_actions_have_the_players_filters)
+{
+    // ActionScript 2's flash.filters: values kept as the player keeps them,
+    // and a movie clip's filters copied each way.
+    std::map<std::string, std::vector<uint8_t>> files;
+    files["DOMDocument.xml"] = bytesOf(
+        "<DOMDocument xmlns=\"http://ns.adobe.com/xfl/2008/\" width=\"200\" height=\"100\" frameRate=\"12\">"
+        "<timelines><DOMTimeline name=\"Scene 1\"><layers><DOMLayer name=\"actions\"><frames>"
+        "<DOMFrame index=\"0\" duration=\"1\"><Actionscript><script><![CDATA["
+        "var GlowFilter = _global.flash.filters.GlowFilter;\n"
+        "var g = new GlowFilter(0x123456, 0.5, 8, 8, 3, 2);\n"
+        "trace(g.color + ' ' + g.alpha + ' ' + g.blurX + ' ' + g.strength + ' ' + g.quality + ' ' + g.inner);\n"
+        "var c = this.createEmptyMovieClip('c', 1);\nc.filters = [g, 5, new _global.flash.filters.BlurFilter(2.5)];\n"
+        "var back = c.filters;\n"
+        "trace(back.length + ' ' + (back[0] instanceof GlowFilter) + ' ' + back[0].alpha + ' ' + back[1].blurX);\n"
+        "trace(back[0] == g);\nstop();\n"
+        "]]></script></Actionscript><elements/></DOMFrame>"
+        "</frames></DOMLayer></layers></DOMTimeline></timelines></DOMDocument>");
+    Parsed source = parse(files);
+    if (!source.document)
+        return;
+    Reopened movie;
+    reopen(*source.document, movie);
+    CHECK(movie.ok && movie.parsed.document);
+    if (!movie.ok || !movie.parsed.document)
+        return;
+    const std::string got = play(*movie.parsed.document, 1, std::string());
+    const std::string wanted = "1193046 0.498039215686275 8 3 2 false\n2 true 0.498039215686275 2.5\nfalse\n";
+    CHECK(got == wanted);
+    if (got != wanted)
+    {
+        std::printf("    got:\n%s", got.c_str());
+        for (const std::string& problem : movie.problems)
+            std::printf("    problem: %s\n", problem.c_str());
+    }
+}
+
 TEST(swf_actions_reach_the_editor_through_mmexecute)
 {
     // A panel written in ActionScript 2, played from its source and as the

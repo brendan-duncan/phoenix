@@ -25,6 +25,16 @@
         return hidden(made);
     };
 
+    // A rectangle of whatever flash.geom.Rectangle is now; -1 when it is
+    // not a class.
+    var rectangleOf = function(x, y, width, height) {
+        var Rectangle = flash.geom.Rectangle;
+        if (typeof Rectangle != "function") {
+            return -1;
+        }
+        return new Rectangle(x, y, width, height);
+    };
+
     var BitmapData = function(width, height, transparent, fillColor) {
         if (!make.apply(this, arguments)) {
             return noObject;
@@ -41,7 +51,7 @@
         if (width == -1) {
             return -1;
         }
-        return new flash.geom.Rectangle(0, 0, width, natives.height.call(this));
+        return rectangleOf(0, 0, width, natives.height.call(this));
     }, null);
     p.addProperty("transparent", natives.transparent, null);
     p.getPixel = natives.getPixel;
@@ -61,7 +71,7 @@
         if (!(box instanceof Array)) {
             return box;
         }
-        return new flash.geom.Rectangle(box[0], box[1], box[2], box[3]);
+        return rectangleOf(box[0], box[1], box[2], box[3]);
     };
     p.perlinNoise = natives.perlinNoise;
     p.colorTransform = natives.colorTransform;
@@ -75,7 +85,13 @@
         return typeof held == "object" ? bitmapOf(held, this.__proto__) : held;
     };
     p.dispose = natives.dispose;
-    p.generateFilterRect = natives.generateFilterRect;
+    p.generateFilterRect = function(sourceRect, filter) {
+        var box = natives.generateFilterRect.apply(this, arguments);
+        if (!(box instanceof Array)) {
+            return box;
+        }
+        return rectangleOf(box[0], box[1], box[2], box[3]);
+    };
     p.compare = function(other) {
         var held = natives.compare.apply(this, arguments);
         return typeof held == "object" ? bitmapOf(held, this.__proto__) : held;
