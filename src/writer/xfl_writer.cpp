@@ -139,6 +139,15 @@ void setColor(XMLElement* node, const char* colorName, const char* alphaName,
         node->SetAttribute(alphaName, formatDouble(rgba[3] / 255.0).c_str());
 }
 
+/// Numbers separated by commas.
+std::string joinNumbers(const std::vector<double>& values)
+{
+    std::string out;
+    for (size_t i = 0; i < values.size(); ++i)
+        out += (i ? "," : "") + formatDouble(values[i]);
+    return out;
+}
+
 void setString(XMLElement* node, const char* name, const std::string& value)
 {
     if (!value.empty() || wasPresent(node, name))
@@ -873,6 +882,29 @@ void XFLWriter::writeSymbolInstance(const SymbolInstance& instance, XMLElement* 
                 setDouble(filterNode, "saturation", filter.saturation, 0.0);
                 setDouble(filterNode, "hue", filter.hue, 0.0);
                 break;
+            // Phoenix's own: on an Adjust Color and a Blur that change
+            // nothing in other FLA editors.
+            case Filter::Type::ColorMatrix:
+                filterNode->SetAttribute("phoenixColorMatrix", joinNumbers(filter.matrix).c_str());
+                break;
+            case Filter::Type::Convolution:
+            {
+                filterNode->SetAttribute("blurX", 0);
+                filterNode->SetAttribute("blurY", 0);
+                filterNode->SetAttribute("phoenixConvolution", joinNumbers(filter.matrix).c_str());
+                filterNode->SetAttribute("phoenixMatrixX", filter.matrixX);
+                filterNode->SetAttribute("phoenixMatrixY", filter.matrixY);
+                setDouble(filterNode, "phoenixDivisor", filter.divisor, 1.0);
+                setDouble(filterNode, "phoenixBias", filter.bias, 0.0);
+                setBool(filterNode, "phoenixPreserveAlpha", filter.preserveAlpha, true);
+                setBool(filterNode, "phoenixClamp", filter.clamp, true);
+                if (!filter.clamp)
+                {
+                    setColor(filterNode, "phoenixEdgeColor", nullptr, filter.color, true);
+                    filterNode->SetAttribute("phoenixEdgeAlpha", formatDouble(filter.color[3] / 255.0).c_str());
+                }
+                break;
+            }
             }
             for (const GradientEntry& entry : filter.entries)
             {

@@ -1,6 +1,7 @@
 #include "filters.h"
 
 #include "../edit/image_blur.h"
+#include "../play/display/bitmap_filter.h"
 #include "../util/parallel.h"
 
 #include <QRegion>
@@ -421,7 +422,9 @@ double margin(const std::vector<fla::Filter>& filters, double scale)
         {
             offset = std::fabs(filter.distance) * scale;
         }
-        if (filter.type != fla::Filter::Type::AdjustColor)
+        if (filter.type == fla::Filter::Type::Convolution)
+            total += std::max(filter.matrixX, filter.matrixY) / 2 + 1;
+        else if (filter.type != fla::Filter::Type::AdjustColor && filter.type != fla::Filter::Type::ColorMatrix)
             total += reach + offset + 1.0;
     }
     return std::ceil(total);
@@ -459,6 +462,23 @@ QImage apply(const QImage& source, const std::vector<fla::Filter>& filters, doub
         case fla::Filter::Type::AdjustColor:
             image = adjustColor(image, filter);
             break;
+        case fla::Filter::Type::ColorMatrix:
+            image.detach();
+            fla::display::applyColorMatrix(reinterpret_cast<uint32_t*>(image.bits()), image.width(), image.height(),
+                static_cast<int>(image.bytesPerLine() / 4), filter.matrix);
+            break;
+        case fla::Filter::Type::Convolution:
+        {
+            const uint32_t color = (static_cast<uint32_t>(filter.color[0]) << 16) |
+                (static_cast<uint32_t>(filter.color[1]) << 8) | filter.color[2];
+            const fla::display::BitmapFilter convolution = fla::display::BitmapFilter::convolution(filter.matrixX,
+                filter.matrixY, filter.matrix, filter.divisor, filter.bias, filter.preserveAlpha, filter.clamp, color,
+                filter.color[3] / 255.0);
+            image.detach();
+            fla::display::applyConvolution(reinterpret_cast<uint32_t*>(image.bits()), image.width(), image.height(),
+                static_cast<int>(image.bytesPerLine() / 4), convolution);
+            break;
+        }
         }
     }
     return image;

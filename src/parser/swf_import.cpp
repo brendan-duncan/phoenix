@@ -3,6 +3,7 @@
 #include "../data/bitmap_decoder.h"
 #include "../edit/transform_blend.h"
 #include "../edit/tween_ease.h"
+#include "../play/display/bitmap_filter.h"
 #include "../util/lzma.h"
 #include "../util/swf_sound.h"
 
@@ -10,6 +11,9 @@
 #include "zlib.h"
 
 #include <algorithm>
+#include <map>
+#include <optional>
+#include <array>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -1388,6 +1392,103 @@ private:
         return actions->empty() ? nullptr : actions;
     }
 
+    static std::string numbers(const std::vector<double>& values)
+    {
+        std::string out;
+        for (size_t i = 0; i < values.size(); ++i)
+            out += (i ? "," : "") + number(values[i], 6);
+        return out;
+    }
+
+    /// The brightness, contrast, saturation and hue of Adjust Color that
+    /// make color matrix  m as Phoenix draws Adjust Color, if any do.
+    bool adjustColorOf(const double m[20], double& brightness, double& contrast, double& saturation, double& hue)
+    {
+        // A movie places the same filter frame after frame: worked out once.
+        const std::vector<double> key(m, m + 20);
+        const auto known = _adjustColors.find(key);
+        if (known == _adjustColors.end())
+        {
+            std::array<double, 4> found{};
+            const bool fits = fitAdjustColor(m, found[0], found[1], found[2], found[3]);
+            _adjustColors[key] = fits ? std::optional<std::array<double, 4>>(found) : std::nullopt;
+            return adjustColorOf(m, brightness, contrast, saturation, hue);
+        }
+        if (!known->second)
+            return false;
+        brightness = (*known->second)[0];
+        contrast = (*known->second)[1];
+        saturation = (*known->second)[2];
+        hue = (*known->second)[3];
+        return true;
+    }
+    std::map<std::vector<double>, std::optional<std::array<double, 4>>> _adjustColors;
+
+    static bool fitAdjustColor(const double m[20], double& brightness, double& contrast, double& saturation,
+        double& hue)
+    {
+        // Alpha left as it is, and color made of color alone.
+        const double alphaRow[5] = {0, 0, 0, 1, 0};
+        for (int c = 0; c < 5; ++c)
+            if (std::fabs(m[15 + c] - alphaRow[c]) > 1e-4)
+                return false;
+        if (std::fabs(m[3]) > 1e-4 || std::fabs(m[8]) > 1e-4 || std::fabs(m[13]) > 1e-4)
+            return false;
+        // Saturation and hue keep gray gray: each row's sum is the contrast.
+        const double scale = m[0] + m[1] + m[2];
+        if (scale < 1e-3 || std::fabs(m[5] + m[6] + m[7] - scale) > 1e-3 ||
+            std::fabs(m[10] + m[11] + m[12] - scale) > 1e-3)
+            return false;
+        contrast = (scale - 1.0) * 100.0;
+        brightness = (m[4] - 128.0 * (1.0 - scale)) / 2.55;
+        if (contrast < -100.0 - 1e-3 || contrast > 100.0 + 1e-3 || brightness < -100.0 - 1e-3 ||
+            brightness > 100.0 + 1e-3)
+            return false;
+        const auto error = [&](double s, double h) {
+            const std::vector<double> made =
+                fla::display::BitmapFilter::adjustColor(brightness, contrast, s, h).matrix;
+            double worst = 0.0;
+            for (int k = 0; k < 20; ++k)
+                worst = std::max(worst, std::fabs(made[static_cast<size_t>(k)] - m[k]) / (k % 5 == 4 ? 255.0 : 1.0));
+            return worst;
+        };
+        // Whole numbers first, as the panel sets them, then closer.
+        double bestS = 0.0, bestH = 0.0, best = error(0.0, 0.0);
+        for (int s = -100; s <= 100; ++s)
+            for (int h = -180; h <= 180; ++h)
+            {
+                const double e = error(s, h);
+                if (e < best)
+                {
+                    best = e;
+                    bestS = s;
+                    bestH = h;
+                }
+            }
+        for (double step : {0.1, 0.01})
+        {
+            const double s0 = bestS, h0 = bestH;
+            for (int i = -10; i <= 10; ++i)
+                for (int j = -10; j <= 10; ++j)
+                {
+                    const double s = std::clamp(s0 + i * step, -100.0, 100.0);
+                    const double h = std::clamp(h0 + j * step, -180.0, 180.0);
+                    const double e = error(s, h);
+                    if (e < best)
+                    {
+                        best = e;
+                        bestS = s;
+                        bestH = h;
+                    }
+                }
+        }
+        if (best > 1e-3)
+            return false;
+        saturation = bestS;
+        hue = bestH;
+        return true;
+    }
+
     std::vector<Placement::Filter> readFilters(Reader& tag)
     {
         std::vector<Placement::Filter> filters;
@@ -1503,23 +1604,47 @@ private:
                 set("type", flags.second ? "full" : flags.first ? "inner" : "outer");
                 break;
             }
-            case 5: // convolution: read past
+            case 5: // convolution: Phoenix's own, on a Blur that does nothing
             {
+                filter.element = "BlurFilter";
                 const int x = tag.u8(), y = tag.u8();
-                tag.f32();
-                tag.f32();
+                const double divisor = tag.f32(), bias = tag.f32();
+                std::vector<double> matrix;
                 for (int k = 0; k < x * y; ++k)
-                    tag.f32();
-                readRgb(tag, true);
-                tag.u8();
-                leftOut("convolution filters");
+                    matrix.push_back(tag.f32());
+                const Rgba color = readRgb(tag, true);
+                const int flags = tag.u8();
+                set("blurX", "0");
+                set("blurY", "0");
+                set("phoenixConvolution", numbers(matrix));
+                set("phoenixMatrixX", std::to_string(std::min(x, 15)));
+                set("phoenixMatrixY", std::to_string(std::min(y, 15)));
+                set("phoenixDivisor", number(divisor, 6));
+                set("phoenixBias", number(bias, 6));
+                set("phoenixPreserveAlpha", flags & 0x01 ? "true" : "false");
+                set("phoenixClamp", flags & 0x02 ? "true" : "false");
+                set("phoenixEdgeColor", hexColor(color));
+                set("phoenixEdgeAlpha", number(color.a / 255.0));
                 break;
             }
-            case 6: // color matrix: read past
-                for (int k = 0; k < 20; ++k)
-                    tag.f32();
-                leftOut("color matrix filters");
+            case 6: // color matrix: an Adjust Color where it is one
+            {
+                filter.element = "AdjustColorFilter";
+                double m[20];
+                for (double& value : m)
+                    value = tag.f32();
+                double brightness, contrast, saturation, hue;
+                if (adjustColorOf(m, brightness, contrast, saturation, hue))
+                {
+                    set("brightness", number(brightness, 2));
+                    set("contrast", number(contrast, 2));
+                    set("saturation", number(saturation, 2));
+                    set("hue", number(hue, 2));
+                }
+                else
+                    set("phoenixColorMatrix", numbers(std::vector<double>(m, m + 20)));
                 break;
+            }
             default:
                 return filters;
             }

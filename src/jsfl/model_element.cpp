@@ -191,6 +191,8 @@ const char* filterName(fla::Filter::Type type)
     case fla::Filter::Type::GradientGlow: return "gradientGlowFilter";
     case fla::Filter::Type::GradientBevel: return "gradientBevelFilter";
     case fla::Filter::Type::AdjustColor: return "adjustColorFilter";
+    case fla::Filter::Type::ColorMatrix: return "colorMatrixFilter";
+    case fla::Filter::Type::Convolution: return "convolutionFilter";
     }
     return "blurFilter";
 }
@@ -208,6 +210,25 @@ Value filterValue(const fla::Filter& filter)
         value.set("saturation", filter.saturation);
         value.set("hue", filter.hue);
         return value;
+    case fla::Filter::Type::ColorMatrix:
+    case fla::Filter::Type::Convolution:
+    {
+        Value matrix = Value::array();
+        for (double each : filter.matrix)
+            matrix.items.emplace_back(each);
+        value.set("matrix", matrix);
+        if (filter.type == fla::Filter::Type::Convolution)
+        {
+            value.set("matrixX", filter.matrixX);
+            value.set("matrixY", filter.matrixY);
+            value.set("divisor", filter.divisor);
+            value.set("bias", filter.bias);
+            value.set("preserveAlpha", filter.preserveAlpha);
+            value.set("clamp", filter.clamp);
+            value.set("color", colorText(filter.color));
+        }
+        return value;
+    }
     default:
         break;
     }
@@ -263,7 +284,7 @@ fla::Filter filterFrom(const Value& value, const fla::Filter* base)
     bool known = false;
     for (fla::Filter::Type type : {fla::Filter::Type::Blur, fla::Filter::Type::DropShadow, fla::Filter::Type::Glow,
              fla::Filter::Type::Bevel, fla::Filter::Type::GradientGlow, fla::Filter::Type::GradientBevel,
-             fla::Filter::Type::AdjustColor})
+             fla::Filter::Type::AdjustColor, fla::Filter::Type::ColorMatrix, fla::Filter::Type::Convolution})
     {
         if (name->toString() == filterName(type))
         {
@@ -314,6 +335,30 @@ fla::Filter filterFrom(const Value& value, const fla::Filter* base)
     color("shadowColor", filter.shadowColor);
     if (const Value* type = value.field("type"))
         filter.bevelType = type->toString() == "inner" ? std::string() : type->toString();
+    if (const Value* matrix = value.field("matrix"))
+    {
+        filter.matrix.clear();
+        for (const Value& each : matrix->items)
+            filter.matrix.push_back(each.toNumber());
+    }
+    if (filter.type == fla::Filter::Type::ColorMatrix)
+    {
+        if (filter.matrix.empty())
+            filter.matrix = {1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0};
+        filter.matrix.resize(20, 0.0);
+    }
+    else if (filter.type == fla::Filter::Type::Convolution)
+    {
+        if (const Value* across = value.field("matrixX"))
+            filter.matrixX = std::clamp(across->toInt(), 0, 15);
+        if (const Value* down = value.field("matrixY"))
+            filter.matrixY = std::clamp(down->toInt(), 0, 15);
+        filter.matrix.resize(static_cast<size_t>(filter.matrixX * filter.matrixY), 0.0);
+        number("divisor", filter.divisor);
+        number("bias", filter.bias);
+        flag("preserveAlpha", filter.preserveAlpha);
+        flag("clamp", filter.clamp);
+    }
     const Value* colors = value.field("colorArray");
     const Value* positions = value.field("posArray");
     if (colors && positions)

@@ -129,6 +129,17 @@ Filter withoutEffect(const Filter& filter)
     none.contrast = 0.0;
     none.saturation = 0.0;
     none.hue = 0.0;
+    // A matrix that leaves the color as it is; a kernel of the pixel alone.
+    if (filter.type == Filter::Type::ColorMatrix)
+        none.matrix = {1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0};
+    else if (filter.type == Filter::Type::Convolution)
+    {
+        std::fill(none.matrix.begin(), none.matrix.end(), 0.0);
+        if (!none.matrix.empty())
+            none.matrix[static_cast<size_t>((filter.matrixY / 2) * filter.matrixX + filter.matrixX / 2)] = 1.0;
+        none.divisor = 1.0;
+        none.bias = 0.0;
+    }
     return none;
 }
 
@@ -164,6 +175,13 @@ std::vector<Filter> blendFilters(const std::vector<Filter>& from, const std::vec
             filter.contrast = blend(a.contrast, b.contrast, t);
             filter.saturation = blend(a.saturation, b.saturation, t);
             filter.hue = blend(a.hue, b.hue, t);
+            if (a.matrix.size() == b.matrix.size() && a.matrixX == b.matrixX)
+            {
+                for (size_t k = 0; k < a.matrix.size(); ++k)
+                    filter.matrix[k] = blend(a.matrix[k], b.matrix[k], t);
+                filter.divisor = blend(a.divisor, b.divisor, t);
+                filter.bias = blend(a.bias, b.bias, t);
+            }
             if (a.entries.size() == b.entries.size())
             {
                 for (size_t e = 0; e < a.entries.size(); ++e)

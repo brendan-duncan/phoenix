@@ -561,7 +561,7 @@ fla::Filter readFilter(const Reader& field, Context& context)
     {
         switch (r.field())
         {
-        case s::Filter::Type: f.type = readEnum(r, 7, fla::Filter::Type::Blur, f.phxUnknown); break;
+        case s::Filter::Type: f.type = readEnum(r, 9, fla::Filter::Type::Blur, f.phxUnknown); break;
         case s::Filter::Enabled: f.enabled = r.boolean(); break;
         case s::Filter::BlurX: f.blurX = r.real(); break;
         case s::Filter::BlurY: f.blurY = r.real(); break;
@@ -581,6 +581,13 @@ fla::Filter readFilter(const Reader& field, Context& context)
         case s::Filter::Saturation: f.saturation = r.real(); break;
         case s::Filter::Hue: f.hue = r.real(); break;
         case s::Filter::Entries: readStops(r, f.entries); break;
+        case s::Filter::Matrix: f.matrix.push_back(r.real()); break;
+        case s::Filter::MatrixX: f.matrixX = std::clamp(r.int32(), 0, 15); break;
+        case s::Filter::MatrixY: f.matrixY = std::clamp(r.int32(), 0, 15); break;
+        case s::Filter::Divisor: f.divisor = r.real(); break;
+        case s::Filter::Bias: f.bias = r.real(); break;
+        case s::Filter::PreserveAlpha: f.preserveAlpha = r.boolean(); break;
+        case s::Filter::Clamp: f.clamp = r.boolean(); break;
         case s::Filter::Xfl: readXfl(r, f.extraAttributes, f.presentAttributes); break;
         default: r.keep(f.phxUnknown); break;
         }

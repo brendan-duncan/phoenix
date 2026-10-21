@@ -114,7 +114,8 @@ struct ColorTransform
 /// highlight; blur in pixels; a shadow's or bevel's angle in radians and
 /// distance in pixels; strength (1 plain); inner, knockout and a bevel's
 /// on top (full); passes (quality); a gradient filter's stops; a color
-/// matrix's 20 numbers, row by row.
+/// matrix's 20 numbers, row by row; a convolution's matrix (matrixX by
+/// matrixY), divisor, bias, clamp and preserve alpha, and color past the edge.
 struct Filter
 {
     enum class Type
@@ -124,6 +125,7 @@ struct Filter
         Glow = 2,
         Bevel = 3,
         GradientGlow = 4,
+        Convolution = 5,
         ColorMatrix = 6,
         GradientBevel = 7
     };
@@ -145,6 +147,10 @@ struct Filter
     };
     std::vector<Stop> stops;
     float matrix[20] = {1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0};
+    int matrixX = 0, matrixY = 0;
+    std::vector<float> convolution;
+    float divisor = 1.0f, bias = 0.0f;
+    bool clamp = true, preserveAlpha = true;
 };
 
 /// The events of a movie clip's handler (CLIPEVENTFLAGS), to or together.

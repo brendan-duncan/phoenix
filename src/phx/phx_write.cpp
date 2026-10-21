@@ -397,6 +397,14 @@ Writer encodeFilter(const fla::Filter& f)
     writeDouble(w, s::Filter::Saturation, f.saturation);
     writeDouble(w, s::Filter::Hue, f.hue);
     writeGradientStops(w, s::Filter::Entries, f.entries);
+    for (double value : f.matrix)
+        w.real(s::Filter::Matrix, value);
+    writeInt(w, s::Filter::MatrixX, f.matrixX);
+    writeInt(w, s::Filter::MatrixY, f.matrixY);
+    writeDouble(w, s::Filter::Divisor, f.divisor, 1.0);
+    writeDouble(w, s::Filter::Bias, f.bias);
+    writeBool(w, s::Filter::PreserveAlpha, f.preserveAlpha, true);
+    writeBool(w, s::Filter::Clamp, f.clamp, true);
     writeXfl(w, s::Filter::Xfl, f.extraAttributes, f.presentAttributes);
     w.rawFields(f.phxUnknown);
     return w;

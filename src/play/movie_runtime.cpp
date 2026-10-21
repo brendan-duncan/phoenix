@@ -279,6 +279,13 @@ std::vector<display::BitmapFilter> toFilters(const std::vector<Filter>& filters)
         case Filter::Type::AdjustColor:
             out.push_back(BitmapFilter::adjustColor(f.brightness, f.contrast, f.saturation, f.hue));
             break;
+        case Filter::Type::ColorMatrix:
+            out.push_back(BitmapFilter::colorMatrix(f.matrix));
+            break;
+        case Filter::Type::Convolution:
+            out.push_back(BitmapFilter::convolution(f.matrixX, f.matrixY, f.matrix, f.divisor, f.bias, f.preserveAlpha,
+                f.clamp, rgbOf(f.color), f.color[3] / 255.0));
+            break;
         }
     }
     return out;

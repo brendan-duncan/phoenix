@@ -293,6 +293,15 @@ std::string filterJson(const Filter& f)
             values += (values.empty() ? "" : ",") + number(v, 5);
         return "{\"t\":\"matrix\",\"m\":[" + values + "]}";
     }
+    case Filter::Type::ColorMatrix:
+    {
+        std::string values;
+        for (const double v : f.matrix)
+            values += (values.empty() ? "" : ",") + number(v, 5);
+        return "{\"t\":\"matrix\",\"m\":[" + values + "]}";
+    }
+    case Filter::Type::Convolution: // the page's player has none
+        return std::string();
     }
     return std::string();
 }

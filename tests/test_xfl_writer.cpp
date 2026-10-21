@@ -249,6 +249,9 @@ private:
                     check(fa.brightness == fb.brightness && fa.contrast == fb.contrast &&
                         fa.saturation == fb.saturation && fa.hue == fb.hue, at + " adjust");
                     check(fa.entries.size() == fb.entries.size(), at + " entries");
+                    check(fa.matrix == fb.matrix && fa.matrixX == fb.matrixX && fa.matrixY == fb.matrixY, at + " matrix");
+                    check(fa.divisor == fb.divisor && fa.bias == fb.bias && fa.preserveAlpha == fb.preserveAlpha &&
+                        fa.clamp == fb.clamp, at + " convolution");
                 }
             }
             break;
@@ -916,6 +919,10 @@ TEST(xfl_round_trips_filters_blend_and_easing)
         "<BevelFilter highlightColor='#FFFF00' shadowColor='#0000FF' shadowAlpha='0.25' type='full'/>"
         "<AdjustColorFilter brightness='10' contrast='-20' saturation='30' hue='-40'/>"
         "<GradientGlowFilter blurX='3' blurY='3'><GradientEntry color='#FFFFFF' alpha='0' ratio='0'/><GradientEntry color='#FF00FF' ratio='1'/></GradientGlowFilter>"
+        "<AdjustColorFilter phoenixColorMatrix='0.5,0.5,0,0,10,0,1,0,0,0,0,0,1,0,-20,0,0,0,1,0'/>"
+        "<BlurFilter blurX='0' blurY='0' phoenixConvolution='0,-1,0,-1,5,-1,0,-1,0' phoenixMatrixX='3' "
+        "phoenixMatrixY='3' phoenixDivisor='2' phoenixBias='8' phoenixPreserveAlpha='false' phoenixClamp='false' "
+        "phoenixEdgeColor='#FF0000' phoenixEdgeAlpha='0.5'/>"
         "</filters>"
         "</DOMSymbolInstance>"
         "</elements></DOMFrame>"

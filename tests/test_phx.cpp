@@ -9,6 +9,7 @@
 #include "../src/data/layer.h"
 #include "../src/data/shape.h"
 #include "../src/data/symbol.h"
+#include "../src/data/symbol_instance.h"
 #include "../src/data/symbol_list.h"
 #include "../src/data/timeline.h"
 #include "../src/edit/new_document.h"
@@ -260,6 +261,47 @@ TEST(phx_round_trips_a_new_document)
     CHECK(back->document->width == 1280 && back->document->height == 720 && back->document->frameRate == 30.0);
     std::string a, b;
     CHECK(packageOf(*document->document, a) == packageOf(*back->document, b));
+}
+
+TEST(phx_keeps_color_matrix_and_convolution_filters)
+{
+    std::unique_ptr<fla::FLADocument> document(fla::createEmptyDocument(550, 400, 24.0));
+    CHECK(document && document->document);
+    if (!document || !document->document)
+        return;
+    fla::Frame* frame = document->document->timelines[0]->layers[0]->frames[0];
+    auto* instance = new fla::SymbolInstance(frame);
+    instance->libraryItemName = "Missing";
+    fla::Filter matrix;
+    matrix.type = fla::Filter::Type::ColorMatrix;
+    matrix.matrix = {0.5, 0.5, 0, 0, 10, 0, 1, 0, 0, 0, 0, 0, 1, 0, -20, 0, 0, 0, 1, 0};
+    fla::Filter convolution;
+    convolution.type = fla::Filter::Type::Convolution;
+    convolution.matrixX = convolution.matrixY = 3;
+    convolution.matrix = {0, -1, 0, -1, 5, -1, 0, -1, 0};
+    convolution.divisor = 2.0;
+    convolution.bias = 8.0;
+    convolution.clamp = false;
+    instance->filters = {matrix, convolution};
+    frame->elements.push_back(instance);
+    const std::string path = scratchPath("filters.phx");
+    std::string error;
+    CHECK(phx::save(*document->document, path, phx::SaveOptions(), error));
+    std::string warning;
+    bool readOnly = false;
+    std::unique_ptr<fla::FLADocument> back(phx::load(path, error, warning, readOnly));
+    CHECK(back && back->document);
+    if (!back || !back->document)
+        return;
+    const fla::Frame* read = back->document->timelines[0]->layers[0]->frames[0];
+    const auto* again = read->elements.empty() ? nullptr : dynamic_cast<const fla::SymbolInstance*>(read->elements[0]);
+    CHECK(again && again->filters.size() == 2);
+    if (!again || again->filters.size() != 2)
+        return;
+    CHECK(again->filters[0].type == fla::Filter::Type::ColorMatrix && again->filters[0].matrix == matrix.matrix);
+    const fla::Filter& c = again->filters[1];
+    CHECK(c.type == fla::Filter::Type::Convolution && c.matrix == convolution.matrix && c.matrixX == 3 &&
+        c.matrixY == 3 && c.divisor == 2.0 && c.bias == 8.0 && !c.clamp && c.preserveAlpha);
 }
 
 TEST(phx_keeps_locked_guides)

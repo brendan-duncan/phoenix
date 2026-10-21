@@ -10,8 +10,10 @@ namespace fla {
 
 /// One of the filters on a symbol instance, as the file records it: the
 /// attributes of a BlurFilter, DropShadowFilter, GlowFilter, BevelFilter,
-/// GradientGlowFilter, GradientBevelFilter or AdjustColorFilter element.
-/// Fields a filter type does not use keep their defaults.
+/// GradientGlowFilter, GradientBevelFilter or AdjustColorFilter element, or
+/// Phoenix's own color matrix and convolution (from SWF movies), which an
+/// FLA keeps as phoenix... attributes on an Adjust Color and a Blur that do
+/// nothing. Fields a filter type does not use keep their defaults.
 struct Filter
 {
     enum class Type
@@ -22,7 +24,9 @@ struct Filter
         Bevel,
         GradientGlow,
         GradientBevel,
-        AdjustColor
+        AdjustColor,
+        ColorMatrix,
+        Convolution
     };
 
     Type type = Type::Blur;
@@ -64,6 +68,19 @@ struct Filter
     double saturation = 0.0;
     double hue = 0.0;
 
+    /// Color matrix: four rows of five, red, green, blue and alpha out of
+    /// red, green, blue, alpha (0 to 255, unpremultiplied) and an offset.
+    /// Convolution: matrixX across by matrixY down, its sum divided by
+    /// divisor with bias added; alpha left alone with preserveAlpha; past the
+    /// edge, the edge pixels with clamp, else color.
+    std::vector<double> matrix;
+    int matrixX = 0;
+    int matrixY = 0;
+    double divisor = 1.0;
+    double bias = 0.0;
+    bool preserveAlpha = true;
+    bool clamp = true;
+
     /// Gradient glow and bevel colors.
     std::vector<GradientEntry> entries;
 
@@ -86,6 +103,9 @@ struct Filter
         case Type::GradientGlow: return "GradientGlowFilter";
         case Type::GradientBevel: return "GradientBevelFilter";
         case Type::AdjustColor: return "AdjustColorFilter";
+        // As an FLA keeps them.
+        case Type::ColorMatrix: return "AdjustColorFilter";
+        case Type::Convolution: return "BlurFilter";
         }
         return "BlurFilter";
     }

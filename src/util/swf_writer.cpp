@@ -262,6 +262,24 @@ void filterList(Bits& out, const std::vector<Filter>& filters)
                 out.u32(bits);
             }
             break;
+        case Filter::Type::Convolution:
+        {
+            const auto real = [&out](float value) {
+                uint32_t bits = 0;
+                std::memcpy(&bits, &value, sizeof(bits));
+                out.u32(bits);
+            };
+            const int x = std::clamp(f.matrixX, 0, 15), y = std::clamp(f.matrixY, 0, 15);
+            out.u8(x);
+            out.u8(y);
+            real(f.divisor);
+            real(f.bias);
+            for (int k = 0; k < x * y; ++k)
+                real(k < static_cast<int>(f.convolution.size()) ? f.convolution[static_cast<size_t>(k)] : 0.0f);
+            rgba(out, f.color);
+            out.u8((f.clamp ? 0x02 : 0) | (f.preserveAlpha ? 0x01 : 0));
+            break;
+        }
         }
     }
 }

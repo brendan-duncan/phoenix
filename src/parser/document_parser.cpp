@@ -22,6 +22,7 @@
 #include "../edit/shape_tween.h"
 
 #include <algorithm>
+#include <sstream>
 #include <cmath>
 #include <functional>
 #include <iostream>
@@ -751,12 +752,53 @@ bool parseFilter(const tinyxml2::XMLElement* element, fla::Filter& filter)
     filter.hue = getDoubleAttribute(element, "hue", 0.0);
     keepAttributes(element, {"enabled", "blurX", "blurY", "quality", "angle", "distance", "strength", "inner",
         "knockout", "hideObject", "type", "brightness", "contrast", "saturation", "hue", "color", "alpha",
-        "highlightColor", "highlightAlpha", "shadowColor", "shadowAlpha"}, filter.extraAttributes,
-        filter.presentAttributes);
+        "highlightColor", "highlightAlpha", "shadowColor", "shadowAlpha", "phoenixColorMatrix", "phoenixConvolution",
+        "phoenixMatrixX", "phoenixMatrixY", "phoenixDivisor", "phoenixBias", "phoenixPreserveAlpha", "phoenixClamp", "phoenixEdgeColor",
+        "phoenixEdgeAlpha"},
+        filter.extraAttributes, filter.presentAttributes);
+
+    // Phoenix's own filters, on an Adjust Color and a Blur that do nothing
+    // elsewhere.
+    const auto numbers = [](const std::string& text) {
+        std::vector<double> values;
+        std::stringstream stream(text);
+        std::string part;
+        while (std::getline(stream, part, ','))
+            values.push_back(std::atof(part.c_str()));
+        return values;
+    };
+    const std::string colorMatrix = getAttribute(element, "phoenixColorMatrix");
+    const std::string convolution = getAttribute(element, "phoenixConvolution");
+    if (filter.type == fla::Filter::Type::AdjustColor && !colorMatrix.empty())
+    {
+        filter.type = fla::Filter::Type::ColorMatrix;
+        filter.matrix = numbers(colorMatrix);
+        filter.matrix.resize(20, 0.0);
+    }
+    else if (filter.type == fla::Filter::Type::Blur && !convolution.empty())
+    {
+        filter.type = fla::Filter::Type::Convolution;
+        filter.matrix = numbers(convolution);
+        filter.matrixX = std::clamp(getIntAttribute(element, "phoenixMatrixX", 0), 0, 15);
+        filter.matrixY = std::clamp(getIntAttribute(element, "phoenixMatrixY", 0), 0, 15);
+        filter.matrix.resize(static_cast<size_t>(filter.matrixX * filter.matrixY), 0.0);
+        filter.divisor = getDoubleAttribute(element, "phoenixDivisor", 1.0);
+        filter.bias = getDoubleAttribute(element, "phoenixBias", 0.0);
+        filter.preserveAlpha = getBoolAttribute(element, "phoenixPreserveAlpha", true);
+        filter.clamp = getBoolAttribute(element, "phoenixClamp", true);
+        filter.blurX = filter.blurY = 0.0;
+    }
 
     const std::string color = getAttribute(element, "color");
     if (!color.empty())
         parseHexColor(color, filter.color, getDoubleAttribute(element, "alpha", 1.0));
+    const std::string pastEdge = getAttribute(element, "phoenixEdgeColor");
+    if (filter.type == fla::Filter::Type::Convolution)
+    {
+        filter.color[0] = filter.color[1] = filter.color[2] = filter.color[3] = 0;
+        if (!pastEdge.empty())
+            parseHexColor(pastEdge, filter.color, getDoubleAttribute(element, "phoenixEdgeAlpha", 0.0));
+    }
     const std::string highlight = getAttribute(element, "highlightColor");
     if (!highlight.empty())
         parseHexColor(highlight, filter.highlightColor, getDoubleAttribute(element, "highlightAlpha", 1.0));

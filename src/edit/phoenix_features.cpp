@@ -9,6 +9,7 @@
 #include "../data/static_text.h"
 #include "../data/stroke_style.h"
 #include "../data/symbol.h"
+#include "../data/symbol_instance.h"
 #include "../data/symbol_list.h"
 #include "../data/timeline.h"
 
@@ -93,6 +94,9 @@ const std::vector<Feature>& all()
             {"phoenixReferences"}},
         {"drawing-aids", "Drawing guides and symmetry", "the art as drawn, without the guides or the symmetry axis",
             {"phoenixDrawingGuides", "phoenixSymmetry"}},
+        {"color-matrix-convolution", "Color matrix and convolution filters",
+            "the instances without those filters, which show as an Adjust Color and a Blur that change nothing",
+            {"phoenixColorMatrix", "phoenixConvolution"}},
         {"interactive-states", "Interactive states",
             "the scripts the states were turned into, which play the same, but no States panel to change them in",
             {"phoenixStates"}},
@@ -184,6 +188,16 @@ std::vector<Use> used(const Document& document)
         case Element::Type::Group:
             for (const Element* member : static_cast<const Group*>(item)->members)
                 element(member, where);
+            break;
+        case Element::Type::SymbolInstance:
+            // Phoenix's own filters, read into fields of their own.
+            for (const Filter& filter : static_cast<const SymbolInstance*>(item)->filters)
+            {
+                if (filter.type == Filter::Type::ColorMatrix)
+                    note({{"phoenixColorMatrix", std::string()}}, where);
+                else if (filter.type == Filter::Type::Convolution)
+                    note({{"phoenixConvolution", std::string()}}, where);
+            }
             break;
         default:
             break;

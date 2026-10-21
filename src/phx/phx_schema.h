@@ -107,6 +107,7 @@ namespace Filter { enum : uint32_t {
     Type = 1, Enabled = 2, BlurX = 3, BlurY = 4, Quality = 5, Angle = 6, Distance = 7, Strength = 8, Color = 9,
     HighlightColor = 10, ShadowColor = 11, Inner = 12, Knockout = 13, HideObject = 14, BevelType = 15,
     Brightness = 16, Contrast = 17, Saturation = 18, Hue = 19, Entries = 20, Xfl = 21,
+    Matrix = 22, MatrixX = 23, MatrixY = 24, Divisor = 25, Bias = 26, PreserveAlpha = 27, Clamp = 28,
 }; }
 
 namespace BitmapInstance { enum : uint32_t { LibraryItemName = 1 }; }

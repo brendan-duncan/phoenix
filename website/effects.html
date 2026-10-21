@@ -317,6 +317,17 @@
 
 <p>Adjust Color and the <a href="#color-effects">color effect</a> can be used together. The color effect is applied first, then the filters in order. Adjust Color can do what the color effect can't, such as grayscale or a hue shift; the color effect can fade the instance, which Adjust Color can't.</p>
 
+<h3>Color Matrix and Convolution</h3>
+
+<p>Two filters for exact control, which SWF movies often use and which come in with them when you import one:</p>
+
+<dl class="defs">
+  <dt>Color Matrix</dt><dd>Twenty numbers in four rows: how much red, green, blue and alpha each come from red, green, blue and alpha, plus an amount added (0 to 255). Starts as the identity, which leaves the colors as they are. Swapping the first two numbers of the first two rows swaps red and green, for example.</dd>
+  <dt>Convolution</dt><dd>A grid of numbers (3 by 3 when you add one) that makes each pixel from its neighbors: a center of 5 with -1 above, below and to the sides sharpens; all ones blurs. <strong>Divisor</strong> divides the sum and <strong>Bias</strong> is added to it. <strong>Preserve alpha</strong> leaves transparency alone. With <strong>Clamp edges</strong> off, the pixels past the edge are the <strong>Edge</strong> color.</dd>
+</dl>
+
+<p>Both are Phoenix's own: another FLA editor opens the file and shows the instance without them.</p>
+
 <h3 id="stacking-order">Stacking order</h3>
 
 <p>An instance can have as many filters as you like, of any kinds, even several of the same kind. They are applied from the top of the list down: the second filter works on the picture the first one made, and so on. Order matters wherever one filter would catch another's result:</p>

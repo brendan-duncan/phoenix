@@ -611,6 +611,22 @@ std::vector<swf::Filter> filters(const std::vector<Filter>& list)
                 s.matrix[15 + c] = c == 3 ? 1.0f : 0.0f;
             break;
         }
+        case Filter::Type::ColorMatrix:
+            s.type = swf::Filter::Type::ColorMatrix;
+            for (size_t k = 0; k < 20 && k < f.matrix.size(); ++k)
+                s.matrix[k] = static_cast<float>(f.matrix[k]);
+            break;
+        case Filter::Type::Convolution:
+            s.type = swf::Filter::Type::Convolution;
+            s.matrixX = f.matrixX;
+            s.matrixY = f.matrixY;
+            s.convolution.assign(f.matrix.begin(), f.matrix.end());
+            s.divisor = static_cast<float>(f.divisor);
+            s.bias = static_cast<float>(f.bias);
+            s.clamp = f.clamp;
+            s.preserveAlpha = f.preserveAlpha;
+            s.color = color(f.color);
+            break;
         }
         out.push_back(s);
     }

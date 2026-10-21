@@ -272,6 +272,8 @@ const char* filterName(fla::Filter::Type type)
     case fla::Filter::Type::GradientGlow: return "Gradient Glow";
     case fla::Filter::Type::GradientBevel: return "Gradient Bevel";
     case fla::Filter::Type::AdjustColor: return "Adjust Color";
+    case fla::Filter::Type::ColorMatrix: return "Color Matrix";
+    case fla::Filter::Type::Convolution: return "Convolution";
     }
     return "Filter";
 }
@@ -3231,6 +3233,46 @@ void PropertiesPanel::addFilterSection(QVBoxLayout* layout, fla::SymbolInstance*
             section->addField(row++, 1, "Hue", hot(i, &fla::Filter::hue, -180, 180, 0, QString(), 1.0));
             continue;
         }
+        if (filter.type == T::ColorMatrix || filter.type == T::Convolution)
+        {
+            // The matrix, a field for each number: for a color matrix, red,
+            // green, blue and alpha out, each of red, green, blue, alpha
+            // and an offset in.
+            const bool color = filter.type == T::ColorMatrix;
+            const int columns = color ? 5 : filter.matrixX;
+            const int rows = color ? 4 : filter.matrixY;
+            QWidget* grid = new QWidget(this);
+            QGridLayout* gridLayout = new QGridLayout(grid);
+            gridLayout->setContentsMargins(0, 0, 0, 0);
+            gridLayout->setSpacing(2);
+            for (int k = 0; k < rows * columns && k < static_cast<int>(filter.matrix.size()); ++k)
+            {
+                HotText* field = makeHotText(-1000, 1000, 3);
+                field->setValue(filter.matrix[static_cast<size_t>(k)]);
+                bindLive(field,
+                    [=]() { *before = *filters; },
+                    [=, this](double value) {
+                        (*filters)[i].matrix[static_cast<size_t>(k)] = value;
+                        emit documentEdited();
+                    },
+                    [=]() {
+                        const std::vector<fla::Filter> after = *filters;
+                        *filters = *before;
+                        change(after, "Filter", false);
+                    });
+                gridLayout->addWidget(field, k / columns, k % columns);
+            }
+            section->addWide(row++, grid);
+            if (color)
+                continue;
+            section->addField(row, 0, "Divisor", hot(i, &fla::Filter::divisor, -1000, 1000, 2, QString(), 1.0));
+            section->addField(row++, 1, "Bias", hot(i, &fla::Filter::bias, -255, 255, 1, QString(), 1.0));
+            section->addField(row, 0, QString(), checkBox(i, &fla::Filter::preserveAlpha, "Preserve alpha"));
+            section->addField(row++, 1, QString(), checkBox(i, &fla::Filter::clamp, "Clamp edges"));
+            if (!filter.clamp)
+                section->addField(row++, 0, "Edge", colorButton(i, &fla::Filter::color, "Edge Color"));
+            continue;
+        }
 
         // Every other filter blurs.
         section->addField(row, 0, "Blur X", hot(i, &fla::Filter::blurX, 0, 255, 1, " px", 1.0));
@@ -3399,11 +3441,22 @@ void PropertiesPanel::addFilterSection(QVBoxLayout* layout, fla::SymbolInstance*
     add->setPopupMode(QToolButton::InstantPopup);
     QMenu* menu = new QMenu(add);
     using T = fla::Filter::Type;
-    for (const T type : {T::DropShadow, T::Blur, T::Glow, T::Bevel, T::GradientGlow, T::GradientBevel, T::AdjustColor})
+    for (const T type : {T::DropShadow, T::Blur, T::Glow, T::Bevel, T::GradientGlow, T::GradientBevel, T::AdjustColor,
+             T::ColorMatrix, T::Convolution})
     {
         menu->addAction(filterName(type), this, [=]() {
             fla::Filter filter;
             filter.type = type;
+            // Each starts leaving the art as it is.
+            if (type == T::ColorMatrix)
+                filter.matrix = {1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0};
+            if (type == T::Convolution)
+            {
+                filter.matrixX = filter.matrixY = 3;
+                filter.matrix = {0, 0, 0, 0, 1, 0, 0, 0, 0};
+                filter.blurX = filter.blurY = 0.0;
+                std::fill(filter.color, filter.color + 4, uint8_t(0));
+            }
             if (type == T::Glow)
             {
                 const uint8_t red[4] = {255, 0, 0, 255};

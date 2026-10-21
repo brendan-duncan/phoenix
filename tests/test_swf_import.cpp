@@ -9,8 +9,10 @@
 #include "../src/data/morph_shape.h"
 #include "../src/data/resource.h"
 #include "../src/data/shape.h"
+#include "../src/data/symbol_instance.h"
 #include "../src/data/symbol_list.h"
 #include "../src/data/timeline.h"
+#include "../src/edit/swf_movie.h"
 #include "../src/parser/document_parser.h"
 #include "../src/parser/swf_import.h"
 #include "../src/parser/zip_reader.h"
@@ -19,6 +21,7 @@
 
 #include <cmath>
 #include <functional>
+#include <map>
 #include <memory>
 #include <string>
 
@@ -250,6 +253,83 @@ TEST(swf_import_masks_only_the_frames_a_depth_is_a_mask_on)
     CHECK(drawn(0, false) == 2 && drawn(0, true) == 0);
     // Frame 2: the big square masked, the small one only masking.
     CHECK(drawn(1, false) == 0 && drawn(1, true) == 1);
+}
+
+TEST(swf_import_keeps_color_matrix_and_convolution_filters)
+{
+    // A clip placed three times: with Phoenix's Adjust Color as its SWF
+    // export writes it, with a color matrix no Adjust Color makes, and with
+    // a convolution.
+    swf::Writer writer(100, 100, 24.0, {255, 255, 255, 255});
+    swf::Fill red;
+    red.color = {255, 0, 0, 255};
+    const int shape = writer.defineShape(red, square(10));
+    swf::Sprite inner;
+    inner.place(shape, 1);
+    inner.showFrame();
+    const int clip = writer.defineSprite(inner);
+    fla::Filter adjust;
+    adjust.type = fla::Filter::Type::AdjustColor;
+    adjust.brightness = 10;
+    adjust.contrast = -20;
+    adjust.saturation = 30;
+    adjust.hue = -40;
+    swf::Filter swapped;
+    swapped.type = swf::Filter::Type::ColorMatrix;
+    const float swap[20] = {0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0};
+    std::copy(swap, swap + 20, swapped.matrix);
+    swf::Filter sharpen;
+    sharpen.type = swf::Filter::Type::Convolution;
+    sharpen.matrixX = sharpen.matrixY = 3;
+    sharpen.convolution = {0, -1, 0, -1, 5, -1, 0, -1, 0};
+    sharpen.divisor = 1.0f;
+    sharpen.bias = 4.0f;
+    sharpen.preserveAlpha = false;
+    swf::Sprite outer;
+    const std::vector<std::vector<swf::Filter>> lists = {fla::swfmovie::filters({adjust}), {swapped}, {sharpen}};
+    for (size_t i = 0; i < lists.size(); ++i)
+    {
+        swf::Placement placement;
+        placement.depth = static_cast<int>(i) + 1;
+        placement.character = clip;
+        placement.hasFilters = true;
+        placement.filters = lists[i];
+        outer.place(placement);
+    }
+    outer.showFrame();
+    writer.place(writer.defineSprite(outer), 1);
+    writer.showFrame();
+    std::map<std::string, std::vector<uint8_t>> files;
+    std::string error;
+    CHECK(SwfImport::convert(writer.finish(false), files, error));
+    Parsed parsed = parse(files);
+    CHECK(parsed.document && parsed.document->symbolList);
+    if (!parsed.document || !parsed.document->symbolList)
+        return;
+    // Each placement's first filter, by depth.
+    std::map<std::string, fla::Filter> found;
+    for (const fla::Symbol* symbol : parsed.document->symbolList->symbols)
+        for (const fla::Timeline* timeline : symbol->timelines)
+            for (const fla::Layer* layer : timeline->layers)
+                for (const fla::Frame* frame : layer->frames)
+                    for (const fla::Element* element : frame->elements)
+                        if (const auto* instance = dynamic_cast<const fla::SymbolInstance*>(element))
+                            if (!instance->filters.empty())
+                                found[layer->name] = instance->filters[0];
+    CHECK(found.size() == 3);
+    if (found.size() != 3)
+        return;
+    const fla::Filter& back = found["Depth 1"];
+    CHECK(back.type == fla::Filter::Type::AdjustColor);
+    CHECK(std::fabs(back.brightness - 10) < 0.05 && std::fabs(back.contrast + 20) < 0.05 &&
+        std::fabs(back.saturation - 30) < 0.05 && std::fabs(back.hue + 40) < 0.05);
+    const fla::Filter& matrix = found["Depth 2"];
+    CHECK(matrix.type == fla::Filter::Type::ColorMatrix && matrix.matrix.size() == 20);
+    CHECK(matrix.matrix.size() == 20 && matrix.matrix[1] == 1.0 && matrix.matrix[0] == 0.0);
+    const fla::Filter& convolution = found["Depth 3"];
+    CHECK(convolution.type == fla::Filter::Type::Convolution && convolution.matrixX == 3 && convolution.matrixY == 3);
+    CHECK(convolution.matrix.size() == 9 && convolution.matrix[4] == 5.0 && convolution.bias == 4.0);
+    CHECK(!convolution.preserveAlpha && convolution.clamp);
 }
 
 TEST(swf_import_keeps_bitmaps_and_the_soundtrack)
