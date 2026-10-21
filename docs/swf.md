@@ -277,7 +277,8 @@ non-normal blend or bitmap caching; otherwise `PlaceObject2` (26).
   bevel type to inner/onTop); Adjust Color becomes a 4x5 color matrix built
   the way Phoenix adjusts color (saturation about luminance weights 0.3086,
   0.6094, 0.0820, hue rotation about the gray axis, contrast about 128, then
-  brightness).
+  brightness). Phoenix's own Color Matrix and Convolution filters are written
+  as SWF's color matrix (6) and convolution (5) filters.
 - `blendMode()` maps the file's names (`normal`, `layer`, `multiply`, ...,
   `hardlight`) to SWF numbers 1 to 14.
 
@@ -676,9 +677,23 @@ DefineBitsJPEG2) go through the decoder `main.cpp` installs with
 2. A `Labels` layer.
 3. One `Sound` layer per concurrent event sound, and a `Soundtrack` layer
    with the stream (`soundSync="stream"`) on its first frame.
-4. One layer per depth. A depth with a clip depth becomes a `mask` layer;
-   depths it covers become layers masked by it (`parentLayerIndex`). A layer
-   showing only video is hidden.
+4. One layer per depth and part it plays. A placement with a clip depth
+   makes a `mask` layer, and the depths it covers on that frame become
+   layers masked by it (`parentLayerIndex`). Movies reuse depths, a mask on
+   some frames and plain art on others, so each depth gets a layer for each
+   part (named `Depth 3 Mask`, `Depth 3 Masked` when it has more than one),
+   holding only the frames it plays that part on. A layer showing only video
+   is hidden.
+
+Filters come back as the FLA has them. A color matrix becomes Adjust Color
+when some brightness, contrast, saturation and hue make that matrix as
+Phoenix draws Adjust Color (`adjustColorOf`, fitted once per matrix);
+otherwise it, and a convolution, become Phoenix's own Color Matrix and
+Convolution filters, which an FLA keeps as `phoenixColorMatrix` on an
+`AdjustColorFilter` and `phoenixConvolution` (with `phoenixMatrixX`,
+`phoenixMatrixY`, `phoenixDivisor`, `phoenixBias`, `phoenixPreserveAlpha`,
+`phoenixClamp`, `phoenixEdgeColor`, `phoenixEdgeAlpha`) on a `BlurFilter` of
+no blur, so other FLA editors show the art without them.
 
 Within a depth, frames are grouped into spans where the placement does not
 change. With `Options::recognizeTweens` (the default), spans whose matrix and
@@ -768,6 +783,29 @@ Useful helpers, all file-local in the tests (copy what you need):
 - `namesPlaced(tags, sprite)`: instance names placed in a timeline.
 - `movieWithSounds`: an `eventSound` stub that defines a tiny raw sound per
   name, for checking where `StartSound` and `DefineButtonSound` land.
+
+### Comparing with Ruffle
+
+[Ruffle](https://github.com/ruffle-rs/ruffle) (MIT/Apache-2.0) plays SWF
+closely to Flash Player, and two scripts use it as a reference. Both run
+Phoenix headless and need Ruffle's source (`RUFFLE_SOURCE`, default
+`D:/src/ruffle`).
+
+- `tools/ruffle_tests.py` plays Ruffle's regression SWFs
+  (`tests/tests/swfs`, about 4,500: AVM1, AVM2, timelines, filters, text)
+  with `Phoenix play`, compares the trace with each test's `output.txt`
+  (what Flash Player traced) and the last frame with its expected images,
+  and prints a summary by folder. A run takes about two minutes. Tests that
+  play recorded input, AIR-only and JPEG XR tests are skipped. Keep a
+  report.json as a baseline and pass it as `--baseline` after a change: the
+  script lists what newly fails and newly passes, and exits 1 on anything
+  newly failing.
+- `tools/ruffle_compare.py` renders sample frames of SWF movies with Ruffle's
+  exporter (built once with `cargo build --release -p exporter` in Ruffle's
+  source) and with Phoenix (the imported timeline, or Test Movie with
+  `--mode play`), scores how much they differ away from edges, and lists the
+  movies that differ most, with side-by-side pictures. Point it at a folder of
+  real movies to find import bugs.
 
 To look at a real export, write it with `Phoenix --export-movie file.fla
 out.swf` (headless with `QT_QPA_PLATFORM=offscreen`), then decode it with the
