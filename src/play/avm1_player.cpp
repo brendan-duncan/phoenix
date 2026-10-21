@@ -1,11 +1,13 @@
 #include "avm1_player.h"
 
 #include "movie_runtime.h"
+#include "as2_library.h"
 #include "../data/frame.h"
 #include "../data/layer.h"
 #include "../data/symbol.h"
 #include "../data/timeline.h"
 
+#include "avm1/avm1.h"
 #include "avm1/avm1_interpreter.h"
 #include "bytecode/vm.h"
 #include "runtime/value.h"
@@ -380,7 +382,20 @@ ActionsPlayer::ActionsPlayer(MovieRuntime& runtime, as3::VM& vm, int version)
     , _vm(vm)
     , _host(std::make_unique<ActionsHost>(runtime, version))
     , _interpreter(std::make_unique<as3::avm1::Interpreter>(vm, *_host, version))
-{}
+{
+    // The player's own ActionScript 2 classes (flash.geom...), which a
+    // movie made for SWF 8 or later sees.
+    if (version >= 8)
+    {
+        static const std::shared_ptr<const std::vector<uint8_t>> library = []() {
+            as3::avm1::Compiler compiler;
+            auto bytes = std::make_shared<std::vector<uint8_t>>(compiler.compileScript(as2LibrarySource(), "library"));
+            return std::shared_ptr<const std::vector<uint8_t>>(bytes);
+        }();
+        if (!library->empty() && _runtime._root)
+            _interpreter->run(library, _runtime.objectFor(*_runtime._root), "library");
+    }
+}
 
 ActionsPlayer::~ActionsPlayer()
 {

@@ -241,6 +241,7 @@ set(PHOENIX_CORE_PYTHON_SOURCES
 set(PHOENIX_CORE_PLAY_SOURCES
     play/movie_runtime.cpp
     play/avm1_player.cpp
+    play/as2_library.cpp
     play/canvas/createjs.cpp
     play/canvas/scripts.cpp
     play/display/bitmap_data.cpp
@@ -331,6 +332,17 @@ function(phoenix_add_core target src)
     if(CORE_PLAY)
         target_link_libraries(${target} PUBLIC as3_parser qjs)
         target_compile_definitions(${target} PUBLIC PHOENIX_PLAY)
+        # ActionScript 2's library classes (resources/as2), built in.
+        file(GLOB as2_library CONFIGURE_DEPENDS "${src}/../resources/as2/*.as")
+        list(SORT as2_library)
+        set(as2_out "${CMAKE_CURRENT_BINARY_DIR}/generated/as2_library.inc")
+        add_custom_command(OUTPUT ${as2_out}
+            COMMAND ${CMAKE_COMMAND} "-DINPUTS=${as2_library}" "-DOUTPUT=${as2_out}"
+                    -P ${CMAKE_CURRENT_FUNCTION_LIST_DIR}/EmbedText.cmake
+            DEPENDS ${as2_library} ${CMAKE_CURRENT_FUNCTION_LIST_DIR}/EmbedText.cmake
+            VERBATIM)
+        target_sources(${target} PRIVATE ${as2_out})
+        target_include_directories(${target} PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/generated)
     endif()
     # The audio engine (miniaudio) needs the system's audio and threads.
     if(APPLE)
