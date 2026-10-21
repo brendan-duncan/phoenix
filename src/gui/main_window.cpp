@@ -8500,10 +8500,6 @@ void MainWindow::setupMenus()
                 }
             });
         }
-        framesMenu->addSeparator();
-        QAction* settingsAction = framesMenu->addAction("Safe Zone Settings...");
-        settingsAction->setEnabled(document != nullptr);
-        connect(settingsAction, &QAction::triggered, this, [this]() { safeZoneSettings(); });
     });
     QAction* safeZoneSettingsAction = new QAction("Safe Zone Settings...", this);
     safeZoneSettingsAction->setObjectName("viewSafeZoneSettings");
