@@ -96,6 +96,10 @@ private:
     Clip* drawTarget(const std::string& path);
     /// Those of flash.filters (as2_filters.cpp).
     as3::Val filterNatives();
+    /// Those of SharedObject (as2_shared_object.cpp), and saving what they
+    /// hold as the movie ends.
+    as3::Val sharedObjectNatives();
+    void saveSharedObjects();
     /// A flash.filters object's filter: false for anything else.
     bool filterOf(const as3::Val& value, display::BitmapFilter& out);
 
@@ -107,6 +111,9 @@ private:
     /// reading back (as2_filters.cpp).
     struct ScriptFilters;
     std::shared_ptr<ScriptFilters> _scriptFilters;
+    /// The SharedObjects scripts opened, to save as the movie ends.
+    struct SharedObjects;
+    std::shared_ptr<SharedObjects> _sharedObjects;
 };
 
 } // namespace play

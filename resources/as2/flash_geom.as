@@ -5,6 +5,10 @@
 
 // Run once, in a function of its own, so its names stay out of the movie.
 (function() {
+    // flash.* is there from SWF 8.
+    if (_global.$phoenix.version < 8) {
+        return;
+    }
     if (_global.flash == undefined) {
         _global.flash = {};
     }

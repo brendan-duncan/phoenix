@@ -19,6 +19,7 @@
 #include "../src/util/swf_writer.h"
 
 #include <functional>
+#include <filesystem>
 #include <map>
 #include <memory>
 #include <string>
@@ -114,7 +115,7 @@ std::vector<uint8_t> published(const fla::Document& document, std::vector<std::s
 /// A document played: what it traces and its errors, over \a frames frames,
 /// with the button named \a button clicked after them when there is one.
 std::string play(const fla::Document& document, int frames, const std::string& button = std::string(),
-    std::function<std::string(const std::string&)> mmExecute = {})
+    std::function<std::string(const std::string&)> mmExecute = {}, const std::string& sharedObjects = std::string())
 {
     std::vector<const fla::Timeline*> scenes(document.timelines.begin(), document.timelines.end());
     fla::play::MovieRuntime runtime(scenes, 12);
@@ -127,6 +128,7 @@ std::string play(const fla::Document& document, int frames, const std::string& b
     runtime.setLibrary(library, {}, {});
     runtime.setActionScriptVersion(2);
     runtime.mmExecute = std::move(mmExecute);
+    runtime.sharedObjectFolder = sharedObjects;
     runtime.start();
     for (int i = 1; i < frames; ++i)
         runtime.step();
@@ -402,6 +404,50 @@ TEST(swf_actions_have_the_players_filters)
         for (const std::string& problem : movie.problems)
             std::printf("    problem: %s\n", problem.c_str());
     }
+}
+
+TEST(swf_actions_keep_shared_objects)
+{
+    // SharedObject in ActionScript 2: kept in a .sol file and read back the
+    // next time the movie plays.
+    namespace fs = std::filesystem;
+    const fs::path folder = fs::temp_directory_path() / "phoenix-test-as2-shared-objects";
+    std::error_code error;
+    fs::remove_all(folder, error);
+    const auto run = [&](const std::string& script) {
+        std::map<std::string, std::vector<uint8_t>> files;
+        files["DOMDocument.xml"] = bytesOf(
+            "<DOMDocument xmlns=\"http://ns.adobe.com/xfl/2008/\" width=\"200\" height=\"100\" frameRate=\"12\">"
+            "<timelines><DOMTimeline name=\"Scene 1\"><layers><DOMLayer name=\"actions\"><frames>"
+            "<DOMFrame index=\"0\" duration=\"1\"><Actionscript><script><![CDATA[" +
+            script +
+            "]]></script></Actionscript><elements/></DOMFrame>"
+            "</frames></DOMLayer></layers></DOMTimeline></timelines></DOMDocument>");
+        Parsed source = parse(files);
+        if (!source.document)
+            return std::string();
+        Reopened movie;
+        reopen(*source.document, movie);
+        CHECK(movie.ok && movie.parsed.document);
+        if (!movie.ok || !movie.parsed.document)
+            return std::string();
+        return play(*movie.parsed.document, 1, std::string(), {}, folder.u8string());
+    };
+    const std::string first = run(
+        "var so = SharedObject.getLocal('save');\ntrace(so.getSize());\n"
+        "so.data.score = 42; so.data.items = ['sword', 'shield']; so.data.when = new Date(7000);\n"
+        "trace(so.getSize() > 0);\ntrace(so.flush());\n"
+        "trace(SharedObject.getLocal('bad name') + ' ' + (SharedObject.getLocal('save') == so));\nstop();\n");
+    const std::string firstWanted = "0\ntrue\ntrue\nnull true\n";
+    CHECK(first == firstWanted);
+    const std::string second = run("var so = SharedObject.getLocal('save');\n"
+                                   "trace(so.data.score + ' ' + so.data.items + ' ' + so.data.when.getTime());\n"
+                                   "so.clear();\ntrace(so.getSize() + ' ' + so.data.score);\nstop();\n");
+    const std::string secondWanted = "42 sword,shield 7000\n0 undefined\n";
+    CHECK(second == secondWanted);
+    if (first != firstWanted || second != secondWanted)
+        std::printf("    got:\n%s%s", first.c_str(), second.c_str());
+    fs::remove_all(folder, error);
 }
 
 TEST(swf_actions_reach_the_editor_through_mmexecute)

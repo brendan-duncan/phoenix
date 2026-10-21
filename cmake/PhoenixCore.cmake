@@ -244,6 +244,7 @@ set(PHOENIX_CORE_PLAY_SOURCES
     play/as2_bitmap.cpp
     play/as2_filters.cpp
     play/as2_library.cpp
+    play/as2_shared_object.cpp
     play/canvas/createjs.cpp
     play/canvas/scripts.cpp
     play/display/bitmap_data.cpp

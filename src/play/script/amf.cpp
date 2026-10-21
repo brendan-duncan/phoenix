@@ -417,7 +417,8 @@ public:
 
     void value0(const Val& value)
     {
-        if (value.isUndefined() || value.isFunction() || isClass(value, "Function"))
+        if (value.isUndefined() || value.isFunction() || isClass(value, "Function") ||
+            (b.actionScript2() && b.isMovieClip(value)))
             out.push_back(Undefined0);
         else if (value.isNull())
             out.push_back(Null0);
@@ -439,8 +440,84 @@ public:
             out.push_back(Undefined0);
     }
 
+    /// An ActionScript 2 object's properties, each a name and a value
+    /// (a getter's undefined, functions left out).
+    void properties2(const Val& value)
+    {
+        for (const std::string& name : b.namesOf(value))
+        {
+            if (b.isAccessor(value, name))
+            {
+                string0(name, false);
+                out.push_back(Undefined0);
+                continue;
+            }
+            const Val member = vm.getIndex(value, Val::string(name));
+            if (member.isFunction() || isClass(member, "Function"))
+                continue;
+            string0(name, false);
+            value0(member);
+        }
+        bigEndian(0, 2);
+        out.push_back(ObjectEnd0);
+    }
+
+    void object2(const Val& value)
+    {
+        const std::string& cls = className(value);
+        if (cls == "Date")
+        {
+            out.push_back(Date0);
+            doubleValue(vm.toNumber(vm.callMethod(value, "getTime", as3::Args())));
+            bigEndian(0, 2);
+            return;
+        }
+        if (cls == "XML" || cls == "XMLDocument")
+        {
+            out.push_back(XmlDoc0);
+            const std::string text = vm.toString(value);
+            bigEndian(text.size(), 4);
+            out.insert(out.end(), text.begin(), text.end());
+            return;
+        }
+        const auto seen = objects0.find(value.get());
+        if (seen != objects0.end())
+        {
+            out.push_back(Reference0);
+            bigEndian(uint32_t(seen->second), 2);
+            return;
+        }
+        objects0.emplace(value.get(), int(objects0.size()));
+        if (value->type == as3::ValueType::Array)
+        {
+            // Its length: past its last index, whichever is further.
+            double length = double(value->elements.size());
+            for (const std::string& name : b.namesOf(value))
+                if (isIndexName(name))
+                    length = std::max(length, std::stod(name) + 1);
+            out.push_back(EcmaArray0);
+            bigEndian(uint32_t(length), 4);
+            properties2(value);
+            return;
+        }
+        const std::string registered = b.registeredName(value);
+        if (!registered.empty())
+        {
+            out.push_back(TypedObject0);
+            string0(registered, false);
+        }
+        else
+            out.push_back(Object0);
+        properties2(value);
+    }
+
     void object0(const Val& value)
     {
+        if (b.actionScript2())
+        {
+            object2(value);
+            return;
+        }
         const std::string& cls = className(value);
         if (cls == "Date")
         {
@@ -979,6 +1056,30 @@ std::shared_ptr<as3::ClassInfo> AmfContext::classOfAlias(const std::string&)
     return nullptr;
 }
 
+std::vector<std::string> AmfContext::namesOf(const Val& object)
+{
+    std::vector<std::string> names;
+    if (object.isObject())
+        for (const auto& property : object->properties)
+            names.push_back(property.first);
+    return names;
+}
+
+bool AmfContext::isAccessor(const Val&, const std::string&)
+{
+    return false;
+}
+
+bool AmfContext::isMovieClip(const Val&)
+{
+    return false;
+}
+
+std::string AmfContext::registeredName(const Val&)
+{
+    return std::string();
+}
+
 BindingsAmf::BindingsAmf(Bindings& bindings)
     : AmfContext(bindings.vm)
     , _bindings(bindings)
@@ -1027,19 +1128,27 @@ std::vector<uint8_t> writeSharedObject(AmfContext& context, const std::string& n
     Writer writer(context, body);
     if (data.isObject())
     {
-        for (const auto& property : data->properties)
+        std::vector<std::string> names;
+        if (context.actionScript2())
+            names = context.namesOf(data);
+        else
+            for (const auto& property : data->properties)
+                names.push_back(property.first);
+        for (const std::string& name : names)
         {
-            if (property.second.isFunction())
+            const bool getter = context.actionScript2() && context.isAccessor(data, name);
+            const Val value = getter ? Val() : context.vm.getProperty(data, name);
+            if (value.isFunction() || isClass(value, "Function"))
                 continue;
             if (amf3)
             {
-                writer.string3(property.first);
-                writer.value3(property.second);
+                writer.string3(name);
+                writer.value3(value);
             }
             else
             {
-                writer.string0(property.first, false);
-                writer.value0(property.second);
+                writer.string0(name, false);
+                writer.value0(value);
             }
             body.push_back(0);
         }

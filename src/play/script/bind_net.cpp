@@ -390,25 +390,7 @@ void Bindings::defineNet()
     // kept as JSON are read still.)
     std::shared_ptr<std::map<std::string, Val>> opened = std::make_shared<std::map<std::string, Val>>();
     const auto pathOf = [this](const std::string& name, const std::string& localPath) {
-        if (runtime.sharedObjectFolder.empty())
-            return std::string();
-        std::string movie = runtime.url;
-        const size_t slash = movie.find_last_of("/\\");
-        if (slash != std::string::npos)
-            movie = movie.substr(slash + 1);
-        if (movie.empty())
-            movie = "movie";
-        std::string where = localPath;
-        for (char& c : where)
-            if (c == ':' || c == '\\')
-                c = '_';
-        while (!where.empty() && where[0] == '/')
-            where.erase(0, 1);
-        namespace fs = std::filesystem;
-        fs::path path = fs::u8path(runtime.sharedObjectFolder) / fs::u8path(movie);
-        if (!where.empty())
-            path /= fs::u8path(where);
-        return (path / fs::u8path(name + ".sol")).u8string();
+        return runtime.sharedObjectFile(name, localPath);
     };
     const auto flush = [this](VM&, SharedObjectHost& host) {
         if (host.path.empty())

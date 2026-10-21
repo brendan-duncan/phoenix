@@ -6,6 +6,10 @@
 // the arguments given, in order.
 
 (function() {
+    // flash.* is there from SWF 8.
+    if (_global.$phoenix.version < 8) {
+        return;
+    }
     var player = _global.$phoenix;
     if (_global.flash == undefined) {
         _global.flash = {};

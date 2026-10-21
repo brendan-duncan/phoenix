@@ -1843,6 +1843,29 @@ void MovieRuntime::runFunction(const as3::ValuePtr& function, const std::vector<
     _source = wasSource;
 }
 
+std::string MovieRuntime::sharedObjectFile(const std::string& name, const std::string& localPath) const
+{
+    if (sharedObjectFolder.empty())
+        return std::string();
+    std::string movie = url;
+    const size_t slash = movie.find_last_of("/\\");
+    if (slash != std::string::npos)
+        movie = movie.substr(slash + 1);
+    if (movie.empty())
+        movie = "movie";
+    std::string where = localPath;
+    for (char& c : where)
+        if (c == ':' || c == '\\')
+            c = '_';
+    while (!where.empty() && where[0] == '/')
+        where.erase(0, 1);
+    namespace fs = std::filesystem;
+    fs::path path = fs::u8path(sharedObjectFolder) / fs::u8path(movie);
+    if (!where.empty())
+        path /= fs::u8path(where);
+    return (path / fs::u8path(name + ".sol")).u8string();
+}
+
 void MovieRuntime::tell(const std::string& message, const DOMElement* source, int line)
 {
     if (error)

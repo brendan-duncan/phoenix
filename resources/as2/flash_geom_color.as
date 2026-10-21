@@ -4,6 +4,10 @@
 // and colors through the player ($phoenix, taken here and then let go).
 
 (function() {
+    // flash.* is there from SWF 8.
+    if (_global.$phoenix.version < 8) {
+        return;
+    }
     var player = _global.$phoenix;
     var hide = function(object, names) {
         ASSetPropFlags(object, names, 1, 0);

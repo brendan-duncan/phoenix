@@ -39,6 +39,17 @@ public:
     virtual as3::Val newByteArray(std::vector<uint8_t> bytes);
     virtual std::string aliasOf(const as3::ClassInfo* cls);
     virtual std::shared_ptr<as3::ClassInfo> classOfAlias(const std::string& alias);
+
+    /// ActionScript 1 and 2 write as the player writes theirs: arrays as
+    /// ECMA arrays of all their names, objects' properties in for-in's
+    /// order, getters as undefined, movie clips as undefined and functions
+    /// left out.
+    virtual bool actionScript2() const { return false; }
+    virtual std::vector<std::string> namesOf(const as3::Val& object);
+    virtual bool isAccessor(const as3::Val& object, const std::string& name);
+    virtual bool isMovieClip(const as3::Val& value);
+    /// The name Object.registerClass gave \a object's class; empty for none.
+    virtual std::string registeredName(const as3::Val& object);
 };
 
 /// ActionScript 3's: its ByteArrays and registerClassAlias.

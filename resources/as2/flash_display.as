@@ -3,6 +3,10 @@
 // bitmap ($bitmap).
 
 (function() {
+    // flash.* is there from SWF 8.
+    if (_global.$phoenix.version < 8) {
+        return;
+    }
     var natives = _global.$phoenix.bitmap;
     var noObject = _global.$phoenix.noObject;
     var make = natives.make;

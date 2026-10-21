@@ -5,6 +5,10 @@
 // back into values, is here too, as movies can call it.
 
 (function() {
+    // flash.* is there from SWF 8.
+    if (_global.$phoenix.version < 8) {
+        return;
+    }
     if (_global.flash == undefined) {
         _global.flash = {};
     }

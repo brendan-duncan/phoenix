@@ -298,6 +298,9 @@ public:
     /// Where SharedObject.getLocal keeps what it saves; nothing is saved
     /// when empty.
     std::string sharedObjectFolder;
+    /// The .sol file SharedObject.getLocal(\a name, \a localPath) keeps
+    /// its data in, by the movie; empty when nothing is saved.
+    std::string sharedObjectFile(const std::string& name, const std::string& localPath) const;
 
     /// What scripts ask of the web (URLLoader, Loader, sendToURL): \a done
     /// is called with what came, later, as the host's network answers.
