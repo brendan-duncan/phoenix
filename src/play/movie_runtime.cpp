@@ -3356,7 +3356,8 @@ Clip* MovieRuntime::resolve(Clip& from, const std::string& target)
 namespace {
 
 /// The names of a clip's properties that only ActionScript 3 and JavaScript
-/// have: in ActionScript 1 and 2 they are variables like any other.
+/// have: in a movie's compiled ActionScript 1 and 2 they are variables like
+/// any other.
 bool laterLanguageName(const std::string& name)
 {
     static const std::set<std::string> names = {"x", "y", "visible", "alpha", "scaleX", "scaleY", "rotation",
@@ -3370,7 +3371,9 @@ bool laterLanguageName(const std::string& name)
 as3::ValuePtr MovieRuntime::property(Clip& clip, const std::string& name)
 {
     using as3::Value;
-    if (!_as3 && !_javaScript && laterLanguageName(name))
+    // In a movie's compiled ActionScript 1 and 2 actions, as the player
+    // has them; Phoenix's own scripts may use either.
+    if (_actions && !_as3 && laterLanguageName(name))
         return nullptr;
     const Transform shown = clip.transform(clip.placedTransform());
     if (name == "_x")
@@ -3693,7 +3696,7 @@ as3::ValuePtr MovieRuntime::property(Clip& clip, const std::string& name)
 
 bool MovieRuntime::setProperty(Clip& clip, const std::string& name, const as3::ValuePtr& value)
 {
-    if (!_as3 && !_javaScript && laterLanguageName(name))
+    if (_actions && !_as3 && laterLanguageName(name))
         return false;
     const auto number = [&value]() { return value ? value->toNumber() : 0.0; };
     if (!clip.display)
