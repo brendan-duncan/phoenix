@@ -329,6 +329,44 @@ TEST(swf_actions_have_the_players_geometry_classes)
     }
 }
 
+TEST(swf_actions_have_the_players_bitmaps)
+{
+    // ActionScript 2's flash.display.BitmapData: pixels, and the numbers
+    // its methods give rather than errors.
+    std::map<std::string, std::vector<uint8_t>> files;
+    files["DOMDocument.xml"] = bytesOf(
+        "<DOMDocument xmlns=\"http://ns.adobe.com/xfl/2008/\" width=\"200\" height=\"100\" frameRate=\"12\">"
+        "<timelines><DOMTimeline name=\"Scene 1\"><layers><DOMLayer name=\"actions\"><frames>"
+        "<DOMFrame index=\"0\" duration=\"1\"><Actionscript><script><![CDATA["
+        "var BitmapData = _global.flash.display.BitmapData;\n"
+        "var b = new BitmapData(4, 3, true, 0x80FF0000);\n"
+        "trace(b.width + ' ' + b.height + ' ' + b.transparent + ' ' + b.rectangle);\n"
+        "trace(b.getPixel32(1, 1) + ' ' + b.getPixel(1, 1) + ' ' + b.getPixel() + ' ' + new BitmapData(1));\n"
+        "trace(b.setPixel32(0, 0, 0xFF00FF00) + ' ' + (b.getPixel32(0, 0) >>> 0).toString(16));\n"
+        "var c = b.clone();\ntrace((c instanceof BitmapData) + ' ' + b.compare(c));\n"
+        "b.dispose();\ntrace(b.width + ' ' + b.getPixel(0, 0) + ' ' + c.width);\nstop();\n"
+        "]]></script></Actionscript><elements/></DOMFrame>"
+        "</frames></DOMLayer></layers></DOMTimeline></timelines></DOMDocument>");
+    Parsed source = parse(files);
+    if (!source.document)
+        return;
+    Reopened movie;
+    reopen(*source.document, movie);
+    CHECK(movie.ok && movie.parsed.document);
+    if (!movie.ok || !movie.parsed.document)
+        return;
+    const std::string got = play(*movie.parsed.document, 1, std::string());
+    const std::string wanted = "4 3 true (x=0, y=0, w=4, h=3)\n-2130771968 16711680 -1 undefined\n0 ff00ff00\n"
+                               "true 0\n-1 -1 4\n";
+    CHECK(got == wanted);
+    if (got != wanted)
+    {
+        std::printf("    got:\n%s", got.c_str());
+        for (const std::string& problem : movie.problems)
+            std::printf("    problem: %s\n", problem.c_str());
+    }
+}
+
 TEST(swf_actions_reach_the_editor_through_mmexecute)
 {
     // A panel written in ActionScript 2, played from its source and as the

@@ -556,6 +556,8 @@ as3::Val ActionsPlayer::natives()
             return numbers({0, 0, 0, 0});
         return numbers({box.x, box.y, box.width, box.height});
     });
+    natives->properties["bitmap"] = bitmapNatives();
+    natives->properties["noObject"] = _interpreter->noObject();
     return natives;
 }
 

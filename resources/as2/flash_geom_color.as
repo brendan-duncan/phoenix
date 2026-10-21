@@ -111,7 +111,11 @@
 
     // ---- Transform
 
+    // Given anything but one object, no transform at all.
     flash.geom.Transform = function(clip) {
+        if (arguments.length != 1 || !(typeof clip == "object" || typeof clip == "movieclip") || clip == null) {
+            return player.noObject;
+        }
         this.$clip = player.isClip(clip) ? clip : undefined;
         hide(this, "$clip");
     };

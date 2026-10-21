@@ -220,7 +220,14 @@ void Bindings::defineBitmaps()
                 red ? &*red : nullptr, green ? &*green : nullptr, blue ? &*blue : nullptr, alpha ? &*alpha : nullptr);
             return Val();
         }, 3)
-        .method("pixelDissolve", NATIVE() { return number(intArg(args, 3)); }, 3)
+        .method("pixelDissolve", NATIVE(this) {
+            const display::BitmapData& source = sourceOf(*this, vm, args[0]);
+            const display::Rect r = rectOf(args[1]);
+            const display::Point p = pointOf(args[2]);
+            return number(pixels(vm, self).pixelDissolve(source, static_cast<int>(r.x), static_cast<int>(r.y),
+                static_cast<int>(r.width), static_cast<int>(r.height), static_cast<int>(p.x), static_cast<int>(p.y),
+                intArg(args, 3), intArg(args, 4), uintArg(args, 5)));
+        }, 3)
         .method("scroll", NATIVE() {
             pixels(vm, self).scroll(intArg(args, 0), intArg(args, 1));
             return Val();

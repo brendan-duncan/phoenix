@@ -4286,8 +4286,11 @@ private:
                 item->SetAttribute("name", nameOf(id).c_str());
                 if (!c.linkage.empty())
                 {
+                    // A class's name for ActionScript 3; an identifier for
+                    // BitmapData.loadBitmap in ActionScript 2.
+                    const bool actionScript3 = _abc > 0 || (_version >= 9 && _scripts == 0);
                     item->SetAttribute("linkageExportForAS", "true");
-                    item->SetAttribute("linkageClassName", c.linkage.c_str());
+                    item->SetAttribute(actionScript3 ? "linkageClassName" : "linkageIdentifier", c.linkage.c_str());
                 }
                 item->SetAttribute("allowSmoothing", "true");
                 if (!c.jpeg)

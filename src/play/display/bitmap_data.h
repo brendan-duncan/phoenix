@@ -81,13 +81,15 @@ public:
             return 0;
         return unpremultiplied(_pixels[static_cast<size_t>(y) * _width + x]) & 0xffffff;
     }
-    /// getPixel32: ARGB, unpremultiplied; 0 off the edge.
+    /// getPixel32: ARGB, unpremultiplied (an opaque bitmap's as it is
+    /// kept); 0 off the edge.
     uint32_t getPixel32(int x, int y) const
     {
         if (static_cast<unsigned>(x) >= static_cast<unsigned>(_width) ||
             static_cast<unsigned>(y) >= static_cast<unsigned>(_height))
             return 0;
-        return unpremultiplied(_pixels[static_cast<size_t>(y) * _width + x]);
+        const uint32_t pixel = _pixels[static_cast<size_t>(y) * _width + x];
+        return _transparent ? unpremultiplied(pixel) : pixel;
     }
     /// setPixel: the RGB, keeping the pixel's alpha. Nothing off the edge.
     void setPixel(int x, int y, uint32_t rgb)
@@ -156,6 +158,11 @@ public:
     void paletteMap(const BitmapData& source, const Rect& sourceRect, const Point& destPoint,
         const std::vector<uint32_t>* red, const std::vector<uint32_t>* green, const std::vector<uint32_t>* blue,
         const std::vector<uint32_t>* alpha);
+    /// pixelDissolve: \a numPixels of \a source's rectangle (or, from
+    /// itself, \a fillColor) put in a random-looking order from
+    /// \a randomSeed; the seed to carry on from.
+    int pixelDissolve(const BitmapData& source, int sourceX, int sourceY, int sourceWidth, int sourceHeight, int destX,
+        int destY, int randomSeed, int numPixels, uint32_t fillColor);
     /// scroll: the pixels moved by (\a dx, \a dy); what they leave keeps
     /// its old pixels.
     void scroll(int dx, int dy);

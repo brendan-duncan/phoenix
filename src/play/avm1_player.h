@@ -15,6 +15,10 @@ class Interpreter;
 
 namespace fla {
 
+namespace display {
+struct BitmapFilter;
+}
+
 namespace play {
 
 class MovieRuntime;
@@ -86,6 +90,12 @@ public:
 private:
     /// The player's side of the library's classes, as an object of functions.
     as3::Val natives();
+    /// Those of flash.display.BitmapData (as2_bitmap.cpp).
+    as3::Val bitmapNatives();
+    /// The clip a path given BitmapData.draw names, from the root.
+    Clip* drawTarget(const std::string& path);
+    /// A flash.filters object's filter: false for anything else.
+    bool filterOf(const as3::Val& value, display::BitmapFilter& out);
 
     MovieRuntime& _runtime;
     as3::VM& _vm;

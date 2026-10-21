@@ -241,6 +241,7 @@ set(PHOENIX_CORE_PYTHON_SOURCES
 set(PHOENIX_CORE_PLAY_SOURCES
     play/movie_runtime.cpp
     play/avm1_player.cpp
+    play/as2_bitmap.cpp
     play/as2_library.cpp
     play/canvas/createjs.cpp
     play/canvas/scripts.cpp
