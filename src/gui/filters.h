@@ -31,13 +31,14 @@ QPainter::CompositionMode blendMode(const std::string& name, bool& supported);
 bool needsIsolation(const std::string& blendModeName);
 
 /// Draws \a image at \a at with the instance's blend mode. Subtract and
-/// invert, which Qt has no mode for, are composed from the ones it has:
-/// invert is the backdrop differenced with white under the instance's
-/// coverage, and subtract inverts, adds and inverts again. Alpha and erase
-/// cut into what is under them, which only means something inside a parent
-/// with the Layer blend mode (\a insideLayerGroup): alpha keeps what is
-/// under its coverage, erase removes it. Elsewhere nothing of them
-/// shows, so nothing is drawn.
+/// invert, which Qt has no mode for, are made otherwise: invert is the
+/// backdrop differenced with white under the instance's coverage; subtract
+/// takes the instance off the backdrop channel by channel on an image (on a
+/// widget it inverts, adds and inverts again). Alpha and erase cut into what
+/// is under them, which only means something inside a parent with the Layer
+/// blend mode (\a insideLayerGroup): alpha takes it down to its own opacity
+/// wherever it is not clear, as the player does, and erase removes it by its
+/// opacity. Elsewhere nothing of them shows, so nothing is drawn.
 void composite(QPainter& painter, const QPoint& at, const QImage& image, const std::string& blendModeName,
     bool insideLayerGroup = false);
 

@@ -410,8 +410,8 @@ QBrush DisplayPainter::brushOf(const FillStyle& fill) const
             return QBrush(Qt::NoBrush);
         gradient.setStops(stops);
         gradient.setSpread(spreadOf(g.spread));
-        if (g.linearRGB)
-            gradient.setInterpolationMode(QGradient::ColorInterpolation);
+        // Each channel blended on its own before alpha, as the player does.
+        gradient.setInterpolationMode(QGradient::ComponentInterpolation);
         QBrush brush(gradient);
         brush.setTransform(toQ(g.matrix));
         return brush;

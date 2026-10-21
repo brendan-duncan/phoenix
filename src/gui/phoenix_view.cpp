@@ -6840,6 +6840,10 @@ struct GradientStop
 /// filling each span with stops computed there.
 void addGradientStops(QGradient& gradient, const std::vector<GradientStop>& stops, bool linearRgb)
 {
+    // Between stops each channel blends on its own, before alpha is
+    // applied, as the player does: from clear black to white is a gray half
+    // way, which darkens, not a fading white.
+    gradient.setInterpolationMode(QGradient::ComponentInterpolation);
     if (!linearRgb || stops.size() < 2)
     {
         for (const GradientStop& stop : stops)

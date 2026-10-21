@@ -7,6 +7,8 @@ What changed in each release of Phoenix, newest first.
 - The web editor's phone layout has the stroke and fill colors on its tools row
 - Drawing guides and the symmetry axis show in the web editor when the GPU draws the stage
 - An imported SWF masks only on the frames where a mask is placed, so art at a depth used as a mask elsewhere in the movie no longer disappears
+- Gradients blend from stop to stop as Flash Player does: a gradient from clear black to white passes through a see-through gray, so it darkens what is under it, rather than fading white
+- The Subtract blend mode is exact where art is see-through or soft-edged, and the Alpha blend mode leaves what is under it alone where the instance is clear or absent, as in Flash Player
 - In Test Movie, scripts read a tweened movie clip's position where the tween has it on that frame, and its width and height as Flash Player measures them, without the margin left for smoothing edges
 - Color Matrix and Convolution filters, added from Add Filter or brought in with an imported SWF movie, and published to SWF; an SWF's color matrix comes back as Adjust Color where it is one
 

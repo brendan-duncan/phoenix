@@ -518,18 +518,72 @@ void composite(QPainter& painter, const QPoint& at, const QImage& image, const s
             painter.drawImage(at, image);
             return;
         }
-        // Alpha keeps the group only where the instance covers it, which
-        // clears everything outside the instance's image as well.
-        painter.setCompositionMode(QPainter::CompositionMode_DestinationIn);
-        painter.drawImage(at, image);
-        QRegion outside(QRect(0, 0, painter.device()->width(), painter.device()->height()));
-        outside -= QRegion(QRect(at, image.size()));
-        painter.save();
-        painter.setClipRegion(outside);
-        painter.setCompositionMode(QPainter::CompositionMode_Clear);
-        painter.fillRect(QRect(0, 0, painter.device()->width(), painter.device()->height()), Qt::transparent);
-        painter.restore();
+        // Alpha takes the group's opacity down to the instance's wherever
+        // the instance shows at all, as the player does; where it is clear,
+        // outside it included, the group is left as it is.
+        auto* target = painter.device() && painter.device()->devType() == QInternal::Image
+            ? static_cast<QImage*>(painter.device()) : nullptr;
+        if (!target || target->format() != QImage::Format_ARGB32_Premultiplied)
+        {
+            painter.setCompositionMode(QPainter::CompositionMode_DestinationIn);
+            painter.drawImage(at, image);
+            return;
+        }
+        const QImage source = image.format() == QImage::Format_ARGB32_Premultiplied
+            ? image : image.convertToFormat(QImage::Format_ARGB32_Premultiplied);
+        QRegion area(QRect(at, source.size()) & target->rect());
+        if (painter.hasClipping())
+            area &= painter.clipRegion();
+        for (const QRect& rect : area)
+            for (int y = rect.top(); y <= rect.bottom(); ++y)
+            {
+                const auto* from = reinterpret_cast<const QRgb*>(source.constScanLine(y - at.y()));
+                auto* to = reinterpret_cast<QRgb*>(target->scanLine(y));
+                for (int x = rect.left(); x <= rect.right(); ++x)
+                {
+                    const int sa = qAlpha(from[x - at.x()]);
+                    if (sa == 0 || sa == 255)
+                        continue;
+                    const QRgb d = to[x];
+                    to[x] = qRgba(qRed(d) * sa / 255, qGreen(d) * sa / 255, qBlue(d) * sa / 255, qAlpha(d) * sa / 255);
+                }
+            }
         return;
+    }
+    // Subtract on an image: the source taken off the backdrop channel by
+    // channel (both premultiplied), alpha laid over as usual.
+    if (name == "subtract" && painter.device() && painter.device()->devType() == QInternal::Image)
+    {
+        auto* target = static_cast<QImage*>(painter.device());
+        if (target->format() == QImage::Format_ARGB32_Premultiplied)
+        {
+            const QImage source = image.format() == QImage::Format_ARGB32_Premultiplied
+                ? image : image.convertToFormat(QImage::Format_ARGB32_Premultiplied);
+            QRegion area(QRect(at, source.size()) & target->rect());
+            if (painter.hasClipping())
+                area &= painter.clipRegion();
+            for (const QRect& rect : area)
+                for (int y = rect.top(); y <= rect.bottom(); ++y)
+                {
+                    const auto* from = reinterpret_cast<const QRgb*>(source.constScanLine(y - at.y()));
+                    auto* to = reinterpret_cast<QRgb*>(target->scanLine(y));
+                    for (int x = rect.left(); x <= rect.right(); ++x)
+                    {
+                        const QRgb s = from[x - at.x()];
+                        const int sa = qAlpha(s);
+                        if (sa == 0)
+                            continue;
+                        const QRgb d = to[x];
+                        const int a = sa + qAlpha(d) * (255 - sa) / 255;
+                        // Kept premultiplied: no channel above alpha.
+                        const auto less = [a](int backdrop, int source) {
+                            return std::min(a, std::max(0, backdrop - source));
+                        };
+                        to[x] = qRgba(less(qRed(d), qRed(s)), less(qGreen(d), qGreen(s)), less(qBlue(d), qBlue(s)), a);
+                    }
+                }
+            return;
+        }
     }
     if (name == "invert" || name == "subtract")
     {
