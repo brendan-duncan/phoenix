@@ -3825,48 +3825,71 @@ private:
         }
 
         // A layer for each depth, top first; a clip depth makes a mask
-        // layer over the depths it clips.
-        std::set<int> depthSet;
-        std::map<int, int> clips;
-        for (const auto& frame : t.frames)
+        // layer over the depths it clips. A depth's part changes from frame
+        // to frame (a mask for a while, clipped by one, or neither), so it
+        // gets a layer for each part it plays, holding just those frames.
+        // A role: kMask, kPlain, or the depth of the mask clipping it.
+        constexpr int kMask = -1, kPlain = -2;
+        std::vector<std::map<int, int>> roles(t.frames.size());
+        std::map<int, std::set<int>> rolesOf;
+        for (size_t f = 0; f < t.frames.size(); ++f)
+        {
+            const auto& frame = t.frames[f];
             for (const auto& [depth, p] : frame)
             {
-                depthSet.insert(depth);
-                if (p.clipDepth > 0)
-                    clips[depth] = std::max(clips[depth], p.clipDepth);
+                int role = p.clipDepth > 0 ? kMask : kPlain;
+                if (role == kPlain)
+                    for (const auto& [mask, m] : frame)
+                    {
+                        if (mask >= depth)
+                            break;
+                        if (m.clipDepth >= depth)
+                        {
+                            role = mask;
+                            break;
+                        }
+                    }
+                roles[f][depth] = role;
+                rolesOf[depth].insert(role);
             }
-        std::map<int, int> maskOf;
-        for (const auto& [mask, clip] : clips)
-            for (int d : depthSet)
-                if (d > mask && d <= clip && !maskOf.count(d) && !clips.count(d))
-                    maskOf[d] = mask;
-        std::vector<int> depths(depthSet.rbegin(), depthSet.rend());
-        std::set<int> written;
+        }
+        std::vector<int> depths;
+        for (auto it = rolesOf.rbegin(); it != rolesOf.rend(); ++it)
+            depths.push_back(it->first);
+        std::set<std::pair<int, int>> written;
         std::map<int, int> layerIndex;
         int index = 0;
         for (tinyxml2::XMLElement* e = layers->FirstChildElement(); e; e = e->NextSiblingElement())
             ++index;
-        const auto writeDepth = [&](int depth) {
-            tinyxml2::XMLElement* layer = layerElement(doc, depthName(t, depth), colorIndex++);
-            if (clips.count(depth))
+        const auto writeDepth = [&](int depth, int role) {
+            // Its placement in a frame where it plays this part.
+            const auto placementAt = [&](size_t f) -> const Placement* {
+                const auto found = t.frames[f].find(depth);
+                return found != t.frames[f].end() && roles[f].at(depth) == role ? &found->second : nullptr;
+            };
+            std::string name = depthName(t, depth);
+            if (rolesOf[depth].size() > 1 && role != kPlain)
+                name += role == kMask ? " Mask" : " Masked";
+            tinyxml2::XMLElement* layer = layerElement(doc, name, colorIndex++);
+            if (role == kMask)
             {
                 layer->SetAttribute("layerType", "mask");
                 layer->SetAttribute("locked", "true");
             }
-            else if (maskOf.count(depth) && layerIndex.count(maskOf[depth]))
+            else if (role >= 0 && layerIndex.count(role))
             {
-                layer->SetAttribute("parentLayerIndex", layerIndex[maskOf[depth]]);
+                layer->SetAttribute("parentLayerIndex", layerIndex[role]);
                 layer->SetAttribute("locked", "true");
             }
             // A layer of only video is hidden: Phoenix cannot draw its
             // pictures, and its stand-in box would cover what is below.
             bool video = false, other = false;
-            for (const auto& frame : t.frames)
+            for (size_t f = 0; f < t.frames.size(); ++f)
             {
-                const auto found = frame.find(depth);
-                if (found == frame.end())
+                const Placement* placement = placementAt(f);
+                if (!placement)
                     continue;
-                const auto c = _characters.find(found->second.character);
+                const auto c = _characters.find(placement->character);
                 (c != _characters.end() && c->second.kind == Character::Kind::Video ? video : other) = true;
             }
             if (video && !other)
@@ -3876,9 +3899,7 @@ private:
             std::vector<Span> spans;
             for (int f = 0; f < static_cast<int>(t.frames.size()); ++f)
             {
-                const auto& map = t.frames[static_cast<size_t>(f)];
-                const auto found = map.find(depth);
-                const Placement* placement = found == map.end() ? nullptr : &found->second;
+                const Placement* placement = placementAt(static_cast<size_t>(f));
                 const Placement* before = spans.empty() ? nullptr : spans.back().placement;
                 // Moved to where it already is, it holds on too.
                 if (!spans.empty() && ((before ? before->version : -1) == (placement ? placement->version : -1) ||
@@ -3947,18 +3968,21 @@ private:
             }
             layer->InsertEndChild(list);
             layers->InsertEndChild(layer);
-            layerIndex[depth] = index++;
-            written.insert(depth);
+            if (role == kMask)
+                layerIndex[depth] = index;
+            ++index;
+            written.insert({depth, role});
         };
         for (int depth : depths)
-        {
-            if (written.count(depth))
-                continue;
-            const auto masked = maskOf.find(depth);
-            if (masked != maskOf.end() && !written.count(masked->second))
-                writeDepth(masked->second);
-            writeDepth(depth);
-        }
+            for (int role : rolesOf[depth])
+            {
+                if (written.count({depth, role}))
+                    continue;
+                // A mask goes over what it clips.
+                if (role >= 0 && !written.count({role, kMask}))
+                    writeDepth(role, kMask);
+                writeDepth(depth, role);
+            }
         if (depths.empty() && layers->NoChildren())
         {
             tinyxml2::XMLElement* layer = layerElement(doc, "Layer 1", 0);

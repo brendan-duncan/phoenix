@@ -6,6 +6,7 @@ What changed in each release of Phoenix, newest first.
 
 - The web editor's phone layout has the stroke and fill colors on its tools row
 - Drawing guides and the symmetry axis show in the web editor when the GPU draws the stage
+- An imported SWF masks only on the frames where a mask is placed, so art at a depth used as a mask elsewhere in the movie no longer disappears
 
 ## 0.22.0
 

@@ -206,6 +206,52 @@ TEST(swf_import_draws_a_shape_placed_once_where_it_is)
     CHECK(!parsed.document->symbolList || parsed.document->symbolList->symbolMap.empty());
 }
 
+TEST(swf_import_masks_only_the_frames_a_depth_is_a_mask_on)
+{
+    // Depth 1 holds a square on frame 1 and the same square as a mask over
+    // depth 2 on frame 2; depth 2 holds a bigger square throughout.
+    swf::Writer writer(100, 100, 24.0, {255, 255, 255, 255});
+    swf::Fill red, blue;
+    red.color = {255, 0, 0, 255};
+    blue.color = {0, 0, 255, 255};
+    const int small = writer.defineShape(red, square(10));
+    const int big = writer.defineShape(blue, square(50));
+    writer.place(small, 1);
+    writer.place(big, 2);
+    writer.showFrame();
+    writer.remove(1);
+    // PlaceObject2 with a character and a clip depth of 2.
+    writer.tag(26, {0x42, 1, 0, static_cast<uint8_t>(small & 0xFF), static_cast<uint8_t>(small >> 8), 2, 0});
+    writer.showFrame();
+    std::map<std::string, std::vector<uint8_t>> files;
+    std::string error;
+    CHECK(SwfImport::convert(writer.finish(false), files, error));
+    Parsed parsed = parse(files);
+    CHECK(parsed.document && parsed.document->timelines.size() == 1);
+    if (!parsed.document)
+        return;
+    const auto& layers = parsed.document->timelines[0]->layers;
+    // Which layer draws something on frame \a f, and is masked or not.
+    const auto drawn = [&layers](int f, bool masked) {
+        int count = 0;
+        for (const fla::Layer* layer : layers)
+        {
+            const bool isMasked = layer->parentLayerIndex >= 0 &&
+                layers[static_cast<size_t>(layer->parentLayerIndex)]->layerType == fla::Layer::Type::Mask;
+            if (layer->layerType == fla::Layer::Type::Mask || isMasked != masked)
+                continue;
+            for (const fla::Frame* frame : layer->frames)
+                if (frame->index <= f && f < frame->index + frame->duration && !frame->elements.empty())
+                    ++count;
+        }
+        return count;
+    };
+    // Frame 1: both squares drawn, neither masked.
+    CHECK(drawn(0, false) == 2 && drawn(0, true) == 0);
+    // Frame 2: the big square masked, the small one only masking.
+    CHECK(drawn(1, false) == 0 && drawn(1, true) == 1);
+}
+
 TEST(swf_import_keeps_bitmaps_and_the_soundtrack)
 {
     swf::Writer writer(64, 64, 10.0, {255, 255, 255, 255});
