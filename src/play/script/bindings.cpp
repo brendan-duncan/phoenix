@@ -822,6 +822,16 @@ Val Bindings::clipObject(Clip& clip)
     }
     // Of a kind its display object can be.
     const std::shared_ptr<as3::ClassInfo> wanted = classNamed(clip.button ? fallback : "flash.display.Sprite");
+    if (cls && isRoot && !cls->isSubclassOf(wanted.get()))
+    {
+        // As Flash Player has it: the class's own code has run, but the
+        // main timeline cannot be one.
+        const size_t dot = cls->name.find_last_of('.');
+        const std::string shown =
+            dot == std::string::npos ? cls->name : cls->name.substr(0, dot) + "::" + cls->name.substr(dot + 1);
+        runtime.tell(name + ": TypeError: Error #2023: Class " + shown + "$ must inherit from Sprite to link to the root.",
+            nullptr, 0);
+    }
     if (!cls || !cls->isSubclassOf(wanted.get()))
         cls = classNamed(fallback);
     Val made = vm.newInstance(cls);

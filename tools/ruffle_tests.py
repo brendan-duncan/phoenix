@@ -80,6 +80,10 @@ def play(phoenix, swf, frames, image, timeout, env):
 
 
 PLAY_REPORT = re.compile(r"^(after \d+ frames: |frame \d+ drawn to |\d+ errors$|getURL |sound |fscommand\()")
+# An ActionScript 3 error no script caught, as `play` reports it, and the
+# lines of its stack.
+UNCAUGHT_ERROR = re.compile(r"^ERROR [^:]*: ((?:[A-Za-z.]*Error)(?:: .*)?)$")
+STACK_LINE = re.compile(r"^\s+at ")
 
 
 def normalized(text, play_output=False):
@@ -87,6 +91,21 @@ def normalized(text, play_output=False):
     # What `play` says itself, not what the movie traced.
     if play_output:
         lines = [line for line in lines if not PLAY_REPORT.match(line)]
+        # Flash Player traces an uncaught error's text; `play` also says
+        # where it was and gives the stack.
+        kept = []
+        in_error = False
+        for line in lines:
+            error = UNCAUGHT_ERROR.match(line)
+            if error:
+                kept.append(error.group(1))
+                in_error = True
+            elif in_error and STACK_LINE.match(line):
+                continue
+            else:
+                in_error = False
+                kept.append(line)
+        lines = kept
     while lines and not lines[-1].strip():
         lines.pop()
     return lines

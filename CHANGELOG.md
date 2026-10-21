@@ -8,6 +8,8 @@ What changed in each release of Phoenix, newest first.
 - ActionScript 2 has flash.display.BitmapData in movies made for SWF 8 or later, with the numbers its methods give in place of errors, and BitmapData.loadBitmap for a library bitmap; bitmaps read back the exact colors SWF movies give, and copyPixels, threshold, getColorBoundsRect, noise, perlinNoise and pixelDissolve work as they do in SWF movies, in ActionScript 3 too
 - ActionScript 2 has flash.filters (Bevel, Blur, ColorMatrix, Convolution, DisplacementMap, DropShadow, Glow, GradientBevel and GradientGlow) and a movie clip's filters, keeping each number as SWF movies do, and BitmapData.applyFilter and generateFilterRect; an imported SWF's filter angles, strengths and blurs come in exactly
 - ActionScript 2 has flash.external.ExternalInterface, which says it is not available (there is no web page around a movie in Phoenix), with its helpers that write values as XML and read them back
+- ActionScript 3 has Namespace and QName, and a movie's namespace constants are Namespace objects
+- Test Movie says when a document class does not extend Sprite (the main timeline cannot be one), as SWF movies do
 
 ## 0.23.0
 
