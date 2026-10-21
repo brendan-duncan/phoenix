@@ -84,6 +84,9 @@ public:
     void callHandler(Clip& clip, const std::string& name);
 
 private:
+    /// The player's side of the library's classes, as an object of functions.
+    as3::Val natives();
+
     MovieRuntime& _runtime;
     as3::VM& _vm;
     std::unique_ptr<ActionsHost> _host;

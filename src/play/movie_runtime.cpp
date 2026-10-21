@@ -37,6 +37,7 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <set>
 #include <sstream>
 
 namespace fla {
@@ -3352,9 +3353,25 @@ Clip* MovieRuntime::resolve(Clip& from, const std::string& target)
     return at;
 }
 
+namespace {
+
+/// The names of a clip's properties that only ActionScript 3 and JavaScript
+/// have: in ActionScript 1 and 2 they are variables like any other.
+bool laterLanguageName(const std::string& name)
+{
+    static const std::set<std::string> names = {"x", "y", "visible", "alpha", "scaleX", "scaleY", "rotation",
+        "currentFrame", "totalFrames", "framesLoaded", "name", "parent", "root", "stage", "numChildren",
+        "currentLabel", "currentFrameLabel", "width", "height", "mouseX", "mouseY"};
+    return names.count(name) > 0;
+}
+
+} // namespace
+
 as3::ValuePtr MovieRuntime::property(Clip& clip, const std::string& name)
 {
     using as3::Value;
+    if (!_as3 && !_javaScript && laterLanguageName(name))
+        return nullptr;
     const Transform shown = clip.transform(clip.placedTransform());
     if (name == "_x")
         return Value::makeNumber(shown.tx);
@@ -3676,6 +3693,8 @@ as3::ValuePtr MovieRuntime::property(Clip& clip, const std::string& name)
 
 bool MovieRuntime::setProperty(Clip& clip, const std::string& name, const as3::ValuePtr& value)
 {
+    if (!_as3 && !_javaScript && laterLanguageName(name))
+        return false;
     const auto number = [&value]() { return value ? value->toNumber() : 0.0; };
     if (!clip.display)
         return false;

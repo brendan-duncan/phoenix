@@ -14,7 +14,12 @@
 
 #include <tinyxml2.h>
 
+#include "display/display_object.h"
+#include "display/backend.h"
+#include "display/stage.h"
+#include <limits>
 #include <algorithm>
+#include <cmath>
 #include <cctype>
 #include <cstring>
 
@@ -393,8 +398,165 @@ ActionsPlayer::ActionsPlayer(MovieRuntime& runtime, as3::VM& vm, int version)
             return std::shared_ptr<const std::vector<uint8_t>>(bytes);
         }();
         if (!library->empty() && _runtime._root)
+        {
+            _vm.setGlobal("$phoenix", natives());
             _interpreter->run(library, _runtime.objectFor(*_runtime._root), "library");
+            _vm.setGlobal("$phoenix", as3::Val());
+        }
     }
+}
+
+namespace {
+
+/// A color transform as a display object holds it: multipliers in 256ths
+/// and offsets whole, each in 16 bits.
+struct FixedColor
+{
+    int16_t multiply[4];
+    int16_t add[4];
+};
+
+int16_t saturated(double value)
+{
+    if (std::isnan(value))
+        return 0;
+    return static_cast<int16_t>(std::clamp(std::trunc(value), -32768.0, 32767.0));
+}
+
+FixedColor fixedOf(const display::ColorTransform& c)
+{
+    const double multipliers[4] = {c.redMultiplier, c.greenMultiplier, c.blueMultiplier, c.alphaMultiplier};
+    const double offsets[4] = {c.redOffset, c.greenOffset, c.blueOffset, c.alphaOffset};
+    FixedColor out{};
+    for (int i = 0; i < 4; ++i)
+    {
+        out.multiply[i] = saturated(multipliers[i] * 256.0);
+        out.add[i] = saturated(offsets[i]);
+    }
+    return out;
+}
+
+display::ColorTransform colorOf(const FixedColor& f)
+{
+    display::ColorTransform c;
+    double* multipliers[4] = {&c.redMultiplier, &c.greenMultiplier, &c.blueMultiplier, &c.alphaMultiplier};
+    double* offsets[4] = {&c.redOffset, &c.greenOffset, &c.blueOffset, &c.alphaOffset};
+    for (int i = 0; i < 4; ++i)
+    {
+        *multipliers[i] = f.multiply[i] / 256.0;
+        *offsets[i] = f.add[i];
+    }
+    return c;
+}
+
+///  outer applied after  inner, in the 16-bit arithmetic the player
+/// uses, which wraps.
+FixedColor combined(const FixedColor& outer, const FixedColor& inner)
+{
+    FixedColor out{};
+    for (int i = 0; i < 4; ++i)
+    {
+        out.multiply[i] = static_cast<int16_t>((int32_t(outer.multiply[i]) * inner.multiply[i]) >> 8);
+        out.add[i] = static_cast<int16_t>(outer.add[i] + ((int32_t(outer.multiply[i]) * inner.add[i]) >> 8));
+    }
+    return out;
+}
+
+} // namespace
+
+as3::Val ActionsPlayer::natives()
+{
+    // What the library's classes ask of the player about movie clips.
+    MovieRuntime& runtime = _runtime;
+    as3::VM& vm = _vm;
+    const as3::Val natives = vm.newObject();
+    const auto define = [&](const char* name, as3::NativeMethod method) {
+        natives->properties[name] = vm.makeFunction(name, std::move(method));
+    };
+    const auto clipOf = [](const as3::Val& value) { return MovieRuntime::clipOfObject(value); };
+    const auto numbers = [&vm](std::initializer_list<double> values) {
+        std::vector<as3::Val> list;
+        for (double value : values)
+            list.push_back(as3::Val::number(value));
+        return vm.newArray(std::move(list));
+    };
+    const auto colors = [numbers](const display::ColorTransform& c) {
+        return numbers({c.redMultiplier, c.greenMultiplier, c.blueMultiplier, c.alphaMultiplier, c.redOffset,
+            c.greenOffset, c.blueOffset, c.alphaOffset});
+    };
+    const auto arg = [](as3::VM& vm, as3::Args args, size_t i) {
+        return i < args.size() ? vm.toNumber(args[i]) : std::numeric_limits<double>::quiet_NaN();
+    };
+    define("isClip", [clipOf](as3::VM&, const as3::Val&, as3::Args args) {
+        return as3::Val::boolean(!args.empty() && clipOf(args[0]) != nullptr);
+    });
+    define("matrix", [clipOf, numbers](as3::VM&, const as3::Val&, as3::Args args) -> as3::Val {
+        Clip* clip = args.empty() ? nullptr : clipOf(args[0]);
+        if (!clip)
+            return as3::Val();
+        const Transform m = clip->transform(clip->placedTransform());
+        return numbers({m.m11, m.m12, m.m21, m.m22, m.tx, m.ty});
+    });
+    define("setMatrix", [clipOf, arg](as3::VM& vm, const as3::Val&, as3::Args args) -> as3::Val {
+        Clip* clip = args.empty() ? nullptr : clipOf(args[0]);
+        if (clip && clip->display)
+        {
+            clip->display->setMatrix(display::Matrix(arg(vm, args, 1), arg(vm, args, 2), arg(vm, args, 3),
+                arg(vm, args, 4), arg(vm, args, 5), arg(vm, args, 6)));
+            display::markDisplayChanged();
+        }
+        return as3::Val();
+    });
+    define("concatenatedMatrix", [&runtime, clipOf, numbers](as3::VM&, const as3::Val&, as3::Args args) -> as3::Val {
+        Clip* clip = args.empty() ? nullptr : clipOf(args[0]);
+        if (!clip)
+            return as3::Val();
+        const Transform m = runtime.toStage(*clip);
+        return numbers({m.m11, m.m12, m.m21, m.m22, m.tx, m.ty});
+    });
+    define("colorTransform", [clipOf, colors](as3::VM&, const as3::Val&, as3::Args args) -> as3::Val {
+        Clip* clip = args.empty() ? nullptr : clipOf(args[0]);
+        return clip && clip->display ? colors(clip->display->colorTransform()) : as3::Val();
+    });
+    define("setColorTransform", [clipOf, arg](as3::VM& vm, const as3::Val&, as3::Args args) -> as3::Val {
+        Clip* clip = args.empty() ? nullptr : clipOf(args[0]);
+        if (clip && clip->display)
+        {
+            display::ColorTransform c;
+            c.redMultiplier = arg(vm, args, 1);
+            c.greenMultiplier = arg(vm, args, 2);
+            c.blueMultiplier = arg(vm, args, 3);
+            c.alphaMultiplier = arg(vm, args, 4);
+            c.redOffset = arg(vm, args, 5);
+            c.greenOffset = arg(vm, args, 6);
+            c.blueOffset = arg(vm, args, 7);
+            c.alphaOffset = arg(vm, args, 8);
+            clip->display->setColorTransform(colorOf(fixedOf(c)));
+            display::markDisplayChanged();
+        }
+        return as3::Val();
+    });
+    // Its own and each parent's, the parent's applied after.
+    define("concatenatedColorTransform", [clipOf, colors](as3::VM&, const as3::Val&, as3::Args args) -> as3::Val {
+        Clip* clip = args.empty() ? nullptr : clipOf(args[0]);
+        if (!clip || !clip->display)
+            return as3::Val();
+        FixedColor total = fixedOf(clip->display->colorTransform());
+        for (Clip* up = clip->parent; up; up = up->parent)
+            if (up->display)
+                total = combined(fixedOf(up->display->colorTransform()), total);
+        return colors(colorOf(total));
+    });
+    define("pixelBounds", [&runtime, clipOf, numbers](as3::VM&, const as3::Val&, as3::Args args) -> as3::Val {
+        Clip* clip = args.empty() ? nullptr : clipOf(args[0]);
+        if (!clip || !clip->display)
+            return as3::Val();
+        const display::Rect box = clip->display->getBounds(&runtime.stage());
+        if (box.isEmpty())
+            return numbers({0, 0, 0, 0});
+        return numbers({box.x, box.y, box.width, box.height});
+    });
+    return natives;
 }
 
 ActionsPlayer::~ActionsPlayer()

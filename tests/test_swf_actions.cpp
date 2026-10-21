@@ -292,6 +292,43 @@ TEST(swf_actions_play_as_the_document_does)
         std::printf("    the document:\n%s    the movie:\n%s", wanted.c_str(), got.c_str());
 }
 
+TEST(swf_actions_have_the_players_geometry_classes)
+{
+    // ActionScript 2's flash.geom, as a published movie's actions find it.
+    std::map<std::string, std::vector<uint8_t>> files;
+    files["DOMDocument.xml"] = bytesOf(
+        "<DOMDocument xmlns=\"http://ns.adobe.com/xfl/2008/\" width=\"200\" height=\"100\" frameRate=\"12\">"
+        "<timelines><DOMTimeline name=\"Scene 1\"><layers><DOMLayer name=\"actions\"><frames>"
+        "<DOMFrame index=\"0\" duration=\"1\"><Actionscript><script><![CDATA["
+        "var Point = _global.flash.geom.Point;\nvar Rectangle = _global.flash.geom.Rectangle;\n"
+        "var Matrix = _global.flash.geom.Matrix;\nvar ColorTransform = _global.flash.geom.ColorTransform;\n"
+        "var p = new Point(3, 4);\ntrace(p + ' ' + p.length);\n"
+        "var r = new Rectangle(1, 2, 3, 4);\ntrace(r.union(new Rectangle(0, 0, 2, 2)) + ' ' + r.bottomRight);\n"
+        "var m = new Matrix();\nm.translate(5, 6);\nm.scale(2, 2);\ntrace(m.transformPoint(new Point(1, 1)));\n"
+        "var c = new ColorTransform(0.5, 1, 1, 1, 10, 0, 0, 0);\ntrace(c.redMultiplier + ' ' + c.rgb);\n"
+        "var keys = '';\nfor (var k in new Point(1, 2)) keys += k + ' ';\ntrace(keys);\nstop();\n"
+        "]]></script></Actionscript><elements/></DOMFrame>"
+        "</frames></DOMLayer></layers></DOMTimeline></timelines></DOMDocument>");
+    Parsed source = parse(files);
+    if (!source.document)
+        return;
+    Reopened movie;
+    reopen(*source.document, movie);
+    CHECK(movie.ok && movie.parsed.document);
+    if (!movie.ok || !movie.parsed.document)
+        return;
+    const std::string got = play(*movie.parsed.document, 1, std::string());
+    const std::string wanted = "(x=3, y=4) 5\n(x=0, y=0, w=4, h=6) (x=4, y=6)\n(x=12, y=14)\n0.5 655360\n"
+                               "toString offset normalize clone equals subtract add length y x \n";
+    CHECK(got == wanted);
+    if (got != wanted)
+    {
+        std::printf("    got:\n%s", got.c_str());
+        for (const std::string& problem : movie.problems)
+            std::printf("    problem: %s\n", problem.c_str());
+    }
+}
+
 TEST(swf_actions_reach_the_editor_through_mmexecute)
 {
     // A panel written in ActionScript 2, played from its source and as the
