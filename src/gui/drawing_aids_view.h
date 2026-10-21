@@ -85,7 +85,7 @@ fla::Point minorHandle(const fla::aids::DrawingGuide& guide);
 /// before the guides.
 Handle handleAt(const PhoenixView& view, const QPointF& stagePos);
 
-/// Puts the layer that shows the aids over \a view. Once per view.
+/// Has \a view show the aids, painted with its frame.
 void attach(PhoenixView* view);
 
 /// Shows a change to the aids.

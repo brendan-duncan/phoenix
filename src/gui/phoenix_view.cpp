@@ -1362,6 +1362,15 @@ void PhoenixView::paintView(QPainter& painter)
         drawShiftTrace(painter);
     }
 
+    // The drawing aids over the art, under the rulers.
+    if (_paintAids && !_exporting)
+    {
+        painter.save();
+        painter.resetTransform();
+        _paintAids(painter);
+        painter.restore();
+    }
+
     // Guides over the art, rulers over everything.
     drawSliceGuides(painter);
     drawRulersAndGuides(painter);

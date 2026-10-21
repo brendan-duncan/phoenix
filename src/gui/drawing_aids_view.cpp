@@ -6,11 +6,8 @@
 #include "../data/document.h"
 #include "../data/fla_document.h"
 
-#include <QEvent>
 #include <QPainter>
-#include <QPointer>
 #include <QPolygonF>
-#include <QWidget>
 
 #include <algorithm>
 #include <cmath>
@@ -23,7 +20,6 @@ namespace aids = fla::aids;
 
 constexpr double kPi = 3.14159265358979323846;
 const char* const kSelectedProperty = "phoenixSelectedDrawingGuide";
-const char* const kOverlayName = "drawingAidsOverlay";
 /// How far from the center the symmetry axis's turn handle sits, in screen
 /// pixels.
 constexpr double kTurnReach = 60.0;
@@ -51,41 +47,26 @@ bool drawingGuidesToolActive(const PhoenixView& view)
     return view.activeTool() && view.activeTool()->name() == "Drawing Guides";
 }
 
-/// The layer over the stage that shows the aids. It takes no input: the
-/// Drawing Guides tool does that through the view.
-class Overlay : public QWidget
+/// What shows the aids over the stage, painted with the view's own frame
+/// (PhoenixView::setAidsPainter): a widget of its own over the view would
+/// sit under the canvas a browser's GPU stage lays over it. It takes no
+/// input: the Drawing Guides tool does that through the view.
+class Overlay
 {
 public:
-    explicit Overlay(PhoenixView* view)
-        : QWidget(view)
-        , _view(view)
+    explicit Overlay(PhoenixView& view)
+        : _view(&view)
     {
-        setAttribute(Qt::WA_TransparentForMouseEvents);
-        setAttribute(Qt::WA_NoSystemBackground);
-        setFocusPolicy(Qt::NoFocus);
-        setObjectName(kOverlayName);
-        setGeometry(view->rect());
-        view->installEventFilter(this);
-        raise();
     }
 
-protected:
-    bool eventFilter(QObject* watched, QEvent* event) override
+    void paint(QPainter& painter)
     {
-        if (watched == _view && event->type() == QEvent::Resize)
-            setGeometry(_view->rect());
-        return QWidget::eventFilter(watched, event);
-    }
-
-    void paintEvent(QPaintEvent*) override
-    {
-        if (!_view || !documentOf(*_view))
+        if (!documentOf(*_view))
             return;
         const aids::Symmetry symmetry = drawaids::symmetry(*_view);
         const aids::DrawingGuides guides = drawaids::guides(*_view);
         if (!symmetry.on && (guides.hidden || guides.guides.empty()))
             return;
-        QPainter painter(this);
         painter.setRenderHint(QPainter::Antialiasing);
         const QTransform toWidget = _view->scopeToStage().inverted() * _view->documentToWidget();
         const bool editing = drawingGuidesToolActive(*_view);
@@ -96,6 +77,9 @@ protected:
     }
 
 private:
+    int width() const { return _view->width(); }
+    int height() const { return _view->height(); }
+
     /// A stage length that reaches across the whole view.
     double across(const QTransform& toWidget) const
     {
@@ -285,7 +269,7 @@ private:
         }
     }
 
-    QPointer<PhoenixView> _view;
+    PhoenixView* _view;
 };
 
 } // namespace
@@ -574,15 +558,13 @@ Handle handleAt(const PhoenixView& view, const QPointF& stagePos)
 
 void attach(PhoenixView* view)
 {
-    if (view && !view->findChild<QWidget*>(kOverlayName, Qt::FindDirectChildrenOnly))
-        new Overlay(view);
+    if (view)
+        view->setAidsPainter([view](QPainter& painter) { Overlay(*view).paint(painter); });
 }
 
 void refresh(PhoenixView& view)
 {
     view.update();
-    if (QWidget* overlay = view.findChild<QWidget*>(kOverlayName, Qt::FindDirectChildrenOnly))
-        overlay->update();
 }
 
 } // namespace drawaids

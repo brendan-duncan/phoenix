@@ -259,6 +259,10 @@ public:
     void setGrayscale(bool on);
     /// The reference board drawn over the stage, never exported; not owned.
     void setReferenceBoard(ReferenceBoardView* board) { _referenceBoard = board; update(); }
+    /// Paints the drawing aids (guides, the symmetry axis) over the art and
+    /// under the rulers, in widget coordinates, as part of the view's own
+    /// frame, so they show whatever draws the stage.
+    void setAidsPainter(std::function<void(QPainter&)> paint) { _paintAids = std::move(paint); update(); }
     ReferenceBoardView* referenceBoard() const { return _referenceBoard; }
 
     /// Between the widget and the stage's own coordinates (the scene's,
@@ -1415,6 +1419,7 @@ private:
     /// The picture a grayscale view draws the stage into first.
     QImage* _grayPass = nullptr;
     ReferenceBoardView* _referenceBoard = nullptr;
+    std::function<void(QPainter&)> _paintAids;
     /// The zoom and turn zoomChanged last told of.
     double _toldZoom = -1.0;
     double _toldRotation = 0.0;
