@@ -326,7 +326,8 @@ void Bindings::defineUtils()
             ByteArrayHost& b = bytes(vm, self);
             const std::vector<uint8_t> copy = b.bytes;
             size_t position = b.position;
-            const Val read = readAmf(*this, copy, position, b.objectEncoding != 0);
+            BindingsAmf context(*this);
+            const Val read = readAmf(context, copy, position, b.objectEncoding != 0);
             b.position = position;
             return read;
         })
@@ -415,7 +416,8 @@ void Bindings::defineUtils()
         }, 1)
         .method("writeObject", NATIVE(this) {
             std::vector<uint8_t> written;
-            writeAmf(*this, written, args[0], bytes(vm, self).objectEncoding != 0);
+            BindingsAmf context(*this);
+            writeAmf(context, written, args[0], bytes(vm, self).objectEncoding != 0);
             ByteArrayHost& b = bytes(vm, self);
             uint8_t* at = put(b, written.size());
             if (!written.empty())

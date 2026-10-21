@@ -453,6 +453,69 @@ TEST(as3_byte_array_round_trips)
         std::printf("%s", played.output().c_str());
 }
 
+TEST(as3_byte_array_writes_objects_in_amf)
+{
+    Movie movie;
+    movie.script(0,
+        "import flash.utils.*;\nimport flash.net.*;\n"
+        "stop();\n"
+        "var b:ByteArray = new ByteArray();\n"
+        "var o:Object = {first: 'Hello'};\n"
+        "b.writeObject(o);\n"
+        "var bytes:Array = []; for (var i:int = 0; i < b.length; i++) bytes.push(b[i]);\n"
+        "trace(bytes);\n"
+        "b.position = 0; var back:Object = b.readObject(); trace(back.first);\n"
+        "var list:Array = [1, 'two', 3.5, null, true, new Date(1000)];\n"
+        "var c:ByteArray = new ByteArray(); c.writeObject([list, list]); c.position = 0;\n"
+        "var both:Array = c.readObject(); trace(both[0] === both[1], both[0][1], both[0][2], both[0][5].getTime());\n"
+        "ByteArray.defaultObjectEncoding = ObjectEncoding.AMF0;\n"
+        "var d:ByteArray = new ByteArray(); trace(d.objectEncoding); d.writeObject({n: 4}); trace(d[0], d.length);\n"
+        "d.position = 0; trace(d.readObject().n);\n");
+    Played played(movie);
+    played.runtime.start();
+    played.showErrors();
+    CHECK(played.errors.empty());
+    const std::string expected = "10,11,1,11,102,105,114,115,116,6,11,72,101,108,108,111,1\n"
+                                 "Hello\n"
+                                 "true two 3.5 1000\n"
+                                 "0\n"
+                                 "3 16\n"
+                                 "4\n";
+    CHECK(played.output() == expected);
+    if (played.output() != expected)
+        std::printf("%s", played.output().c_str());
+}
+
+TEST(as3_shared_objects_keep_their_values_in_sol_files)
+{
+    // Kept as Flash Player keeps them, a Date stays a Date.
+    namespace fs = std::filesystem;
+    const fs::path folder = fs::temp_directory_path() / "phoenix-test-shared-objects";
+    std::error_code error;
+    fs::remove_all(folder, error);
+    const auto run = [&](const std::string& script) {
+        Movie movie;
+        movie.script(0, "import flash.net.*;\nstop();\n" + script);
+        Played played(movie);
+        played.runtime.sharedObjectFolder = folder.u8string();
+        played.runtime.start();
+        played.showErrors();
+        CHECK(played.errors.empty());
+        return played.output();
+    };
+    const std::string first = run("var so:SharedObject = SharedObject.getLocal('game');\n"
+                                  "trace(so.size);\n"
+                                  "so.data.level = 3; so.data.when = new Date(5000); so.data.names = ['a', 'b'];\n"
+                                  "trace(so.size > 0, so.flush());\n");
+    CHECK(first == "0\ntrue flushed\n");
+    const std::string second = run("var so:SharedObject = SharedObject.getLocal('game');\n"
+                                   "trace(so.data.level, so.data.when is Date, so.data.when.getTime(), so.data.names);\n");
+    CHECK(second == "3 true 5000 a,b\n");
+    if (second != "3 true 5000 a,b\n")
+        std::printf("%s%s", first.c_str(), second.c_str());
+    fs::remove_all(folder, error);
+}
+
 TEST(as3_timers_fire_as_the_movie_steps)
 {
     Movie movie;

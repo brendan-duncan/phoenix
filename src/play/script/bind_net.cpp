@@ -2,10 +2,12 @@
 // and SharedObject.
 
 #include "native.h"
+#include "amf.h"
 
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <sstream>
 
 namespace fla {
@@ -28,8 +30,12 @@ struct URLLoaderHost : DispatcherHost
 /// flash.net.SharedObject: its data and the file it is kept in.
 struct SharedObjectHost : DispatcherHost
 {
+    std::string name;
+    /// Its .sol file; none for a remote one.
     std::string path;
     Val data;
+    /// 3 for AMF3, 0 for AMF0.
+    uint32_t objectEncoding = 3;
 };
 
 bool isWeb(const std::string& url)
@@ -379,8 +385,9 @@ void Bindings::defineNet()
         })
         .define();
 
-    // SharedObject: kept as JSON in a file of Phoenix's, by the movie and
-    // the name.
+    // SharedObject: kept in a .sol file, as Flash Player keeps them, in a
+    // folder of Phoenix's by the movie and the name. (Earlier ones Phoenix
+    // kept as JSON are read still.)
     std::shared_ptr<std::map<std::string, Val>> opened = std::make_shared<std::map<std::string, Val>>();
     const auto pathOf = [this](const std::string& name, const std::string& localPath) {
         if (runtime.sharedObjectFolder.empty())
@@ -401,17 +408,20 @@ void Bindings::defineNet()
         fs::path path = fs::u8path(runtime.sharedObjectFolder) / fs::u8path(movie);
         if (!where.empty())
             path /= fs::u8path(where);
-        return (path / fs::u8path(name + ".json")).u8string();
+        return (path / fs::u8path(name + ".sol")).u8string();
     };
-    const auto flush = [](VM& vm, SharedObjectHost& host) {
+    const auto flush = [this](VM&, SharedObjectHost& host) {
         if (host.path.empty())
             return true;
         namespace fs = std::filesystem;
-        const Val json = vm.callMethod(vm.findDefinition("JSON"), "stringify", {host.data});
+        BindingsAmf context(*this);
+        const std::vector<uint8_t> file = writeSharedObject(context, host.name, host.data, host.objectEncoding != 0);
         std::error_code error;
         fs::create_directories(fs::u8path(host.path).parent_path(), error);
         std::ofstream out(fs::u8path(host.path), std::ios::binary);
-        out << vm.toString(json);
+        out.write(reinterpret_cast<const char*>(file.data()), static_cast<std::streamsize>(file.size()));
+        if (out)
+            fs::remove(fs::path(fs::u8path(host.path)).replace_extension(".json"), error);
         return static_cast<bool>(out);
     };
     _flushShared = [this, opened, flush]() {
@@ -448,15 +458,29 @@ void Bindings::defineNet()
                 return found->second;
             auto host = std::make_shared<SharedObjectHost>();
             host->dispatcher = std::make_shared<display::EventDispatcher>();
+            host->name = name;
             host->path = pathOf(name, localPath);
             host->data = vm.newObject();
+            host->objectEncoding =
+                vm.getProperty(vm.classValue(classNamed("flash.net.SharedObject").get()), "defaultObjectEncoding")
+                    .toUint32();
+            namespace fs = std::filesystem;
+            const fs::path legacy = host->path.empty() ? fs::path() : fs::path(fs::u8path(host->path)).replace_extension(".json");
             if (!host->path.empty())
             {
-                std::ifstream in(std::filesystem::u8path(host->path), std::ios::binary);
+                std::ifstream in(fs::u8path(host->path), std::ios::binary);
                 if (in)
                 {
+                    const std::vector<uint8_t> file((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+                    BindingsAmf context(*this);
+                    Val data;
+                    if (readSharedObject(context, file, data) && data.isObject())
+                        host->data = data;
+                }
+                else if (std::ifstream old{legacy, std::ios::binary})
+                {
                     std::stringstream saved;
-                    saved << in.rdbuf();
+                    saved << old.rdbuf();
                     try
                     {
                         const Val data = vm.callMethod(vm.findDefinition("JSON"), "parse", {text(saved.str())});
@@ -482,12 +506,20 @@ void Bindings::defineNet()
             return made;
         }, 1)
         .getter("data", NATIVE(shared) { return shared(vm, self).data; })
-        .getter("size", NATIVE(shared) {
-            const Val json = vm.callMethod(vm.findDefinition("JSON"), "stringify", {shared(vm, self).data});
-            const std::string text = vm.toString(json);
-            return number(text == "{}" ? 0 : static_cast<double>(text.size()));
+        // Its file's size; 0 with nothing in it.
+        .getter("size", NATIVE(this, shared) {
+            SharedObjectHost& host = shared(vm, self);
+            if (!host.data.isObject() || host.data->properties.empty())
+                return number(0);
+            BindingsAmf context(*this);
+            return number(static_cast<double>(
+                writeSharedObject(context, host.name, host.data, host.objectEncoding != 0).size()));
         })
-        .property("objectEncoding", NATIVE() { return number(3); }, NATIVE() { return Val(); })
+        .property("objectEncoding", NATIVE(shared) { return number(shared(vm, self).objectEncoding); },
+            NATIVE(shared) {
+                shared(vm, self).objectEncoding = args[0].toUint32() == 0 ? 0 : 3;
+                return Val();
+            })
         .property("client", NATIVE() { return self; }, NATIVE() { return Val(); })
         .property("fps", NATIVE() { return number(0); }, NATIVE() { return Val(); })
         .method("flush", NATIVE(shared, flush) { return text(flush(vm, shared(vm, self)) ? "flushed" : "pending"); })
@@ -498,6 +530,7 @@ void Bindings::defineNet()
             {
                 std::error_code error;
                 std::filesystem::remove(std::filesystem::u8path(host.path), error);
+                std::filesystem::remove(std::filesystem::path(std::filesystem::u8path(host.path)).replace_extension(".json"), error);
             }
             return Val();
         })

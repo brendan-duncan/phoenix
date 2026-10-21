@@ -108,7 +108,7 @@ std::vector<std::string> sealedMembers(const as3::ClassInfo* cls)
     return out;
 }
 
-bool externalizable(Bindings& b, const as3::ClassInfo* cls)
+bool externalizable(AmfContext& b, const as3::ClassInfo* cls)
 {
     const std::shared_ptr<as3::ClassInfo> face = b.classNamed("flash.utils.IExternalizable");
     return cls && face && cls->isSubclassOf(face.get());
@@ -126,10 +126,17 @@ std::vector<std::string> dynamicNames(VM& vm, const Val& object)
     return names;
 }
 
+/// A class's value, or undefined when there is no such class.
+Val classValueOf(AmfContext& b, const std::string& name)
+{
+    const std::shared_ptr<as3::ClassInfo> cls = b.classNamed(name);
+    return cls ? b.vm.classValue(cls.get()) : Val();
+}
+
 class Writer
 {
 public:
-    Writer(Bindings& b, std::vector<uint8_t>& out)
+    Writer(AmfContext& b, std::vector<uint8_t>& out)
         : b(b)
         , vm(b.vm)
         , out(out)
@@ -338,6 +345,8 @@ public:
         if (external)
         {
             const Val output = b.newByteArray({});
+            if (!output.isObject())
+                return;
             vm.callMethod(value, "writeExternal", {output});
             if (const ByteArrayHost* written = byteArrayOf(output))
                 out.insert(out.end(), written->bytes.begin(), written->bytes.end());
@@ -520,7 +529,7 @@ public:
     }
 
 private:
-    Bindings& b;
+    AmfContext& b;
     VM& vm;
     std::vector<uint8_t>& out;
     std::map<std::string, int> strings;
@@ -532,7 +541,7 @@ private:
 class Reader
 {
 public:
-    Reader(Bindings& b, const std::vector<uint8_t>& in, size_t& at)
+    Reader(AmfContext& b, const std::vector<uint8_t>& in, size_t& at)
         : b(b)
         , vm(b.vm)
         , in(in)
@@ -647,7 +656,7 @@ public:
             if (reference3(header, found))
                 return found;
             const std::string text = bytesText(header >> 1);
-            const Val made = vm.construct(vm.classValue(b.classNamed("XML").get()), std::vector<Val>{Val::string(text)});
+            const Val made = vm.construct(classValueOf(b, "XML"), std::vector<Val>{Val::string(text)});
             objects.push_back(made);
             return made;
         }
@@ -658,7 +667,7 @@ public:
             if (reference3(header, found))
                 return found;
             const Val made =
-                vm.construct(vm.classValue(b.classNamed("Date").get()), std::vector<Val>{Val::number(doubleValue())});
+                vm.construct(classValueOf(b, "Date"), std::vector<Val>{Val::number(doubleValue())});
             objects.push_back(made);
             return made;
         }
@@ -707,7 +716,7 @@ public:
             if (reference3(header, found))
                 return found;
             byte(); // weak keys
-            const Val made = vm.construct(vm.classValue(b.classNamed("flash.utils.Dictionary").get()));
+            const Val made = vm.construct(classValueOf(b, "flash.utils.Dictionary"));
             objects.push_back(made);
             for (uint32_t i = 0; i < (header >> 1); ++i)
             {
@@ -764,6 +773,8 @@ public:
         {
             std::vector<uint8_t> rest(in.begin() + std::ptrdiff_t(at), in.end());
             const Val input = b.newByteArray(std::move(rest));
+            if (!input.isObject())
+                return made;
             vm.callMethod(made, "readExternal", {input});
             if (const ByteArrayHost* read = byteArrayOf(input))
                 at += read->position;
@@ -914,12 +925,12 @@ public:
         {
             const double time = doubleValue();
             bigEndian(2);
-            return vm.construct(vm.classValue(b.classNamed("Date").get()), std::vector<Val>{Val::number(time)});
+            return vm.construct(classValueOf(b, "Date"), std::vector<Val>{Val::number(time)});
         }
         case XmlDoc0:
         {
             const std::string text = string0(true);
-            return vm.construct(vm.classValue(b.classNamed("XML").get()), std::vector<Val>{Val::string(text)});
+            return vm.construct(classValueOf(b, "XML"), std::vector<Val>{Val::string(text)});
         }
         case Avmplus0:
             return value3();
@@ -929,7 +940,7 @@ public:
     }
 
 private:
-    Bindings& b;
+    AmfContext& b;
     VM& vm;
     const std::vector<uint8_t>& in;
     size_t& at;
@@ -941,19 +952,138 @@ private:
 
 } // namespace
 
-void writeAmf(Bindings& bindings, std::vector<uint8_t>& out, const Val& value, bool amf3)
+std::shared_ptr<as3::ClassInfo> AmfContext::classNamed(const std::string& name)
 {
-    Writer writer(bindings, out);
+    try
+    {
+        return vm.findClass(name);
+    }
+    catch (as3::ScriptException&)
+    {
+        return nullptr;
+    }
+}
+
+Val AmfContext::newByteArray(std::vector<uint8_t>)
+{
+    return Val();
+}
+
+std::string AmfContext::aliasOf(const as3::ClassInfo*)
+{
+    return std::string();
+}
+
+std::shared_ptr<as3::ClassInfo> AmfContext::classOfAlias(const std::string&)
+{
+    return nullptr;
+}
+
+BindingsAmf::BindingsAmf(Bindings& bindings)
+    : AmfContext(bindings.vm)
+    , _bindings(bindings)
+{}
+
+std::shared_ptr<as3::ClassInfo> BindingsAmf::classNamed(const std::string& name)
+{
+    return _bindings.classNamed(name);
+}
+
+Val BindingsAmf::newByteArray(std::vector<uint8_t> bytes)
+{
+    return _bindings.newByteArray(std::move(bytes));
+}
+
+std::string BindingsAmf::aliasOf(const as3::ClassInfo* cls)
+{
+    return _bindings.aliasOf(cls);
+}
+
+std::shared_ptr<as3::ClassInfo> BindingsAmf::classOfAlias(const std::string& alias)
+{
+    return _bindings.classOfAlias(alias);
+}
+
+void writeAmf(AmfContext& context, std::vector<uint8_t>& out, const Val& value, bool amf3)
+{
+    Writer writer(context, out);
     if (amf3)
         writer.value3(value);
     else
         writer.value0(value);
 }
 
-Val readAmf(Bindings& bindings, const std::vector<uint8_t>& in, size_t& position, bool amf3)
+Val readAmf(AmfContext& context, const std::vector<uint8_t>& in, size_t& position, bool amf3)
 {
-    Reader reader(bindings, in, position);
+    Reader reader(context, in, position);
     return amf3 ? reader.value3() : reader.value0();
+}
+
+std::vector<uint8_t> writeSharedObject(AmfContext& context, const std::string& name, const Val& data, bool amf3)
+{
+    // Each property: its name, its value, and a byte of 0; in AMF3 the
+    // values share their references.
+    std::vector<uint8_t> body;
+    Writer writer(context, body);
+    if (data.isObject())
+    {
+        for (const auto& property : data->properties)
+        {
+            if (property.second.isFunction())
+                continue;
+            if (amf3)
+            {
+                writer.string3(property.first);
+                writer.value3(property.second);
+            }
+            else
+            {
+                writer.string0(property.first, false);
+                writer.value0(property.second);
+            }
+            body.push_back(0);
+        }
+    }
+    std::vector<uint8_t> file = {0x00, 0xbf, 0, 0, 0, 0, 'T', 'C', 'S', 'O', 0x00, 0x04, 0x00, 0x00, 0x00, 0x00};
+    file.push_back(uint8_t(name.size() >> 8));
+    file.push_back(uint8_t(name.size()));
+    file.insert(file.end(), name.begin(), name.end());
+    file.insert(file.end(), {0, 0, 0, uint8_t(amf3 ? 3 : 0)});
+    file.insert(file.end(), body.begin(), body.end());
+    const uint32_t length = uint32_t(file.size() - 6);
+    for (int i = 0; i < 4; ++i)
+        file[2 + i] = uint8_t(length >> (24 - 8 * i));
+    return file;
+}
+
+bool readSharedObject(AmfContext& context, const std::vector<uint8_t>& file, Val& data)
+{
+    if (file.size() < 22 || file[0] != 0x00 || file[1] != 0xbf || std::memcmp(file.data() + 6, "TCSO", 4) != 0)
+        return false;
+    size_t at = 16;
+    const size_t nameLength = (size_t(file[at]) << 8) | file[at + 1];
+    at += 2 + nameLength + 4;
+    if (at > file.size())
+        return false;
+    const bool amf3 = file[at - 1] == 3;
+    Val made = context.vm.newObject();
+    Reader reader(context, file, at);
+    try
+    {
+        while (at < file.size())
+        {
+            const std::string name = amf3 ? reader.string3() : reader.string0(false);
+            const Val value = amf3 ? reader.value3() : reader.value0();
+            context.vm.setProperty(made, name, value);
+            if (at < file.size())
+                ++at;
+        }
+    }
+    catch (as3::ScriptException&)
+    {
+    }
+    data = made;
+    return true;
 }
 
 } // namespace script
