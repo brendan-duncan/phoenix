@@ -2,6 +2,7 @@
 
 #include "native.h"
 #include "amf.h"
+#include "../legacy_xml.h"
 
 #include <zlib.h>
 
@@ -193,6 +194,13 @@ void Bindings::runTimers()
 
 void Bindings::defineUtils()
 {
+    // What flash.xml's XMLDocument (resources/as3/flash/xml) parses with: the
+    // legacy XML, as ActionScript 1 and 2 have it.
+    vm.defineFunction("flash.xml.__parse", NATIVE() {
+        return parseLegacyXml(vm, args.empty() ? std::string() : vm.toString(args[0]), args.size() > 1 && args[1].toBoolean(),
+            false);
+    }, 2);
+
     vm.defineNativeClass("flash.utils.Endian")
         .constant("BIG_ENDIAN", text("bigEndian"))
         .constant("LITTLE_ENDIAN", text("littleEndian"))
