@@ -10,6 +10,8 @@ What changed in each release of Phoenix, newest first.
 - ActionScript 2 has flash.external.ExternalInterface, which says it is not available (there is no web page around a movie in Phoenix), with its helpers that write values as XML and read them back
 - ActionScript 3 has Namespace and QName, and a movie's namespace constants are Namespace objects
 - In ActionScript 3, a class's prototype is one object whose properties its instances find, set or deleted, and whose constructor is the class
+- ActionScript 3 has flash.utils.Proxy: a subclass's getProperty, setProperty, callProperty, hasProperty, deleteProperty and nextNameIndex, nextName and nextValue answer for the names it does not declare and for for-in and for each
+- In a movie's compiled ActionScript 3, a name in more than one private namespace (a class's and its file's) is found in any of them, such as a helper class written after a package in the same file
 - Test Movie says when a document class does not extend Sprite (the main timeline cannot be one), as SWF movies do
 
 ## 0.23.0
