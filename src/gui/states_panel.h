@@ -66,6 +66,8 @@ private:
         Input,
         Listener,
         Binding,
+        Pin,
+        Scroller,
     };
 
     fla::Timeline* timeline() const;
@@ -90,6 +92,8 @@ private:
     void addInput();
     void addListener();
     void addBinding();
+    void addPin();
+    void addScroller();
     void removePicked();
     void updateScripts();
 
@@ -104,6 +108,13 @@ private:
     QWidget* buildListenerEditor();
     QWidget* buildBindingEditor();
     void bindingEdited();
+    QWidget* buildPinEditor();
+    void pinEdited();
+    QWidget* buildScrollerEditor();
+    void scrollerEdited();
+    /// A list of instance names to pick from, with Use Selected.
+    QWidget* targetPicker(QWidget* parent, QComboBox*& combo, const std::function<void()>& edited);
+    void fillBindable(QComboBox* combo, const std::string& current, bool clipsOnly);
     void stateEdited();
     void transitionEdited();
     void inputEdited();
@@ -128,6 +139,8 @@ private:
     QListWidget* _inputs;
     QListWidget* _listeners;
     QListWidget* _bindings;
+    QListWidget* _pins;
+    QListWidget* _scrollers;
     QStackedWidget* _editors;
 
     // The state editor.
@@ -184,4 +197,18 @@ private:
     QDoubleSpinBox* _bindFrom;
     QDoubleSpinBox* _bindTo;
     QFormLayout* _bindForm;
+
+    // The pin editor.
+    QComboBox* _pinTarget;
+    QCheckBox* _pinLeft;
+    QCheckBox* _pinRight;
+    QCheckBox* _pinTop;
+    QCheckBox* _pinBottom;
+
+    // The scroller editor.
+    QComboBox* _scrollTarget;
+    QDoubleSpinBox* _scrollWidth;
+    QDoubleSpinBox* _scrollHeight;
+    QComboBox* _scrollWay;
+    QDoubleSpinBox* _scrollGlide;
 };

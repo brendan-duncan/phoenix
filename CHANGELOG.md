@@ -13,6 +13,8 @@ What changed in each release of Phoenix, newest first.
 - The Subtract blend mode is exact where art is see-through or soft-edged, and the Alpha blend mode leaves what is under it alone where the instance is clear or absent, as SWF movies have them
 - In Test Movie, scripts read a tweened movie clip's position and alpha where the tween has them on that frame, and its width and height as an SWF movie measures them, without the margin left for smoothing edges
 - Color Matrix and Convolution filters, added from Add Filter or brought in with an imported SWF movie, and published to SWF; an SWF's color matrix comes back as Adjust Color where it is one
+- Pins in the States panel keep instances at their distance from the window's edges, or stretch them between two edges, so a published page lays itself out to fill any window
+- Scrolling in the States panel: a movie clip scrolls inside a box, dragged, flicked or wheeled, gliding to a stop and springing back from its ends
 - Bindings in the States panel show an input on the stage, kept up to date: a text field's text, or a movie clip's frame, place, turn, fade, size or visibility
 - Published HTML5 pages let the page read and set the movie's inputs, fire its triggers and hear when its state changes
 - States can follow a number: a state shows the frame a number input picks and keeps up as it changes, for gauges, dials and faces from sad to happy

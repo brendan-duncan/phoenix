@@ -7,6 +7,7 @@
 #include "script_edit.h"
 
 #include "../data/action_script.h"
+#include "../data/document.h"
 #include "../data/frame.h"
 #include "../data/layer.h"
 #include "../data/static_text.h"
@@ -25,6 +26,7 @@
 #include <memory>
 #include <set>
 #include <sstream>
+#include <tuple>
 
 namespace fla {
 namespace states {
@@ -233,6 +235,20 @@ public:
         for (const Binding& binding : graph.bindings)
             if (!binding.target.empty() && graph.input(binding.input))
                 _binds.push_back(binding);
+        for (const Pin& pin : graph.pins)
+            if (!pin.target.empty())
+                _pins.push_back(pin);
+        for (const Scroller& scroller : graph.scrollers)
+            if (!scroller.target.empty() && (scroller.across || scroller.down))
+                _scrolls.push_back(scroller);
+        // The stage the pins were placed on.
+        for (const DOMElement* up = &timeline; up; up = up->parent)
+            if (up->domType() == DOMElement::DOMType::Document)
+            {
+                const auto* document = static_cast<const Document*>(up);
+                _stageWidth = document->width > 0 ? document->width : 550;
+                _stageHeight = document->height > 0 ? document->height : 400;
+            }
         // The timeline's own states, then each layer whose clip is there.
         const int layers = static_cast<int>(graph.layers.size());
         _own.timeline = &timeline;
@@ -615,12 +631,301 @@ private:
         }
     }
 
+    /// A pinned instance's place and size along one axis: kept from the
+    /// low edge, the high one, both (stretching) or the middle.
+    void pinAxis(const std::string& at, bool low, bool high, const char* place, const char* size, int start, int extent,
+        const char* change)
+    {
+        const std::string prop = std::string(_as3 ? "" : "_") + place;
+        const std::string length = std::string(_as3 ? "" : "_") + size;
+        const std::string was = at + "[" + std::to_string(start) + "]";
+        if (low && high)
+        {
+            line("o." + prop + " = " + was + ";");
+            line("o." + length + " = Math.max(1, " + at + "[" + std::to_string(extent) + "] + " + change + ");");
+        }
+        else if (high)
+            line("o." + prop + " = " + was + " + " + change + ";");
+        else if (low)
+            line("o." + prop + " = " + was + ";");
+        else
+            line("o." + prop + " = " + was + " + " + change + " / 2;");
+    }
+
+    void layoutBody()
+    {
+        const std::string stage = _as3 ? "stage" : "Stage";
+        if (_as3)
+        {
+            open("if (stage == null) {");
+            line("return;");
+            close();
+        }
+        open("if (!" + me("phxLaid") + ") {");
+        line(me("phxLaid") + " = true;");
+        line(me("phxPinned") + " = [];");
+        if (_as3)
+        {
+            line("stage.scaleMode = \"noScale\";");
+            line("stage.align = \"TL\";");
+            line("stage.addEventListener(\"resize\", phxLayout);");
+        }
+        else
+        {
+            // A player with no Stage leaves everything where it is.
+            open("if (Stage != undefined) {");
+            line("Stage.scaleMode = \"noScale\";");
+            line("Stage.align = \"TL\";");
+            line("var l = {};");
+            open("l.onResize = function () {");
+            line("phxT.phxLayout();");
+            close("};");
+            open("if (Stage.addListener != undefined) {");
+            line("Stage.addListener(l);");
+            close();
+            close();
+        }
+        close();
+        // A window of no size (not shown yet) moves nothing.
+        if (_as3)
+        {
+            line("var dw:Number = stage.stageWidth > 0 ? stage.stageWidth - " + numberText(_stageWidth) + " : 0;");
+            line("var dh:Number = stage.stageHeight > 0 ? stage.stageHeight - " + numberText(_stageHeight) + " : 0;");
+        }
+        else
+        {
+            line("var dw = 0;");
+            line("var dh = 0;");
+            open("if (Stage != undefined && Stage.width > 0) {");
+            line("dw = Stage.width - " + numberText(_stageWidth) + ";");
+            line("dh = Stage.height - " + numberText(_stageHeight) + ";");
+            close();
+        }
+        line(_as3 ? "var o:Object;" : "var o;");
+        for (size_t i = 0; i < _pins.size(); ++i)
+        {
+            const Pin& pin = _pins[i];
+            const std::string at = me("phxPinned") + "[" + std::to_string(i) + "]";
+            line(_as3 ? "o = getChildByName(" + quoted(pin.target) + ");" : "o = phxT[" + quoted(pin.target) + "];");
+            open(_as3 ? "if (o != null) {" : "if (o != undefined) {");
+            // Where it was first found, as placed on the stage.
+            open("if (" + at + " == null || " + at + "[4] != o) {");
+            line(at + (_as3 ? " = [o.x, o.y, o.width, o.height, o];" : " = [o._x, o._y, o._width, o._height, o];"));
+            close();
+            pinAxis(at, pin.left, pin.right, "x", "width", 0, 2, "dw");
+            pinAxis(at, pin.top, pin.bottom, "y", "height", 1, 3, "dh");
+            close();
+        }
+    }
+
+    /// What the scrolling clips are, as the script keeps them.
+    std::string scrollList() const
+    {
+        std::string list = "[";
+        for (size_t i = 0; i < _scrolls.size(); ++i)
+        {
+            const Scroller& s = _scrolls[i];
+            if (i)
+                list += ", ";
+            list += "{n: " + quoted(s.target) + ", w: " + numberText(s.width) + ", h: " + numberText(s.height) +
+                ", ac: " + (s.across ? "true" : "false") + ", dn: " + (s.down ? "true" : "false") +
+                ", g: " + numberText(s.glide) + "}";
+        }
+        return list + "]";
+    }
+
+    /// Each frame: a scrolling clip follows the pointer while held, glides
+    /// once let go, and springs back from past its ends.
+    void scrollStepBody()
+    {
+        const std::string x = _as3 ? "x" : "_x";
+        const std::string y = _as3 ? "y" : "_y";
+        const std::string mouseX = _as3 ? "mouseX" : "phxT._xmouse";
+        const std::string mouseY = _as3 ? "mouseY" : "phxT._ymouse";
+        line(me("phxScrollHook") + "();");
+        open(std::string("for (var i") + (_as3 ? ":int" : "") + " = 0; i < " + me("phxScrolls") + ".length; i++) {");
+        line(std::string(_as3 ? "var s:Object = " : "var s = ") + me("phxScrolls") + "[i];");
+        line(std::string(_as3 ? "var o:Object = " : "var o = ") + "s.o;");
+        open(_as3 ? "if (o == null) {" : "if (o == undefined) {");
+        line("continue;");
+        close();
+        line(std::string(_as3 ? "var lowX:Number = " : "var lowX = ") + "s.x0 - Math.max(0, o." + (_as3 ? "width" : "_width") + " - s.w);");
+        line(std::string(_as3 ? "var lowY:Number = " : "var lowY = ") + "s.y0 - Math.max(0, o." + (_as3 ? "height" : "_height") + " - s.h);");
+        open("if (s.held) {");
+        line(std::string(_as3 ? "var dx:Number = " : "var dx = ") + "s.ac ? " + mouseX + " - s.px : 0;");
+        line(std::string(_as3 ? "var dy:Number = " : "var dy = ") + "s.dn ? " + mouseY + " - s.py : 0;");
+        line("s.px = " + mouseX + ";");
+        line("s.py = " + mouseY + ";");
+        line("// Past an end it goes half as far, as if held back by a spring.");
+        open("if (o." + x + " > s.x0 || o." + x + " < lowX) {");
+        line("dx = dx / 2;");
+        close();
+        open("if (o." + y + " > s.y0 || o." + y + " < lowY) {");
+        line("dy = dy / 2;");
+        close();
+        line("o." + x + " += dx;");
+        line("o." + y + " += dy;");
+        line("s.vx = dx;");
+        line("s.vy = dy;");
+        close("} else {");
+        ++_depth;
+        line("o." + x + " += s.vx;");
+        line("o." + y + " += s.vy;");
+        line("s.vx = s.vx * s.g;");
+        line("s.vy = s.vy * s.g;");
+        for (const auto& [axis, low, high, speed] :
+            {std::tuple<std::string, std::string, std::string, std::string>{x, "lowX", "s.x0", "s.vx"},
+                {y, "lowY", "s.y0", "s.vy"}})
+        {
+            open("if (o." + axis + " > " + high + " || o." + axis + " < " + low + ") {");
+            line(std::string(_as3 ? "var to" : "var to") + axis + (_as3 ? ":Number" : "") + " = o." + axis + " > " + high +
+                " ? " + high + " : " + low + ";");
+            line(speed + " = " + speed + " / 2;");
+            line("o." + axis + " += (to" + axis + " - o." + axis + ") / 4;");
+            open("if (Math.abs(to" + axis + " - o." + axis + ") < 0.5) {");
+            line("o." + axis + " = to" + axis + ";");
+            close();
+            close();
+        }
+        close();
+        close();
+    }
+
+    void scrollFunctionsAs3()
+    {
+        line("// Makes each scrolling clip scroll inside its box, again as it comes back on the stage.");
+        open("function phxScrollHook():void {");
+        open("for (var i:int = 0; i < phxScrolls.length; i++) {");
+        line("var s:Object = phxScrolls[i];");
+        line("var o:Object = getChildByName(s.n);");
+        open("if (o == null || o == s.o) {");
+        line("continue;");
+        close();
+        line("s.o = o;");
+        line("s.x0 = o.x;");
+        line("s.y0 = o.y;");
+        line("s.vx = 0;");
+        line("s.vy = 0;");
+        line("s.held = false;");
+        line("var m:Shape = new Shape();");
+        line("m.graphics.beginFill(0);");
+        line("m.graphics.drawRect(o.x, o.y, s.w, s.h);");
+        line("m.graphics.endFill();");
+        line("addChild(m);");
+        line("o.mask = m;");
+        line("o.addEventListener(\"mouseDown\", phxScrollDown);");
+        line("o.addEventListener(\"mouseWheel\", phxScrollWheel);");
+        close();
+        close();
+        open("function phxScrollDown(e:*):void {");
+        open("for (var i:int = 0; i < phxScrolls.length; i++) {");
+        line("var s:Object = phxScrolls[i];");
+        open("if (s.o == e.currentTarget) {");
+        line("s.held = true;");
+        line("s.px = mouseX;");
+        line("s.py = mouseY;");
+        line("s.vx = 0;");
+        line("s.vy = 0;");
+        close();
+        close();
+        open("if (stage != null) {");
+        line("stage.addEventListener(\"mouseUp\", phxScrollUp);");
+        close();
+        close();
+        open("function phxScrollUp(e:*):void {");
+        open("for (var i:int = 0; i < phxScrolls.length; i++) {");
+        line("phxScrolls[i].held = false;");
+        close();
+        close();
+        open("function phxScrollWheel(e:*):void {");
+        open("for (var i:int = 0; i < phxScrolls.length; i++) {");
+        line("var s:Object = phxScrolls[i];");
+        open("if (s.o == e.currentTarget && s.dn) {");
+        line("s.vy += e.delta * 4;");
+        close("} else if (s.o == e.currentTarget) {");
+        ++_depth;
+        line("s.vx += e.delta * 4;");
+        close();
+        close();
+        close();
+        open("function phxScrollStep():void {");
+        scrollStepBody();
+        close();
+    }
+
+    void scrollFunctionsAs2()
+    {
+        line("// Makes each scrolling clip scroll inside its box, again as it comes back on the stage.");
+        open("phxT.phxScrollHook = function () {");
+        open("for (var i = 0; i < phxT.phxScrolls.length; i++) {");
+        line("var s = phxT.phxScrolls[i];");
+        line("var o = phxT[s.n];");
+        open("if (o == undefined || o == s.o) {");
+        line("continue;");
+        close();
+        line("s.o = o;");
+        line("s.x0 = o._x;");
+        line("s.y0 = o._y;");
+        line("s.vx = 0;");
+        line("s.vy = 0;");
+        line("s.held = false;");
+        line("var m = phxT.createEmptyMovieClip(\"phxScrollMask\" + i, 1048100 + i);");
+        // A player that cannot draw shows the whole clip, still scrolling.
+        open("if (m.beginFill != undefined) {");
+        line("m.beginFill(0);");
+        line("m.moveTo(o._x, o._y);");
+        line("m.lineTo(o._x + s.w, o._y);");
+        line("m.lineTo(o._x + s.w, o._y + s.h);");
+        line("m.lineTo(o._x, o._y + s.h);");
+        line("m.lineTo(o._x, o._y);");
+        line("m.endFill();");
+        line("o.setMask(m);");
+        close();
+        line("o.phxScroll = s;");
+        open("o.onPress = function () {");
+        line("this.phxScroll.held = true;");
+        line("this.phxScroll.px = phxT._xmouse;");
+        line("this.phxScroll.py = phxT._ymouse;");
+        line("this.phxScroll.vx = 0;");
+        line("this.phxScroll.vy = 0;");
+        close("};");
+        open("o.onRelease = o.onReleaseOutside = function () {");
+        line("this.phxScroll.held = false;");
+        close("};");
+        close();
+        close("};");
+        open("phxT.phxScrollStep = function () {");
+        scrollStepBody();
+        close("};");
+        line("var phxWheel = {};");
+        open("phxWheel.onMouseWheel = function (delta) {");
+        open("for (var i = 0; i < phxT.phxScrolls.length; i++) {");
+        line("var s = phxT.phxScrolls[i];");
+        open("if (s.o != undefined && s.o.hitTest(_root._xmouse, _root._ymouse, true)) {");
+        open("if (s.dn) {");
+        line("s.vy += delta * 4;");
+        close("} else {");
+        ++_depth;
+        line("s.vx += delta * 4;");
+        close();
+        close();
+        close();
+        close("};");
+        open("if (Mouse.addListener != undefined) {");
+        line("Mouse.addListener(phxWheel);");
+        close();
+    }
+
     void frameBody()
     {
         line(me("phxTicks") + "++;");
         line(me("phxHook") + "();");
         if (!_binds.empty())
             line(me("phxBind") + "();");
+        if (!_pins.empty())
+            line(me("phxLayout") + "();");
+        if (!_scrolls.empty())
+            line(me("phxScrollStep") + "();");
         line(std::string(_as3 ? "var f:int = " : "var f = ") + me(_as3 ? "currentFrame" : "_currentframe") + ";");
         playBody(_own);
         line(me("phxAt") + " = f;");
@@ -787,6 +1092,20 @@ private:
             bindBody();
             close();
         }
+        if (!_pins.empty())
+        {
+            line("// Keeps the pinned instances at their distance from the window's edges.");
+            line("var phxLaid:Boolean;");
+            line("var phxPinned:Array;");
+            open("function phxLayout(e:* = null):void {");
+            layoutBody();
+            close();
+        }
+        if (!_scrolls.empty())
+        {
+            line("var phxScrolls:Array;");
+            scrollFunctionsAs3();
+        }
         for (const Lane& lane : _lanes)
         {
             line("// The " + quoted(lane.target) + " layer: the same for that movie clip's states.");
@@ -810,6 +1129,8 @@ private:
         open("if (!phxReady) {");
         line("phxReady = true;");
         line("phxInputs = {};");
+        if (!_scrolls.empty())
+            line("phxScrolls = " + scrollList() + ";");
         for (const Input& each : _graph.inputs)
             line(input(each.name) + " = " + startValue(each) + ";");
         line("addEventListener(\"enterFrame\", phxFrame);");
@@ -818,6 +1139,10 @@ private:
             line("phxGo" + lane.suffix + "(" + entry(lane) + ");");
         if (!_binds.empty())
             line("phxBind();");
+        if (!_pins.empty())
+            line("phxLayout();");
+        if (!_scrolls.empty())
+            line("phxScrollHook();");
         close();
     }
 
@@ -875,6 +1200,18 @@ private:
             bindBody();
             close("};");
         }
+        if (!_pins.empty())
+        {
+            line("// Keeps the pinned instances at their distance from the window's edges.");
+            open("phxT.phxLayout = function () {");
+            layoutBody();
+            close("};");
+        }
+        if (!_scrolls.empty())
+        {
+            line("phxT.phxScrolls = " + scrollList() + ";");
+            scrollFunctionsAs2();
+        }
         for (const Lane& lane : _lanes)
         {
             line("// The " + quoted(lane.target) + " layer: the same for that movie clip's states.");
@@ -913,6 +1250,10 @@ private:
             line("phxT.phxGo" + lane.suffix + "(" + entry(lane) + ");");
         if (!_binds.empty())
             line("phxT.phxBind();");
+        if (!_pins.empty())
+            line("phxT.phxLayout();");
+        if (!_scrolls.empty())
+            line("phxT.phxScrollHook();");
         close();
     }
 
@@ -927,6 +1268,10 @@ private:
     Lane _own;
     std::vector<Lane> _lanes;
     std::vector<Binding> _binds;
+    std::vector<Pin> _pins;
+    std::vector<Scroller> _scrolls;
+    double _stageWidth = 550.0;
+    double _stageHeight = 400.0;
 };
 
 } // namespace
@@ -1096,6 +1441,27 @@ std::string encode(const Graph& graph)
             e->SetAttribute("to", numberText(binding.to).c_str());
         }
     }
+    for (const Pin& pin : graph.pins)
+    {
+        tinyxml2::XMLElement* e = root->InsertNewChildElement("pin");
+        e->SetAttribute("target", pin.target.c_str());
+        std::string edges;
+        for (const auto& [on, letter] : {std::pair<bool, char>{pin.left, 'l'}, {pin.right, 'r'}, {pin.top, 't'},
+                 {pin.bottom, 'b'}})
+            if (on)
+                edges += letter;
+        e->SetAttribute("edges", edges.c_str());
+    }
+    for (const Scroller& scroller : graph.scrollers)
+    {
+        tinyxml2::XMLElement* e = root->InsertNewChildElement("scroll");
+        e->SetAttribute("target", scroller.target.c_str());
+        e->SetAttribute("width", numberText(scroller.width).c_str());
+        e->SetAttribute("height", numberText(scroller.height).c_str());
+        e->SetAttribute("across", scroller.across);
+        e->SetAttribute("down", scroller.down);
+        e->SetAttribute("glide", numberText(scroller.glide).c_str());
+    }
     for (const StateLayer& layer : graph.layers)
     {
         tinyxml2::XMLElement* e = root->InsertNewChildElement("layer");
@@ -1168,6 +1534,28 @@ bool decode(const std::string& text, Graph& graph)
             state.low = numberOf(e->Attribute("low"), 0.0);
             state.high = numberOf(e->Attribute("high"), 1.0);
             read.states.push_back(state);
+        }
+        else if (name == "pin")
+        {
+            Pin pin;
+            pin.target = e->Attribute("target") ? e->Attribute("target") : "";
+            const std::string edges = e->Attribute("edges") ? e->Attribute("edges") : "lt";
+            pin.left = edges.find('l') != std::string::npos;
+            pin.right = edges.find('r') != std::string::npos;
+            pin.top = edges.find('t') != std::string::npos;
+            pin.bottom = edges.find('b') != std::string::npos;
+            read.pins.push_back(pin);
+        }
+        else if (name == "scroll")
+        {
+            Scroller scroller;
+            scroller.target = e->Attribute("target") ? e->Attribute("target") : "";
+            scroller.width = std::max(1.0, numberOf(e->Attribute("width"), 200.0));
+            scroller.height = std::max(1.0, numberOf(e->Attribute("height"), 200.0));
+            scroller.across = e->BoolAttribute("across", false);
+            scroller.down = e->BoolAttribute("down", true);
+            scroller.glide = std::clamp(numberOf(e->Attribute("glide"), 0.92), 0.0, 0.99);
+            read.scrollers.push_back(scroller);
         }
         else if (name == "bind")
         {
@@ -1445,6 +1833,28 @@ std::string describe(const Binding& binding)
         return input + " shows or hides " + target;
     return input + " sets " + target + "'s " + words(binding.property) + " (" + numberText(binding.low) + " to " +
         numberText(binding.high) + " as " + numberText(binding.from) + " to " + numberText(binding.to) + ")";
+}
+
+std::string describe(const Pin& pin)
+{
+    const auto axis = [](bool low, bool high, const char* lowName, const char* highName) {
+        if (low && high)
+            return std::string(lowName) + " and " + highName + " (stretches)";
+        if (low)
+            return std::string(lowName);
+        if (high)
+            return std::string(highName);
+        return std::string("the middle");
+    };
+    return (pin.target.empty() ? std::string("?") : pin.target) + ": " + axis(pin.left, pin.right, "left", "right") +
+        ", " + axis(pin.top, pin.bottom, "top", "bottom");
+}
+
+std::string describe(const Scroller& scroller)
+{
+    const std::string way = scroller.across && scroller.down ? "both ways" : scroller.across ? "across" : "down";
+    return (scroller.target.empty() ? std::string("?") : scroller.target) + " scrolls " + way + " in " +
+        numberText(scroller.width) + " x " + numberText(scroller.height);
 }
 
 std::vector<std::pair<std::string, int>> labels(const Timeline& timeline)

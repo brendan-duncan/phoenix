@@ -172,6 +172,8 @@ StatesPanel::StatesPanel(StatesLinks links, QWidget* parent)
     _editors->addWidget(buildInputEditor());
     _editors->addWidget(buildListenerEditor());
     _editors->addWidget(buildBindingEditor());
+    _editors->addWidget(buildPinEditor());
+    _editors->addWidget(buildScrollerEditor());
     pickedLayout->addWidget(_editors);
     column->addWidget(picked);
     column->addStretch(1);
@@ -228,6 +230,44 @@ StatesPanel::StatesPanel(StatesLinks links, QWidget* parent)
     connect(_bindings, &QListWidget::currentRowChanged, this, [this](int row) {
         if (!_refreshing && row >= 0)
             pick(Picked::Binding, row);
+    });
+
+    QGroupBox* pins = new QGroupBox("Pins", lists);
+    pins->setToolTip("Instances on the main timeline kept at their distance from the edges of the movie's window as "
+                     "it is resized, such as a published page filling the browser");
+    QVBoxLayout* pinsLayout = new QVBoxLayout(pins);
+    _pins = new QListWidget(pins);
+    _pins->setObjectName("statesPins");
+    _pins->setMinimumHeight(48);
+    _pins->setWordWrap(true);
+    QPushButton* addPin = new QPushButton("Add Pin", pins);
+    addPin->setObjectName("statesAddPin");
+    pinsLayout->addWidget(_pins);
+    pinsLayout->addWidget(addPin, 0, Qt::AlignLeft);
+    listsColumn->addWidget(pins);
+    connect(addPin, &QPushButton::clicked, this, &StatesPanel::addPin);
+    connect(_pins, &QListWidget::currentRowChanged, this, [this](int row) {
+        if (!_refreshing && row >= 0)
+            pick(Picked::Pin, row);
+    });
+
+    QGroupBox* scrolling = new QGroupBox("Scrolling", lists);
+    scrolling->setToolTip("Movie clips that scroll inside a box: dragged, flicked or turned by the mouse wheel, "
+                          "slowing to a stop and springing back from their ends");
+    QVBoxLayout* scrollingLayout = new QVBoxLayout(scrolling);
+    _scrollers = new QListWidget(scrolling);
+    _scrollers->setObjectName("statesScrolling");
+    _scrollers->setMinimumHeight(48);
+    _scrollers->setWordWrap(true);
+    QPushButton* addScroller = new QPushButton("Add Scrolling", scrolling);
+    addScroller->setObjectName("statesAddScrolling");
+    scrollingLayout->addWidget(_scrollers);
+    scrollingLayout->addWidget(addScroller, 0, Qt::AlignLeft);
+    listsColumn->addWidget(scrolling);
+    connect(addScroller, &QPushButton::clicked, this, &StatesPanel::addScroller);
+    connect(_scrollers, &QListWidget::currentRowChanged, this, [this](int row) {
+        if (!_refreshing && row >= 0)
+            pick(Picked::Scroller, row);
     });
     listsArea->setWidget(lists);
     split->addWidget(listsArea);
@@ -385,6 +425,8 @@ void StatesPanel::refresh()
         : _kind == Picked::Input              ? static_cast<int>(_graph.inputs.size())
         : _kind == Picked::Listener           ? static_cast<int>(_graph.listeners.size())
         : _kind == Picked::Binding            ? static_cast<int>(_graph.bindings.size())
+        : _kind == Picked::Pin                ? static_cast<int>(_graph.pins.size())
+        : _kind == Picked::Scroller           ? static_cast<int>(_graph.scrollers.size())
                                               : 0;
     if (_index < 0 || _index >= count)
     {
@@ -410,6 +452,14 @@ void StatesPanel::refresh()
     for (const st::Binding& binding : _graph.bindings)
         _bindings->addItem(QString::fromStdString(st::describe(binding)));
     _bindings->setCurrentRow(_kind == Picked::Binding ? _index : -1);
+    _pins->clear();
+    for (const st::Pin& pin : _graph.pins)
+        _pins->addItem(QString::fromStdString(st::describe(pin)));
+    _pins->setCurrentRow(_kind == Picked::Pin ? _index : -1);
+    _scrollers->clear();
+    for (const st::Scroller& scroller : _graph.scrollers)
+        _scrollers->addItem(QString::fromStdString(st::describe(scroller)));
+    _scrollers->setCurrentRow(_kind == Picked::Scroller ? _index : -1);
 
     QString notice;
     if (!missing.isEmpty())
@@ -436,6 +486,10 @@ void StatesPanel::pick(Picked kind, int index)
         _listeners->setCurrentRow(-1);
     if (_kind != Picked::Binding)
         _bindings->setCurrentRow(-1);
+    if (_kind != Picked::Pin)
+        _pins->setCurrentRow(-1);
+    if (_kind != Picked::Scroller)
+        _scrollers->setCurrentRow(-1);
     if (_kind != Picked::State && _kind != Picked::Transition)
         _view->setPicked(StatesView::Pick::None, -1);
     _refreshing = false;
@@ -690,6 +744,116 @@ QWidget* StatesPanel::buildListenerEditor()
     return page;
 }
 
+QWidget* StatesPanel::targetPicker(QWidget* parent, QComboBox*& combo, const std::function<void()>& edited)
+{
+    QWidget* row = new QWidget(parent);
+    QHBoxLayout* layout = new QHBoxLayout(row);
+    layout->setContentsMargins(0, 0, 0, 0);
+    combo = new QComboBox(row);
+    combo->setEditable(true);
+    combo->setToolTip("The instance name of the movie clip on the stage");
+    QPushButton* useSelected = new QPushButton("Use Selected", row);
+    useSelected->setToolTip("The movie clip selected on the stage (give it an instance name first)");
+    layout->addWidget(combo, 1);
+    layout->addWidget(useSelected);
+    QComboBox* picked = combo;
+    connect(combo, qOverload<int>(&QComboBox::currentIndexChanged), this, [edited](int) { edited(); });
+    connect(combo->lineEdit(), &QLineEdit::editingFinished, this, edited);
+    connect(useSelected, &QPushButton::clicked, this, [this, picked, edited]() {
+        const QString name = _links.selectedInstance ? _links.selectedInstance() : QString();
+        if (name.isEmpty())
+            return;
+        picked->setCurrentText(name);
+        edited();
+    });
+    return row;
+}
+
+void StatesPanel::fillBindable(QComboBox* combo, const std::string& current, bool clipsOnly)
+{
+    combo->clear();
+    if (const fla::Timeline* edited = timeline())
+        for (const std::string& name : clipsOnly ? st::instanceNames(*edited) : st::bindableNames(*edited))
+            combo->addItem(QString::fromStdString(name));
+    if (!current.empty() && combo->findText(QString::fromStdString(current)) < 0)
+        combo->addItem(QString::fromStdString(current));
+    combo->setCurrentText(QString::fromStdString(current));
+}
+
+QWidget* StatesPanel::buildPinEditor()
+{
+    QWidget* page = new QWidget();
+    QFormLayout* form = new QFormLayout(page);
+    form->setContentsMargins(0, 0, 0, 0);
+    form->addRow("Instance", targetPicker(page, _pinTarget, [this]() { pinEdited(); }));
+    QWidget* across = new QWidget(page);
+    QHBoxLayout* acrossLayout = new QHBoxLayout(across);
+    acrossLayout->setContentsMargins(0, 0, 0, 0);
+    _pinLeft = new QCheckBox("Left", across);
+    _pinRight = new QCheckBox("Right", across);
+    acrossLayout->addWidget(_pinLeft);
+    acrossLayout->addWidget(_pinRight);
+    acrossLayout->addStretch(1);
+    QWidget* down = new QWidget(page);
+    QHBoxLayout* downLayout = new QHBoxLayout(down);
+    downLayout->setContentsMargins(0, 0, 0, 0);
+    _pinTop = new QCheckBox("Top", down);
+    _pinBottom = new QCheckBox("Bottom", down);
+    downLayout->addWidget(_pinTop);
+    downLayout->addWidget(_pinBottom);
+    downLayout->addStretch(1);
+    form->addRow("Keeps to", across);
+    form->addRow(QString(), down);
+    QLabel* about = new QLabel("Both sides of a way: it stretches with the window. Neither: it keeps to the middle.", page);
+    about->setWordWrap(true);
+    form->addRow(about);
+    for (QCheckBox* box : {_pinLeft, _pinRight, _pinTop, _pinBottom})
+        connect(box, &QCheckBox::toggled, this, &StatesPanel::pinEdited);
+    return page;
+}
+
+QWidget* StatesPanel::buildScrollerEditor()
+{
+    QWidget* page = new QWidget();
+    QFormLayout* form = new QFormLayout(page);
+    form->setContentsMargins(0, 0, 0, 0);
+    form->addRow("Movie clip", targetPicker(page, _scrollTarget, [this]() { scrollerEdited(); }));
+    QWidget* box = new QWidget(page);
+    QHBoxLayout* boxLayout = new QHBoxLayout(box);
+    boxLayout->setContentsMargins(0, 0, 0, 0);
+    _scrollWidth = new QDoubleSpinBox(box);
+    _scrollHeight = new QDoubleSpinBox(box);
+    for (QDoubleSpinBox* each : {_scrollWidth, _scrollHeight})
+    {
+        each->setRange(1.0, 99999.0);
+        each->setDecimals(0);
+        each->setKeyboardTracking(false);
+        each->setSuffix(" px");
+    }
+    _scrollWidth->setToolTip("How wide the box it shows through is, from where it is placed");
+    _scrollHeight->setToolTip("How tall the box it shows through is, from where it is placed");
+    boxLayout->addWidget(_scrollWidth, 1);
+    boxLayout->addWidget(new QLabel("by", box));
+    boxLayout->addWidget(_scrollHeight, 1);
+    _scrollWay = new QComboBox(page);
+    _scrollWay->addItem("Down", 1);
+    _scrollWay->addItem("Across", 2);
+    _scrollWay->addItem("Both ways", 3);
+    _scrollGlide = new QDoubleSpinBox(page);
+    _scrollGlide->setRange(0.0, 99.0);
+    _scrollGlide->setDecimals(0);
+    _scrollGlide->setSuffix(" %");
+    _scrollGlide->setKeyboardTracking(false);
+    _scrollGlide->setToolTip("How much of its speed it keeps each frame once let go: more glides further");
+    form->addRow("Box", box);
+    form->addRow("Scrolls", _scrollWay);
+    form->addRow("Glide", _scrollGlide);
+    connect(_scrollWay, qOverload<int>(&QComboBox::currentIndexChanged), this, &StatesPanel::scrollerEdited);
+    for (QDoubleSpinBox* each : {_scrollWidth, _scrollHeight, _scrollGlide})
+        connect(each, qOverload<double>(&QDoubleSpinBox::valueChanged), this, &StatesPanel::scrollerEdited);
+    return page;
+}
+
 QWidget* StatesPanel::buildBindingEditor()
 {
     QWidget* page = new QWidget();
@@ -884,6 +1048,28 @@ void StatesPanel::showEditor()
         _bindForm->setRowVisible(_bindRangeRow, mapped);
         _bindForm->setRowVisible(_bindValuesRow, mapped);
         _editors->setCurrentIndex(5);
+        break;
+    }
+    case Picked::Pin:
+    {
+        const st::Pin& pin = _graph.pins[static_cast<size_t>(_index)];
+        fillBindable(_pinTarget, pin.target, false);
+        _pinLeft->setChecked(pin.left);
+        _pinRight->setChecked(pin.right);
+        _pinTop->setChecked(pin.top);
+        _pinBottom->setChecked(pin.bottom);
+        _editors->setCurrentIndex(6);
+        break;
+    }
+    case Picked::Scroller:
+    {
+        const st::Scroller& scroller = _graph.scrollers[static_cast<size_t>(_index)];
+        fillBindable(_scrollTarget, scroller.target, true);
+        _scrollWidth->setValue(scroller.width);
+        _scrollHeight->setValue(scroller.height);
+        setCurrentData(_scrollWay, (scroller.down ? 1 : 0) + (scroller.across ? 2 : 0));
+        _scrollGlide->setValue(std::round(scroller.glide * 100.0));
+        _editors->setCurrentIndex(7);
         break;
     }
     case Picked::None:
@@ -1330,6 +1516,72 @@ void StatesPanel::bindingEdited()
     commit(graph, st::Edit(), "Change Binding");
 }
 
+void StatesPanel::pinEdited()
+{
+    if (_refreshing || _kind != Picked::Pin)
+        return;
+    st::Graph graph = _graph;
+    st::Pin& pin = graph.pins[static_cast<size_t>(_index)];
+    pin.target = _pinTarget->currentText().trimmed().toStdString();
+    pin.left = _pinLeft->isChecked();
+    pin.right = _pinRight->isChecked();
+    pin.top = _pinTop->isChecked();
+    pin.bottom = _pinBottom->isChecked();
+    if (graph == _graph)
+        return;
+    commit(graph, st::Edit(), "Change Pin");
+}
+
+void StatesPanel::scrollerEdited()
+{
+    if (_refreshing || _kind != Picked::Scroller)
+        return;
+    st::Graph graph = _graph;
+    st::Scroller& scroller = graph.scrollers[static_cast<size_t>(_index)];
+    scroller.target = _scrollTarget->currentText().trimmed().toStdString();
+    scroller.width = _scrollWidth->value();
+    scroller.height = _scrollHeight->value();
+    const int way = _scrollWay->currentData().toInt();
+    scroller.down = (way & 1) != 0;
+    scroller.across = (way & 2) != 0;
+    scroller.glide = _scrollGlide->value() / 100.0;
+    if (graph == _graph)
+        return;
+    commit(graph, st::Edit(), "Change Scrolling");
+}
+
+void StatesPanel::addPin()
+{
+    const fla::Timeline* edited = timeline();
+    if (!edited)
+        return;
+    st::Graph graph = _graph;
+    st::Pin pin;
+    const QString selected = _links.selectedInstance ? _links.selectedInstance() : QString();
+    const std::vector<std::string> names = st::bindableNames(*edited);
+    pin.target = !selected.isEmpty() ? selected.toStdString() : names.empty() ? std::string() : names.front();
+    graph.pins.push_back(pin);
+    commit(graph, st::Edit(), "Add Pin");
+    pick(Picked::Pin, static_cast<int>(_graph.pins.size()) - 1);
+    _pins->setCurrentRow(_index);
+}
+
+void StatesPanel::addScroller()
+{
+    const fla::Timeline* edited = timeline();
+    if (!edited)
+        return;
+    st::Graph graph = _graph;
+    st::Scroller scroller;
+    const QString selected = _links.selectedInstance ? _links.selectedInstance() : QString();
+    const std::vector<std::string> names = st::instanceNames(*edited);
+    scroller.target = !selected.isEmpty() ? selected.toStdString() : names.empty() ? std::string() : names.front();
+    graph.scrollers.push_back(scroller);
+    commit(graph, st::Edit(), "Add Scrolling");
+    pick(Picked::Scroller, static_cast<int>(_graph.scrollers.size()) - 1);
+    _scrollers->setCurrentRow(_index);
+}
+
 void StatesPanel::addBinding()
 {
     const fla::Timeline* edited = timeline();
@@ -1382,6 +1634,14 @@ void StatesPanel::removePicked()
     case Picked::Binding:
         graph.bindings.erase(graph.bindings.begin() + _index);
         name = "Remove Binding";
+        break;
+    case Picked::Pin:
+        graph.pins.erase(graph.pins.begin() + _index);
+        name = "Remove Pin";
+        break;
+    case Picked::Scroller:
+        graph.scrollers.erase(graph.scrollers.begin() + _index);
+        name = "Remove Scrolling";
         break;
     case Picked::None:
         return;

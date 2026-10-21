@@ -83,6 +83,34 @@ struct Binding
     double to = 1.0;
 };
 
+/// A named instance on the main timeline kept at its distance from the
+/// edges of the movie's window it is pinned to, as the window is resized
+/// (a published page filling the browser): pinned to both sides of an
+/// axis it stretches along it, to neither it keeps to the middle.
+struct Pin
+{
+    std::string target;
+    bool left = true;
+    bool right = false;
+    bool top = true;
+    bool bottom = false;
+};
+
+/// A named movie clip that scrolls inside a box at the place it starts:
+/// dragged, flicked or turned by the mouse wheel, it slows to a stop and
+/// springs back from its ends.
+struct Scroller
+{
+    std::string target;
+    /// The box it shows through, from where it is placed.
+    double width = 200.0;
+    double height = 200.0;
+    bool across = false;
+    bool down = true;
+    /// How much of its speed it keeps each frame once let go (0 to 1).
+    double glide = 0.92;
+};
+
 /// A layer of states playing alongside the timeline's own: the movie clip
 /// named \a target on the timeline moves through its own labels, by
 /// transitions of its own, at the same time.
@@ -197,9 +225,12 @@ struct Graph
     /// The layers beyond the timeline's own (layer 1 is layers[0]).
     std::vector<StateLayer> layers;
     std::vector<Binding> bindings;
+    std::vector<Pin> pins;
+    std::vector<Scroller> scrollers;
 
-    /// Nothing to turn into a script: no states and no bindings.
-    bool empty() const { return states.empty() && bindings.empty(); }
+    /// Nothing to turn into a script: no states, bindings, pins or
+    /// scrolling.
+    bool empty() const { return states.empty() && bindings.empty() && pins.empty() && scrollers.empty(); }
     int stateNamed(const std::string& label) const;
     /// The state of layer \a layer with label \a label, or -1.
     int stateNamed(const std::string& label, int layer) const;
@@ -245,6 +276,10 @@ std::string describe(const Graph& graph, const Transition& transition);
 std::string describe(const Listener& listener);
 /// "score shows in scoreText", "happy sets face's x (0 to 10 as 0 to 200)".
 std::string describe(const Binding& binding);
+/// "menuBar: left and right (stretches), top".
+std::string describe(const Pin& pin);
+/// "list scrolls down in 300 x 400".
+std::string describe(const Scroller& scroller);
 
 /// The properties a binding can set, in menu order, and their words.
 const std::vector<std::string>& bindProperties();

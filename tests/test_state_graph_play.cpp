@@ -18,13 +18,16 @@
 #include "../src/parser/document_parser.h"
 #include "../src/parser/zip_reader.h"
 #include "../src/play/display/display_object.h"
+#include "../src/play/display/stage.h"
 #include "../src/play/display/text_field.h"
 #include "../src/play/movie_runtime.h"
 
 #include <quickjs.h>
 
 #include <cmath>
+#include <algorithm>
 #include <filesystem>
+#include <tuple>
 #include <fstream>
 #include <map>
 #include <memory>
@@ -468,6 +471,144 @@ void playBindings(int version)
         std::printf("    %s\n", error.c_str());
 }
 
+/// A movie with a tall clip, "list" (100 x 600 at 20, 20), scrolling down
+/// in a 100 x 200 box, and a bar pinned to the bottom, stretching across.
+std::unique_ptr<Movie> scrollingMovie(int version)
+{
+    const auto rect = [](int w, int h) {
+        return "<DOMShape><fills><FillStyle index=\"1\"><SolidColor color=\"#3366CC\"/></FillStyle></fills><edges>"
+               "<Edge fillStyle1=\"1\" edges=\"!0 0|" +
+            std::to_string(w * 20) + " 0!" + std::to_string(w * 20) + " 0|" + std::to_string(w * 20) + " " +
+            std::to_string(h * 20) + "!" + std::to_string(w * 20) + " " + std::to_string(h * 20) + "|0 " +
+            std::to_string(h * 20) + "!0 " + std::to_string(h * 20) + "|0 0\"/></edges></DOMShape>";
+    };
+    std::map<std::string, std::vector<uint8_t>> files;
+    files["DOMDocument.xml"] = bytesOf(
+        "<DOMDocument xmlns=\"http://ns.adobe.com/xfl/2008/\" width=\"300\" height=\"300\" frameRate=\"12\">"
+        "<symbols><Include href=\"List.xml\"/><Include href=\"Bar.xml\"/></symbols>"
+        "<timelines><DOMTimeline name=\"Scene 1\"><layers>"
+        "<DOMLayer name=\"art\"><frames><DOMFrame index=\"0\" duration=\"10\"><elements>"
+        "<DOMSymbolInstance libraryItemName=\"List\" name=\"list\" symbolType=\"movie clip\">"
+        "<matrix><Matrix tx=\"20\" ty=\"20\"/></matrix></DOMSymbolInstance>"
+        "<DOMSymbolInstance libraryItemName=\"Bar\" name=\"bar\" symbolType=\"movie clip\">"
+        "<matrix><Matrix tx=\"0\" ty=\"260\"/></matrix></DOMSymbolInstance>"
+        "</elements></DOMFrame></frames></DOMLayer>"
+        "</layers></DOMTimeline></timelines></DOMDocument>");
+    // Each draws itself too: with nothing to draw the stage, a clip's
+    // timeline art has no size, its drawing does. (ActionScript 1 and 2
+    // have no drawing in the test runtime.)
+    const auto draw = [version](int w, int h) {
+        const std::string size = std::to_string(w) + ", " + std::to_string(h);
+        return version >= 3 ? "<Actionscript><script><![CDATA[graphics.beginFill(0x3366CC); graphics.drawRect(0, 0, " +
+                size + "); graphics.endFill();]]></script></Actionscript>"
+                            : std::string();
+    };
+    for (const auto& [name, w, h] : {std::tuple<std::string, int, int>{"List", 100, 600}, {"Bar", 300, 40}})
+        files["LIBRARY/" + name + ".xml"] = bytesOf(
+            "<DOMSymbolItem xmlns=\"http://ns.adobe.com/xfl/2008/\" name=\"" + name +
+            "\" symbolType=\"movie clip\"><timeline><DOMTimeline name=\"" + name +
+            "\"><layers><DOMLayer name=\"art\"><frames><DOMFrame index=\"0\">" + draw(w, h) +
+            "<elements>" + rect(w, h) +
+            "</elements></DOMFrame></frames></DOMLayer></layers></DOMTimeline></timeline></DOMSymbolItem>");
+    const std::string settings =
+        "<flash_profiles><flash_profile name=\"Default\" current=\"true\"><PublishFlashProperties enabled=\"true\">"
+        "<ActionScriptVersion>" +
+        std::to_string(version) +
+        "</ActionScriptVersion><Version>10</Version></PublishFlashProperties></flash_profile></flash_profiles>";
+
+    auto made = std::make_unique<Movie>();
+    made->reader.reset(new ZipReader());
+    made->reader->openMemory(files);
+    made->root.reset(new fla::FLADocument(nullptr));
+    DocumentParser parser(made->reader.get());
+    const auto xml = files.at("DOMDocument.xml");
+    made->document = parser.parse(std::string(xml.begin(), xml.end()), made->root.get());
+    made->root->document = made->document;
+    if (!made->document || made->document->timelines.empty())
+        return nullptr;
+    made->document->extraFiles.emplace_back("PublishSettings.xml", fla::LazyBytes(bytesOf(settings)));
+
+    st::Graph graph;
+    st::Scroller scroller;
+    scroller.target = "list";
+    scroller.width = 100.0;
+    scroller.height = 200.0;
+    graph.scrollers = {scroller};
+    st::Pin pin;
+    pin.target = "bar";
+    pin.left = true;
+    pin.right = true;
+    pin.top = false;
+    pin.bottom = true;
+    graph.pins = {pin};
+    st::apply(made->stack, *made->document->timelines[0], graph, st::Edit(), version, 12.0, "States");
+    return made;
+}
+
+void playScrolling(int version)
+{
+    std::unique_ptr<Movie> made = scrollingMovie(version);
+    CHECK(made != nullptr);
+    if (!made)
+        return;
+    fla::play::MovieRuntime runtime(*made->document->timelines[0], 12.0);
+    runtime.setActionScriptVersion(version);
+    // The stage as Test Movie sizes it, the document's.
+    runtime.stage().setSize(300.0, 300.0);
+    std::vector<std::string> errors;
+    runtime.error = [&errors](const std::string& line) { errors.push_back(line); };
+    runtime.start();
+    fla::play::Clip& root = runtime.root();
+    fla::play::Clip* list = root.named("list");
+    fla::play::Clip* bar = root.named("bar");
+    CHECK(list != nullptr && list->display != nullptr && bar != nullptr && bar->display != nullptr);
+    if (!list || !list->display || !bar || !bar->display)
+        return;
+    runtime.step();
+    CHECK(std::abs(list->display->y() - 20.0) < 1e-6);
+    // Dragged up by 100.
+    runtime.pointerAt(60.0, 100.0);
+    runtime.stage().pointerMove(60.0, 100.0);
+    runtime.pointerOver(list);
+    runtime.pointerDown();
+    runtime.afterEvents();
+    runtime.step();
+    runtime.pointerAt(60.0, 0.0);
+    runtime.stage().pointerMove(60.0, 0.0);
+    runtime.step();
+    CHECK(std::abs(list->display->y() + 80.0) < 1e-6);
+    if (std::abs(list->display->y() + 80.0) >= 1e-6)
+        std::printf("    held at y %g\n", list->display->y());
+    // Let go mid-flick: it glides on past its end and springs back to it,
+    // its bottom at the bottom of the box (20 + 200 - 600).
+    runtime.pointerUp();
+    runtime.afterEvents();
+    double lowest = list->display->y();
+    for (int i = 0; i < 120; ++i)
+    {
+        runtime.step();
+        lowest = std::min(lowest, list->display->y());
+    }
+    // (With no size to go by, as ActionScript 1 and 2 have it here, its end is where it started.)
+    const double rest = version >= 3 ? -380.0 : 20.0;
+    CHECK(lowest < rest);
+    CHECK(std::abs(list->display->y() - rest) < 1e-6);
+    if (std::abs(list->display->y() - rest) >= 1e-6)
+        std::printf("    came to rest at y %g\n", list->display->y());
+    // The window is the stage's size: the pinned bar stays where it is.
+    CHECK(std::abs(bar->display->y() - 260.0) < 1e-6 && std::abs(bar->display->x()) < 1e-6);
+    if (version >= 3)
+    {
+        // Wider and taller: it stretches across and keeps to the bottom.
+        runtime.stage().setSize(500.0, 400.0);
+        runtime.step();
+        CHECK(std::abs(bar->display->x()) < 1e-6 && std::abs(bar->display->y() - 360.0) < 1e-6);
+    }
+    CHECK(errors.empty());
+    for (const std::string& error : errors)
+        std::printf("    %s\n", error.c_str());
+}
+
 void playLayers(int version)
 {
     std::unique_ptr<Movie> made = layeredMovie(version);
@@ -522,6 +663,16 @@ TEST(state_layers_and_blends_play_as_actionscript_3)
 TEST(state_layers_and_blends_play_as_actionscript_2)
 {
     playLayers(2);
+}
+
+TEST(scrolling_clips_drag_glide_and_spring_back_as_actionscript_3)
+{
+    playScrolling(3);
+}
+
+TEST(scrolling_clips_drag_glide_and_spring_back_as_actionscript_2)
+{
+    playScrolling(2);
 }
 
 TEST(state_bindings_show_inputs_as_actionscript_3)
