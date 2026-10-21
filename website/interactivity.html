@@ -60,7 +60,7 @@
   <figcaption>A new label made at frame 37.</figcaption>
 </figure>
 
-<p>Each state does one of three things with its frames:</p>
+<p>Each state does one of four things with its frames:</p>
 
 <table>
   <thead><tr><th>It</th><th>What happens</th></tr></thead>
@@ -68,10 +68,22 @@
     <tr><td>loops</td><td class="wrap">Plays its frames over and over, like a walk cycle or an idle bob.</td></tr>
     <tr><td>plays once</td><td class="wrap">Plays its frames and stops on the last one: a jump, a wave, a door opening.</td></tr>
     <tr><td>holds its first frame</td><td class="wrap">Stays still on its first frame: a button that is pressed, a light that is off.</td></tr>
+    <tr><td>follows a number</td><td class="wrap">Shows the frame a number <a href="#inputs">input</a> picks, and keeps up as the number changes: a gauge, a dial, a health bar, a face from sad to happy. <strong>Input</strong> chooses the number and the values at the state's first and last frame; between them, its frames are spread evenly.</td></tr>
   </tbody>
 </table>
 
 <p>Click a state's box to change it. <strong>Name</strong> is its frame label: renaming the state renames the label. <strong>Through</strong> lets a state play on through the frames of later labels too. <strong>The movie starts in this state</strong> marks the starting state, shown with a green arrow; the first state you add starts out as that. Drag a box to move it about the graph.</p>
+
+<h2 id="layers">Layers of states</h2>
+
+<p>A movie clip on the timeline can have states of its own that play at the same time as the timeline's: a character walks while its face changes expression, a button glows while its icon spins. Give the movie clip an instance name, then click <strong>Add Layer...</strong>, name the layer and choose the movie clip. The <strong>Layer</strong> list above the graph switches between the timeline's own states and each layer's.</p>
+
+<figure>
+  <img src="assets/shots/states-layer.webp" alt="The States panel showing the Face layer: the state mood, which follows the number happy from 0 to 10 over frames 1 to 5, and blink, which plays once; a key B goes to blink and its end goes back to mood" width="1361" height="344">
+  <figcaption>The face's own states: its mood follows <i>happy</i>, and B makes it blink.</figcaption>
+</figure>
+
+<p>A layer's states are the movie clip's frame labels, so label the clip's frames first; <strong>Add State...</strong> offers them. Its transitions join its own states, and the <strong>Any state</strong> box sends it to one of them whatever it is doing. Every layer goes by the same inputs and listeners, so one key or click can move several at once. <strong>Remove Layer</strong> takes out the layer and its states; the clip's labels stay.</p>
 
 <h2 id="transitions">Transitions</h2>
 

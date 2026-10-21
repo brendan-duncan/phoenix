@@ -40,11 +40,13 @@ struct StatesLinks
 };
 
 /// The States panel: interactivity made without code. The timeline's
-/// frame labels are its states, each looping, playing once or holding;
-/// arrows between them are the transitions, set off by a click on an
-/// instance, a key, the end of a state, a timer or an input; listeners set
-/// the inputs. Every change is one undo step, and turns the graph into
-/// ordinary ActionScript on the timeline's first frame (see fla::states).
+/// frame labels are its states, each looping, playing once, holding or
+/// following a number input; arrows between them are the transitions, set
+/// off by a click on an instance, a key, the end of a state, a timer or an
+/// input; listeners set the inputs. Layers add states for movie clips on
+/// the timeline that play alongside. Every change is one undo step, and
+/// turns the graph into ordinary ActionScript on the timeline's first
+/// frame (see fla::states).
 class StatesPanel : public QWidget
 {
     Q_OBJECT
@@ -66,6 +68,15 @@ private:
     };
 
     fla::Timeline* timeline() const;
+    /// The timeline whose labels the layer shown goes by: the edited one,
+    /// or its layer's movie clip's.
+    const fla::Timeline* layerTimeline(int layer) const;
+    /// The layer state \a index is in.
+    int layerOf(int index) const;
+    /// The states of the layer shown, in order.
+    std::vector<int> shownStates() const;
+    void addLayer();
+    void removeLayer();
     int version() const;
     double frameRate() const;
     /// Keeps \a graph with the labels \a edit makes, as one step.
@@ -101,6 +112,9 @@ private:
     int _index = -1;
     bool _refreshing = false;
 
+    int _layerShown = 0;
+    QComboBox* _layer;
+    QPushButton* _removeLayer;
     QLabel* _title;
     QWidget* _notice;
     QLabel* _noticeText;
@@ -117,6 +131,11 @@ private:
     QComboBox* _stateUntil;
     QCheckBox* _stateEntry;
     QLabel* _stateFrames;
+    QFormLayout* _stateForm;
+    QWidget* _blendRow;
+    QComboBox* _blendInput;
+    QDoubleSpinBox* _blendLow;
+    QDoubleSpinBox* _blendHigh;
 
     // The transition editor.
     QComboBox* _from;

@@ -104,6 +104,35 @@ StatesPanel::StatesPanel(StatesLinks links, QWidget* parent)
     top->addWidget(test);
     layout->addLayout(top);
 
+    // The layer shown: the timeline's own states, or a movie clip's.
+    QHBoxLayout* layerRow = new QHBoxLayout();
+    layerRow->addWidget(new QLabel("Layer", this));
+    _layer = new QComboBox(this);
+    _layer->setObjectName("statesLayer");
+    _layer->setToolTip("The states of the timeline itself, or of a movie clip on it that moves through its own "
+                       "labels at the same time, by the same inputs");
+    QPushButton* addLayer = new QPushButton("Add Layer...", this);
+    addLayer->setObjectName("statesAddLayer");
+    addLayer->setToolTip("States for a movie clip on the timeline, playing alongside: a face's expressions while "
+                         "the body walks");
+    _removeLayer = new QPushButton("Remove Layer", this);
+    _removeLayer->setObjectName("statesRemoveLayer");
+    _removeLayer->setToolTip("Take out this layer and its states (the movie clip's labels stay)");
+    layerRow->addWidget(_layer, 1);
+    layerRow->addWidget(addLayer);
+    layerRow->addWidget(_removeLayer);
+    layout->addLayout(layerRow);
+    connect(_layer, qOverload<int>(&QComboBox::currentIndexChanged), this, [this](int index) {
+        if (_refreshing || index < 0)
+            return;
+        _layerShown = index;
+        _kind = Picked::None;
+        _index = -1;
+        refresh();
+    });
+    connect(addLayer, &QPushButton::clicked, this, &StatesPanel::addLayer);
+    connect(_removeLayer, &QPushButton::clicked, this, &StatesPanel::removeLayer);
+
     _notice = new QWidget(this);
     QHBoxLayout* notice = new QHBoxLayout(_notice);
     notice->setContentsMargins(0, 0, 0, 0);
@@ -198,9 +227,14 @@ StatesPanel::StatesPanel(StatesLinks links, QWidget* parent)
 
     connect(addState, &QPushButton::clicked, this, &StatesPanel::addState);
     connect(_addTransition, &QPushButton::clicked, this, [this]() {
-        const int from = _kind == Picked::State ? _index : 0;
-        int to = static_cast<int>(_graph.states.size()) > 1 ? (from + 1) % static_cast<int>(_graph.states.size()) : 0;
-        addTransition(static_cast<int>(_graph.states.size()) > 1 ? from : -1, to);
+        // From the state picked to the next in its layer.
+        const std::vector<int> states = shownStates();
+        if (states.empty())
+            return;
+        const auto at = std::find(states.begin(), states.end(), _kind == Picked::State ? _index : states.front());
+        const size_t from = at == states.end() ? 0 : static_cast<size_t>(at - states.begin());
+        const int to = states[(from + 1) % states.size()];
+        addTransition(states.size() > 1 ? states[from] : -1, to);
     });
     connect(_remove, &QPushButton::clicked, this, &StatesPanel::removePicked);
     connect(test, &QPushButton::clicked, this, [this]() {
@@ -242,6 +276,29 @@ fla::Timeline* StatesPanel::timeline() const
     return _links.timeline ? _links.timeline() : nullptr;
 }
 
+const fla::Timeline* StatesPanel::layerTimeline(int layer) const
+{
+    const fla::Timeline* edited = timeline();
+    return edited ? st::layerTimeline(*edited, _graph, layer) : nullptr;
+}
+
+int StatesPanel::layerOf(int index) const
+{
+    if (index < 0 || index >= static_cast<int>(_graph.states.size()))
+        return 0;
+    const int layer = _graph.states[static_cast<size_t>(index)].layer;
+    return layer > 0 && layer <= static_cast<int>(_graph.layers.size()) ? layer : 0;
+}
+
+std::vector<int> StatesPanel::shownStates() const
+{
+    std::vector<int> list;
+    for (size_t i = 0; i < _graph.states.size(); ++i)
+        if (layerOf(static_cast<int>(i)) == _layerShown)
+            list.push_back(static_cast<int>(i));
+    return list;
+}
+
 int StatesPanel::version() const
 {
     const fla::Document* document = _links.document ? _links.document() : nullptr;
@@ -278,13 +335,23 @@ void StatesPanel::refresh()
     }
     _graph = edited ? st::of(*edited) : st::Graph();
     _title->setText(edited ? "States of " + QString::fromStdString(edited->name) : "No document open");
+    if (_layerShown > static_cast<int>(_graph.layers.size()))
+        _layerShown = 0;
+    _layer->clear();
+    _layer->addItem(edited ? QString::fromStdString(edited->name) + " (its own frames)" : QString("This timeline"));
+    for (const st::StateLayer& layer : _graph.layers)
+        _layer->addItem(QString::fromStdString(layer.name) + " (the movie clip " + QString::fromStdString(layer.target) + ")");
+    _layer->setCurrentIndex(_layerShown);
+    _removeLayer->setEnabled(_layerShown > 0);
     // Each state's frames, or that its label has gone.
     std::vector<QString> ranges;
     QStringList missing;
-    for (const st::State& state : _graph.states)
+    for (size_t i = 0; i < _graph.states.size(); ++i)
     {
+        const st::State& state = _graph.states[i];
+        const fla::Timeline* labels = layerTimeline(layerOf(static_cast<int>(i)));
         int first = 0, last = 0;
-        if (edited && st::range(*edited, state, first, last))
+        if (labels && st::range(*labels, state, first, last))
             ranges.push_back(first == last ? QString("frame %1").arg(first + 1)
                                            : QString("frames %1-%2").arg(first + 1).arg(last + 1));
         else
@@ -303,6 +370,7 @@ void StatesPanel::refresh()
         _kind = Picked::None;
         _index = -1;
     }
+    _view->setLayer(_layerShown);
     _view->setGraph(_graph, ranges);
     _view->setPicked(_kind == Picked::State ? StatesView::Pick::State
             : _kind == Picked::Transition ? StatesView::Pick::Transition
@@ -326,7 +394,7 @@ void StatesPanel::refresh()
         notice = "The labels have moved, or the document's ActionScript version changed, since the scripts were written.";
     _noticeText->setText(notice);
     _notice->setVisible(!notice.isEmpty());
-    _addTransition->setEnabled(!_graph.states.empty());
+    _addTransition->setEnabled(!shownStates().empty());
     _remove->setEnabled(_kind != Picked::None);
     _refreshing = false;
     showEditor();
@@ -410,20 +478,46 @@ QWidget* StatesPanel::buildStateEditor()
     _stateName = new QLineEdit(page);
     _stateName->setToolTip("The state's name is its frame label: renaming it renames the label");
     _statePlay = new QComboBox(page);
-    for (st::Play play : {st::Play::Loop, st::Play::Once, st::Play::Hold})
+    for (st::Play play : {st::Play::Loop, st::Play::Once, st::Play::Hold, st::Play::Blend})
         _statePlay->addItem(QString::fromStdString(st::words(play)), static_cast<int>(play));
-    _statePlay->setToolTip("Loop its frames, play them once and stop on the last, or stop on its first frame");
+    _statePlay->setToolTip("Loop its frames, play them once and stop on the last, stop on its first frame, or show "
+                           "the frame a number input picks");
+    _blendRow = new QWidget(page);
+    QHBoxLayout* blendLayout = new QHBoxLayout(_blendRow);
+    blendLayout->setContentsMargins(0, 0, 0, 0);
+    _blendInput = new QComboBox(_blendRow);
+    _blendInput->setToolTip("The number input that picks the frame");
+    _blendLow = new QDoubleSpinBox(_blendRow);
+    _blendHigh = new QDoubleSpinBox(_blendRow);
+    for (QDoubleSpinBox* box : {_blendLow, _blendHigh})
+    {
+        box->setRange(-99999.0, 99999.0);
+        box->setDecimals(2);
+        box->setKeyboardTracking(false);
+    }
+    _blendLow->setToolTip("The input's value at the state's first frame");
+    _blendHigh->setToolTip("The input's value at the state's last frame");
+    blendLayout->addWidget(_blendInput, 1);
+    blendLayout->addWidget(new QLabel("from", _blendRow));
+    blendLayout->addWidget(_blendLow);
+    blendLayout->addWidget(new QLabel("to", _blendRow));
+    blendLayout->addWidget(_blendHigh);
     _stateUntil = new QComboBox(page);
     _stateUntil->setToolTip("Play on through the frames of later labels too");
     _stateEntry = new QCheckBox("The movie starts in this state", page);
     _stateFrames = new QLabel(page);
+    _stateForm = form;
     form->addRow("Name", _stateName);
     form->addRow("It", _statePlay);
+    form->addRow("Input", _blendRow);
     form->addRow("Through", _stateUntil);
     form->addRow(QString(), _stateEntry);
     form->addRow("Frames", _stateFrames);
     connect(_stateName, &QLineEdit::editingFinished, this, &StatesPanel::stateEdited);
     connect(_statePlay, qOverload<int>(&QComboBox::currentIndexChanged), this, &StatesPanel::stateEdited);
+    connect(_blendInput, qOverload<int>(&QComboBox::currentIndexChanged), this, &StatesPanel::stateEdited);
+    connect(_blendLow, qOverload<double>(&QDoubleSpinBox::valueChanged), this, &StatesPanel::stateEdited);
+    connect(_blendHigh, qOverload<double>(&QDoubleSpinBox::valueChanged), this, &StatesPanel::stateEdited);
     connect(_stateUntil, qOverload<int>(&QComboBox::currentIndexChanged), this, &StatesPanel::stateEdited);
     connect(_stateEntry, &QCheckBox::toggled, this, &StatesPanel::stateEdited);
     return page;
@@ -579,16 +673,30 @@ void StatesPanel::showEditor()
     case Picked::State:
     {
         const st::State& state = _graph.states[static_cast<size_t>(_index)];
+        const int layer = layerOf(_index);
+        const fla::Timeline* labels = layerTimeline(layer);
+        (void)edited;
         _stateName->setText(QString::fromStdString(state.label));
+        // A layer's states are its movie clip's labels, renamed there.
+        _stateName->setReadOnly(layer > 0);
         setCurrentData(_statePlay, static_cast<int>(state.play));
+        _blendInput->clear();
+        _blendInput->addItem("(no input)", QString());
+        for (const st::Input& input : _graph.inputs)
+            if (input.kind == st::InputKind::Number)
+                _blendInput->addItem(QString::fromStdString(input.name), QString::fromStdString(input.name));
+        setCurrentData(_blendInput, QString::fromStdString(state.blend));
+        _blendLow->setValue(state.low);
+        _blendHigh->setValue(state.high);
+        _stateForm->setRowVisible(_blendRow, state.play == st::Play::Blend);
         _stateUntil->clear();
         _stateUntil->addItem("(only its own frames)", QString());
         int first = 0, last = 0;
-        const bool there = edited && st::range(*edited, state, first, last);
-        if (edited)
+        const bool there = labels && st::range(*labels, state, first, last);
+        if (labels)
         {
             int start = -1;
-            for (const auto& [label, frame] : st::labels(*edited))
+            for (const auto& [label, frame] : st::labels(*labels))
             {
                 if (label == state.label)
                     start = frame;
@@ -597,9 +705,12 @@ void StatesPanel::showEditor()
             }
         }
         setCurrentData(_stateUntil, QString::fromStdString(state.until));
-        _stateEntry->setChecked(_graph.entry == _index);
-        _stateEntry->setEnabled(_graph.entry != _index);
-        _stateFrames->setText(there ? QString("%1 to %2").arg(first + 1).arg(last + 1) : "Its label is not on the timeline");
+        const bool entry = _graph.entryOf(layer) == _index;
+        _stateEntry->setText(layer > 0 ? "The layer starts in this state" : "The movie starts in this state");
+        _stateEntry->setChecked(entry);
+        _stateEntry->setEnabled(!entry);
+        _stateFrames->setText(there ? QString("%1 to %2").arg(first + 1).arg(last + 1)
+                                    : layer > 0 ? "Its label is not in the movie clip" : "Its label is not on the timeline");
         _editors->setCurrentIndex(1);
         break;
     }
@@ -609,8 +720,12 @@ void StatesPanel::showEditor()
         _from->clear();
         _to->clear();
         _from->addItem("Any state", -1);
+        // Only the states of its own layer.
+        const int layer = layerOf(transition.to);
         for (size_t i = 0; i < _graph.states.size(); ++i)
         {
+            if (layerOf(static_cast<int>(i)) != layer)
+                continue;
             _from->addItem(QString::fromStdString(_graph.states[i].label), static_cast<int>(i));
             _to->addItem(QString::fromStdString(_graph.states[i].label), static_cast<int>(i));
         }
@@ -682,9 +797,10 @@ void StatesPanel::stateEdited()
         return;
     st::Graph graph = _graph;
     st::State& state = graph.states[static_cast<size_t>(_index)];
+    const int layer = layerOf(_index);
     st::Edit edit;
     const std::string name = _stateName->text().trimmed().toStdString();
-    if (!name.empty() && name != state.label)
+    if (layer == 0 && !name.empty() && name != state.label)
     {
         // A name another label has already would join the two.
         bool taken = false;
@@ -705,8 +821,26 @@ void StatesPanel::stateEdited()
     }
     state.play = static_cast<st::Play>(_statePlay->currentData().toInt());
     state.until = _stateUntil->currentData().toString().toStdString();
+    if (state.play == st::Play::Blend)
+    {
+        state.blend = _blendInput->currentData().toString().toStdString();
+        // Made a blend just now: the first number input there is.
+        if (state.blend.empty() && _graph.states[static_cast<size_t>(_index)].play != st::Play::Blend)
+            for (const st::Input& input : graph.inputs)
+                if (input.kind == st::InputKind::Number && state.blend.empty())
+                    state.blend = input.name;
+        state.low = _blendLow->value();
+        state.high = _blendHigh->value();
+        if (state.low == state.high)
+            state.high = state.low + 1.0;
+    }
     if (_stateEntry->isChecked())
-        graph.entry = _index;
+    {
+        if (layer == 0)
+            graph.entry = _index;
+        else
+            graph.layers[static_cast<size_t>(layer - 1)].entry = _index;
+    }
     if (graph == _graph && edit.renames.empty())
         return;
     commit(graph, edit, edit.renames.empty() ? "Change State" : "Rename State");
@@ -831,25 +965,34 @@ void StatesPanel::listenerEdited()
 void StatesPanel::addState()
 {
     const fla::Timeline* edited = timeline();
-    if (!edited)
+    const int layer = _layerShown;
+    const fla::Timeline* labels = layerTimeline(layer);
+    if (!edited || !labels)
         return;
     // The labels no state has yet come first.
     QStringList unused;
-    for (const auto& [label, frame] : st::labels(*edited))
-        if (_graph.stateNamed(label) < 0)
+    for (const auto& [label, frame] : st::labels(*labels))
+        if (_graph.stateNamed(label, layer) < 0)
             unused << QString::fromStdString(label);
+    if (layer > 0 && unused.isEmpty())
+    {
+        modal::information(this, "Add State",
+            "Every frame label of the movie clip is a state already. Label more of its frames to add states.");
+        return;
+    }
 
     QDialog* dialog = new QDialog(this);
     dialog->setWindowTitle("Add State");
     QFormLayout* form = new QFormLayout(dialog);
-    QLabel* about = new QLabel(unused.isEmpty()
+    QLabel* about = new QLabel(layer > 0 ? "Pick a frame label of the movie clip for the state."
+            : unused.isEmpty()
             ? "A new frame label is made for the state, at the frame given, on the States layer."
             : "Pick a frame label for the state, or type a new name to make a label at the frame given.",
         dialog);
     about->setWordWrap(true);
     form->addRow(about);
     QComboBox* name = new QComboBox(dialog);
-    name->setEditable(true);
+    name->setEditable(layer == 0);
     name->addItems(unused);
     if (unused.isEmpty())
     {
@@ -862,13 +1005,15 @@ void StatesPanel::addState()
     frame->setRange(1, 1 << 20);
     frame->setValue((_links.currentFrame ? _links.currentFrame() : 0) + 1);
     QComboBox* play = new QComboBox(dialog);
-    for (st::Play each : {st::Play::Loop, st::Play::Once, st::Play::Hold})
+    for (st::Play each : {st::Play::Loop, st::Play::Once, st::Play::Hold, st::Play::Blend})
         play->addItem(QString::fromStdString(st::words(each)), static_cast<int>(each));
     form->addRow("Label", name);
     form->addRow("At frame", frame);
     form->addRow("It", play);
-    const auto labelled = [edited](const QString& text) {
-        for (const auto& [label, at] : st::labels(*edited))
+    if (layer > 0)
+        form->setRowVisible(frame, false);
+    const auto labelled = [labels](const QString& text) {
+        for (const auto& [label, at] : st::labels(*labels))
             if (QString::fromStdString(label) == text)
                 return true;
         return false;
@@ -880,31 +1025,103 @@ void StatesPanel::addState()
     form->addRow(buttons);
     connect(buttons, &QDialogButtonBox::accepted, dialog, &QDialog::accept);
     connect(buttons, &QDialogButtonBox::rejected, dialog, &QDialog::reject);
-    modal::open(dialog, [this, edited, name, frame, play, labelled](int result) {
+    modal::open(dialog, [this, edited, layer, name, frame, play, labelled](int result) {
         if (result != QDialog::Accepted)
             return;
         // Another timeline may have come up while the dialog was.
-        if (timeline() != edited)
+        if (timeline() != edited || layer > static_cast<int>(_graph.layers.size()))
             return;
         const std::string label = name->currentText().trimmed().toStdString();
-        if (label.empty() || _graph.stateNamed(label) >= 0)
+        if (label.empty() || _graph.stateNamed(label, layer) >= 0 || (layer > 0 && !labelled(QString::fromStdString(label))))
             return;
         st::Graph graph = _graph;
         st::State state;
         state.label = label;
+        state.layer = layer;
         state.play = static_cast<st::Play>(play->currentData().toInt());
-        const int n = static_cast<int>(graph.states.size());
+        if (state.play == st::Play::Blend)
+            for (const st::Input& input : graph.inputs)
+                if (input.kind == st::InputKind::Number && state.blend.empty())
+                    state.blend = input.name;
+        // Placed by how many its layer has.
+        int n = 0;
+        for (const st::State& other : graph.states)
+            n += other.layer == layer ? 1 : 0;
         // Two to a row, every other row set in: no box in line with two others.
         state.x = 30.0 + 280.0 * (n % 2) + 140.0 * ((n / 2) % 2);
         state.y = 20.0 + 120.0 * (n / 2);
         graph.states.push_back(state);
+        const int made = static_cast<int>(graph.states.size()) - 1;
         st::Edit edit;
-        if (!labelled(QString::fromStdString(label)))
+        if (layer == 0 && !labelled(QString::fromStdString(label)))
             edit.newLabels.emplace_back(label, frame->value() - 1);
         commit(graph, edit, "Add State");
-        pick(Picked::State, n);
-        _view->setPicked(StatesView::Pick::State, n);
+        pick(Picked::State, made);
+        _view->setPicked(StatesView::Pick::State, made);
     });
+}
+
+void StatesPanel::addLayer()
+{
+    const fla::Timeline* edited = timeline();
+    if (!edited)
+        return;
+    QStringList clips;
+    for (const std::string& name : st::instanceNames(*edited))
+        if (st::clipTimeline(*edited, name))
+            clips << QString::fromStdString(name);
+    if (clips.isEmpty())
+    {
+        modal::information(this, "Add Layer",
+            "A layer of states moves a movie clip on this timeline through its own labels. Give a movie clip "
+            "on the timeline an instance name first.");
+        return;
+    }
+    QDialog* dialog = new QDialog(this);
+    dialog->setWindowTitle("Add Layer");
+    QFormLayout* form = new QFormLayout(dialog);
+    QLabel* about = new QLabel("The layer's states are the movie clip's frame labels. They play at the same time as "
+                               "this timeline's own, going by the same inputs.",
+        dialog);
+    about->setWordWrap(true);
+    form->addRow(about);
+    QLineEdit* name = new QLineEdit(QString("Layer %1").arg(_graph.layers.size() + 1), dialog);
+    QComboBox* clip = new QComboBox(dialog);
+    clip->addItems(clips);
+    const QString selected = _links.selectedInstance ? _links.selectedInstance() : QString();
+    if (clips.contains(selected))
+        clip->setCurrentText(selected);
+    form->addRow("Name", name);
+    form->addRow("Movie clip", clip);
+    QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, dialog);
+    form->addRow(buttons);
+    connect(buttons, &QDialogButtonBox::accepted, dialog, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, dialog, &QDialog::reject);
+    modal::open(dialog, [this, edited, name, clip](int result) {
+        if (result != QDialog::Accepted || timeline() != edited)
+            return;
+        st::Graph graph = _graph;
+        st::StateLayer layer;
+        layer.name = name->text().trimmed().isEmpty() ? clip->currentText().toStdString() : name->text().trimmed().toStdString();
+        layer.target = clip->currentText().toStdString();
+        graph.layers.push_back(layer);
+        _layerShown = static_cast<int>(graph.layers.size());
+        _kind = Picked::None;
+        _index = -1;
+        commit(graph, st::Edit(), "Add State Layer");
+    });
+}
+
+void StatesPanel::removeLayer()
+{
+    if (_layerShown <= 0 || _layerShown > static_cast<int>(_graph.layers.size()))
+        return;
+    st::Graph graph = _graph;
+    graph.removeLayer(_layerShown);
+    _layerShown = 0;
+    _kind = Picked::None;
+    _index = -1;
+    commit(graph, st::Edit(), "Remove State Layer");
 }
 
 void StatesPanel::addTransition(int from, int to)

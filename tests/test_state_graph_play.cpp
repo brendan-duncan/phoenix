@@ -280,7 +280,155 @@ private:
     JSContext* _ctx = nullptr;
 };
 
+/// A movie whose root loops "idle" (frames 1-10) while a layer of states
+/// moves the movie clip "face" on it: its "mood" (frames 1-5) follows the
+/// number input happy, 0 to 10, and B sends it to "blink" (6-7) and back.
+std::unique_ptr<Movie> layeredMovie(int version)
+{
+    const std::string square = "<DOMShape><fills><FillStyle index=\"1\"><SolidColor color=\"#FF0000\"/></FillStyle></fills>"
+                               "<edges><Edge fillStyle1=\"1\" edges=\"!0 0|800 0!800 0|800 800!800 800|0 800!0 800|0 0\"/>"
+                               "</edges></DOMShape>";
+    std::map<std::string, std::vector<uint8_t>> files;
+    files["DOMDocument.xml"] = bytesOf(
+        "<DOMDocument xmlns=\"http://ns.adobe.com/xfl/2008/\" width=\"200\" height=\"100\" frameRate=\"12\">"
+        "<symbols><Include href=\"Face.xml\"/></symbols>"
+        "<timelines><DOMTimeline name=\"Scene 1\"><layers>"
+        "<DOMLayer name=\"labels\"><frames>"
+        "<DOMFrame index=\"0\" duration=\"10\" name=\"idle\" labelType=\"name\"><elements/></DOMFrame>"
+        "</frames></DOMLayer>"
+        "<DOMLayer name=\"art\"><frames><DOMFrame index=\"0\" duration=\"10\"><elements>"
+        "<DOMSymbolInstance libraryItemName=\"Face\" name=\"face\" symbolType=\"movie clip\">"
+        "<matrix><Matrix tx=\"20\" ty=\"20\"/></matrix></DOMSymbolInstance>"
+        "</elements></DOMFrame></frames></DOMLayer>"
+        "</layers></DOMTimeline></timelines></DOMDocument>");
+    files["LIBRARY/Face.xml"] = bytesOf(
+        "<DOMSymbolItem xmlns=\"http://ns.adobe.com/xfl/2008/\" name=\"Face\" symbolType=\"movie clip\">"
+        "<timeline><DOMTimeline name=\"Face\"><layers>"
+        "<DOMLayer name=\"labels\"><frames>"
+        "<DOMFrame index=\"0\" duration=\"5\" name=\"mood\" labelType=\"name\"><elements/></DOMFrame>"
+        "<DOMFrame index=\"5\" duration=\"2\" name=\"blink\" labelType=\"name\"><elements/></DOMFrame>"
+        "</frames></DOMLayer>"
+        "<DOMLayer name=\"art\"><frames><DOMFrame index=\"0\" duration=\"7\"><elements>" +
+        square + "</elements></DOMFrame></frames></DOMLayer></layers></DOMTimeline></timeline></DOMSymbolItem>");
+    const std::string settings =
+        "<flash_profiles><flash_profile name=\"Default\" current=\"true\"><PublishFlashProperties enabled=\"true\">"
+        "<ActionScriptVersion>" +
+        std::to_string(version) +
+        "</ActionScriptVersion><Version>10</Version></PublishFlashProperties></flash_profile></flash_profiles>";
+
+    auto made = std::make_unique<Movie>();
+    made->reader.reset(new ZipReader());
+    made->reader->openMemory(files);
+    made->root.reset(new fla::FLADocument(nullptr));
+    DocumentParser parser(made->reader.get());
+    const auto xml = files.at("DOMDocument.xml");
+    made->document = parser.parse(std::string(xml.begin(), xml.end()), made->root.get());
+    made->root->document = made->document;
+    if (!made->document || made->document->timelines.empty())
+        return nullptr;
+    made->document->extraFiles.emplace_back("PublishSettings.xml", fla::LazyBytes(bytesOf(settings)));
+
+    st::Graph graph;
+    st::State idle{"idle", "", st::Play::Loop, 0, 0};
+    st::State mood{"mood", "", st::Play::Blend, 0, 0};
+    mood.layer = 1;
+    mood.blend = "happy";
+    mood.low = 0.0;
+    mood.high = 10.0;
+    st::State blink{"blink", "", st::Play::Once, 200, 0};
+    blink.layer = 1;
+    graph.states = {idle, mood, blink};
+    graph.layers = {{"Face", "face", 1}};
+    graph.inputs = {{"happy", st::InputKind::Number, 0}};
+    st::Transition toBlink;
+    toBlink.from = 1;
+    toBlink.to = 2;
+    toBlink.when = st::When::Key;
+    toBlink.target = "B";
+    st::Transition back;
+    back.from = 2;
+    back.to = 1;
+    back.when = st::When::Finished;
+    graph.transitions = {toBlink, back};
+    graph.listeners = {{st::When::Key, "H", "happy", st::Change::Add, 5}};
+    st::apply(made->stack, *made->document->timelines[0], graph, st::Edit(), version, 12.0, "States");
+    return made;
+}
+
+void playLayers(int version)
+{
+    std::unique_ptr<Movie> made = layeredMovie(version);
+    CHECK(made != nullptr);
+    if (!made)
+        return;
+    fla::play::MovieRuntime runtime(*made->document->timelines[0], 12.0);
+    runtime.setActionScriptVersion(version);
+    std::vector<std::string> errors;
+    runtime.error = [&errors](const std::string& line) { errors.push_back(line); };
+    runtime.start();
+    fla::play::Clip& root = runtime.root();
+    fla::play::Clip* face = root.named("face");
+    CHECK(face != nullptr);
+    if (!face)
+        return;
+    runtime.step();
+    // happy at 0: the mood's first frame, held, while the root loops on.
+    CHECK(face->frame == 0 && !face->playing);
+    runtime.keyDown(72, 'h');
+    runtime.keyUp(72, 'h');
+    runtime.afterEvents();
+    runtime.step();
+    // 5 of 10: the middle of five frames.
+    CHECK(face->frame == 2);
+    runtime.keyDown(72, 'h');
+    runtime.keyUp(72, 'h');
+    runtime.afterEvents();
+    runtime.step();
+    CHECK(face->frame == 4);
+    // B: a blink, played once, then back to the mood where happy left it.
+    runtime.keyDown(66, 'b');
+    runtime.keyUp(66, 'b');
+    runtime.afterEvents();
+    CHECK(face->frame == 5);
+    for (int i = 0; i < 3; ++i)
+        runtime.step();
+    CHECK(face->frame == 4);
+    CHECK(root.frame >= 1 && root.frame <= 9 && root.playing);
+    CHECK(errors.empty());
+    for (const std::string& error : errors)
+        std::printf("    %s\n", error.c_str());
+}
+
 } // namespace
+
+TEST(state_layers_and_blends_play_as_actionscript_3)
+{
+    playLayers(3);
+}
+
+TEST(state_layers_and_blends_play_as_actionscript_2)
+{
+    playLayers(2);
+}
+
+TEST(state_layers_compile_for_swf_and_html5)
+{
+    std::unique_ptr<Movie> made = layeredMovie(3);
+    CHECK(made != nullptr);
+    if (!made)
+        return;
+    fla::swfmovie::ActionScript3Options options;
+    options.findClass = [](const std::string&) { return std::optional<std::string>(); };
+    options.documentName = "layers";
+    const fla::swfmovie::ActionScript3 compiled = fla::swfmovie::compileActionScript3(*made->document, options);
+    CHECK(!compiled.abc.empty());
+    for (const std::string& note : compiled.notes)
+        std::printf("    swf: %s\n", note.c_str());
+    const fla::swfmovie::JavaScript3 translated = fla::swfmovie::translateActionScript3(*made->document, options);
+    CHECK(!translated.bundle.empty());
+    for (const char* part : {"phxGo1", "phxStep1", "Math.round"})
+        CHECK(translated.bundle.find(part) != std::string::npos);
+}
 
 TEST(state_graph_plays_as_actionscript_3)
 {

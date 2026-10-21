@@ -27,6 +27,9 @@ public:
     };
 
     void setGraph(const fla::states::Graph& graph, const std::vector<QString>& ranges);
+    /// Shows only the states of layer \a layer (0 for the timeline's own)
+    /// and the transitions to them.
+    void setLayer(int layer);
     void setPicked(Pick kind, int index);
     Pick pickedKind() const { return _kind; }
     int pickedIndex() const { return _index; }
@@ -47,6 +50,8 @@ protected:
     void mouseReleaseEvent(QMouseEvent* event) override;
 
 private:
+    /// Whether state \a state is in the layer shown (Any state always is).
+    bool shown(int state) const;
     QRectF box(int state) const;
     QRectF anyBox() const;
     QPointF handle(int state) const;
@@ -57,6 +62,7 @@ private:
 
     fla::states::Graph _graph;
     std::vector<QString> _ranges;
+    int _layer = 0;
     Pick _kind = Pick::None;
     int _index = -1;
 

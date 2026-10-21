@@ -58,12 +58,31 @@ void StatesView::setGraph(const fla::states::Graph& graph, const std::vector<QSt
     double right = 240.0, bottom = 200.0;
     for (size_t i = 0; i < _graph.states.size(); ++i)
     {
+        if (!shown(static_cast<int>(i)))
+            continue;
         const QRectF rect = box(static_cast<int>(i));
         right = std::max(right, rect.right() + 40.0);
         bottom = std::max(bottom, rect.bottom() + 40.0);
     }
     setMinimumSize(static_cast<int>(right), static_cast<int>(bottom));
     update();
+}
+
+void StatesView::setLayer(int layer)
+{
+    _layer = layer;
+    update();
+}
+
+bool StatesView::shown(int state) const
+{
+    if (state < 0)
+        return true;
+    if (state >= static_cast<int>(_graph.states.size()))
+        return false;
+    const int layer = _graph.states[static_cast<size_t>(state)].layer;
+    const int count = static_cast<int>(_graph.layers.size());
+    return (layer > 0 && layer <= count ? layer : 0) == _layer;
 }
 
 void StatesView::setPicked(Pick kind, int index)
@@ -93,7 +112,7 @@ QPointF StatesView::handle(int state) const
 int StatesView::stateAt(const QPointF& at) const
 {
     for (int i = static_cast<int>(_graph.states.size()) - 1; i >= 0; --i)
-        if (box(i).contains(at))
+        if (shown(i) && box(i).contains(at))
             return i;
     return -1;
 }
@@ -102,7 +121,8 @@ bool StatesView::arrow(int index, QPointF& from, QPointF& to, QPointF& middle) c
 {
     const fla::states::Transition& transition = _graph.transitions[static_cast<size_t>(index)];
     const int count = static_cast<int>(_graph.states.size());
-    if (transition.to < 0 || transition.to >= count || transition.from >= count)
+    if (transition.to < 0 || transition.to >= count || transition.from >= count || !shown(transition.to) ||
+        !shown(transition.from))
         return false;
     const QRectF start = transition.from < 0 ? anyBox() : box(transition.from);
     const QRectF end = box(transition.to);
@@ -181,22 +201,27 @@ void StatesView::paintEvent(QPaintEvent*)
     const QColor accent = colors.color(QPalette::Highlight);
     const QColor start(76, 175, 80);
 
-    if (_graph.states.empty())
+    bool any = false;
+    for (int i = 0; i < static_cast<int>(_graph.states.size()) && !any; ++i)
+        any = shown(i);
+    if (!any)
     {
         painter.setPen(colors.color(QPalette::PlaceholderText));
         painter.drawText(rect().adjusted(16, 16, -16, -16), Qt::AlignCenter | Qt::TextWordWrap,
-            "No states yet.\n\nLabel the frames of each pose or animation in the timeline, "
-            "then click Add State to make each label a state.");
+            _layer > 0 ? "No states in this layer yet.\n\nClick Add State to make one of its movie clip's frame "
+                         "labels a state."
+                       : "No states yet.\n\nLabel the frames of each pose or animation in the timeline, "
+                         "then click Add State to make each label a state.");
         return;
     }
 
     // Any State, for the transitions that leave whatever state is playing.
-    const QRectF any = anyBox();
+    const QRectF anyState = anyBox();
     painter.setPen(QPen(colors.color(QPalette::Mid), 1.0, Qt::DashLine));
     painter.setBrush(colors.alternateBase());
-    painter.drawRoundedRect(any, 6, 6);
+    painter.drawRoundedRect(anyState, 6, 6);
     painter.setPen(line);
-    painter.drawText(any, Qt::AlignCenter, "Any state");
+    painter.drawText(anyState, Qt::AlignCenter, "Any state");
 
     // The arrows under the boxes.
     const QFontMetricsF metrics(font());
@@ -235,12 +260,15 @@ void StatesView::paintEvent(QPaintEvent*)
     }
 
     // The boxes.
+    const int entryState = _graph.entryOf(_layer);
     for (int i = 0; i < static_cast<int>(_graph.states.size()); ++i)
     {
+        if (!shown(i))
+            continue;
         const fla::states::State& state = _graph.states[static_cast<size_t>(i)];
         const QRectF rect = box(i);
         const bool picked = _kind == Pick::State && _index == i;
-        const bool entry = _graph.entry == i;
+        const bool entry = entryState == i;
         painter.setPen(QPen(picked ? accent : entry ? start : colors.color(QPalette::Mid), picked || entry ? 2.4 : 1.2));
         painter.setBrush(colors.button());
         painter.drawRoundedRect(rect, 8, 8);
@@ -254,6 +282,8 @@ void StatesView::paintEvent(QPaintEvent*)
         painter.setFont(font());
         painter.setPen(colors.color(QPalette::PlaceholderText));
         QString detail = QString::fromStdString(fla::states::words(state.play));
+        if (state.play == fla::states::Play::Blend && !state.blend.empty())
+            detail = "follows " + QString::fromStdString(state.blend);
         if (static_cast<size_t>(i) < _ranges.size() && !_ranges[static_cast<size_t>(i)].isEmpty())
             detail += ", " + _ranges[static_cast<size_t>(i)];
         const QRectF below = rect.adjusted(10, rect.height() / 2.0, -14, -6);
@@ -312,6 +342,8 @@ void StatesView::mousePressEvent(QMouseEvent* event)
     // A dot: a new transition from there.
     for (int i = -1; i < static_cast<int>(_graph.states.size()); ++i)
     {
+        if (!shown(i))
+            continue;
         const QPointF dot = handle(i);
         if (std::hypot(at.x() - dot.x(), at.y() - dot.y()) <= kHandle + 2.0)
         {
@@ -351,7 +383,7 @@ void StatesView::mouseMoveEvent(QMouseEvent* event)
     {
         bool over = false;
         for (int i = -1; i < static_cast<int>(_graph.states.size()) && !over; ++i)
-            over = std::hypot(at.x() - handle(i).x(), at.y() - handle(i).y()) <= kHandle + 2.0;
+            over = shown(i) && std::hypot(at.x() - handle(i).x(), at.y() - handle(i).y()) <= kHandle + 2.0;
         setCursor(over ? Qt::CrossCursor : Qt::ArrowCursor);
         setToolTip(over ? "Drag to another state to add a transition" : QString());
         return;

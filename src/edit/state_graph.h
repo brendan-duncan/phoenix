@@ -15,7 +15,9 @@ class Timeline;
 /// frame labels as the states it can be in, named inputs (switches,
 /// numbers, triggers), and transitions from state to state that a click
 /// on an instance, a key, the end of a state's animation, a timer or an
-/// input's value sets off. The graph is turned into ordinary ActionScript
+/// input's value sets off. Layers of states play alongside the timeline's
+/// own, each moving a named movie clip on it through that clip's labels,
+/// all going by the same inputs. The graph is turned into ordinary ActionScript
 /// in the timeline's first frame (ActionScript 3 for an ActionScript 3
 /// document, else ActionScript 1 and 2), between comment markers, so Test
 /// Movie, SWF and HTML5 publishing and any other app play it with nothing
@@ -35,6 +37,10 @@ enum class Play
     Loop,
     Once,
     Hold,
+    /// Shows the frame a number input picks: its first frame at the low
+    /// value, its last at the high one, those between in proportion (a
+    /// gauge, a dial, a face from sad to happy).
+    Blend,
 };
 
 struct State
@@ -48,6 +54,26 @@ struct State
     /// Where it sits in the graph.
     double x = 0.0;
     double y = 0.0;
+    /// The layer it is in: 0 for the timeline's own, else 1 and up for
+    /// Graph::layers.
+    int layer = 0;
+    /// For Play::Blend: the number input that picks the frame, and the
+    /// values at its first and last frames.
+    std::string blend;
+    double low = 0.0;
+    double high = 1.0;
+};
+
+/// A layer of states playing alongside the timeline's own: the movie clip
+/// named \a target on the timeline moves through its own labels, by
+/// transitions of its own, at the same time.
+struct StateLayer
+{
+    std::string name;
+    std::string target;
+    /// The state it starts in (an index into Graph::states); -1 for its
+    /// first.
+    int entry = -1;
 };
 
 enum class InputKind
@@ -149,12 +175,20 @@ struct Graph
     std::vector<Input> inputs;
     std::vector<Transition> transitions;
     std::vector<Listener> listeners;
+    /// The layers beyond the timeline's own (layer 1 is layers[0]).
+    std::vector<StateLayer> layers;
 
     bool empty() const { return states.empty(); }
     int stateNamed(const std::string& label) const;
+    /// The state of layer \a layer with label \a label, or -1.
+    int stateNamed(const std::string& label, int layer) const;
     const Input* input(const std::string& name) const;
+    /// The state layer \a layer starts in, or -1 when it has none.
+    int entryOf(int layer) const;
     /// Takes out state \a index and the transitions to and from it.
     void removeState(int index);
+    /// Takes out layer \a layer (1 and up) and its states.
+    void removeLayer(int layer);
     /// Takes out input \a name and the conditions and listeners on it.
     void removeInput(const std::string& name);
     bool operator==(const Graph& other) const;
@@ -195,6 +229,12 @@ int length(const Timeline& timeline);
 bool range(const Timeline& timeline, const State& state, int& first, int& last);
 /// The names of the movie clip and button instances on \a timeline, sorted.
 std::vector<std::string> instanceNames(const Timeline& timeline);
+/// The timeline of the movie clip named \a instance on \a timeline, or
+/// null.
+const Timeline* clipTimeline(const Timeline& timeline, const std::string& instance);
+/// The timeline the states of \a layer go by: \a timeline itself for
+/// layer 0, its layer's movie clip's for the rest; null when not there.
+const Timeline* layerTimeline(const Timeline& timeline, const Graph& graph, int layer);
 
 /// The script \a graph is turned into for \a timeline, in ActionScript
 /// \a version (3, or 1 and 2), markers and all; empty for an empty graph.
