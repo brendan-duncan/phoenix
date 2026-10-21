@@ -1,13 +1,13 @@
 // The phone layout of the web editor (View > Phone Layout): the stage alone,
 // two rows of large buttons along the bottom (the common tools with undo
-// and redo; playing, looping and onion skin, and a menu holding the other
-// panels and the menu bar's menus), the timeline as a drawer that comes up
-// from a bar over them, Properties as one from a bar at the side, and the
-// other panels one at a time as a sheet over the bottom of the stage. A
-// press held still on the stage opens the pop-up palette, and a turned
-// stage has a button to set it straight. Phones get it the first time; the
-// menu switches it, and the choice is kept. Compiled only into the web
-// build (CMakeLists.txt).
+// and redo; playing, looping, onion skin, a time slider and a menu holding
+// the other panels and the menu bar's menus), the timeline as a drawer
+// that comes up from a bar over them, Properties as one from a bar at the
+// side, and the other panels one at a time as a sheet over the bottom of
+// the stage. A press held still on the stage opens the pop-up palette, and
+// a turned stage has a button to set it straight. Phones get it the first
+// time; the menu switches it, and the choice is kept. Compiled only into
+// the web build (CMakeLists.txt).
 
 #include "main_window.h"
 #include "phoenix_view.h"
@@ -29,6 +29,7 @@
 #include <QPointer>
 #include <QScreen>
 #include <QSettings>
+#include <QSlider>
 #include <QStatusBar>
 #include <QTimer>
 #include <QToolBar>
@@ -621,10 +622,37 @@ void MainWindow::buildPhoneBar()
     connect(onion, &QAction::toggled, _onionSkinAction, &QAction::setChecked);
     connect(_onionSkinAction, &QAction::toggled, onion, &QAction::setChecked);
 
+    // A slider through the timeline's frames, in the room left.
+    QSlider* scrub = new QSlider(Qt::Horizontal, _phoneBar);
+    scrub->setObjectName("phoneTimeSlider");
+    scrub->setToolTip("Time");
+    scrub->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    scrub->setMinimumSize(60, kButtonSize);
+    scrub->setPageStep(1);
+    // A handle large enough for a finger.
+    scrub->setStyleSheet("QSlider::groove:horizontal { height: 4px; border-radius: 2px; background: palette(mid); }"
+                         "QSlider::handle:horizontal { width: 20px; margin: -8px 0; border-radius: 10px;"
+                         " background: palette(highlight); }");
+    // Its end follows the frames, measured again after each edit (a slider
+    // with no range takes no presses) and as the frame shown changes.
+    const auto showTime = [this, scrub]() {
+        const QSignalBlocker blocker(scrub);
+        const TimelinesPanel* panel = _timelineView->timelines();
+        const int frames = panel ? panel->grid()->frameCount() : 1;
+        scrub->setRange(0, std::max({1, frames, _player->currentFrame() + 1}) - 1);
+        scrub->setValue(_player->currentFrame());
+    };
+    showTime();
+    connect(_player, &Player::currentFrameChanged, scrub, showTime);
+    connect(_timelineView, &TimelineView::currentLayerChanged, scrub, showTime);
+    connect(this, &MainWindow::editStateChanged, scrub, showTime);
+    connect(scrub, &QSlider::valueChanged, this, [this](int frame) {
+        if (frame != _player->currentFrame())
+            _player->setCurrentFrame(frame);
+    });
+    _phoneBar->addWidget(scrub);
+
     // The other panels, one at a time.
-    QWidget* spacer = new QWidget(_phoneBar);
-    spacer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
-    _phoneBar->addWidget(spacer);
     QToolButton* panels = new QToolButton(_phoneBar);
     panels->setIcon(phoneIcon(PhoneIcon::Panels));
     panels->setToolTip("Panels");
