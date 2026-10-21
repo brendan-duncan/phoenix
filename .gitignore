@@ -18,6 +18,7 @@ UNITY-TODO.md
 CLOUD.md
 CLOUD-TODO.md
 tools/deploy_site.ini
+tools/deploy_cloud.ini
 tools/web/web.ini
 
 # Working copies Claude Code makes for its agents
