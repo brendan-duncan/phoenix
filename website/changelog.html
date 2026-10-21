@@ -34,6 +34,38 @@
 
 <p class="lead">What changed in each release of Phoenix, newest first.</p>
 
+<h2 id="v0-23-1">0.23.1</h2>
+
+<ul>
+  <li>ActionScript 2 has flash.geom's Point, Rectangle, Matrix, ColorTransform and Transform (and a movie clip's transform) in movies made for SWF 8 or later; x, y, alpha and the other ActionScript 3 names are ordinary variables in a movie's compiled ActionScript 2; for-in visits properties newest first, NaN equals NaN, and joining an array writes undefined as undefined, as SWF movies have them</li>
+  <li>ActionScript 2 has flash.display.BitmapData in movies made for SWF 8 or later, with the numbers its methods give in place of errors, and BitmapData.loadBitmap for a library bitmap; bitmaps read back the exact colors SWF movies give, and copyPixels, threshold, getColorBoundsRect, noise, perlinNoise and pixelDissolve work as they do in SWF movies, in ActionScript 3 too</li>
+  <li>ActionScript 2 has flash.filters (Bevel, Blur, ColorMatrix, Convolution, DisplacementMap, DropShadow, Glow, GradientBevel and GradientGlow) and a movie clip's filters, keeping each number as SWF movies do, and BitmapData.applyFilter and generateFilterRect; an imported SWF's filter angles, strengths and blurs come in exactly</li>
+  <li>ActionScript 2 has flash.external.ExternalInterface, which says it is not available (there is no web page around a movie in Phoenix), with its helpers that write values as XML and read them back</li>
+  <li>ActionScript 3 has Namespace and QName, and a movie's namespace constants are Namespace objects</li>
+  <li>ActionScript 3 has flash.xml's XMLDocument, XMLNode and XMLNodeType, parsing as ActionScript 1 and 2's XML does</li>
+  <li>ActionScript 3 has flash.text.StyleSheet (parseCSS, setStyle, getStyle, transform) and TextField.styleSheet: HTML text set after takes each tag's and class's styles, as SWF movies show it; TextField.getTextRuns too</li>
+  <li>The displacement map filter: DisplacementMapFilter in ActionScript 3 and 2 moves each pixel by a map bitmap's channels, on display objects and through BitmapData.applyFilter, in Test Movie</li>
+  <li>ActionScript 3's transform.matrix3D: a display object given one is three-dimensional (its matrix reads null) and shows with its two-dimensional part; setting matrix or a null matrix3D makes it flat again; and a transform assigned to another object carries it</li>
+  <li>Text with characters past the Basic Multilingual Plane (emoji) comes through ActionScript 3 whole, built a character at a time or compiled in halves</li>
+  <li>Malformed XML in ActionScript 3 throws the error SWF movies throw for each mistake (an unclosed element, comment, CDATA section, attribute or processing instruction, a bad name, markup after the root), and an end tag may have spaces or attributes after its name</li>
+  <li>In ActionScript 3, a class's prototype is one object whose properties its instances find, set or deleted, and whose constructor is the class</li>
+  <li>ActionScript 3 has flash.utils.Proxy: a subclass's getProperty, setProperty, callProperty, hasProperty, deleteProperty and nextNameIndex, nextName and nextValue answer for the names it does not declare and for for-in and for each</li>
+  <li>ActionScript 3's ByteArray writes and reads objects (writeObject, readObject) in AMF3 and AMF0, with registerClassAlias, getClassByAlias, ObjectEncoding and IExternalizable; for-in over an array in a movie's compiled ActionScript 3 gives its indexes as numbers</li>
+  <li>ActionScript 3's SharedObject keeps its data in .sol files, as SharedObjects in SWF movies are kept, so dates, byte arrays and typed objects come back as they were; its size is its file's, and data saved by earlier versions of Phoenix is still read</li>
+  <li>ActionScript 1 and 2 have SharedObject in movies made for SWF 6 or later: getLocal, data, flush, getSize and clear, kept in .sol files as SWF movies keep them and saved again as the movie ends</li>
+  <li>ActionScript 1 and 2 have XML and XMLNode in movies made for SWF 5 or later: parsing as SWF movies do (leniently, with a status for what went wrong, the XML declaration and DOCTYPE kept), the node tree with its attributes, siblings, namespaces and idMap, toString, and XML.load and sendAndLoad from a file or the web</li>
+  <li>ActionScript 1 and 2 have LoadVars (load, send, sendAndLoad, decode, toString); escape in ActionScript 1 and 2 encodes every character but letters and digits, and a property's getter that reads itself gets undefined, as SWF movies have them</li>
+  <li>In a movie's compiled ActionScript 3, a name in more than one private namespace (a class's and its file's) is found in any of them, such as a helper class written after a package in the same file</li>
+  <li>Test Movie says when a document class does not extend Sprite (the main timeline cannot be one), as SWF movies do</li>
+  <li>ActionScript 2's movie clips have depths: getDepth, swapDepths, getNextHighestDepth and getInstanceAtDepth, and attachMovie, createEmptyMovieClip, duplicateMovieClip and attachBitmap put a clip at the depth given, in place of what was there; removeMovieClip takes off only what is at a script's depth; an imported SWF keeps each layer's depth, and clips placed without a name are named instance1, instance2... as SWF movies name them</li>
+  <li>ActionScript 2 has the drawing API (lineStyle, beginFill, beginGradientFill, beginBitmapFill, moveTo, lineTo, curveTo, endFill, clear), localToGlobal, globalToLocal, getBounds and getRect worked out to the twip as SWF movies do, setMask, getSWFVersion, and a movie clip's blendMode, cacheAsBitmap, opaqueBackground and scrollRect</li>
+  <li>ActionScript 2 has TextField and TextFormat: createTextField, every text field's properties and methods (text, htmlText, textColor, border, autoSize, scroll, maxChars, setTextFormat, getTextFormat, replaceText and the rest), the variable a field shows kept in step with the field, and its _x, _alpha and other properties, as SWF movies have them; an imported SWF's HTML text fields keep their HTML, and its text fields with no font are in Times New Roman, as SWF movies show them</li>
+  <li>ActionScript 1 and 2 have AsBroadcaster, and Key, Mouse, Selection and text fields broadcast through it: Mouse's listeners hear onMouseDown, onMouseUp and onMouseMove</li>
+  <li>Test Movie loads other movies and images as SWF movies ask: loadMovie, loadMovieNum and unloadMovie into clips and levels, MovieClipLoader with its onLoadStart, onLoadProgress, onLoadComplete, onLoadInit and onLoadError, loadVariables, and getBytesLoaded and getBytesTotal; a loaded movie's clips find its own library</li>
+  <li>Phoenix's SWF movies write loadMovie, loadVariables and getURL's method as SWF players read them, so they load into the right target</li>
+  <li>ActionScript runs faster: a string's length, sorting with a compare function, filling an array from its end, objects with many properties and Math's functions take a fraction of the time they did</li>
+</ul>
+
 <h2 id="v0-23-0">0.23.0</h2>
 
 <ul>

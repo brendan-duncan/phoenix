@@ -30,14 +30,14 @@ endif()
 FetchContent_Declare(
     libas3
     GIT_REPOSITORY https://github.com/brendan-duncan/libas3
-    GIT_TAG 74d4dac8bf26205262a8f57d941383cd921f623e
+    GIT_TAG 23565b32b91f7dac0e9b6d0a2909f2f5a0931e9a
 )
 FetchContent_MakeAvailable(libas3)
 
 add_library(libas3 INTERFACE)
 target_link_libraries(libas3 INTERFACE as3_parser)
 
-project(Phoenix VERSION 0.23.0 LANGUAGES C CXX)
+project(Phoenix VERSION 0.23.1 LANGUAGES C CXX)
 
 # The web build: Qt for WebAssembly's toolchain (tools/web/build_web.py,
 # docs/web-editor.md). What a browser cannot do (other programs, Python, sockets,

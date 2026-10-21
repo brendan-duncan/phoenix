@@ -2,7 +2,7 @@
 
 What changed in each release of Phoenix, newest first.
 
-## Unreleased
+## 0.23.1
 
 - ActionScript 2 has flash.geom's Point, Rectangle, Matrix, ColorTransform and Transform (and a movie clip's transform) in movies made for SWF 8 or later; x, y, alpha and the other ActionScript 3 names are ordinary variables in a movie's compiled ActionScript 2; for-in visits properties newest first, NaN equals NaN, and joining an array writes undefined as undefined, as SWF movies have them
 - ActionScript 2 has flash.display.BitmapData in movies made for SWF 8 or later, with the numbers its methods give in place of errors, and BitmapData.loadBitmap for a library bitmap; bitmaps read back the exact colors SWF movies give, and copyPixels, threshold, getColorBoundsRect, noise, perlinNoise and pixelDissolve work as they do in SWF movies, in ActionScript 3 too
@@ -30,6 +30,7 @@ What changed in each release of Phoenix, newest first.
 - ActionScript 1 and 2 have AsBroadcaster, and Key, Mouse, Selection and text fields broadcast through it: Mouse's listeners hear onMouseDown, onMouseUp and onMouseMove
 - Test Movie loads other movies and images as SWF movies ask: loadMovie, loadMovieNum and unloadMovie into clips and levels, MovieClipLoader with its onLoadStart, onLoadProgress, onLoadComplete, onLoadInit and onLoadError, loadVariables, and getBytesLoaded and getBytesTotal; a loaded movie's clips find its own library
 - Phoenix's SWF movies write loadMovie, loadVariables and getURL's method as SWF players read them, so they load into the right target
+- ActionScript runs faster: a string's length, sorting with a compare function, filling an array from its end, objects with many properties and Math's functions take a fraction of the time they did
 
 ## 0.23.0
 
