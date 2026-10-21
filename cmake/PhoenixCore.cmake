@@ -263,6 +263,7 @@ set(PHOENIX_CORE_PLAY_SOURCES
     play/script/bind_net.cpp
     play/script/bind_system.cpp
     play/script/bind_text.cpp
+    play/script/amf.cpp
     play/script/bind_utils.cpp
     play/script/bindings.cpp
     play/script/class_path.cpp

@@ -276,6 +276,11 @@ public:
     as3::Val newFilter(const display::BitmapFilter& filter);
     as3::Val newTextFormat(const display::TextFormat& format);
     as3::Val newByteArray(std::vector<uint8_t> bytes);
+    /// registerClassAlias: the alias a class is written with (empty for
+    /// none), and the class an alias reads back as (null for none).
+    std::string aliasOf(const as3::ClassInfo* cls) const;
+    std::shared_ptr<as3::ClassInfo> classOfAlias(const std::string& alias) const;
+    std::map<std::string, std::shared_ptr<as3::ClassInfo>> classAliases;
 
     /// Numbers of an array or vector.
     std::vector<double> numbers(const as3::Val& array);

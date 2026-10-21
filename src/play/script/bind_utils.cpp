@@ -1,6 +1,7 @@
 // flash.utils: ByteArray, Endian, CompressionAlgorithm and Timer.
 
 #include "native.h"
+#include "amf.h"
 
 #include <zlib.h>
 
@@ -211,9 +212,16 @@ void Bindings::defineUtils()
     vm.defineNativeClass("flash.utils.ByteArray")
         .implements("flash.utils.IDataInput")
         .implements("flash.utils.IDataOutput")
-        .constructor(NATIVE() {
+        .constructor(NATIVE(this) {
             if (!self.host<ByteArrayHost>())
-                self->host = std::make_shared<ByteArrayHost>();
+            {
+                auto host = std::make_shared<ByteArrayHost>();
+                // ByteArray.defaultObjectEncoding, as it is now.
+                host->objectEncoding =
+                    vm.getProperty(vm.classValue(classNamed("flash.utils.ByteArray").get()), "defaultObjectEncoding")
+                        .toUint32();
+                self->host = host;
+            }
             return Val();
         })
         .property("length", NATIVE() { return number(static_cast<double>(bytes(vm, self).bytes.size())); }, NATIVE() {
@@ -314,8 +322,13 @@ void Bindings::defineUtils()
             std::copy(copy.begin(), copy.end(), into->bytes.begin() + static_cast<std::ptrdiff_t>(offset));
             return Val();
         }, 1)
-        .method("readObject", NATIVE() {
-            vm.throwError("flash.errors.IllegalOperationError", "Phoenix does not read AMF objects from a ByteArray yet.", 0);
+        .method("readObject", NATIVE(this) {
+            ByteArrayHost& b = bytes(vm, self);
+            const std::vector<uint8_t> copy = b.bytes;
+            size_t position = b.position;
+            const Val read = readAmf(*this, copy, position, b.objectEncoding != 0);
+            b.position = position;
+            return read;
         })
         .method("writeBoolean", NATIVE() {
             *put(bytes(vm, self), 1) = args[0].toBoolean() ? 1 : 0;
@@ -400,8 +413,14 @@ void Bindings::defineUtils()
                 std::memcpy(at, copy.data(), copy.size());
             return Val();
         }, 1)
-        .method("writeObject", NATIVE() {
-            vm.throwError("flash.errors.IllegalOperationError", "Phoenix does not write AMF objects to a ByteArray yet.", 0);
+        .method("writeObject", NATIVE(this) {
+            std::vector<uint8_t> written;
+            writeAmf(*this, written, args[0], bytes(vm, self).objectEncoding != 0);
+            ByteArrayHost& b = bytes(vm, self);
+            uint8_t* at = put(b, written.size());
+            if (!written.empty())
+                std::memcpy(at, written.data(), written.size());
+            return Val();
         }, 1)
         .method("compress", NATIVE() {
             ByteArrayHost& b = bytes(vm, self);

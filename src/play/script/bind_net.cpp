@@ -123,6 +123,26 @@ std::string encodeVariables(VM& vm, const Val& source)
 
 void Bindings::defineNet()
 {
+    // AMF: the formats, and the aliases classes are written with.
+    vm.defineNativeClass("flash.net.ObjectEncoding")
+        .constant("AMF0", number(0))
+        .constant("AMF3", number(3))
+        .constant("DEFAULT", number(3))
+        .define();
+    vm.defineFunction("flash.net.registerClassAlias", NATIVE(this) {
+        if (args[0].isNullish())
+            vm.throwError("TypeError", "Error #2007: Parameter aliasName must be non-null.", 2007);
+        if (!args[1].isClass())
+            vm.throwError("TypeError", "Error #2007: Parameter classObject must be non-null.", 2007);
+        classAliases[vm.toString(args[0])] = args[1]->cls;
+        return Val();
+    }, 2);
+    vm.defineFunction("flash.net.getClassByAlias", NATIVE(this) {
+        const std::string alias = vm.toString(args[0]);
+        if (std::shared_ptr<as3::ClassInfo> cls = classOfAlias(alias))
+            return vm.classValue(cls.get());
+        vm.throwError("ReferenceError", "Error #1014: Class " + alias + " could not be found.", 1014);
+    }, 1);
     const auto constants = [this](const char* name, std::initializer_list<std::pair<const char*, const char*>> values) {
         NativeClassBuilder builder = vm.defineNativeClass(name);
         for (const auto& [constant, value] : values)

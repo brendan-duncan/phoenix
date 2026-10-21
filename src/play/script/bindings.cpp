@@ -970,6 +970,22 @@ Val Bindings::newByteArray(std::vector<uint8_t> bytes)
     return instance("flash.utils.ByteArray", host);
 }
 
+std::string Bindings::aliasOf(const as3::ClassInfo* cls) const
+{
+    for (const auto& [alias, aliased] : classAliases)
+        if (aliased.get() == cls)
+            return alias;
+    return std::string();
+}
+
+std::shared_ptr<as3::ClassInfo> Bindings::classOfAlias(const std::string& alias) const
+{
+    if (alias.empty())
+        return nullptr;
+    const auto found = classAliases.find(alias);
+    return found == classAliases.end() ? nullptr : found->second;
+}
+
 std::vector<double> Bindings::numbers(const Val& array)
 {
     std::vector<double> out;
