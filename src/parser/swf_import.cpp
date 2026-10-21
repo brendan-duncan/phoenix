@@ -1434,16 +1434,32 @@ private:
                 return false;
         if (std::fabs(m[3]) > 1e-4 || std::fabs(m[8]) > 1e-4 || std::fabs(m[13]) > 1e-4)
             return false;
-        // Saturation and hue keep gray gray: each row's sum is the contrast.
+        // Saturation and hue keep gray gray: each row's sum is what contrast
+        // scales by, and the offset what it and brightness add.
         const double scale = m[0] + m[1] + m[2];
-        if (scale < 1e-3 || std::fabs(m[5] + m[6] + m[7] - scale) > 1e-3 ||
-            std::fabs(m[10] + m[11] + m[12] - scale) > 1e-3)
+        if (std::fabs(m[5] + m[6] + m[7] - scale) > 1e-3 || std::fabs(m[10] + m[11] + m[12] - scale) > 1e-3 ||
+            std::fabs(m[9] - m[4]) > 1e-2 || std::fabs(m[14] - m[4]) > 1e-2)
             return false;
-        contrast = (scale - 1.0) * 100.0;
-        brightness = (m[4] - 128.0 * (1.0 - scale)) / 2.55;
-        if (contrast < -100.0 - 1e-3 || contrast > 100.0 + 1e-3 || brightness < -100.0 - 1e-3 ||
-            brightness > 100.0 + 1e-3)
+        // The contrast that scales so (whole numbers, as the panel sets it),
+        // and the brightness that, scaled, leaves this offset.
+        double bestScale = 1e9;
+        contrast = 0.0;
+        for (int c = -100; c <= 100; ++c)
+        {
+            const double each = fla::display::BitmapFilter::adjustColor(0.0, c, 0.0, 0.0).matrix[0];
+            if (std::fabs(each - scale) < std::fabs(bestScale - scale))
+            {
+                bestScale = each;
+                contrast = c;
+            }
+        }
+        if (std::fabs(bestScale - scale) > 1e-3 || bestScale < 1e-6)
             return false;
+        const double offset = fla::display::BitmapFilter::adjustColor(0.0, contrast, 0.0, 0.0).matrix[4];
+        brightness = (m[4] - offset) / bestScale;
+        if (brightness < -100.0 - 1e-2 || brightness > 100.0 + 1e-2)
+            return false;
+        brightness = std::round(brightness * 100.0) / 100.0;
         const auto error = [&](double s, double h) {
             const std::vector<double> made =
                 fla::display::BitmapFilter::adjustColor(brightness, contrast, s, h).matrix;

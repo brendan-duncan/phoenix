@@ -1,6 +1,7 @@
 #include "bitmap_filter.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 
 namespace fla {
@@ -98,34 +99,69 @@ BitmapFilter BitmapFilter::colorMatrix(const std::vector<double>& matrix)
 
 BitmapFilter BitmapFilter::adjustColor(double brightness, double contrast, double saturation, double hue)
 {
-    const double b = limit(brightness, -100.0, 100.0) * 2.55;
-    const double c = 1.0 + limit(contrast, -100.0, 100.0) / 100.0;
-    const double s = 1.0 + limit(saturation, -100.0, 100.0) / 100.0;
-    const double h = limit(hue, -180.0, 180.0) * kPi / 180.0;
-    // Saturation about the luminance axis, then the hue turned about it,
-    // then contrast about the middle gray and the brightness added.
-    constexpr double lum[3] = {0.3086, 0.6094, 0.0820};
-    double sat[3][3];
+    // As Animate makes it (fl.motion.AdjustColor): brightness added, then
+    // contrast about the middle by its table, saturation about luminance,
+    // then the hue turned; each a 5 by 5 matrix, applied in that order.
+    static constexpr double kContrast[101] = {0, 0.01, 0.02, 0.04, 0.05, 0.06, 0.07, 0.08, 0.1, 0.11, 0.12, 0.14,
+        0.15, 0.16, 0.17, 0.18, 0.20, 0.21, 0.22, 0.24, 0.25, 0.27, 0.28, 0.30, 0.32, 0.34, 0.36, 0.38, 0.40, 0.42,
+        0.44, 0.46, 0.48, 0.5, 0.53, 0.56, 0.59, 0.62, 0.65, 0.68, 0.71, 0.74, 0.77, 0.80, 0.83, 0.86, 0.89, 0.92,
+        0.95, 0.98, 1.0, 1.06, 1.12, 1.18, 1.24, 1.30, 1.36, 1.42, 1.48, 1.54, 1.60, 1.66, 1.72, 1.78, 1.84, 1.90,
+        1.96, 2.0, 2.12, 2.25, 2.37, 2.50, 2.62, 2.75, 2.87, 3.0, 3.2, 3.4, 3.6, 3.8, 4.0, 4.3, 4.7, 4.9, 5.0, 5.5,
+        6.0, 6.5, 6.8, 7.0, 7.3, 7.5, 7.8, 8.0, 8.4, 8.7, 9.0, 9.4, 9.6, 9.8, 10.0};
+    using M = std::array<std::array<double, 5>, 5>;
+    const auto identity = []() {
+        M m{};
+        for (int i = 0; i < 5; ++i)
+            m[i][i] = 1.0;
+        return m;
+    };
+    const auto times = [](const M& a, const M& b) {
+        M out{};
+        for (int i = 0; i < 5; ++i)
+            for (int j = 0; j < 5; ++j)
+                for (int k = 0; k < 5; ++k)
+                    out[i][j] += a[i][k] * b[k][j];
+        return out;
+    };
+    const double b = limit(brightness, -100.0, 100.0);
+    const double c = limit(contrast, -100.0, 100.0);
+    const double s = limit(saturation, -100.0, 100.0);
+    const double h = limit(hue, -180.0, 180.0);
+
+    M lift = identity();
     for (int r = 0; r < 3; ++r)
-        for (int k = 0; k < 3; ++k)
-            sat[r][k] = lum[k] * (1.0 - s) + (r == k ? s : 0.0);
-    const double cosH = std::cos(h);
-    const double sinH = std::sin(h);
-    const double w = 1.0 / 3.0;
-    const double s3 = std::sqrt(1.0 / 3.0);
-    double turn[3][3];
-    for (int r = 0; r < 3; ++r)
-        for (int k = 0; k < 3; ++k)
-            turn[r][k] = w + cosH * ((r == k ? 1.0 : 0.0) - w) +
-                sinH * s3 * (((k - r + 3) % 3 == 1) ? 1.0 : ((k - r + 3) % 3 == 2) ? -1.0 : 0.0);
-    std::vector<double> m(20, 0.0);
+        lift[r][4] = b;
+    // The table is read at whole numbers, as Animate reads it.
+    const double spread = c > 0.0 ? kContrast[static_cast<int>(c)] * 127.0 + 127.0 : c / 100.0 * 127.0 + 127.0;
+    M stretch = identity();
     for (int r = 0; r < 3; ++r)
     {
-        for (int k = 0; k < 3; ++k)
-            m[r * 5 + k] = c * (turn[r][0] * sat[0][k] + turn[r][1] * sat[1][k] + turn[r][2] * sat[2][k]);
-        m[r * 5 + 4] = 128.0 * (1.0 - c) + b;
+        stretch[r][r] = spread / 127.0;
+        stretch[r][4] = 0.5 * (127.0 - spread);
     }
-    m[18] = 1.0;
+    const double vivid = s > 0.0 ? 1.0 + 3.0 * s / 100.0 : s / 100.0 + 1.0;
+    constexpr double lum[3] = {0.3086, 0.6094, 0.0820};
+    M saturate = identity();
+    for (int r = 0; r < 3; ++r)
+        for (int k = 0; k < 3; ++k)
+            saturate[r][k] = (1.0 - vivid) * lum[k] + (r == k ? vivid : 0.0);
+    M turn = identity();
+    if (h != 0.0)
+    {
+        const double cosH = std::cos(h * kPi / 180.0), sinH = std::sin(h * kPi / 180.0);
+        constexpr double lr = 0.213, lg = 0.715, lb = 0.072;
+        const double cosBase[3][3] = {{1 - lr, -lg, -lb}, {-lr, 1 - lg, -lb}, {-lr, -lg, 1 - lb}};
+        const double sinBase[3][3] = {{-lr, -lg, 1 - lb}, {0.143, 0.140, -0.283}, {-(1 - lr), lg, lb}};
+        const double base[3] = {lr, lg, lb};
+        for (int r = 0; r < 3; ++r)
+            for (int k = 0; k < 3; ++k)
+                turn[r][k] = base[k] + cosBase[r][k] * cosH + sinBase[r][k] * sinH;
+    }
+    const M made = times(turn, times(saturate, times(stretch, lift)));
+    std::vector<double> m(20, 0.0);
+    for (int r = 0; r < 4; ++r)
+        for (int k = 0; k < 5; ++k)
+            m[static_cast<size_t>(r * 5 + k)] = made[r][k];
     return colorMatrix(m);
 }
 

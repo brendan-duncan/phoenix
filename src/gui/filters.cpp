@@ -352,33 +352,10 @@ QImage gradientBevel(const QImage& image, const fla::Filter& filter, double scal
 /// straight RGB, the way Flash's Adjust Color builds its color matrix.
 QImage adjustColor(const QImage& image, const fla::Filter& filter)
 {
-    const double brightness = std::max(-100.0, std::min(100.0, filter.brightness)) * 2.55;
-    const double contrast = 1.0 + std::max(-100.0, std::min(100.0, filter.contrast)) / 100.0;
-    const double saturation = 1.0 + std::max(-100.0, std::min(100.0, filter.saturation)) / 100.0;
-    const double hue = std::max(-180.0, std::min(180.0, filter.hue)) * kPi / 180.0;
-
-    // Saturation about the luminance axis, then the hue turned about it.
-    constexpr double lr = 0.3086;
-    constexpr double lg = 0.6094;
-    constexpr double lb = 0.0820;
-    double m[3][3];
-    for (int r = 0; r < 3; ++r)
-        for (int c = 0; c < 3; ++c)
-            m[r][c] = (c == 0 ? lr : c == 1 ? lg : lb) * (1.0 - saturation) + (r == c ? saturation : 0.0);
-
-    const double cosH = std::cos(hue);
-    const double sinH = std::sin(hue);
-    const double w = 1.0 / 3.0;
-    const double s3 = std::sqrt(1.0 / 3.0);
-    double h[3][3];
-    for (int r = 0; r < 3; ++r)
-        for (int c = 0; c < 3; ++c)
-            h[r][c] = w + cosH * ((r == c ? 1.0 : 0.0) - w) + sinH * s3 * (((c - r + 3) % 3 == 1) ? 1.0 : ((c - r + 3) % 3 == 2) ? -1.0 : 0.0);
-
-    double full[3][3];
-    for (int r = 0; r < 3; ++r)
-        for (int c = 0; c < 3; ++c)
-            full[r][c] = h[r][0] * m[0][c] + h[r][1] * m[1][c] + h[r][2] * m[2][c];
+    // The matrix Animate makes of the four (fl.motion.AdjustColor), as the
+    // movie it publishes has it.
+    const std::vector<double> m =
+        fla::display::BitmapFilter::adjustColor(filter.brightness, filter.contrast, filter.saturation, filter.hue).matrix;
 
     QImage out(image.size(), QImage::Format_ARGB32_Premultiplied);
     uchar* const outRows = out.bits();
@@ -396,8 +373,8 @@ QImage adjustColor(const QImage& image, const fla::Filter& filter)
             int result[3];
             for (int r = 0; r < 3; ++r)
             {
-                double v = full[r][0] * rgb[0] + full[r][1] * rgb[1] + full[r][2] * rgb[2];
-                v = (v - 128.0) * contrast + 128.0 + brightness;
+                const double* row = &m[static_cast<size_t>(r * 5)];
+                const double v = row[0] * rgb[0] + row[1] * rgb[1] + row[2] * rgb[2] + row[3] * qAlpha(straight) + row[4];
                 result[r] = std::max(0, std::min(255, static_cast<int>(v + 0.5)));
             }
             line[x] = qPremultiply(qRgba(result[0], result[1], result[2], qAlpha(straight)));

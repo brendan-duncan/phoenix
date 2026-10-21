@@ -17,6 +17,7 @@
 #include "../data/symbol_instance.h"
 #include "../data/symbol_list.h"
 #include "../data/timeline.h"
+#include "../play/display/bitmap_filter.h"
 #include "../play/script/class_path.h"
 #include "camera.h"
 #include "motion_object.h"
@@ -580,35 +581,12 @@ std::vector<swf::Filter> filters(const std::vector<Filter>& list)
             break;
         case Filter::Type::AdjustColor:
         {
-            // As Phoenix adjusts color: saturation about the luminance axis,
-            // the hue turned about the gray axis, then contrast about the
-            // middle and the brightness added.
+            // The matrix Animate publishes for it (fl.motion.AdjustColor).
             s.type = swf::Filter::Type::ColorMatrix;
-            const double brightness = std::clamp(f.brightness, -100.0, 100.0) * 2.55;
-            const double contrast = 1.0 + std::clamp(f.contrast, -100.0, 100.0) / 100.0;
-            const double saturation = 1.0 + std::clamp(f.saturation, -100.0, 100.0) / 100.0;
-            const double hue = std::clamp(f.hue, -180.0, 180.0) * kPi / 180.0;
-            constexpr double luminance[3] = {0.3086, 0.6094, 0.0820};
-            double m[3][3], h[3][3];
-            for (int r = 0; r < 3; ++r)
-                for (int c = 0; c < 3; ++c)
-                    m[r][c] = luminance[c] * (1.0 - saturation) + (r == c ? saturation : 0.0);
-            const double cosH = std::cos(hue), sinH = std::sin(hue);
-            const double w = 1.0 / 3.0, s3 = std::sqrt(1.0 / 3.0);
-            for (int r = 0; r < 3; ++r)
-                for (int c = 0; c < 3; ++c)
-                    h[r][c] = w + cosH * ((r == c ? 1.0 : 0.0) - w) +
-                        sinH * s3 * (((c - r + 3) % 3 == 1) ? 1.0 : ((c - r + 3) % 3 == 2) ? -1.0 : 0.0);
-            for (int r = 0; r < 3; ++r)
-            {
-                for (int c = 0; c < 3; ++c)
-                    s.matrix[r * 5 + c] =
-                        static_cast<float>(contrast * (h[r][0] * m[0][c] + h[r][1] * m[1][c] + h[r][2] * m[2][c]));
-                s.matrix[r * 5 + 3] = 0.0f;
-                s.matrix[r * 5 + 4] = static_cast<float>(128.0 * (1.0 - contrast) + brightness);
-            }
-            for (int c = 0; c < 5; ++c)
-                s.matrix[15 + c] = c == 3 ? 1.0f : 0.0f;
+            const std::vector<double> m =
+                display::BitmapFilter::adjustColor(f.brightness, f.contrast, f.saturation, f.hue).matrix;
+            for (size_t k = 0; k < 20 && k < m.size(); ++k)
+                s.matrix[k] = static_cast<float>(m[k]);
             break;
         }
         case Filter::Type::ColorMatrix:

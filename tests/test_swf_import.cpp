@@ -14,11 +14,13 @@
 #include "../src/data/timeline.h"
 #include "../src/edit/swf_movie.h"
 #include "../src/parser/document_parser.h"
+#include "../src/play/display/bitmap_filter.h"
 #include "../src/parser/swf_import.h"
 #include "../src/parser/zip_reader.h"
 #include "../src/util/swf_sound.h"
 #include "../src/util/swf_writer.h"
 
+#include <algorithm>
 #include <cmath>
 #include <functional>
 #include <map>
@@ -330,6 +332,59 @@ TEST(swf_import_keeps_color_matrix_and_convolution_filters)
     CHECK(convolution.type == fla::Filter::Type::Convolution && convolution.matrixX == 3 && convolution.matrixY == 3);
     CHECK(convolution.matrix.size() == 9 && convolution.matrix[4] == 5.0 && convolution.bias == 4.0);
     CHECK(!convolution.preserveAlpha && convolution.clamp);
+}
+
+TEST(swf_import_reads_animates_adjust_color_matrix_back)
+{
+    // What Animate published for Adjust Color with brightness -76, contrast
+    // 25, saturation -46 and hue 122 (Ruffle's visual/filters/color_matrix).
+    const float animate[20] = {-0.08813f, 0.72842f, 0.69972f, 0.0f, -123.43f, 0.51377f, 0.86964f, -0.04341f, 0.0f,
+        -123.42999f, -0.05692f, 1.60593f, -0.20901f, 0.0f, -123.42998f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f};
+    // Phoenix makes the same matrix of them.
+    const std::vector<double> made = fla::display::BitmapFilter::adjustColor(-76, 25, -46, 122).matrix;
+    double worst = 0.0;
+    for (int k = 0; k < 20; ++k)
+        worst = std::max(worst, std::fabs(made[static_cast<size_t>(k)] - animate[k]));
+    CHECK(worst < 1e-3);
+
+    // And imports it as that Adjust Color.
+    swf::Writer writer(100, 100, 24.0, {255, 255, 255, 255});
+    swf::Fill red;
+    red.color = {255, 0, 0, 255};
+    swf::Sprite inner;
+    inner.place(writer.defineShape(red, square(10)), 1);
+    inner.showFrame();
+    const int clip = writer.defineSprite(inner);
+    swf::Filter filter;
+    filter.type = swf::Filter::Type::ColorMatrix;
+    std::copy(animate, animate + 20, filter.matrix);
+    swf::Placement placement;
+    placement.character = clip;
+    placement.hasFilters = true;
+    placement.filters = {filter};
+    swf::Sprite outer;
+    outer.place(placement);
+    outer.showFrame();
+    writer.place(writer.defineSprite(outer), 1);
+    writer.showFrame();
+    std::map<std::string, std::vector<uint8_t>> files;
+    std::string error;
+    CHECK(SwfImport::convert(writer.finish(false), files, error));
+    Parsed parsed = parse(files);
+    const fla::Filter* back = nullptr;
+    if (parsed.document && parsed.document->symbolList)
+        for (const fla::Symbol* symbol : parsed.document->symbolList->symbols)
+            for (const fla::Timeline* timeline : symbol->timelines)
+                for (const fla::Layer* layer : timeline->layers)
+                    for (const fla::Frame* frame : layer->frames)
+                        for (const fla::Element* element : frame->elements)
+                            if (const auto* instance = dynamic_cast<const fla::SymbolInstance*>(element))
+                                if (!instance->filters.empty())
+                                    back = &instance->filters[0];
+    CHECK(back && back->type == fla::Filter::Type::AdjustColor);
+    if (back)
+        CHECK(std::fabs(back->brightness + 76) < 0.05 && back->contrast == 25 && back->saturation == -46 &&
+            back->hue == 122);
 }
 
 TEST(swf_import_keeps_bitmaps_and_the_soundtrack)

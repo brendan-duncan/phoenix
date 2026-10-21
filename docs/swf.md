@@ -275,9 +275,10 @@ non-normal blend or bitmap caching; otherwise `PlaceObject2` (26).
 - `filters()` maps enabled filters: drop shadow, blur, glow, bevel, gradient
   glow, gradient bevel directly (angle to radians, quality to passes 1 to 3,
   bevel type to inner/onTop); Adjust Color becomes a 4x5 color matrix built
-  the way Phoenix adjusts color (saturation about luminance weights 0.3086,
-  0.6094, 0.0820, hue rotation about the gray axis, contrast about 128, then
-  brightness). Phoenix's own Color Matrix and Convolution filters are written
+  as Animate builds it (fl.motion.AdjustColor: brightness, contrast by its
+  table, saturation about luminance 0.3086, 0.6094, 0.0820, then hue;
+  `display::BitmapFilter::adjustColor`, which the stage and Test Movie draw
+  with too). Phoenix's own Color Matrix and Convolution filters are written
   as SWF's color matrix (6) and convolution (5) filters.
 - `blendMode()` maps the file's names (`normal`, `layer`, `multiply`, ...,
   `hardlight`) to SWF numbers 1 to 14.
@@ -687,7 +688,7 @@ DefineBitsJPEG2) go through the decoder `main.cpp` installs with
 
 Filters come back as the FLA has them. A color matrix becomes Adjust Color
 when some brightness, contrast, saturation and hue make that matrix as
-Phoenix draws Adjust Color (`adjustColorOf`, fitted once per matrix);
+Animate does (`adjustColorOf`, fitted once per matrix);
 otherwise it, and a convolution, become Phoenix's own Color Matrix and
 Convolution filters, which an FLA keeps as `phoenixColorMatrix` on an
 `AdjustColorFilter` and `phoenixConvolution` (with `phoenixMatrixX`,
