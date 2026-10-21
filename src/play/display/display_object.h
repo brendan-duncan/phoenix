@@ -249,6 +249,13 @@ public:
 
     /// Set for one its parent's timeline placed.
     std::optional<TimelinePlacement> timeline;
+    /// ActionScript 2: the depth a script gave it (attachMovie, swapDepths),
+    /// from -16384 up; none while its timeline place is its depth.
+    std::optional<int> scriptDepth;
+    /// Its depth as ActionScript 2 numbers them: the one a script gave it,
+    /// else its timeline place less 16384; none for one ActionScript 3
+    /// added.
+    std::optional<int> depthNumber() const;
     /// The timeline clip behind a MovieClip or SimpleButton that a
     /// timeline placed or the runtime made from a library symbol; null for
     /// one made in script with no symbol.
@@ -340,6 +347,11 @@ public:
     /// A timeline puts \a child in by its depth (child->timeline): over the
     /// timeline children below it, under the first above it, else on top.
     void placeTimelineChild(const std::shared_ptr<DisplayObject>& child);
+    /// ActionScript 2 puts \a child in at \a depth (its scriptDepth): over
+    /// the children deeper down, under the first above.
+    void placeAtDepth(const std::shared_ptr<DisplayObject>& child, int depth);
+    /// The child at ActionScript 2's \a depth, or null.
+    DisplayObject* childAtDepth(int depth) const;
     /// A timeline takes \a child off (removed events and all).
     void removeTimelineChild(DisplayObject* child);
     /// The timeline child placed for \a element on the frame now, or null.

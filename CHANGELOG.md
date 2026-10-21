@@ -24,6 +24,8 @@ What changed in each release of Phoenix, newest first.
 - ActionScript 1 and 2 have LoadVars (load, send, sendAndLoad, decode, toString); escape in ActionScript 1 and 2 encodes every character but letters and digits, and a property's getter that reads itself gets undefined, as SWF movies have them
 - In a movie's compiled ActionScript 3, a name in more than one private namespace (a class's and its file's) is found in any of them, such as a helper class written after a package in the same file
 - Test Movie says when a document class does not extend Sprite (the main timeline cannot be one), as SWF movies do
+- ActionScript 2's movie clips have depths: getDepth, swapDepths, getNextHighestDepth and getInstanceAtDepth, and attachMovie, createEmptyMovieClip, duplicateMovieClip and attachBitmap put a clip at the depth given, in place of what was there; removeMovieClip takes off only what is at a script's depth; an imported SWF keeps each layer's depth, and clips placed without a name are named instance1, instance2... as SWF movies name them
+- ActionScript 2 has the drawing API (lineStyle, beginFill, beginGradientFill, beginBitmapFill, moveTo, lineTo, curveTo, endFill, clear), localToGlobal, globalToLocal, getBounds and getRect worked out to the twip as SWF movies do, setMask, getSWFVersion, and a movie clip's blendMode, cacheAsBitmap, opaqueBackground and scrollRect
 
 ## 0.23.0
 

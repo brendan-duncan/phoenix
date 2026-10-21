@@ -954,6 +954,8 @@ int play(const QStringList& args)
         // What the web has sent comes in between frames.
         QCoreApplication::processEvents();
     }
+    // What the last frame loaded is told of, as it would be before the next.
+    movie.deliverLoads();
     std::printf("after %d frames: scene %d of %d, frame %d, %s\n", frames, movie.scene() + 1, movie.sceneCount(),
         movie.root().frame + 1, movie.root().playing ? "playing" : "stopped");
     if (args.contains("--tree"))

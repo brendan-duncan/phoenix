@@ -365,8 +365,8 @@ bool keyPressMatches(const std::string& named, int code, int character)
     return named.size() == 1 && character != 0 && static_cast<unsigned char>(named[0]) == character;
 }
 
-/// What createEmptyMovieClip makes a clip of: a movie clip of one empty
-/// frame.
+} // namespace
+
 const Symbol& emptySymbol()
 {
     static const std::unique_ptr<Symbol> symbol = []() {
@@ -381,8 +381,6 @@ const Symbol& emptySymbol()
     }();
     return *symbol;
 }
-
-} // namespace
 
 bool Clip::listensFor(const std::string& type) const
 {
@@ -731,6 +729,7 @@ void MovieRuntime::start()
     _offStage.clear();
     _gone.clear();
     _madeCount = 0;
+    _instanceCount = 0;
     _started = std::chrono::steady_clock::now();
     _pointerOver.reset();
     _pointerPressed.reset();
@@ -1511,7 +1510,8 @@ const Symbol* MovieRuntime::linked(const std::string& linkage) const
     return nullptr;
 }
 
-Clip* MovieRuntime::makeClip(Clip* parent, const Symbol& symbol, const std::string& name)
+Clip* MovieRuntime::makeClip(Clip* parent, const Symbol& symbol, const std::string& name, std::optional<int> depth,
+    const std::function<void(Clip&)>& beforeClass)
 {
     auto instance = std::make_shared<SymbolInstance>(nullptr);
     instance->symbol = const_cast<Symbol*>(&symbol);
@@ -1531,15 +1531,25 @@ Clip* MovieRuntime::makeClip(Clip* parent, const Symbol& symbol, const std::stri
     made->length = lengthOf(made->timeline);
     attachDisplay(*made);
     Clip* clip = made.get();
+    if (parent && depth)
+        clearDepth(*parent, *depth);
     if (parent)
     {
         parent->children.push_back(std::move(made));
         if (parent->display && parent->display->isContainer())
-            static_cast<display::DisplayObjectContainer*>(parent->display.get())->addChild(clip->display);
+        {
+            auto* container = static_cast<display::DisplayObjectContainer*>(parent->display.get());
+            if (depth)
+                container->placeAtDepth(clip->display, *depth);
+            else
+                container->addChild(clip->display);
+        }
     }
     else
         _offStage.push_back(std::move(made));
     _madeToEnter.push_back(clip);
+    if (beforeClass)
+        beforeClass(*clip);
     // A clip attachMovie or duplicateMovieClip made is of its symbol's
     // class at once.
     if (!_as3)
@@ -1547,6 +1557,61 @@ Clip* MovieRuntime::makeClip(Clip* parent, const Symbol& symbol, const std::stri
     if (changed)
         changed();
     return clip;
+}
+
+Clip* MovieRuntime::duplicateClip(Clip& clip, const std::string& name, int depth,
+    const std::function<void(Clip&)>& beforeClass)
+{
+    // Depths from -16384 up to 2^31 less 16777220 (as the player counts
+    // them, from 0).
+    constexpr int64_t kMostDepth = 2130706428;
+    if (clip.gone || !clip.symbol || !clip.parent || depth < -16384 || int64_t(depth) + 16384 > kMostDepth)
+        return nullptr;
+    // Where and how it shows, its drawing and its handlers go with it.
+    const Transform placed = clip.placedTransform();
+    const std::shared_ptr<display::DisplayObject> from = clip.display;
+    const std::map<std::string, as3::ValuePtr> handlers = clip.clipEvents;
+    Clip* made = makeClip(clip.parent, *clip.symbol, name, depth, [&](Clip& copy) {
+        copy.made->transform = placed;
+        copy.clipEvents = handlers;
+        if (copy.display && from)
+        {
+            copy.display->setPlacedMatrix(toMatrix(placed));
+            if (from->transformScripted())
+                copy.display->setMatrix(from->matrix());
+            copy.display->setPlacedColorTransform(from->colorTransform());
+            if (from->alphaScripted())
+                copy.display->setAlpha(from->alpha());
+            copy.display->setVisible(from->visible());
+            const auto* drawn = dynamic_cast<const display::Sprite*>(from.get());
+            if (auto* drawing = dynamic_cast<display::Sprite*>(copy.display.get()); drawing && drawn)
+                drawing->graphics.copyFrom(drawn->graphics);
+        }
+        if (beforeClass)
+            beforeClass(copy);
+    });
+    return made;
+}
+
+void MovieRuntime::removeClip(Clip& clip)
+{
+    if (clip.parent && !clip.made)
+        clip.parent->scriptRemoved.insert(clip.key);
+    takeOff(clip, false);
+}
+
+void MovieRuntime::clearDepth(Clip& parent, int depth)
+{
+    if (!parent.display || !parent.display->isContainer())
+        return;
+    auto* container = static_cast<display::DisplayObjectContainer*>(parent.display.get());
+    display::DisplayObject* there = container->childAtDepth(depth);
+    if (!there)
+        return;
+    if (there->clip && there->clip->parent == &parent)
+        removeClip(*there->clip);
+    else
+        container->removeChild(there);
 }
 
 void MovieRuntime::takeOff(Clip& clip, bool keep)
@@ -2131,6 +2196,8 @@ void MovieRuntime::syncChildren(Clip& clip, std::vector<Clip*>& entered)
     if (!_as3 && !_canvas)
         runInitActions(clip);
     std::vector<std::unique_ptr<Clip>> kept;
+    // What a script took off that the frame still places.
+    std::set<std::string> placing;
     for (const Layer* layer : clip.timeline->layers)
     {
         if (!layer || !playing(*clip.timeline, *layer))
@@ -2144,6 +2211,11 @@ void MovieRuntime::syncChildren(Clip& clip, std::vector<Clip*>& entered)
             if (!instance || !instance->symbol || instance->symbolType == SymbolType::Graphic)
                 continue;
             const std::string key = keyOf(*clip.timeline, *layer, *frame, *instance, element);
+            if (clip.scriptRemoved.count(key))
+            {
+                placing.insert(key);
+                continue;
+            }
             // Already about, from the frame before: it goes on as it was.
             auto found = std::find_if(clip.children.begin(), clip.children.end(),
                 [&key](const std::unique_ptr<Clip>& c) { return c && c->key == key; });
@@ -2174,6 +2246,9 @@ void MovieRuntime::syncChildren(Clip& clip, std::vector<Clip*>& entered)
             made->layer = layer;
             made->placed = instance;
             made->name = instance->name;
+            // ActionScript 2 names what has no name of its own.
+            if (made->name.empty() && !_as3 && !_canvas)
+                made->name = "instance" + std::to_string(++_instanceCount);
             made->key = key;
             made->button = instance->symbolType == SymbolType::Button;
             made->playing = !made->button;
@@ -2210,6 +2285,9 @@ void MovieRuntime::syncChildren(Clip& clip, std::vector<Clip*>& entered)
         }
     }
     clip.children = std::move(kept);
+    // Once the frames stop placing it, a timeline may place it again.
+    for (auto at = clip.scriptRemoved.begin(); at != clip.scriptRemoved.end();)
+        at = placing.count(*at) ? std::next(at) : clip.scriptRemoved.erase(at);
     syncDisplay(clip);
     // Each where and as its timeline has it now, a tween's in-between too.
     if (placedNow)
@@ -2369,12 +2447,16 @@ void MovieRuntime::syncDisplay(Clip& clip)
         const Frame* frame = frames[li];
         if (!layer || !frame)
             continue;
+        // A movie's layer keeps the depth it had there.
+        const int movieDepth = swfDepthOf(*layer);
         for (size_t ei = 0; ei < frame->elements.size(); ++ei)
         {
             const Element* element = frame->elements[ei];
             if (!element)
                 continue;
             ++depth;
+            if (movieDepth > 0)
+                depth = movieDepth;
             std::shared_ptr<display::DisplayObject> object;
             std::string key;
             const SymbolInstance* instance = instanceOf(element);
@@ -2446,6 +2528,19 @@ void MovieRuntime::syncDisplay(Clip& clip)
     // The variables the clip's class declares for its instances.
     if (_as3 && clip.object)
         _bindings->declareInstances(clip);
+}
+
+int swfDepthOf(const Layer& layer)
+{
+    for (const std::string& xml : layer.extraChildren)
+    {
+        const size_t at = xml.find("<SwfDepth");
+        if (at == std::string::npos)
+            continue;
+        const size_t value = xml.find("depth=\"", at);
+        return value == std::string::npos ? 0 : std::atoi(xml.c_str() + value + 7);
+    }
+    return 0;
 }
 
 const SymbolInstance* MovieRuntime::instanceOf(const Element* element) const
@@ -2827,6 +2922,15 @@ void MovieRuntime::advance(Clip& clip, std::vector<Clip*>& entered, std::vector<
     for (Clip* child : now)
         if (!child->gone && child->parent == &clip)
             advance(*child, entered, scripts);
+}
+
+void MovieRuntime::deliverLoads()
+{
+    if (_as3 && _bindings)
+        _bindings->runPosted();
+    else if (_actions)
+        _actions->frameStarted();
+    settle();
 }
 
 void MovieRuntime::afterEvents()
@@ -3356,10 +3460,11 @@ Clip* MovieRuntime::resolve(Clip& from, const std::string& target)
         at = _root.get();
         path = path.substr(1);
     }
-    std::replace(path.begin(), path.end(), '/', '.');
+    // A slash path's parts are between slashes ("../hat"), a dot path's
+    // between dots.
     std::stringstream parts(path);
     std::string part;
-    while (std::getline(parts, part, '.'))
+    while (std::getline(parts, part, target.find('/') != std::string::npos ? '/' : '.'))
     {
         if (part.empty())
             continue;
@@ -3390,6 +3495,15 @@ bool laterLanguageName(const std::string& name)
     return names.count(name) > 0;
 }
 
+/// The methods a movie's compiled ActionScript 1 and 2 find on
+/// MovieClip.prototype (the library's) rather than on the clip.
+bool prototypeMethod(const std::string& name)
+{
+    static const std::set<std::string> names = {"attachMovie", "createEmptyMovieClip", "duplicateMovieClip",
+        "removeMovieClip"};
+    return names.count(name) > 0;
+}
+
 } // namespace
 
 as3::ValuePtr MovieRuntime::property(Clip& clip, const std::string& name)
@@ -3397,7 +3511,7 @@ as3::ValuePtr MovieRuntime::property(Clip& clip, const std::string& name)
     using as3::Value;
     // In a movie's compiled ActionScript 1 and 2 actions, as the player
     // has them; Phoenix's own scripts may use either.
-    if (_actions && !_as3 && laterLanguageName(name))
+    if (_actions && !_as3 && (laterLanguageName(name) || prototypeMethod(name)))
         return nullptr;
     const Transform shown = clip.transform(clip.placedTransform());
     if (name == "_x")

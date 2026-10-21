@@ -4012,6 +4012,10 @@ private:
             if (rolesOf[depth].size() > 1 && role != kPlain)
                 name += role == kMask ? " Mask" : " Masked";
             tinyxml2::XMLElement* layer = layerElement(doc, name, colorIndex++);
+            // Its depth in the movie, for scripts that ask (getDepth).
+            tinyxml2::XMLElement* movieDepth = doc.NewElement("SwfDepth");
+            movieDepth->SetAttribute("depth", depth);
+            layer->InsertEndChild(movieDepth);
             if (role == kMask)
             {
                 layer->SetAttribute("layerType", "mask");

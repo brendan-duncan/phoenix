@@ -300,6 +300,8 @@ public:
     /// A frame starts: the clock moves on, timers due fire, loads finished
     /// are told of.
     void frameStarted();
+    /// What waits for the frame to start (loads finished), done now.
+    void runPosted();
     /// The time timers are run to as a frame starts.
     double timerTime();
     /// Runs \a task at the start of the next frame.

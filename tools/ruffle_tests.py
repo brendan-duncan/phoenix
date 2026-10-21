@@ -68,7 +68,9 @@ def skip_reason(config, folder):
 
 
 def play(phoenix, swf, frames, image, timeout, env):
-    command = [phoenix, "play", swf, "--frames", str(frames)]
+    # The first frame plays as the movie starts; --frames counts the ones
+    # stepped after it.
+    command = [phoenix, "play", swf, "--frames", str(max(0, frames - 1))]
     if image:
         command += ["--image", image]
     try:

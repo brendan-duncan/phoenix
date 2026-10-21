@@ -301,20 +301,16 @@ public:
         _runtime.runFrameActions(*clip, index);
     }
 
+    // CloneSprite's depth counts from 0, the methods' from -16384.
     void cloneSprite(const as3::Val& value, const std::string& name, int depth) override
     {
-        Clip* clip = clipOf(value);
-        if (!clip)
-            return;
-        const as3::ValuePtr duplicate = _runtime.property(*clip, "duplicateMovieClip");
-        if (duplicate && duplicate->nativeFunc)
-            duplicate->nativeFunc({as3::Value::makeString(name), as3::Value::makeNumber(depth)});
+        if (Clip* clip = clipOf(value))
+            _runtime.duplicateClip(*clip, name, static_cast<int>(int64_t(depth) - 16384));
     }
     void removeSprite(const as3::Val& value) override
     {
-        Clip* clip = clipOf(value);
-        if (clip && clip->made)
-            _runtime.takeOff(*clip, false);
+        if (Clip* clip = clipOf(value); clip && _runtime._actions)
+            _runtime._actions->removeIfScripted(*clip);
     }
     void startDrag(const as3::Val& value, bool lockCenter, bool constrain, double left, double top, double right,
         double bottom) override
@@ -557,6 +553,7 @@ as3::Val ActionsPlayer::natives()
         return numbers({box.x, box.y, box.width, box.height});
     });
     natives->properties["bitmap"] = bitmapNatives();
+    natives->properties["clip"] = clipNatives();
     const as3::Val filters = filterNatives();
     for (const auto& [name, function] : filters->properties)
         natives->properties[name] = function;

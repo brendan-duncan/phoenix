@@ -830,16 +830,44 @@ std::vector<std::shared_ptr<DisplayObject>> DisplayObjectContainer::getObjectsUn
     return under;
 }
 
+std::optional<int> DisplayObject::depthNumber() const
+{
+    if (scriptDepth)
+        return scriptDepth;
+    if (timeline)
+        return timeline->depth - 16384;
+    return std::nullopt;
+}
+
 void DisplayObjectContainer::placeTimelineChild(const std::shared_ptr<DisplayObject>& child)
 {
     if (!child || !child->timeline)
         return;
-    const int depth = child->timeline->depth;
+    placeAtDepth(child, child->depthNumber().value_or(0));
+}
+
+DisplayObject* DisplayObjectContainer::childAtDepth(int depth) const
+{
+    for (const std::shared_ptr<DisplayObject>& child : _children)
+        if (child && child->depthNumber() == depth)
+            return child.get();
+    return nullptr;
+}
+
+void DisplayObjectContainer::placeAtDepth(const std::shared_ptr<DisplayObject>& child, int depth)
+{
+    if (!child)
+        return;
+    if (!child->timeline || child->timeline->depth - 16384 != depth)
+        child->scriptDepth = depth;
+    else
+        child->scriptDepth.reset();
     int at = numChildren();
     for (size_t i = 0; i < _children.size(); ++i)
     {
         const DisplayObject* other = _children[i].get();
-        if (other && other != child.get() && other->timeline && other->timeline->depth > depth)
+        const std::optional<int> otherDepth = other && other != child.get() ? other->depthNumber() : std::nullopt;
+        if (otherDepth && *otherDepth > depth)
         {
             at = static_cast<int>(i);
             break;

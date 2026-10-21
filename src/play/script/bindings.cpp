@@ -561,10 +561,7 @@ void Bindings::frameStarted()
     _frameStart = std::chrono::steady_clock::now();
     _lastNow = _frameTime;
 
-    std::vector<std::function<void()>> tasks;
-    tasks.swap(_posted);
-    for (const std::function<void()>& task : tasks)
-        task();
+    runPosted();
 
     // setTimeout and setInterval.
     vm.clearError();
@@ -578,6 +575,14 @@ void Bindings::frameStarted()
 
     if (++_frames % 30 == 0)
         sweep();
+}
+
+void Bindings::runPosted()
+{
+    std::vector<std::function<void()>> tasks;
+    tasks.swap(_posted);
+    for (const std::function<void()>& task : tasks)
+        task();
 }
 
 double Bindings::timerTime()

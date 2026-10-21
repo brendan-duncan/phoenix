@@ -9,6 +9,7 @@
 #include <map>
 #include <memory>
 #include <optional>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -116,6 +117,10 @@ struct Clip
     /// their frame or kept from an earlier one, the same object (its
     /// listeners and all) when a frame places them again.
     std::vector<std::unique_ptr<Clip>> parked;
+    /// What its timeline placed that a script took off (removeMovieClip,
+    /// or something put at its depth), by key: not placed again while the
+    /// frames go on placing it.
+    std::set<std::string> scriptRemoved;
     /// What scripts see it as.
     as3::ValuePtr object;
     /// Its onClipEvent handlers, by event.
@@ -216,6 +221,10 @@ public:
     /// (their listeners may have sent clips to other frames): goes on with
     /// what they did.
     void afterEvents();
+    /// Tells the movie of the loads that have finished now rather than as
+    /// the next frame starts: for a movie played a set number of frames,
+    /// what it loaded in its last.
+    void deliverLoads();
 
     /// The scene playing goes to \a frame (from 0), as a script's
     /// gotoAndPlay or gotoAndStop sends it, keeping whether it plays: a
@@ -526,8 +535,20 @@ private:
     const Symbol* linked(const std::string& linkage) const;
     /// A new clip of \a symbol named \a name on \a parent (null: not on the
     /// stage yet, as ActionScript 3's new makes it), its first frame
-    /// entered once the script making it is done.
-    Clip* makeClip(Clip* parent, const Symbol& symbol, const std::string& name);
+    /// entered once the script making it is done. With \a depth
+    /// (ActionScript 2's, from -16384), at that depth, in place of what
+    /// was there; \a beforeClass is given it before its class is run.
+    Clip* makeClip(Clip* parent, const Symbol& symbol, const std::string& name,
+        std::optional<int> depth = std::nullopt, const std::function<void(Clip&)>& beforeClass = {});
+    /// ActionScript 2's duplicateMovieClip: a copy of \a clip beside it at
+    /// \a depth, named \a name; null for the root or a depth out of range.
+    Clip* duplicateClip(Clip& clip, const std::string& name, int depth,
+        const std::function<void(Clip&)>& beforeClass = {});
+    /// Takes \a clip off for good, one its timeline placed too.
+    void removeClip(Clip& clip);
+    /// Takes off what is at ActionScript 2's \a depth in \a parent, for
+    /// what goes there in its place.
+    void clearDepth(Clip& parent, int depth);
     /// Takes a made clip off its parent: forgotten, or kept off the stage
     /// for addChild when \a keep.
     void takeOff(Clip& clip, bool keep);
@@ -659,6 +680,9 @@ private:
     /// holding freed memory.
     std::vector<std::unique_ptr<Clip>> _gone;
     int _madeCount = 0;
+    /// ActionScript 2's names for the clips a timeline places unnamed:
+    /// instance1, instance2...
+    int _instanceCount = 0;
 
     // ActionScript 3.
     int _version = 0;
@@ -716,6 +740,14 @@ std::map<std::string, std::string> classFiles(const Document& document, const st
 /// The script kept on an instance (a button's on handlers, a movie clip's
 /// onClipEvent handlers), or empty.
 std::string instanceScript(const SymbolInstance& instance);
+
+/// What createEmptyMovieClip makes a clip of: a movie clip of one empty
+/// frame.
+const Symbol& emptySymbol();
+
+/// The depth \a layer had in the published movie it was read from, from 1;
+/// 0 for a layer that was not read from one.
+int swfDepthOf(const Layer& layer);
 
 /// Whether \a source parses as ActionScript; when it does not, the line
 /// (from 1, or 0 when unknown) and the message of the first error.

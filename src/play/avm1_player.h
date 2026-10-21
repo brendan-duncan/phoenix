@@ -102,6 +102,8 @@ private:
     as3::Val natives();
     /// Those of flash.display.BitmapData (as2_bitmap.cpp).
     as3::Val bitmapNatives();
+    /// Those of MovieClip.prototype (as2_movie_clip.cpp).
+    as3::Val clipNatives();
     /// The clip a path given BitmapData.draw names, from the root.
     Clip* drawTarget(const std::string& path);
     /// Those of flash.filters (as2_filters.cpp).
@@ -114,6 +116,12 @@ private:
     /// told on the frame after.
     as3::Val xmlNatives();
     void load(const MovieRuntime::Request& request, std::function<void(const MovieRuntime::Response&)> done);
+public:
+    /// removeMovieClip: \a clip taken off when it is at a depth scripts
+    /// use, 0 and up.
+    void removeIfScripted(Clip& clip);
+
+private:
     /// A flash.filters object's filter: false for anything else.
     bool filterOf(const as3::Val& value, display::BitmapFilter& out);
 
