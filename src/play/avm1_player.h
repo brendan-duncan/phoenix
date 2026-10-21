@@ -21,6 +21,8 @@ namespace fla {
 namespace display {
 struct BitmapFilter;
 class BitmapData;
+class DisplayObject;
+class TextField;
 }
 
 namespace play {
@@ -68,6 +70,10 @@ std::shared_ptr<const CompiledActions> compiledActionsIn(const std::vector<std::
 std::vector<std::string> clipEventNames(uint32_t events, int key);
 std::vector<std::string> buttonEventNames(uint32_t conditions);
 
+/// The text field an ActionScript 2 text field's object is, null for
+/// anything else (or a field gone).
+std::shared_ptr<display::TextField> textFieldOfObject(const as3::Val& value);
+
 /// The pixels an ActionScript 2 BitmapData keeps (its $bitmap), null for
 /// anything else.
 std::shared_ptr<display::BitmapData> bitmapOfHolder(const as3::Val& holder);
@@ -104,6 +110,8 @@ private:
     as3::Val bitmapNatives();
     /// Those of MovieClip.prototype (as2_movie_clip.cpp).
     as3::Val clipNatives();
+    /// Those of TextField.prototype (as2_text_field.cpp).
+    as3::Val textNatives();
     /// The clip a path given BitmapData.draw names, from the root.
     Clip* drawTarget(const std::string& path);
     /// Those of flash.filters (as2_filters.cpp).
@@ -120,6 +128,16 @@ public:
     /// removeMovieClip: \a clip taken off when it is at a depth scripts
     /// use, 0 and up.
     void removeIfScripted(Clip& clip);
+    /// What scripts see \a field as: one object for it while it lives.
+    as3::Val textObject(const std::shared_ptr<display::TextField>& field);
+    /// \a clip's text field of that instance name, as an object; undefined
+    /// for none.
+    as3::Val textFieldNamed(Clip& clip, const std::string& name);
+    /// The text fields showing a variable show what it holds now.
+    void updateTextBindings();
+    /// A timeline placed \a field: one showing a variable takes its value,
+    /// or gives it its text.
+    void fieldPlaced(const std::shared_ptr<display::TextField>& field);
 
 private:
     /// A flash.filters object's filter: false for anything else.
@@ -140,6 +158,8 @@ private:
     /// the player is still about for them.
     std::vector<std::function<void()>> _posted;
     std::shared_ptr<bool> _alive = std::make_shared<bool>(true);
+    /// The objects scripts have had for text fields, while the fields live.
+    std::vector<std::pair<std::weak_ptr<display::DisplayObject>, as3::Val>> _textObjects;
 };
 
 } // namespace play

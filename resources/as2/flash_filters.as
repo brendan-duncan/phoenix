@@ -459,7 +459,7 @@
         convolution: "ConvolutionFilter", displacementMap: "DisplacementMapFilter", dropShadow: "DropShadowFilter",
         glow: "GlowFilter", gradientBevel: "GradientBevelFilter", gradientGlow: "GradientGlowFilter"};
 
-    MovieClip.prototype.addProperty("filters", function() {
+    var getFilters = function() {
         var list = player.filters(this);
         var out = [];
         for (var i = 0; list != undefined && i < list.length; i++) {
@@ -468,8 +468,12 @@
             out.push(make(cls.prototype, kind, list[i].slice(1)));
         }
         return out;
-    }, function(value) {
+    };
+    var setFilters = function(value) {
         player.setFilters(this, value);
-    });
+    };
+    MovieClip.prototype.addProperty("filters", getFilters, setFilters);
     hide(MovieClip.prototype, "filters");
+    // A text field's are the same (text_field.as).
+    _global.$phoenix.filtersProperty = [getFilters, setFilters];
 })();

@@ -597,7 +597,9 @@ void TextField::setHtmlText(const std::string& html)
     while (at < html.size())
     {
         const size_t lt = html.find('<', at);
-        add(decodeEntities(html.substr(at, lt == std::string::npos ? std::string::npos : lt - at)));
+        const std::string between = html.substr(at, lt == std::string::npos ? std::string::npos : lt - at);
+        if (swfVersion < 6 || swfVersion > 7 || between.find_first_not_of(" \t\r\n") != std::string::npos)
+            add(decodeEntities(between));
         if (lt == std::string::npos)
             break;
         const size_t gt = html.find('>', lt);
@@ -690,7 +692,12 @@ void TextField::setHtmlText(const std::string& html)
             if (auto spacing = attribute("letterspacing"))
                 format.letterSpacing = std::atof(spacing->c_str());
             if (auto kerning = attribute("kerning"))
-                format.kerning = std::atoi(kerning->c_str()) != 0;
+            {
+                if (*kerning == "1" && (swfVersion == 0 || swfVersion >= 8))
+                    format.kerning = true;
+                else if (*kerning == "0")
+                    format.kerning = false;
+            }
         }
         else if (name == "a")
         {

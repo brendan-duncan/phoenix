@@ -409,6 +409,44 @@ TEST(swf_actions_put_clips_at_depths_and_draw_in_them)
     }
 }
 
+TEST(swf_actions_make_text_fields)
+{
+    // ActionScript 2's TextField and TextFormat, a field made by
+    // createTextField and found by its name.
+    std::map<std::string, std::vector<uint8_t>> files;
+    files["DOMDocument.xml"] = bytesOf(
+        "<DOMDocument xmlns=\"http://ns.adobe.com/xfl/2008/\" width=\"200\" height=\"100\" frameRate=\"12\">"
+        "<timelines><DOMTimeline name=\"Scene 1\"><layers><DOMLayer name=\"actions\"><frames>"
+        "<DOMFrame index=\"0\" duration=\"1\"><Actionscript><script><![CDATA["
+        "var field = this.createTextField('label', 3, 10, 20, 100, 30);\n"
+        "trace(field._x + ' ' + label._y + ' ' + label.getDepth() + ' ' + typeof label + ' ' + label);\n"
+        "label.text = 'hello';\nlabel.border = true;\ntrace(label.text + ' ' + label.length + ' ' + label.border);\n"
+        "var f = new TextFormat('Arial', 18.6, 0xFF0000);\ntrace(f.font + ' ' + f.size + ' ' + f.bold + ' ' + f.display);\n"
+        "label.setTextFormat(f);\nvar g = label.getTextFormat(0, 5);\ntrace(g.font + ' ' + g.size + ' ' + g.color);\n"
+        "label.variable = 'score';\ntrace(score);\nscore = 7;\ntrace(label.text);\n"
+        "label.removeTextField();\ntrace(typeof this.label);\nstop();\n"
+        "]]></script></Actionscript><elements/></DOMFrame>"
+        "</frames></DOMLayer></layers></DOMTimeline></timelines></DOMDocument>");
+    Parsed source = parse(files);
+    if (!source.document)
+        return;
+    Reopened movie;
+    reopen(*source.document, movie);
+    CHECK(movie.ok && movie.parsed.document);
+    if (!movie.ok || !movie.parsed.document)
+        return;
+    const std::string got = play(*movie.parsed.document, 1, std::string());
+    const std::string wanted = "10 20 3 object _level0.label\nhello 5 true\nArial 18 null block\nArial 18 16711680\n"
+                               "undefined\n7\nundefined\n";
+    CHECK(got == wanted);
+    if (got != wanted)
+    {
+        std::printf("    got:\n%s", got.c_str());
+        for (const std::string& problem : movie.problems)
+            std::printf("    problem: %s\n", problem.c_str());
+    }
+}
+
 TEST(swf_actions_have_the_players_filters)
 {
     // ActionScript 2's flash.filters: values kept as the player keeps them,

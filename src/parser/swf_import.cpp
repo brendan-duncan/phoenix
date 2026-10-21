@@ -2942,6 +2942,15 @@ private:
             text->SetAttribute("border", "true");
         if (e.maxLength > 0)
             text->SetAttribute("maxCharacters", e.maxLength);
+        // HTML text is kept as the movie had it too, for its scripts.
+        if (e.html)
+        {
+            text->SetAttribute("renderAsHTML", "true");
+            tinyxml2::XMLElement* source = doc.NewElement("SwfHtml");
+            source->SetAttribute("swfVersion", _version);
+            source->SetText(e.text.c_str());
+            text->InsertEndChild(source);
+        }
         Matrix offset;
         offset.tx = e.bounds.left + 40;
         offset.ty = e.bounds.top + 40;
@@ -2999,10 +3008,11 @@ private:
         if (e.align > 0 && e.align < 4)
             attrs->SetAttribute("alignment", aligns[e.align]);
         attrs->SetAttribute("size", number(e.height / 20.0).c_str());
+        attrs->SetAttribute("autoKern", "false");
         const auto font = _characters.find(e.font);
         attrs->SetAttribute("face", font != _characters.end() && !font->second.font.name.empty()
                 ? font->second.font.name.c_str()
-                : "Arial");
+                : "Times New Roman");
         if (e.hasColor)
         {
             attrs->SetAttribute("fillColor", hexColor(e.color).c_str());

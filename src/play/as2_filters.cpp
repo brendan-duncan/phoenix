@@ -13,6 +13,7 @@
 #include "display/backend.h"
 #include "display/bitmap_filter.h"
 #include "display/display_object.h"
+#include "display/text_field.h"
 
 #include <algorithm>
 #include <cmath>
@@ -90,6 +91,14 @@ as3::Val copyOf(as3::VM& vm, const as3::Val& value)
     for (const as3::Val& element : value->elements)
         elements.push_back(copyOf(vm, element));
     return vm.newArray(std::move(elements));
+}
+
+/// What a clip's or a text field's object shows as, or null.
+std::shared_ptr<display::DisplayObject> displayOfObject(const as3::Val& value)
+{
+    if (Clip* clip = MovieRuntime::clipOfObject(value))
+        return clip->display;
+    return textFieldOfObject(value);
 }
 
 } // namespace
@@ -189,13 +198,13 @@ as3::Val ActionsPlayer::filterNatives()
         _scriptFilters = std::make_shared<ScriptFilters>();
     std::shared_ptr<ScriptFilters> kept = _scriptFilters;
     define("filters", [&vm, kept](as3::VM&, const as3::Val&, as3::Args args) -> as3::Val {
-        Clip* clip = args.empty() ? nullptr : MovieRuntime::clipOfObject(args[0]);
-        if (!clip || !clip->display)
+        const std::shared_ptr<display::DisplayObject> shown = args.empty() ? nullptr : displayOfObject(args[0]);
+        if (!shown)
             return vm.newArray({});
         // What a script gave it, as it gave them (a displacement map too,
         // though none is drawn).
-        const auto found = kept->entries.find(clip->display.get());
-        if (found != kept->entries.end() && !found->second.object.expired() && clip->display->filtersScripted())
+        const auto found = kept->entries.find(shown.get());
+        if (found != kept->entries.end() && !found->second.object.expired() && shown->filtersScripted())
         {
             std::vector<as3::Val> out;
             for (const as3::Val& filter : found->second.filters)
@@ -207,7 +216,7 @@ as3::Val ActionsPlayer::filterNatives()
         const auto b = [](bool value) { return as3::Val::boolean(value); };
         const auto radians = [](double degrees) { return fixed16(degrees * kPi / 180.0); };
         std::vector<as3::Val> out;
-        for (const display::BitmapFilter& f : clip->display->filters())
+        for (const display::BitmapFilter& f : shown->filters())
         {
             std::vector<as3::Val> values = {as3::Val::string(kindOf(f.type))};
             const double quality = f.quality & 31;
@@ -279,12 +288,12 @@ as3::Val ActionsPlayer::filterNatives()
     // Set from a list: each element that is a filter, a copy; anything else
     // left out.
     define("setFilters", [this, &vm, kept](as3::VM&, const as3::Val&, as3::Args args) -> as3::Val {
-        Clip* clip = args.empty() ? nullptr : MovieRuntime::clipOfObject(args[0]);
-        if (!clip || !clip->display)
+        const std::shared_ptr<display::DisplayObject> shown = args.empty() ? nullptr : displayOfObject(args[0]);
+        if (!shown)
             return as3::Val();
         std::vector<display::BitmapFilter> filters;
         ScriptFilters::Entry entry;
-        entry.object = clip->display;
+        entry.object = shown;
         if (args.size() > 1 && args[1].isObject())
         {
             const double length = _interpreter->toNumber(_interpreter->getMember(args[1], "length"));
@@ -305,11 +314,11 @@ as3::Val ActionsPlayer::filterNatives()
                 }
             }
         }
-        clip->display->setFilters(std::move(filters));
+        shown->setFilters(std::move(filters));
         // Those of display objects gone, let go of.
         for (auto at = kept->entries.begin(); at != kept->entries.end();)
             at = at->second.object.expired() ? kept->entries.erase(at) : std::next(at);
-        kept->entries[clip->display.get()] = std::move(entry);
+        kept->entries[shown.get()] = std::move(entry);
         display::markDisplayChanged();
         return as3::Val();
     });

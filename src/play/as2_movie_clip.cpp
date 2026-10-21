@@ -14,6 +14,7 @@
 #include "display/display_object.h"
 #include "display/graphics.h"
 #include "display/stage.h"
+#include "display/text_field.h"
 
 #include <algorithm>
 #include <cmath>
@@ -338,6 +339,28 @@ as3::Val ActionsPlayer::clipNatives()
         if (Clip* clip = clipOf(self))
             removeIfScripted(*clip);
         return as3::Val();
+    });
+
+    // createTextField(name, depth, x, y, width, height): whole numbers but
+    // the depth; from SWF 8, the field comes back.
+    define("createTextField", [this, &runtime, &interpreter, clipOf, container, number, whole, changed](
+                                  as3::VM&, const as3::Val& self, as3::Args args) -> as3::Val {
+        Clip* clip = clipOf(self);
+        display::DisplayObjectContainer* holder = clip ? container(*clip) : nullptr;
+        if (!holder)
+            return as3::Val();
+        const double asked = number(args, 1);
+        const int depth = std::isnan(asked) ? 0
+                                            : static_cast<int>(std::clamp(std::trunc(asked), -2147483648.0, 2147483647.0));
+        runtime.clearDepth(*clip, depth);
+        auto field = std::make_shared<display::TextField>();
+        field->setName(interpreter.toString(args.empty() ? as3::Val() : args[0]));
+        field->setBox(display::Rect(0, 0, whole(args, 4), whole(args, 5)));
+        field->setX(whole(args, 2));
+        field->setY(whole(args, 3));
+        holder->placeAtDepth(field, depth);
+        changed();
+        return interpreter.version() >= 8 ? textObject(field) : as3::Val();
     });
 
     // Where things are: a point's x and y, own numbers only, from the clip's

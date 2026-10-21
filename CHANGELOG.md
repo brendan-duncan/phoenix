@@ -26,6 +26,7 @@ What changed in each release of Phoenix, newest first.
 - Test Movie says when a document class does not extend Sprite (the main timeline cannot be one), as SWF movies do
 - ActionScript 2's movie clips have depths: getDepth, swapDepths, getNextHighestDepth and getInstanceAtDepth, and attachMovie, createEmptyMovieClip, duplicateMovieClip and attachBitmap put a clip at the depth given, in place of what was there; removeMovieClip takes off only what is at a script's depth; an imported SWF keeps each layer's depth, and clips placed without a name are named instance1, instance2... as SWF movies name them
 - ActionScript 2 has the drawing API (lineStyle, beginFill, beginGradientFill, beginBitmapFill, moveTo, lineTo, curveTo, endFill, clear), localToGlobal, globalToLocal, getBounds and getRect worked out to the twip as SWF movies do, setMask, getSWFVersion, and a movie clip's blendMode, cacheAsBitmap, opaqueBackground and scrollRect
+- ActionScript 2 has TextField and TextFormat: createTextField, every text field's properties and methods (text, htmlText, textColor, border, autoSize, scroll, maxChars, setTextFormat, getTextFormat, replaceText and the rest), the variable a field shows kept in step with the field, and its _x, _alpha and other properties, as SWF movies have them; an imported SWF's HTML text fields keep their HTML, and its text fields with no font are in Times New Roman, as SWF movies show them
 
 ## 0.23.0
 

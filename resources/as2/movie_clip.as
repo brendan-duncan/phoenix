@@ -29,6 +29,7 @@
     method("duplicateMovieClip", 5);
     method("removeMovieClip", 5);
     method("getSWFVersion", 5);
+    method("createTextField", 5);
     method("setMask", 6);
     method("createEmptyMovieClip", 6);
     method("beginFill", 6);

@@ -448,6 +448,16 @@ public:
     /// The movie changed: what shows needs drawing again.
     std::function<void()> changed;
 
+    /// The clip a target names ("hat", "/hat", "_root.hat", "../hat",
+    /// "_parent.hat", "_level0.hat", "this"), from \a from; null when none.
+    Clip* resolve(Clip& from, const std::string& target);
+    Clip* resolve(Clip& from, const as3::ValuePtr& target);
+    /// What scripts see \a clip as.
+    as3::ValuePtr objectFor(Clip& clip);
+    /// The clip a script object is, without looking for it: null for any
+    /// other value.
+    static Clip* clipOfObject(const as3::Val& value);
+
 private:
     friend class ClipObject;
     friend class script::Bindings;
@@ -487,9 +497,6 @@ private:
     /// Makes \a clip one of the class Object.registerClass gave its symbol,
     /// once, when there is one.
     void registeredClass(Clip& clip);
-    /// The clip a script object is, without looking for it: null for any
-    /// other value.
-    static Clip* clipOfObject(const as3::Val& value);
     /// Plays the sounds on button state frame \a state (0 Up to 3 Hit).
     void buttonSound(const Clip& button, int state);
     /// Goes on with the frames clips were sent to while scripts ran.
@@ -593,14 +600,8 @@ private:
     void applyScene(int scene, int frame, bool play);
     /// The scene \a name names, or -1.
     int sceneNamed(const std::string& name) const;
-    /// The clip a target names ("hat", "/hat", "_root.hat", "../hat",
-    /// "_parent.hat", "_level0.hat", "this"), from \a from; null when none.
-    Clip* resolve(Clip& from, const std::string& target);
-    Clip* resolve(Clip& from, const as3::ValuePtr& target);
-
     as3::ValuePtr property(Clip& clip, const std::string& name);
     bool setProperty(Clip& clip, const std::string& name, const as3::ValuePtr& value);
-    as3::ValuePtr objectFor(Clip& clip);
     /// Marks  clip and what is in it gone, and lets go of every pointer
     /// to them the runtime keeps.
     void forget(Clip& clip);

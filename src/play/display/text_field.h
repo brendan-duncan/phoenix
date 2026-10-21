@@ -145,6 +145,11 @@ public:
     bool selectable = true;
     bool mouseWheelEnabled = true;
     bool condenseWhite = false;
+    /// The SWF version of the movie it is in, for how HTML text reads in
+    /// older ones (0 for the latest): before 8, a font tag cannot turn
+    /// kerning on, and in 6 and 7 text of only spaces between tags is left
+    /// out.
+    int swfVersion = 0;
     bool embedFonts = false;
     bool alwaysShowSelection = false;
     /// 0 for no limit.

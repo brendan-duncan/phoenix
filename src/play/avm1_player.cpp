@@ -17,6 +17,7 @@
 #include "display/display_object.h"
 #include "display/backend.h"
 #include "display/stage.h"
+#include "display/text_field.h"
 #include <limits>
 #include <algorithm>
 #include <cmath>
@@ -180,16 +181,29 @@ public:
             _runtime.trace(text);
     }
     void error(const std::string& message) override { _runtime.tell(message, _runtime._source, 0); }
-    bool isClip(const as3::Val& value) override { return clipOf(value) != nullptr; }
+    bool isClip(const as3::Val& value) override
+    {
+        return clipOf(value) != nullptr || textFieldOfObject(value) != nullptr;
+    }
     std::string className(const as3::Val& value) override
     {
+        if (textFieldOfObject(value))
+            return "TextField";
         Clip* clip = clipOf(value);
         return clip && clip->button ? "Button" : "MovieClip";
+    }
+    /// The clip a text field is on, or null.
+    static Clip* ownerOfField(const as3::Val& value)
+    {
+        const std::shared_ptr<display::TextField> field = textFieldOfObject(value);
+        return field && field->parent() ? field->parent()->clip : nullptr;
     }
     as3::Val root(const as3::Val&) override { return objectOf(_runtime._root.get()); }
     as3::Val level(int number) override { return number == 0 ? objectOf(_runtime._root.get()) : as3::Val(); }
     as3::Val parent(const as3::Val& value) override
     {
+        if (Clip* owner = ownerOfField(value))
+            return objectOf(owner);
         Clip* clip = clipOf(value);
         return clip ? objectOf(clip->parent) : as3::Val();
     }
@@ -205,10 +219,17 @@ public:
             for (const auto& each : clip->children)
                 if (each && !each->gone && sameIgnoringCase(each->name, name))
                     return objectOf(each.get());
+        if (_runtime._actions)
+            return _runtime._actions->textFieldNamed(*clip, name);
         return as3::Val();
     }
     std::string targetPath(const as3::Val& value) override
     {
+        if (const std::shared_ptr<display::TextField> field = textFieldOfObject(value))
+        {
+            Clip* owner = ownerOfField(value);
+            return owner ? targetPath(objectOf(owner)) + "." + field->name() : field->name();
+        }
         Clip* clip = clipOf(value);
         if (!clip)
             return std::string();
@@ -218,10 +239,16 @@ public:
     }
     void childNames(const as3::Val& value, std::vector<std::string>& names) override
     {
-        if (Clip* clip = clipOf(value))
-            for (const auto& each : clip->children)
-                if (each && !each->gone && !each->name.empty())
-                    names.push_back(each->name);
+        Clip* clip = clipOf(value);
+        if (!clip)
+            return;
+        for (const auto& each : clip->children)
+            if (each && !each->gone && !each->name.empty())
+                names.push_back(each->name);
+        if (clip->display && clip->display->isContainer())
+            for (const auto& child : static_cast<display::DisplayObjectContainer*>(clip->display.get())->children())
+                if (child && child->kind() == display::ObjectKind::TextField && !child->name().empty())
+                    names.push_back(child->name());
     }
 
     void gotoFrame(const as3::Val& value, int frame, bool play) override
@@ -388,11 +415,18 @@ ActionsPlayer::ActionsPlayer(MovieRuntime& runtime, as3::VM& vm, int version)
     // SharedObject from 6, flash.geom and the rest of flash.* from 8.
     if (version >= 5)
     {
+        // Compiled once; what stops it compiling is a mistake in Phoenix,
+        // told as the movie starts.
+        static std::string problems;
         static const std::shared_ptr<const std::vector<uint8_t>> library = []() {
             as3::avm1::Compiler compiler;
             auto bytes = std::make_shared<std::vector<uint8_t>>(compiler.compileScript(as2LibrarySource(), "library"));
+            for (const std::string& error : compiler.errors())
+                problems += error + "\n";
             return std::shared_ptr<const std::vector<uint8_t>>(bytes);
         }();
+        if (!problems.empty())
+            _runtime.tell("Phoenix's ActionScript 2 library does not compile: " + problems, nullptr, 0);
         if (!library->empty() && _runtime._root)
         {
             _vm.setGlobal("$phoenix", natives());
@@ -400,6 +434,17 @@ ActionsPlayer::ActionsPlayer(MovieRuntime& runtime, as3::VM& vm, int version)
             _vm.setGlobal("$phoenix", as3::Val());
         }
     }
+    // The fields placed before the movie's first actions ran.
+    std::function<void(display::DisplayObject&)> visit = [&](display::DisplayObject& object) {
+        if (object.kind() == display::ObjectKind::TextField && object.timeline)
+            fieldPlaced(std::static_pointer_cast<display::TextField>(object.shared()));
+        if (object.isContainer())
+            for (const auto& child : static_cast<display::DisplayObjectContainer&>(object).children())
+                if (child)
+                    visit(*child);
+    };
+    if (_runtime._stage)
+        visit(*_runtime._stage);
 }
 
 namespace {
@@ -554,6 +599,7 @@ as3::Val ActionsPlayer::natives()
     });
     natives->properties["bitmap"] = bitmapNatives();
     natives->properties["clip"] = clipNatives();
+    natives->properties["text"] = textNatives();
     const as3::Val filters = filterNatives();
     for (const auto& [name, function] : filters->properties)
         natives->properties[name] = function;

@@ -2486,6 +2486,20 @@ void MovieRuntime::syncDisplay(Clip& clip)
                 {
                     auto made = std::make_shared<display::TextField>();
                     made->setFromElement(*text);
+                    // HTML text as a published movie had it.
+                    for (const std::string& xml : text->extraChildren)
+                        if (xml.find("<SwfHtml") != std::string::npos)
+                        {
+                            tinyxml2::XMLDocument parsed;
+                            if (parsed.Parse(xml.c_str(), xml.size()) != tinyxml2::XML_SUCCESS ||
+                                !parsed.FirstChildElement())
+                                continue;
+                            const int version = parsed.FirstChildElement()->IntAttribute("swfVersion", 8);
+                            made->swfVersion = version;
+                            made->setHtmlText(parsed.FirstChildElement()->GetText()
+                                        ? parsed.FirstChildElement()->GetText()
+                                        : "");
+                        }
                     made->setName(nameOf(*text));
                     // What a script put in it already.
                     const auto set = nameOf(*text).empty() ? clip.texts.end() : clip.texts.find(nameOf(*text));
@@ -2523,7 +2537,12 @@ void MovieRuntime::syncDisplay(Clip& clip)
         if (object->parent() == container)
             continue;
         if (!object->parent() && std::find(before.begin(), before.end(), object) == before.end())
+        {
             container->placeTimelineChild(object);
+            // ActionScript 2: a field showing a variable takes its value.
+            if (_actions && !_as3 && object->kind() == display::ObjectKind::TextField)
+                _actions->fieldPlaced(std::static_pointer_cast<display::TextField>(object));
+        }
     }
     // The variables the clip's class declares for its instances.
     if (_as3 && clip.object)
@@ -2989,6 +3008,10 @@ void MovieRuntime::step()
         if (!clip->gone)
             runFrameScripts(*clip);
     enter(entered);
+    // ActionScript 2's text fields show their variables as the frame's
+    // scripts left them.
+    if (_actions && !_as3)
+        _actions->updateTextBindings();
     // JavaScript's tick, once the frames' scripts have run, as the stage
     // updates in CreateJS; and where it sent clips.
     if (_canvas)
@@ -3535,8 +3558,14 @@ as3::ValuePtr MovieRuntime::property(Clip& clip, const std::string& name)
         return Value::makeNumber(clip.length);
     if (name == "_name")
         return Value::makeString(clip.name);
-    // A text field on its timeline, by its instance name.
-    if (fieldNamed(clip.timeline, clip.frame, name))
+    // A text field on its timeline, by its instance name; in compiled
+    // ActionScript 2, any of its text fields, as the display list has them.
+    if (_actions && !_as3)
+    {
+        if (const as3::Val field = _actions->textFieldNamed(clip, name); field.isObject())
+            return field;
+    }
+    else if (fieldNamed(clip.timeline, clip.frame, name))
         return textFieldObject(clip, name);
     // The pointer, in its space.
     if (name == "_xmouse" || name == "_ymouse" || name == "mouseX" || name == "mouseY")
