@@ -8,6 +8,7 @@
 
 #include <climits>
 #include <cstdint>
+#include <array>
 #include <memory>
 #include <optional>
 #include <string>
@@ -108,6 +109,11 @@ public:
         double centerY = 250.0;
     };
     std::shared_ptr<Perspective> perspective;
+    /// transform.matrix3D: sixteen numbers, a column at a time, when a
+    /// script has made it three-dimensional; none in two dimensions. Its
+    /// a, b, c, d, tx and ty are the matrix it shows with (z and
+    /// perspective aside), kept there as x, y and the rest change.
+    std::optional<std::array<double, 16>> matrix3D;
     EventDispatcher* eventParent() const override;
 
     const std::string& name() const { return _name; }

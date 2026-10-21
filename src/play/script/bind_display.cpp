@@ -313,6 +313,7 @@ void Bindings::defineDisplay()
                 vm.throwError("TypeError", "Error #2007: Parameter transform must be non-null.", 2007);
             display::DisplayObject& o = object(vm, self);
             o.setMatrix(from->object->matrix());
+            o.matrix3D = from->object->matrix3D;
             o.setColorTransform(from->object->colorTransform());
             return Val();
         })

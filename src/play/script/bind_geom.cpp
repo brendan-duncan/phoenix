@@ -658,10 +658,23 @@ void Bindings::defineGeom()
             }
             return Val();
         })
-        .property("matrix", NATIVE(this, transformed) { return newMatrix(transformed(vm, self).matrix()); },
-            NATIVE(this, transformed) {
+        // In three dimensions, matrix is null; set null, it makes the object
+        // three-dimensional (its 3D matrix the 2D one's), and set, two again.
+        .property("matrix", NATIVE(this, transformed) {
+            display::DisplayObject& object = transformed(vm, self);
+            return object.matrix3D ? Val::null() : newMatrix(object.matrix());
+        }, NATIVE(this, transformed) {
+                display::DisplayObject& object = transformed(vm, self);
                 if (!args[0].isNullish())
-                    transformed(vm, self).setMatrix(matrixOf(args[0]));
+                {
+                    object.matrix3D.reset();
+                    object.setMatrix(matrixOf(args[0]));
+                }
+                else if (!object.matrix3D)
+                {
+                    const display::Matrix m = object.matrix();
+                    object.matrix3D = std::array<double, 16>{m.a, m.b, 0, 0, m.c, m.d, 0, 0, 0, 0, 1, 0, m.tx, m.ty, 0, 1};
+                }
                 return Val();
             })
         .property("colorTransform",
@@ -688,7 +701,45 @@ void Bindings::defineGeom()
             bounds = display::Rect(left, top, std::ceil(bounds.right()) - left, std::ceil(bounds.bottom()) - top);
             return newRectangle(bounds);
         })
-        .property("matrix3D", NATIVE() { return Val::null(); }, NATIVE() { return Val(); })
+        // A copy each way: what is read is the object's 3D matrix with its
+        // current 2D part; set null, the object is two-dimensional again
+        // with no transform.
+        .property("matrix3D", NATIVE(this, transformed) {
+            display::DisplayObject& object = transformed(vm, self);
+            if (!object.matrix3D)
+                return Val::null();
+            std::array<double, 16> raw = *object.matrix3D;
+            const display::Matrix m = object.matrix();
+            raw[0] = m.a;
+            raw[1] = m.b;
+            raw[4] = m.c;
+            raw[5] = m.d;
+            raw[12] = m.tx;
+            raw[13] = m.ty;
+            std::vector<Val> values;
+            for (const double value : raw)
+                values.push_back(number(value));
+            const Val type = vm.classValue(vm.builtins().number.get());
+            Val vector = vm.construct(vm.applyType(vm.classValue(vm.builtins().vector.get()), {type}));
+            vector->elements = std::move(values);
+            return vm.construct(vm.classValue(classNamed("flash.geom.Matrix3D").get()), std::vector<Val>{vector});
+        }, NATIVE(this, transformed) {
+            display::DisplayObject& object = transformed(vm, self);
+            if (args[0].isNullish())
+            {
+                object.matrix3D.reset();
+                object.setMatrix(display::Matrix());
+                return Val();
+            }
+            const Val data = vm.getProperty(args[0], "rawData");
+            std::array<double, 16> raw{1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
+            if (data.isObject())
+                for (size_t i = 0; i < 16 && i < data->elements.size(); ++i)
+                    raw[i] = vm.toNumber(data->elements[i]);
+            object.matrix3D = raw;
+            object.setMatrix(display::Matrix(raw[0], raw[1], raw[4], raw[5], raw[12], raw[13]));
+            return Val();
+        })
         // The stage's and the main timeline's are there from the start;
         // another object has one once a script gives it one. Each read is a
         // new object onto the same projection.
