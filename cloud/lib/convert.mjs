@@ -254,10 +254,20 @@ export class Converter {
     return this.background(() => this.withFolder(async (dir) => {
       const width = PREVIEW_WIDTH;
       const height = Math.max(8, Math.min(800, Math.round(width * size.height / Math.max(1, size.width))));
-      const out = path.join(dir, 'preview.webp');
-      const { outOfMemory } = await this.run(dir, ['render', phxFile, '--range', `1-${PREVIEW_FRAMES}`, '--out', out,
-        '--size', `${width}x${height}`, '--fps', '12', '--quality', '60', '--no-audio']);
-      return !outOfMemory && fs.existsSync(out) ? fsp.readFile(out) : null;
+      // Animated WebP, or GIF where Phoenix's ffmpeg has no WebP encoder
+      // (the Linux release's, so far).
+      for (const name of ['preview.webp', 'preview.gif']) {
+        const out = path.join(dir, name);
+        const { outOfMemory } = await this.run(dir, ['render', phxFile, '--range', `1-${PREVIEW_FRAMES}`, '--out', out,
+          '--size', `${width}x${height}`, '--fps', '12', '--quality', '60', '--no-audio']);
+        if (outOfMemory) {
+          return null;
+        }
+        if (fs.existsSync(out)) {
+          return fsp.readFile(out);
+        }
+      }
+      return null;
     }));
   }
 

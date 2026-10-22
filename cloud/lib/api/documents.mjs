@@ -630,9 +630,10 @@ export function registerDocuments(router, app) {
     if (!doc.preview) {
       throw notFound('No preview.');
     }
-    const webp = await ctx.blobs.get(doc.preview);
-    ctx.res.writeHead(200, { 'Content-Type': 'image/webp', 'Content-Length': webp.length, 'Cache-Control': 'private, max-age=31536000, immutable' });
-    ctx.res.end(webp);
+    const picture = await ctx.blobs.get(doc.preview);
+    const type = picture.subarray(0, 4).toString('latin1') === 'GIF8' ? 'image/gif' : 'image/webp';
+    ctx.res.writeHead(200, { 'Content-Type': type, 'Content-Length': picture.length, 'Cache-Control': 'private, max-age=31536000, immutable' });
+    ctx.res.end(picture);
     return undefined;
   });
 

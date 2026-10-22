@@ -38,7 +38,7 @@ flip() {
 
 healthy() {
   for _ in $(seq 1 30); do
-    if curl -fsS -o /dev/null "http://127.0.0.1:$PORT/api/me"; then
+    if curl -fs -o /dev/null "http://127.0.0.1:$PORT/api/me"; then
       return 0
     fi
     sleep 1
