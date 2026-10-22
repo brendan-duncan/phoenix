@@ -6,6 +6,7 @@ import { newDocumentDialog, renderDocument, renderListing, UPLOAD_TYPES, uploadF
 import {
   newGroupDialog, renderAccount, renderAdmin, renderConfirm, renderForgot, renderGroupPage, renderInvite, renderLocked, renderPlayer, renderRegister, renderReset, renderSignin,
 } from './pages.js';
+import { renderMessages, renderNotifications } from './messages.js';
 import { avatar, clear, closeMenu, h, icon, popup, promptDialog, showError, timeAgo, toast } from './ui.js';
 
 export const state = {
@@ -96,6 +97,15 @@ function buildShell() {
     ]),
   }, icon('plus'), 'New');
 
+  const messagesCount = h('span', { class: 'count hidden' });
+  const messagesLink = navLink('/messages', 'chat', 'Messages', 'messages');
+  messagesLink.append(messagesCount);
+  shellCounts.messages = (n) => {
+    messagesCount.textContent = n > 99 ? '99+' : String(n);
+    messagesCount.classList.toggle('hidden', !n);
+  };
+  shellCounts.messages(me.unreadMessages ?? 0);
+
   const sidebar = h('nav', { class: 'sidebar', 'aria-label': 'Places' },
     h('a', { class: 'brand', href: '/' }, h('img', { src: '/ui/logo.png', alt: '' }), 'Phoenix Cloud', me.settings.beta ? h('span', { class: 'pill' }, 'Beta') : null),
     newButton,
@@ -104,7 +114,8 @@ function buildShell() {
       navLink('/', 'clock', 'Recents', 'recent'),
       navLink('/files', 'folder', 'My Files', 'files'),
       navLink('/shared', 'share', 'Shared with me', 'shared'),
-      navLink('/favorites', 'star', 'Favorites', 'favorites')),
+      navLink('/favorites', 'star', 'Favorites', 'favorites'),
+      messagesLink),
     h('div', { class: 'nav-head' }, 'Groups',
       h('button', { type: 'button', class: 'btn ghost icon-only', title: 'New group', 'aria-label': 'New group', onclick: () => newGroupDialog() }, icon('plus'))),
     me.groups.length ? groups : h('div', { class: 'muted small nav-empty' }, 'No groups yet'),
@@ -147,6 +158,14 @@ function buildShell() {
 }
 
 /** The bell: what happened that concerns this person, with how many are unread. */
+// Updates the shell's counts (unread messages) as /api/me is asked again.
+const shellCounts = { messages: () => {} };
+
+/** Shows `n` unread messages beside Messages in the sidebar. */
+export function showUnreadMessages(n) {
+  shellCounts.messages(n);
+}
+
 function bell() {
   const count = h('span', { class: 'bell-count hidden' });
   const show = (n) => {
@@ -163,12 +182,17 @@ function bell() {
       showError(err);
       return;
     }
-    popup(button, list.length
-      ? [{ head: 'Notifications' }, ...list.slice(0, 15).map((n) => ({
-        label: `${n.read ? '' : '● '}${n.text} · ${timeAgo(n.createdAt)}`,
-        onclick: () => navigate(n.link || '/'),
-      }))]
-      : [{ head: 'Nothing new' }]);
+    popup(button, [
+      ...(list.length
+        ? [{ head: 'Notifications' }, ...list.slice(0, 15).map((n) => ({
+          label: `${n.read ? '' : '● '}${n.text} · ${timeAgo(n.createdAt)}`,
+          onclick: () => navigate(n.link || '/'),
+        }))]
+        : [{ head: 'Nothing new' }]),
+      '-',
+      { label: 'See all', icon: 'bell', onclick: () => navigate('/notifications') },
+      { label: 'What to tell me…', icon: 'settings', onclick: () => navigate('/notifications#settings') },
+    ]);
     if (list.some((n) => !n.read)) {
       post('/api/notifications/read').then(({ unread }) => show(unread)).catch(() => {});
     }
@@ -176,9 +200,12 @@ function bell() {
   // Checks now and then while the page is open.
   setInterval(() => {
     if (document.visibilityState === 'visible') {
-      get('/api/me').then((me) => show(me.unread ?? 0)).catch(() => {});
+      get('/api/me').then((me) => {
+        show(me.unread ?? 0);
+        shellCounts.messages(me.unreadMessages ?? 0);
+      }).catch(() => {});
     }
-  }, 60 * 1000);
+  }, 30 * 1000);
   return button;
 }
 
@@ -247,6 +274,8 @@ const ROUTES = [
   [/^\/groups\/([^/]+)(?:\/(members|settings)|\/f\/([^/]+))?$/, ([id, tab, folder]) => ({ nav: `group:${id}`, render: (m) => renderGroupPage(m, id, tab ?? 'files', folder) })],
   [/^\/d\/([^/]+)$/, ([id]) => ({ nav: null, render: (m) => renderDocument(m, id) })],
   [/^\/account$/, () => ({ nav: null, render: (m) => renderAccount(m) })],
+  [/^\/messages(?:\/([^/]+))?$/, ([id]) => ({ nav: 'messages', render: (m) => renderMessages(m, id) })],
+  [/^\/notifications$/, () => ({ nav: null, render: (m) => renderNotifications(m) })],
   [/^\/admin(?:\/(\w+))?$/, ([tab]) => ({ nav: 'admin', render: (m) => renderAdmin(m, tab ?? 'users') })],
 ];
 

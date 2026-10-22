@@ -115,8 +115,24 @@ play origin serves nothing, and everyone else sees the lock message.
   lock someone else out by guessing at their name).
 - Forgot your password? emails a link to choose a new one (good for 2
   hours). Account > Change picture sets a profile picture.
-- The bell shows notifications: a document or group shared with you, an
-  account waiting for an admin, an account unlocked.
+- Notifications (`lib/notify.mjs`): the bell, and the Notifications page,
+  where they can be marked read or cleared. Each person chooses, kind by
+  kind, whether they show in Phoenix Cloud and whether they come by email
+  (a document shared or given to you, being added to a group, a direct
+  message, group chat, and for admins accounts waiting and reports); an
+  account becoming ready is always told. Nothing comes from people one has
+  blocked.
+- Messages (`lib/messages.mjs`, `/messages`): direct messages between two
+  people, and a chat for each group (and each team, once there are teams),
+  fetched every few seconds while the page shows. Who may start a direct
+  message with someone is their choice (Account > Messages): anyone,
+  people in a group with them (the default), people in their team, only
+  people they chose, or no one; the people they chose can always write,
+  and anyone they wrote to can answer. Blocking stops messages both ways,
+  hides the blocked person's messages in group chats and their
+  notifications. Anyone can delete their own messages and report others';
+  reports go to Admin > Reports, where a message can be removed. A person
+  sends at most 30 messages a minute.
 - Registering asks for a name, email and password (8 characters or more,
   typed twice); the button is on only when all of them are right. While an
   admin unlocks new accounts, the page says it is a closed beta and asks for

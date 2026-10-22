@@ -9,6 +9,7 @@ import { registerAdmin } from './api/admin.mjs';
 import { registerAuth } from './api/auth.mjs';
 import { registerDocuments } from './api/documents.mjs';
 import { registerGroups } from './api/groups.mjs';
+import { registerMessages } from './api/messages.mjs';
 import { CLOUD_DIR, editorAvailable } from './config.mjs';
 import { Converter } from './convert.mjs';
 import { HttpError, lockedError, notFound, readBody, readJson, Router, saveBody, sendJson, serveStatic } from './http.mjs';
@@ -123,6 +124,7 @@ export function createApp({ config, store, blobs }) {
   registerDocuments(router, app);
   registerGroups(router, app);
   registerAdmin(router, app);
+  registerMessages(router, app);
   app.handle = (req, res) => handleCloud(app, req, res);
   app.handlePlay = (req, res) => handlePlay(app, req, res);
   return app;

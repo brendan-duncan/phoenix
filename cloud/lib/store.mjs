@@ -315,6 +315,69 @@ UPDATE groups SET owner_id = COALESCE(
   (SELECT m.user_id FROM group_members m WHERE m.group_id = groups.id AND m.user_id = groups.created_by AND m.role = 'admin'),
   (SELECT m.user_id FROM group_members m WHERE m.group_id = groups.id AND m.role = 'admin' ORDER BY m.added_at LIMIT 1));
 `,
+  // v7: what each person wants to be told, and how (notify.mjs); messages:
+  // direct, and each group's and team's chat (messages.mjs), with who may
+  // message whom, blocks and reports.
+  `
+ALTER TABLE users ADD COLUMN notify_prefs TEXT NOT NULL DEFAULT '{}';
+ALTER TABLE users ADD COLUMN dm_policy TEXT NOT NULL DEFAULT 'groups';
+
+CREATE TABLE dm_allowed (
+  user_id TEXT NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  allowed_id TEXT NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  created_at INTEGER NOT NULL,
+  PRIMARY KEY (user_id, allowed_id)
+) WITHOUT ROWID;
+
+CREATE TABLE blocks (
+  blocker_id TEXT NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  blocked_id TEXT NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  created_at INTEGER NOT NULL,
+  PRIMARY KEY (blocker_id, blocked_id)
+) WITHOUT ROWID;
+CREATE INDEX blocks_blocked ON blocks (blocked_id);
+
+CREATE TABLE conversations (
+  id TEXT PRIMARY KEY,
+  kind TEXT NOT NULL,
+  group_id TEXT UNIQUE REFERENCES groups (id) ON DELETE CASCADE,
+  team_id TEXT UNIQUE REFERENCES teams (id) ON DELETE CASCADE,
+  dm_key TEXT UNIQUE,
+  created_at INTEGER NOT NULL,
+  last_message_at INTEGER
+);
+
+CREATE TABLE conversation_people (
+  conversation_id TEXT NOT NULL REFERENCES conversations (id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  last_read_id INTEGER NOT NULL DEFAULT 0,
+  muted INTEGER NOT NULL DEFAULT 0,
+  hidden INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (conversation_id, user_id)
+) WITHOUT ROWID;
+CREATE INDEX conversation_people_user ON conversation_people (user_id);
+
+CREATE TABLE messages (
+  id INTEGER PRIMARY KEY,
+  conversation_id TEXT NOT NULL REFERENCES conversations (id) ON DELETE CASCADE,
+  sender_id TEXT REFERENCES users (id) ON DELETE SET NULL,
+  body TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  deleted_at INTEGER
+);
+CREATE INDEX messages_conversation ON messages (conversation_id, id);
+
+CREATE TABLE message_reports (
+  id INTEGER PRIMARY KEY,
+  message_id INTEGER NOT NULL REFERENCES messages (id) ON DELETE CASCADE,
+  reporter_id TEXT REFERENCES users (id) ON DELETE SET NULL,
+  reason TEXT NOT NULL DEFAULT '',
+  created_at INTEGER NOT NULL,
+  resolved_at INTEGER,
+  resolved_by TEXT,
+  outcome TEXT
+);
+`,
 ];
 
 /** Settings an admin changes at runtime; stored as JSON in `settings`. */

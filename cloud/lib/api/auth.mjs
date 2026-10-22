@@ -10,8 +10,9 @@ import { editorAvailable } from '../config.mjs';
 import { fontName, listFonts } from '../fonts.mjs';
 import { badRequest, HttpError, lockedError, notFound, redirect, serveStatic } from '../http.mjs';
 import { clientAddress } from '../limits.mjs';
-import { adminIds, notificationsView, notify, unreadCount } from '../notify.mjs';
+import { adminIds, KINDS, notificationsView, notify, preferences, savePreferences, unreadCount } from '../notify.mjs';
 import { finishLogin, startLogin, takeLoginState } from '../oauth.mjs';
+import { unreadMessages } from '../messages.mjs';
 import { deleteAccount, deletionChoices } from '../ownership.mjs';
 import { effectivePlan, managingTeam, PLANS } from '../plans.mjs';
 import { hashPassword, passwordProblem, verifyPassword } from '../passwords.mjs';
@@ -82,6 +83,7 @@ export function registerAuth(router, app) {
       providers: Object.values(config.providers).map((p) => ({ id: p.id, name: p.name })),
       editor: editorAvailable(config),
       unread: ctx.user ? unreadCount(store, ctx.user.id) : 0,
+      unreadMessages: ctx.user ? unreadMessages(store, ctx.user) : 0,
       plan: ctx.user ? planView(effectivePlan(store, ctx.user)) : null,
       converter: app.converter.available,
       playUrl: config.playUrl,
@@ -296,7 +298,38 @@ export function registerAuth(router, app) {
 
   router.get('/api/notifications', (ctx) => {
     const user = ctx.requireUser();
-    return { notifications: notificationsView(store, user.id), unread: unreadCount(store, user.id) };
+    const limit = Math.min(Math.max(Number(ctx.query('limit')) || 50, 1), 500);
+    return { notifications: notificationsView(store, user.id, limit), unread: unreadCount(store, user.id) };
+  });
+
+  // Clears them: all, or one.
+  router.delete('/api/notifications', (ctx) => {
+    const user = ctx.requireUser();
+    store.run('DELETE FROM notifications WHERE user_id = ?', user.id);
+    return { unread: 0 };
+  });
+
+  router.delete('/api/notifications/:id', (ctx) => {
+    const user = ctx.requireUser();
+    store.run('DELETE FROM notifications WHERE id = ? AND user_id = ?', Number(ctx.params.id), user.id);
+    return { unread: unreadCount(store, user.id) };
+  });
+
+  // What each kind of notification does: in the dashboard, by email.
+  router.get('/api/me/notify', (ctx) => {
+    const user = ctx.requireUser();
+    const prefs = preferences(user);
+    return {
+      kinds: Object.entries(prefs).map(([kind, p]) => ({ kind, label: KINDS[kind].label, always: Boolean(KINDS[kind].always), ...p })),
+      hasEmail: Boolean(user.email),
+    };
+  });
+
+  router.patch('/api/me/notify', async (ctx) => {
+    const user = ctx.requireUser();
+    savePreferences(store, user, await ctx.json());
+    const prefs = preferences(store.get('SELECT * FROM users WHERE id = ?', user.id));
+    return { kinds: Object.entries(prefs).map(([kind, p]) => ({ kind, label: KINDS[kind].label, always: Boolean(KINDS[kind].always), ...p })) };
   });
 
   // Marks them read: { ids } or, with none, all.

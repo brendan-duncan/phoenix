@@ -4,6 +4,7 @@
 import { api, del, get, patch, post, send } from './api.js';
 import { navigate, refreshMe, reloadShell, rerender, state } from './app.js';
 import { renderListing } from './files.js';
+import { adminReports, messagingPanel, openGroupChat } from './messages.js';
 import {
   avatar, bytes, clear, confirmDialog, copyText, dateTime, formDialog, h, icon, person, showError, timeAgo, toast,
 } from './ui.js';
@@ -523,8 +524,16 @@ export async function renderAccount(target) {
     h('p', { class: 'muted small flush' }, 'Your documents and folders are deleted with it. Before it goes, you can give the documents others use, and the groups you own, to someone else.'),
     h('div', {}, h('button', { type: 'button', class: 'btn danger', onclick: () => deleteAccountDialog().catch(showError) }, icon('trash'), 'Delete account…')));
 
+  const notices = h('div', { class: 'panel stack cards-form' },
+    h('h2', {}, 'Notifications'),
+    h('p', { class: 'muted small flush' }, 'Choose what Phoenix Cloud tells you about, here and by email.'),
+    h('div', {}, h('a', { class: 'btn', href: '/notifications#settings' }, icon('bell'), 'Notification settings')));
+  const messaging = await messagingPanel();
+  if (!target.isConnected) {
+    return;
+  }
   clear(target, h('div', { class: 'page-head' }, h('h1', {}, 'Account')),
-    h('div', { class: 'stack' }, profile, planPanel, passwordForm, signins, sessionList, leaving));
+    h('div', { class: 'stack' }, profile, planPanel, notices, messaging, passwordForm, signins, sessionList, leaving));
   if (location.hash === '#password') {
     passwordForm.scrollIntoView();
     (me.hasPassword ? current : fresh).focus();
@@ -736,7 +745,8 @@ export async function renderGroupPage(target, id, tab, folder) {
   }
   const { group, role } = detail;
   const head = h('div', { class: 'page-head' }, h('span', { class: 'avatar' }, icon('users')), h('div', { class: 'grow' },
-    h('h1', {}, group.name), h('div', { class: 'muted small' }, `@${group.handle} · ${detail.members.length} member${detail.members.length === 1 ? '' : 's'}${role === 'admin' ? ' · you are an admin' : ''}`)));
+    h('h1', {}, group.name), h('div', { class: 'muted small' }, `@${group.handle} · ${detail.members.length} member${detail.members.length === 1 ? '' : 's'}${role === 'admin' ? ' · you are an admin' : ''}`)),
+    role ? h('button', { type: 'button', class: 'btn', onclick: () => openGroupChat(group.id) }, icon('chat'), 'Chat') : null);
   const before = h('div', {}, head, group.description ? h('p', { class: 'muted' }, group.description) : null, groupTabs(group, role, tab));
   if (tab === 'files') {
     await renderListing(target, {
@@ -766,7 +776,7 @@ const STATUS_LABELS = {
 };
 
 function adminTabs(tab, waiting) {
-  return h('div', { class: 'tabs' }, [['users', waiting ? `Accounts (${waiting} waiting)` : 'Accounts'], ['invites', 'Invites'], ['settings', 'Settings'], ['fonts', 'Fonts'], ['email', 'Email'], ['audit', 'Activity']]
+  return h('div', { class: 'tabs' }, [['users', waiting ? `Accounts (${waiting} waiting)` : 'Accounts'], ['invites', 'Invites'], ['settings', 'Settings'], ['reports', 'Reports'], ['fonts', 'Fonts'], ['email', 'Email'], ['audit', 'Activity']]
     .map(([t, label]) => h('a', { href: `/admin/${t}`, class: tab === t ? 'active' : null }, label)));
 }
 
@@ -1036,7 +1046,7 @@ export async function renderAdmin(target, tab) {
     clear(target, h('div', { class: 'empty' }, icon('lock'), h('h2', {}, 'Admins only')));
     return;
   }
-  const build = { users: adminUsers, invites: adminInvites, settings: adminSettings, fonts: adminFonts, email: adminEmail, audit: adminAudit }[tab] ?? adminUsers;
+  const build = { users: adminUsers, invites: adminInvites, settings: adminSettings, reports: () => adminReports(change), fonts: adminFonts, email: adminEmail, audit: adminAudit }[tab] ?? adminUsers;
   const [content, stats] = await Promise.all([build(), get('/api/admin/stats')]);
   if (target.isConnected) {
     clear(target, h('div', { class: 'page-head' }, h('h1', {}, 'Admin')), adminTabs(tab, stats.waiting), content);
