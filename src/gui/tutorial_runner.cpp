@@ -912,11 +912,15 @@ TutorialRunner::~TutorialRunner()
     delete _ring;
 }
 
-bool TutorialRunner::start(const TutorialLesson& lesson, QString& error)
+bool TutorialRunner::start(const TutorialLesson& lesson, QString& error, bool onShownDocument)
 {
     stop();
     _lesson = lesson;
-    if (lesson.startKind == "new")
+    if (onShownDocument)
+    {
+        // The document is open already.
+    }
+    else if (lesson.startKind == "new")
     {
         _window->newLessonDocument(lesson.startWidth, lesson.startHeight, lesson.startFps);
     }

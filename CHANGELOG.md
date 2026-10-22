@@ -6,6 +6,7 @@ What changed in each release of Phoenix, newest first.
 
 - Drop a PHX, FLA, XFL or SWF file on the web editor to open it, on the window or the Welcome screen; on the desktop, SWF files and drops on the Welcome screen open too
 - `Phoenix <file> --play` opens the file and plays it in Test Movie, filling the window
+- `Phoenix <file> --tutorial <lesson>` runs the lesson on that file, rather than on a document of its own
 
 ## 0.23.1
 

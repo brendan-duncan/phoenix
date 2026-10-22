@@ -165,7 +165,10 @@ public:
     explicit TutorialRunner(MainWindow* window);
     ~TutorialRunner() override;
 
-    bool start(const TutorialLesson& lesson, QString& error);
+    /// Starts \a lesson on its own document (a new one, or a copy of its
+    /// start), or with \a onShownDocument on the document already open:
+    /// one a host page made from the lesson's start.
+    bool start(const TutorialLesson& lesson, QString& error, bool onShownDocument = false);
     void stop();
     bool running() const { return _running; }
 

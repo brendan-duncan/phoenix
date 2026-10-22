@@ -286,6 +286,21 @@ std::string publishXml(const fla::Document& document);
 
 namespace {
 bool s_skipStartScreen = false;
+// A page that keeps the document runs this window (setHosted).
+bool s_hosted = false;
+// The window opens its file only to play it (setPlayOnly).
+bool s_playOnly = false;
+
+/// Leaves \a action out when a host page keeps the document: opening,
+/// making and saving elsewhere are the page's to do.
+void notHosted(QAction* action)
+{
+    if (s_hosted && action)
+    {
+        action->setVisible(false);
+        action->setEnabled(false);
+    }
+}
 /// The next window made is one opened to take a tab (openSecondaryWindow).
 bool s_openingSecondary = false;
 /// Every window people work in, in the order they opened.
@@ -1107,8 +1122,9 @@ void MainWindow::adoptDocument(fla::FLADocument* document, const QString& filePa
 
 void MainWindow::warnAboutFonts()
 {
-    // Once per document, after it is up on the screen.
-    if (!_interactive || !_flaDocument || _switchingTabs)
+    // Once per document, after it is up on the screen. Not when it is only
+    // played: fonts are mapped when it is edited.
+    if (!_interactive || !_flaDocument || _switchingTabs || s_playOnly)
         return;
     QTimer::singleShot(0, this, [this, document = _flaDocument]() {
         if (_flaDocument != document)
@@ -1446,7 +1462,8 @@ void MainWindow::revealInFileManager(const QString& path)
 
 void MainWindow::showTabMenu(int index, const QPoint& globalPos)
 {
-    if (index < 0 || index >= static_cast<int>(_tabs.size()))
+    // A page that keeps the document has its one tab, to keep open.
+    if (s_hosted || index < 0 || index >= static_cast<int>(_tabs.size()))
         return;
     // The tab is found again by itself afterward: closing others moves it.
     DocumentTab* tab = _tabs[static_cast<size_t>(index)].get();
@@ -1881,6 +1898,39 @@ bool MainWindow::isReadOnlyDocument() const
 void MainWindow::skipStartScreen()
 {
     s_skipStartScreen = true;
+}
+
+void MainWindow::setHosted()
+{
+    s_hosted = true;
+}
+
+void MainWindow::setPlayOnly()
+{
+    s_playOnly = true;
+}
+
+void MainWindow::startTutorialOnDocument(const QString& id, int tries)
+{
+    // The file may still be opening.
+    if (!_flaDocument || !_flaDocument->document)
+    {
+        if (tries > 0)
+            QTimer::singleShot(200, this, [this, id, tries]() { startTutorialOnDocument(id, tries - 1); });
+        return;
+    }
+    for (const TutorialLesson& lesson : tutorials::allLessons())
+    {
+        if (lesson.id != id)
+            continue;
+        if (!_tutorial)
+            _tutorial = new TutorialRunner(this);
+        QString error;
+        if (!_tutorial->start(lesson, error, true))
+            modal::warning(this, "Tutorials", QString("The lesson could not start: %1").arg(error));
+        return;
+    }
+    modal::warning(this, "Tutorials", QString("There is no lesson called %1.").arg(id));
 }
 
 bool MainWindow::hasDocument(const fla::FLADocument* document) const
@@ -3464,7 +3514,7 @@ void MainWindow::setupUI()
     stageLayout->setContentsMargins(0, 0, 0, 0);
     stageLayout->setSpacing(0);
     _tabBar = new DocumentTabBar(this);
-    _tabBar->setTabsClosable(true);
+    _tabBar->setTabsClosable(!s_hosted);
     _tabBar->setMovable(true);
     _tabBar->setDocumentMode(true);
     _tabBar->setExpanding(false);
@@ -7137,6 +7187,11 @@ void MainWindow::setupMenus()
     closeAllAction->setShortcut(QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_W));
     closeAllAction->setStatusTip("Close every document in this window, asking about unsaved changes");
     connect(closeAllAction, &QAction::triggered, this, [this]() { closeAllTabs(); });
+    // In a page that keeps the document, it is the one document here.
+    for (QAction* action : {newAction, openAction, saveAsAction, fromTemplateAction, saveTemplateAction, closeAction, closeAllAction})
+        notHosted(action);
+    if (s_hosted)
+        _recentFilesMenu->menuAction()->setVisible(false);
     QAction* nextTabAction = new QAction(this);
     nextTabAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Tab));
     connect(nextTabAction, &QAction::triggered, this, [this]() { cycleTabs(1); });
@@ -7284,6 +7339,8 @@ void MainWindow::setupMenus()
     // The format Save As starts in for a new document: XFL folders suit a
     // studio keeping its files in version control.
     QMenu* formatMenu = fileMenu->addMenu("Default Save &Format");
+    // A page that keeps the document chooses its format.
+    notHosted(formatMenu->menuAction());
     QActionGroup* formatGroup = new QActionGroup(this);
     const std::pair<const char*, const char*> formats[] = {
         {"phx", "Phoenix Document (.phx)"}, {"fla", "FLA File (.fla)"}, {"xfl", "XFL Folder (for version control)"}};
@@ -8708,6 +8765,9 @@ void MainWindow::setupMenus()
     tutorialsAction->setStatusTip("Lessons that walk through Phoenix step by step, pointing at what to use next");
     connect(tutorialsAction, &QAction::triggered, this, &MainWindow::showTutorials);
     helpMenu->addAction(tutorialsAction);
+    // A page that keeps the document starts lessons and new documents itself.
+    notHosted(startAction);
+    notHosted(tutorialsAction);
 
     QAction* checkForUpdatesAction = new QAction("Check for &Updates...", this);
     web_page::desktopOnly(checkForUpdatesAction);

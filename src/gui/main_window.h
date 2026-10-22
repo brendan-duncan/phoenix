@@ -187,6 +187,18 @@ public:
     /// The next window starts without the start screen, as for a lesson
     /// asked for on the command line.
     static void skipStartScreen();
+    /// The windows made from now on run inside a page that keeps their
+    /// document (Phoenix <file> --hosted, as a document server starts the
+    /// web editor): no New, Open, Save As, Close, Start Screen or Tutorials,
+    /// which are the page's to do.
+    static void setHosted();
+    /// The windows made from now on open their file only to play it
+    /// (Phoenix <file> --play): nothing asks about it first, such as the
+    /// Missing Fonts dialog.
+    static void setPlayOnly();
+    /// Runs lesson \a id on the document open (once it has opened), rather
+    /// than on one of its own: the page made it from the lesson's start.
+    void startTutorialOnDocument(const QString& id, int tries = 100);
     /// Plays the document in Test Movie filling the screen, once it has
     /// opened (Phoenix <file> --play: a page that only plays).
     void playMovie(int tries = 100);

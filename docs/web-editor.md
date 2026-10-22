@@ -157,7 +157,11 @@ A page can run Phoenix on documents it keeps itself, as Phoenix Cloud does
 
 - `prepare(config, status)` (may be async) is called with the loader's
   settings before Phoenix loads. It can set `config.arguments` (a file to
-  open, and `--play` to play it in Test Movie filling the window) and add
+  open; `--hosted` to leave out New, Open, Save As, New from Template, Save
+  as Template, Close, the Start Screen and Tutorials, and the tab's close
+  button and menu, the page keeping the one document; `--play` to play it
+  in Test Movie filling the window; `--tutorial <lesson>` to run a lesson
+  on the file, which the page made from the lesson's start) and add
   `config.preRun` functions that write files with `instance.FS.writeFile`.
   `status` is the loading message's element. A throw stops the start, with
   its message on the page.

@@ -438,6 +438,11 @@ int main(int argc, char *argv[])
     }
     // Phoenix <file> --play: opens the file and plays it in Test Movie.
     const bool play = launch.removeAll("--play") > 0;
+    if (play)
+        MainWindow::setPlayOnly();
+    // Phoenix <file> --hosted: a page that keeps the document runs Phoenix.
+    if (launch.removeAll("--hosted") > 0)
+        MainWindow::setHosted();
     QString initialFile = launch.size() > 1 ? launch.at(1) : QString();
 
     // Phoenix script.jsfl (or script.py): a Phoenix already running runs
@@ -484,7 +489,10 @@ int main(int argc, char *argv[])
         QTimer::singleShot(300, &window, [&window, script]() { window.scripts()->runFile(script); });
     if (!package.isEmpty())
         QTimer::singleShot(300, &window, [&window, package]() { ScriptRunner::installExtension(package, &window); });
-    if (!tutorial.isEmpty())
+    // With a file, the lesson runs on it: a page made it from the lesson's start.
+    if (!tutorial.isEmpty() && !initialFile.isEmpty())
+        window.startTutorialOnDocument(tutorial);
+    else if (!tutorial.isEmpty())
         QTimer::singleShot(300, &window, [&window, tutorial]() { window.startTutorial(tutorial); });
     if (play && !initialFile.isEmpty())
         QTimer::singleShot(300, &window, [&window]() { window.playMovie(); });
