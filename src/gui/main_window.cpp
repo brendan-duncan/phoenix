@@ -8917,8 +8917,10 @@ void MainWindow::saveToPath(const QString& filePath, std::function<void()> saved
         addToRecentFiles(filePath);
         statusBar()->showMessage(QString("Saved %1").arg(filePath), 5000);
 #ifdef PHOENIX_WEB
-        // Written to the page's own file system; the browser keeps it as a download.
-        web_files::download(filePath);
+        // Written to the page's own file system. A page that keeps the
+        // document itself takes it; otherwise the browser keeps it as a download.
+        if (!web_files::handToHost(filePath))
+            web_files::download(filePath);
 #endif
         scriptEvent("documentSaved");
         if (saved)
@@ -16074,6 +16076,21 @@ void MainWindow::testMovie()
         },
         this, _documentPath);
     modal::open(window);
+    if (_testMovieFills)
+        window->showMaximized();
+}
+
+void MainWindow::playMovie(int tries)
+{
+    // The file may still be opening.
+    if (!_flaDocument || !_flaDocument->document)
+    {
+        if (tries > 0)
+            QTimer::singleShot(200, this, [this, tries]() { playMovie(tries - 1); });
+        return;
+    }
+    _testMovieFills = true;
+    testMovie();
 }
 
 fla::SymbolInstance* MainWindow::makePuppet(fla::Element* art, fla::Frame* frame)

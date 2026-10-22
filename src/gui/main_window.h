@@ -187,6 +187,9 @@ public:
     /// The next window starts without the start screen, as for a lesson
     /// asked for on the command line.
     static void skipStartScreen();
+    /// Plays the document in Test Movie filling the screen, once it has
+    /// opened (Phoenix <file> --play: a page that only plays).
+    void playMovie(int tries = 100);
 
     /// For scripts and AI assistants (script_api.cpp): everything shown
     /// brought up to date after a change made without the mouse, and
@@ -1163,6 +1166,8 @@ private:
     /// layouts saved by name.
     QByteArray _defaultLayout;
     bool _layoutRestored = false;
+    /// Test Movie fills the screen (playMovie).
+    bool _testMovieFills = false;
     void restoreLayout();
     void fillWorkspaceMenu(QMenu* menu);
     /// A workspace: the docks' arrangement, the tools' layout and the

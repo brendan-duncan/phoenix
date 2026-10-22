@@ -32,4 +32,10 @@ QString keepDropped(const QString& path);
 /// False when it cannot be read.
 bool download(const QString& path);
 
+/// A page Phoenix runs inside may keep documents itself, as a document
+/// server does: it sets window.phoenixHost, whose owns(path) says which
+/// files are its and whose save(path, bytes) takes them. Hands the saved
+/// file at \a path to it; false when the page does not keep that file.
+bool handToHost(const QString& path);
+
 } // namespace web_files

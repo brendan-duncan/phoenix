@@ -149,6 +149,23 @@ nor saved, and Open Recent, Auto-Save and anything that writes a folder of
 files is left out. Settings (QSettings) are kept in the browser's local
 storage.
 
+### A page that keeps documents
+
+A page can run Phoenix on documents it keeps itself, as Phoenix Cloud does
+(`cloud/dashboard/editor-host.js`). It sets `window.phoenixHost` before
+`resources/web/index.html` starts Phoenix:
+
+- `prepare(config, status)` (may be async) is called with the loader's
+  settings before Phoenix loads. It can set `config.arguments` (a file to
+  open, and `--play` to play it in Test Movie filling the window) and add
+  `config.preRun` functions that write files with `instance.FS.writeFile`.
+  `status` is the loading message's element. A throw stops the start, with
+  its message on the page.
+- `owns(path)` says whether a file in the page's file system is the page's.
+- `save(path, bytes)` gets the file's bytes (a `Uint8Array` copy) each time
+  Phoenix saves a file the page owns, in place of a download
+  (`web_files::handToHost`).
+
 ### Left out
 
 Menu items for what a browser cannot do are hidden with

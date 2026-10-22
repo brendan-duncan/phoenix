@@ -5,6 +5,7 @@ What changed in each release of Phoenix, newest first.
 ## Unreleased
 
 - Drop a PHX, FLA, XFL or SWF file on the web editor to open it, on the window or the Welcome screen; on the desktop, SWF files and drops on the Welcome screen open too
+- `Phoenix <file> --play` opens the file and plays it in Test Movie, filling the window
 
 ## 0.23.1
 

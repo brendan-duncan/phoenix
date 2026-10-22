@@ -5,6 +5,8 @@
 #include <QFileDialog>
 #include <QFileInfo>
 
+#include <emscripten.h>
+
 namespace web_files {
 
 QString folder()
@@ -49,6 +51,26 @@ bool download(const QString& path)
     if (!file.open(QIODevice::ReadOnly))
         return false;
     QFileDialog::saveFileContent(file.readAll(), QFileInfo(path).fileName());
+    return true;
+}
+
+bool handToHost(const QString& path)
+{
+    const QByteArray name = path.toUtf8();
+    const int owned = EM_ASM_INT({
+        const host = window.phoenixHost;
+        return host && typeof host.owns === "function" && host.owns(UTF8ToString($0)) ? 1 : 0;
+    }, name.constData());
+    if (!owned)
+        return false;
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly))
+        return false;
+    const QByteArray bytes = file.readAll();
+    // A copy of the bytes: the page's memory can move, and the browser
+    // sends no shared memory over the network.
+    EM_ASM({ window.phoenixHost.save(UTF8ToString($0), HEAPU8.slice($1, $1 + $2)); }, name.constData(), bytes.constData(),
+        bytes.size());
     return true;
 }
 

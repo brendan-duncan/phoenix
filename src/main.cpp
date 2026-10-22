@@ -436,6 +436,8 @@ int main(int argc, char *argv[])
         launch.remove(tutorialAt, 2);
         MainWindow::skipStartScreen();
     }
+    // Phoenix <file> --play: opens the file and plays it in Test Movie.
+    const bool play = launch.removeAll("--play") > 0;
     QString initialFile = launch.size() > 1 ? launch.at(1) : QString();
 
     // Phoenix script.jsfl (or script.py): a Phoenix already running runs
@@ -484,6 +486,8 @@ int main(int argc, char *argv[])
         QTimer::singleShot(300, &window, [&window, package]() { ScriptRunner::installExtension(package, &window); });
     if (!tutorial.isEmpty())
         QTimer::singleShot(300, &window, [&window, tutorial]() { window.startTutorial(tutorial); });
+    if (play && !initialFile.isEmpty())
+        QTimer::singleShot(300, &window, [&window]() { window.playMovie(); });
     if (mcp)
         window.serveMcpOnStdio();
 

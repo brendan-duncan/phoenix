@@ -88,7 +88,7 @@
     }
     status.textContent = "Loading Phoenix…";
     try {
-      const phoenix = await qtLoad({
+      const config = {
         ...emscripten,
         qt: {
           entryFunction: window.Phoenix_entry,
@@ -102,7 +102,14 @@
             problem("Phoenix stopped" + (exit.text ? ": " + exit.text : exit.code !== undefined ? " (" + exit.code + ")." : "."));
           },
         },
-      });
+      };
+      // A page Phoenix runs inside (window.phoenixHost, as a document server
+      // sets) may hand it a file to open and arguments to start with, and
+      // takes back the documents it keeps when they are saved
+      // (src/gui/web_files.h).
+      if (window.phoenixHost && window.phoenixHost.prepare)
+        await window.phoenixHost.prepare(config, status);
+      const phoenix = await qtLoad(config);
       // Closing or reloading the page with changes not saved: the browser
       // asks first.
       window.addEventListener("beforeunload", (event) => {
