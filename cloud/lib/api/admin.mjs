@@ -3,9 +3,12 @@
 // totals and the email outbox.
 
 import fs from 'node:fs';
+import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { createInvite, createUser, inviteView, normalizeName, publicUser, renameUser, requireName, validEmail } from '../accounts.mjs';
+import { addFont, fontName, listFonts } from '../fonts.mjs';
 import { badRequest, forbidden, HttpError, notFound } from '../http.mjs';
+import { notify } from '../notify.mjs';
 import { hashPassword, passwordProblem } from '../passwords.mjs';
 import { SETTING_DEFAULTS } from '../store.mjs';
 import { usageBytes } from '../storage.mjs';
@@ -140,6 +143,12 @@ export function registerAdmin(router, app) {
       }
       const verb = body.status === 'suspended' ? 'suspend' : (user.status.startsWith('pending') ? 'unlock' : 'unsuspend');
       store.audit(me.id, `user.${verb}`, 'user', user.id);
+      if (verb === 'unlock') {
+        notify(app, [user.id], {
+          kind: 'unlocked', text: 'Your account is ready. Welcome to Phoenix Cloud!', link: '/', actorId: me.id,
+          email: { subject: 'Your Phoenix Cloud account is ready', text: 'An admin has unlocked your account. Sign in here:' },
+        });
+      }
     }
     if (body.isAdmin !== undefined) {
       store.run('UPDATE users SET is_admin = ? WHERE id = ?', Boolean(body.isAdmin), user.id);
@@ -259,6 +268,35 @@ export function registerAdmin(router, app) {
     return {
       entries: rows.map((r) => ({ id: r.id, ts: r.ts, actor: user(r.actor_id), action: r.action, targetKind: r.target_kind, targetId: r.target_id, detail: JSON.parse(r.detail) })),
     };
+  });
+
+  router.get('/api/admin/fonts', (ctx) => {
+    ctx.requireAdmin();
+    return { fonts: listFonts(ctx.config.fontsDir) };
+  });
+
+  // Adds a font (?name=File.ttf); the body is the font file.
+  router.post('/api/admin/fonts', async (ctx) => {
+    const me = ctx.requireAdmin();
+    const { file } = await ctx.upload('font', 20 * 1024 * 1024);
+    const name = await addFont(ctx.config.fontsDir, ctx.query('name'), file);
+    if (!name) {
+      throw badRequest('A font is a .ttf or .otf file, up to 20 MB.');
+    }
+    ctx.store.audit(me.id, 'font.add', 'font', name);
+    ctx.status = 201;
+    return { fonts: listFonts(ctx.config.fontsDir) };
+  });
+
+  router.delete('/api/admin/fonts/:name', async (ctx) => {
+    const me = ctx.requireAdmin();
+    const name = fontName(ctx.params.name);
+    if (!name || name !== ctx.params.name) {
+      throw notFound('No such font.');
+    }
+    await fsp.rm(path.join(ctx.config.fontsDir, name), { force: true });
+    ctx.store.audit(me.id, 'font.remove', 'font', name);
+    return { fonts: listFonts(ctx.config.fontsDir) };
   });
 
   // What the server would have emailed (there is no mail server yet).

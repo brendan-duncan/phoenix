@@ -37,6 +37,9 @@ export async function startServer({ env = {}, phoenix = false } = {}) {
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   const base = `http://127.0.0.1:${server.address().port}`;
   config.publicUrl = base;
+  const play = http.createServer(app.handlePlay);
+  await new Promise((resolve) => play.listen(0, '127.0.0.1', resolve));
+  config.playUrl = `http://127.0.0.1:${play.address().port}`;
   return {
     base,
     config,
@@ -47,6 +50,7 @@ export async function startServer({ env = {}, phoenix = false } = {}) {
     client: () => new Client(base, store),
     async close() {
       await new Promise((resolve) => server.close(resolve));
+      await new Promise((resolve) => play.close(resolve));
       store.close();
       fs.rmSync(dir, { recursive: true, force: true });
     },

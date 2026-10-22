@@ -234,6 +234,50 @@ DELETE FROM settings WHERE key = 'signupPolicy';
   `
 ALTER TABLE users ADD COLUMN request_message TEXT NOT NULL DEFAULT '';
 `,
+  // Drafts (unsaved work the editor keeps for each person), edit locks,
+  // notifications, profile pictures and animated previews.
+  `
+CREATE TABLE drafts (
+  document_id TEXT NOT NULL REFERENCES documents (id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  manifest TEXT NOT NULL,
+  size INTEGER NOT NULL,
+  base_revision INTEGER NOT NULL,
+  saved_at INTEGER NOT NULL,
+  PRIMARY KEY (document_id, user_id)
+) WITHOUT ROWID;
+
+CREATE TABLE draft_chunks (
+  document_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  hash TEXT NOT NULL,
+  PRIMARY KEY (document_id, user_id, hash),
+  FOREIGN KEY (document_id, user_id) REFERENCES drafts (document_id, user_id) ON DELETE CASCADE
+) WITHOUT ROWID;
+CREATE INDEX draft_chunks_hash ON draft_chunks (hash);
+
+CREATE TABLE locks (
+  document_id TEXT PRIMARY KEY REFERENCES documents (id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  expires_at INTEGER NOT NULL
+);
+
+CREATE TABLE notifications (
+  id INTEGER PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  kind TEXT NOT NULL,
+  text TEXT NOT NULL,
+  link TEXT NOT NULL DEFAULT '',
+  actor_id TEXT,
+  created_at INTEGER NOT NULL,
+  read_at INTEGER
+);
+CREATE INDEX notifications_user ON notifications (user_id, created_at);
+
+ALTER TABLE users ADD COLUMN avatar_blob TEXT;
+ALTER TABLE documents ADD COLUMN preview TEXT;
+ALTER TABLE documents ADD COLUMN preview_revision INTEGER NOT NULL DEFAULT 0;
+`,
 ];
 
 /** Settings an admin changes at runtime; stored as JSON in `settings`. */

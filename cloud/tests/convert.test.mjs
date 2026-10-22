@@ -117,6 +117,35 @@ describe('Phoenix on the server', { skip }, () => {
     assert.ok(own.document.thumbnailUrl);
   });
 
+  it('makes an animated preview after a document is stored', async () => {
+    const { document: doc } = await me.post('/api/documents', { template: 'bouncing-ball' });
+    let previewUrl = null;
+    for (let i = 0; i < 100 && !previewUrl; i++) {
+      await new Promise((r) => setTimeout(r, 200));
+      previewUrl = (await me.get(`/api/documents/${doc.id}`)).document.previewUrl;
+    }
+    assert.ok(previewUrl, 'no preview');
+    assert.equal((await me.request('GET', previewUrl)).headers.get('content-type'), 'image/webp');
+  });
+
+  it('plays a document as HTML5 for viewers who may not open it', async () => {
+    const { document: doc } = await me.post('/api/documents', { template: 'bouncing-ball' });
+    await me.patch(`/api/documents/${doc.id}`, { allowDownload: false });
+    const viewer = server.client();
+    await viewer.signIn('wes');
+    await me.post(`/api/documents/${doc.id}/shares`, { kind: 'user', who: 'wes', role: 'viewer' });
+    const play = await viewer.get(`/api/documents/${doc.id}/play`);
+    assert.equal(play.mode, 'bundle');
+    assert.ok(play.url.startsWith(server.config.playUrl));
+    const page = await fetch(play.url);
+    assert.equal(page.status, 200);
+    assert.match(await page.text(), /<script/);
+    assert.equal(page.headers.get('set-cookie'), null);
+    // A pass that was not signed here opens nothing.
+    const forged = play.url.replace(/\/b\/[^/]+\./, '/b/AAAA.');
+    assert.equal((await fetch(forged)).status, 404);
+  });
+
   it('says what went wrong with a file it cannot read, and keeps nothing', async () => {
     const before = server.store.get('SELECT COUNT(*) AS n FROM documents').n;
     const res = await me.request('POST', '/api/documents/upload?name=broken.svg', { body: Buffer.from('not an svg'), headers: { 'Content-Type': 'application/octet-stream' } });

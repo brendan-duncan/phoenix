@@ -3,12 +3,17 @@
 import fsp from 'node:fs/promises';
 import { atLeast, documentRole, groupRole, mayReadSource, SHARE_ROLES, spaceRole, VISIBILITIES } from '../access.mjs';
 import { findUser, publicUser } from '../accounts.mjs';
+import { editorAvailable } from '../config.mjs';
 import { UPLOAD_KINDS } from '../convert.mjs';
 import { badRequest, forbidden, HttpError, notFound } from '../http.mjs';
 import { hashToken, newId, newToken } from '../ids.mjs';
-import { copyRevision, quotaBytes, revisionFile, saveRevision, sendFile, usageBytes } from '../storage.mjs';
+import { notify } from '../notify.mjs';
+import { bundleUrl, ensureBundle, refreshPreview } from '../renders.mjs';
+import { copyRevision, deleteDraft, draftOf, quotaBytes, revisionFile, saveDraft, saveRevision, sendFile, usageBytes } from '../storage.mjs';
 
 const LIST_LIMIT = 500;
+// An edit lock lasts this long unless the editor keeps it.
+const LOCK_MS = 90 * 1000;
 
 function cleanName(value, fallback = 'Untitled') {
   const name = String(value ?? '').replace(/[\u0000-\u001f]/g, '').trim().slice(0, 120);
@@ -108,6 +113,8 @@ class Viewer {
       revision: doc.revision,
       size: doc.size,
       thumbnailUrl: doc.thumbnail ? `/api/documents/${doc.id}/thumbnail?v=${doc.thumbnail.slice(0, 12)}` : null,
+      previewUrl: doc.preview && doc.preview_revision === doc.revision ? `/api/documents/${doc.id}/preview?v=${doc.preview.slice(0, 12)}` : null,
+      editing: this.editing(doc),
       info: JSON.parse(doc.info),
       createdAt: doc.created_at,
       modifiedAt: doc.modified_at,
@@ -118,6 +125,22 @@ class Viewer {
       canDownload: mayReadSource(doc, role),
       favorite: this.favorites.has(doc.id),
     };
+  }
+
+  /** Someone else editing `doc` now (holding its edit lock), or null. */
+  editing(doc) {
+    const lock = this.ctx.store.get('SELECT user_id, expires_at FROM locks WHERE document_id = ?', doc.id);
+    if (!lock || lock.expires_at < Date.now() || lock.user_id === this.ctx.user?.id) {
+      return null;
+    }
+    return this.user(lock.user_id);
+  }
+
+  /** Where a document is, for search results: its space and folders. */
+  where(doc) {
+    const space = doc.owner_kind === 'group' ? this.group(doc.owner_id)?.name
+      : (doc.owner_id === this.ctx.user?.id ? 'My Files' : this.user(doc.owner_id)?.name);
+    return [space, ...folderPath(this.ctx.store, doc.folder_id).map((f) => f.name)].filter(Boolean).join(' / ');
   }
 
   /** Documents the caller can see, with their roles. */
@@ -181,7 +204,9 @@ function list(ctx) {
   const q = ctx.query('q');
   if (q) {
     const like = `%${q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
-    return { documents: viewer.documents(store.all(SEARCH_SQL, { u: user.id, q: like })), folders: [] };
+    const rows = store.all(SEARCH_SQL, { u: user.id, q: like });
+    const byId = new Map(rows.map((r) => [r.id, r]));
+    return { documents: viewer.documents(rows).map((d) => ({ ...d, where: viewer.where(byId.get(d.id)) })), folders: [] };
   }
   if (view === 'files' || view === 'group') {
     const ownerKind = view === 'group' ? 'group' : 'user';
@@ -277,6 +302,7 @@ async function documentFrom(ctx, space, name, made) {
     ctx.store.run('DELETE FROM documents WHERE id = ?', doc.id);
     throw err;
   }
+  refreshPreview(ctx.app, doc.id);
   const saved = getDocument(ctx.store, doc.id);
   ctx.status = 201;
   return { document: new Viewer(ctx).document(saved, documentRole(ctx.store, ctx.user, saved, { beta: ctx.settings.beta })) };
@@ -451,6 +477,7 @@ export function registerDocuments(router, app) {
     if (doc.revision > 0) {
       try {
         copyRevision(ctx.store, doc, doc.revision, copy, { userId: ctx.user.id });
+        refreshPreview(app, copy.id);
       } catch (err) {
         ctx.store.run('DELETE FROM documents WHERE id = ?', copy.id);
         throw err;
@@ -502,10 +529,118 @@ export function registerDocuments(router, app) {
     if (base !== null && !Number.isInteger(base)) {
       throw badRequest('base is a revision number.');
     }
+    const lock = ctx.store.get('SELECT user_id, expires_at FROM locks WHERE document_id = ?', doc.id);
+    if (lock && lock.user_id !== ctx.user.id && lock.expires_at > Date.now()) {
+      const holder = ctx.store.get('SELECT name FROM users WHERE id = ?', lock.user_id);
+      ctx.req.resume();
+      throw new HttpError(423, 'locked', `${holder?.name ?? 'Someone'} is editing this document, so it can't be saved over now.`);
+    }
     const { file } = await ctx.upload('phx');
     const number = await saveRevision(ctx.store, ctx.blobs, doc, { file }, { userId: ctx.user.id, base, label: ctx.query('label') ?? '' });
     touchRecent(ctx.store, ctx.user.id, doc.id);
+    // Saved: the draft of it is no longer needed.
+    deleteDraft(ctx.store, doc.id, ctx.user.id);
+    refreshPreview(app, doc.id);
     return { revision: number };
+  });
+
+  router.get('/api/documents/:id/preview', async (ctx) => {
+    const { doc } = access(ctx, ctx.params.id);
+    if (!doc.preview) {
+      throw notFound('No preview.');
+    }
+    const webp = await ctx.blobs.get(doc.preview);
+    ctx.res.writeHead(200, { 'Content-Type': 'image/webp', 'Content-Length': webp.length, 'Cache-Control': 'private, max-age=31536000, immutable' });
+    ctx.res.end(webp);
+    return undefined;
+  });
+
+  router.get('/api/documents/:id/revisions/:number/thumbnail', async (ctx) => {
+    const { doc } = access(ctx, ctx.params.id);
+    const rev = ctx.store.get('SELECT manifest FROM revisions WHERE document_id = ? AND number = ?', doc.id, Number(ctx.params.number));
+    const thumb = rev && JSON.parse(rev.manifest).chunks.find((c) => c.t === 'THMB' && (c.f & 0xf) === 0);
+    if (!thumb) {
+      throw notFound('No thumbnail.');
+    }
+    const png = await ctx.blobs.get(thumb.h);
+    ctx.res.writeHead(200, { 'Content-Type': 'image/png', 'Content-Length': png.length, 'Cache-Control': 'private, max-age=31536000, immutable' });
+    ctx.res.end(png);
+    return undefined;
+  });
+
+  // How to play a document: in the web editor for people who may open it,
+  // else as an HTML5 bundle on the play origin (made by Phoenix, once a
+  // revision, which can take a moment).
+  router.get('/api/documents/:id/play', async (ctx) => {
+    const { doc, role } = access(ctx, ctx.params.id);
+    if (!doc.revision) {
+      throw notFound('This document has nothing saved yet.');
+    }
+    if (mayReadSource(doc, role) && editorAvailable(ctx.config) && ctx.query('as') !== 'bundle') {
+      return { mode: 'editor', url: `/editor/?doc=${doc.id}&play=1` };
+    }
+    await ensureBundle(app, doc);
+    return { mode: 'bundle', url: bundleUrl(app, doc), width: JSON.parse(doc.info).width ?? null, height: JSON.parse(doc.info).height ?? null };
+  });
+
+  // ── Edit locks: one person edits at a time ───────────────────────────────
+
+  // Takes or keeps the lock (the editor asks every half minute); someone
+  // else holding it is answered with who.
+  router.post('/api/documents/:id/lock', (ctx) => {
+    const { doc } = access(ctx, ctx.params.id, 'editor');
+    const now = Date.now();
+    const lock = ctx.store.get('SELECT user_id, expires_at FROM locks WHERE document_id = ?', doc.id);
+    if (lock && lock.user_id !== ctx.user.id && lock.expires_at > now) {
+      return { held: false, holder: publicUser(ctx.store.get('SELECT * FROM users WHERE id = ?', lock.user_id)) };
+    }
+    ctx.store.run(`INSERT INTO locks (document_id, user_id, expires_at) VALUES (?, ?, ?)
+                   ON CONFLICT (document_id) DO UPDATE SET user_id = excluded.user_id, expires_at = excluded.expires_at`,
+    doc.id, ctx.user.id, now + LOCK_MS);
+    return { held: true };
+  });
+
+  router.delete('/api/documents/:id/lock', (ctx) => {
+    const user = ctx.requireUser();
+    ctx.store.run('DELETE FROM locks WHERE document_id = ? AND user_id = ?', ctx.params.id, user.id);
+    return { ok: true };
+  });
+
+  // ── Drafts: each person's unsaved work, kept by the editor ───────────────
+
+  router.put('/api/documents/:id/draft', async (ctx) => {
+    const { doc, role } = access(ctx, ctx.params.id);
+    if (!mayReadSource(doc, role)) {
+      throw forbidden('You cannot open this document in the editor.');
+    }
+    const { file } = await ctx.upload('phx');
+    return saveDraft(ctx.store, ctx.blobs, doc, ctx.user.id, file);
+  });
+
+  router.get('/api/documents/:id/draft', (ctx) => {
+    const { doc } = access(ctx, ctx.params.id);
+    const draft = draftOf(ctx.store, doc, ctx.user.id);
+    if (!draft) {
+      throw notFound('No draft.');
+    }
+    return { savedAt: draft.savedAt, baseRevision: draft.baseRevision, size: draft.size };
+  });
+
+  router.get('/api/documents/:id/draft/file', async (ctx) => {
+    const { doc } = access(ctx, ctx.params.id);
+    const draft = draftOf(ctx.store, doc, ctx.user.id);
+    if (!draft) {
+      throw notFound('No draft.');
+    }
+    ctx.res.writeHead(200, { 'Content-Type': 'application/octet-stream', 'Content-Length': draft.file.size, 'Cache-Control': 'private, no-store' });
+    await sendFile(ctx.blobs, draft.file, ctx.res);
+    return undefined;
+  });
+
+  router.delete('/api/documents/:id/draft', (ctx) => {
+    const user = ctx.requireUser();
+    deleteDraft(ctx.store, ctx.params.id, user.id);
+    return { ok: true };
   });
 
   router.get('/api/documents/:id/thumbnail', async (ctx) => {
@@ -522,8 +657,16 @@ export function registerDocuments(router, app) {
   router.get('/api/documents/:id/revisions', (ctx) => {
     const { doc } = access(ctx, ctx.params.id);
     const viewer = new Viewer(ctx);
-    const rows = ctx.store.all('SELECT number, created_by, created_at, label, size, application FROM revisions WHERE document_id = ? ORDER BY number DESC', doc.id);
-    return { revisions: rows.map((r) => ({ number: r.number, createdBy: viewer.user(r.created_by), createdAt: r.created_at, label: r.label, size: r.size, application: r.application })) };
+    const rows = ctx.store.all('SELECT number, created_by, created_at, label, size, application, manifest FROM revisions WHERE document_id = ? ORDER BY number DESC', doc.id);
+    return {
+      revisions: rows.map((r) => {
+        const thumb = JSON.parse(r.manifest).chunks.find((c) => c.t === 'THMB' && (c.f & 0xf) === 0);
+        return {
+          number: r.number, createdBy: viewer.user(r.created_by), createdAt: r.created_at, label: r.label, size: r.size, application: r.application,
+          thumbnailUrl: thumb ? `/api/documents/${doc.id}/revisions/${r.number}/thumbnail?v=${thumb.h.slice(0, 12)}` : null,
+        };
+      }),
+    };
   });
 
   router.patch('/api/documents/:id/revisions/:number', async (ctx) => {
@@ -540,6 +683,7 @@ export function registerDocuments(router, app) {
     const { doc } = access(ctx, ctx.params.id, 'editor');
     const number = Number(ctx.params.number);
     const made = copyRevision(ctx.store, doc, number, doc, { userId: ctx.user.id, label: `Restored from ${number}` });
+    refreshPreview(app, doc.id);
     return { revision: made };
   });
 
@@ -585,6 +729,8 @@ export function registerDocuments(router, app) {
                ON CONFLICT (document_id, principal_kind, principal_id) DO UPDATE SET role = excluded.role, granted_by = excluded.granted_by, granted_at = excluded.granted_at`,
     doc.id, kind, principalId, r, ctx.user.id, Date.now());
     store.audit(ctx.user.id, 'share.set', 'document', doc.id, { kind, principalId, role: r });
+    const told = kind === 'user' ? [principalId] : store.all('SELECT user_id FROM group_members WHERE group_id = ?', principalId).map((m) => m.user_id);
+    notify(app, told, { kind: 'share', text: `${ctx.user.name} shared “${doc.name}” with you`, link: `/d/${doc.id}`, actorId: ctx.user.id });
     return sharesView(ctx, doc, role);
   });
 

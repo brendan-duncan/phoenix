@@ -15,6 +15,7 @@ import { HttpError, notFound, readBody, readJson, Router, saveBody, sendJson, se
 import { newId } from './ids.mjs';
 import { Attempts, Budget } from './limits.mjs';
 import { Mailer } from './mail.mjs';
+import { openPass } from './renders.mjs';
 import { Starters } from './starters.mjs';
 import { Jwks } from './oauth.mjs';
 
@@ -278,7 +279,12 @@ async function serveEditor(app, req, res, relative) {
   throw notFound();
 }
 
-/** The play origin: untrusted play bundles only, no cookies, no API. Bundles come later. */
+/**
+ * The play origin: HTML5 bundles of documents, for people who may play a
+ * document but not open it. It has no cookies and no API; a bundle is
+ * reached by a signed pass in its address (renders.mjs), so its scripts,
+ * which come from the document, can reach nothing of the cloud's.
+ */
 async function handlePlay(app, req, res) {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Robots-Tag', 'noindex, nofollow');
@@ -286,6 +292,15 @@ async function handlePlay(app, req, res) {
     res.writeHead(405).end();
     return;
   }
+  const match = /^\/b\/([A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)\/(.+)$/.exec(new URL(req.url, app.config.playUrl).pathname);
+  const dir = match ? openPass(app, match[1]) : null;
+  if (dir && await serveStatic(req, res, dir, decodeURIComponent(match[2]), {
+    'Cache-Control': 'private, max-age=3600',
+    // Shown in the cloud's player page, from another origin.
+    'Cross-Origin-Resource-Policy': 'cross-origin',
+  })) {
+    return;
+  }
   res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
-  res.end('Phoenix Cloud play origin. Nothing is published here yet.\n');
+  res.end('Nothing here, or the link has run out. Open the document again in Phoenix Cloud.\n');
 }

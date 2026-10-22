@@ -4,8 +4,10 @@
 // holds a whole document in memory.
 
 import { once } from 'node:events';
+import fs from 'node:fs';
 import { Readable } from 'node:stream';
 import { HttpError } from './http.mjs';
+import { sha256 } from './ids.mjs';
 import {
   bodyOffset, BufferSource, checksumError, describe, FileSource, isThumbnail, layout, manifestEntry, manifestHashes, PhxError, readContainer,
   withThumbnailEntry,
@@ -172,6 +174,69 @@ export async function saveRevision(store, blobs, doc, input, { userId, base = nu
   });
 }
 
+/**
+ * Keeps `file` (a .phx the editor sent) as `userId`'s draft of `doc`: their
+ * unsaved work, one per person per document, replacing the last. Drafts
+ * share stored chunks with the document's revisions.
+ */
+export async function saveDraft(store, blobs, doc, userId, file) {
+  const source = new FileSource(file);
+  let split;
+  try {
+    split = await stageContainer(blobs, source, null);
+  } catch (err) {
+    if (err instanceof PhxError) {
+      throw new HttpError(422, 'not_phx', `That draft can't be kept: ${err.message}.`);
+    }
+    throw err;
+  } finally {
+    source.close();
+  }
+  const now = Date.now();
+  store.transaction(() => {
+    for (const blob of split.staged.values()) {
+      store.run('INSERT INTO blobs (hash, size, created_at) VALUES (?, ?, ?) ON CONFLICT (hash) DO UPDATE SET created_at = excluded.created_at', blob.hash, blob.size, now);
+    }
+  });
+  for (const blob of split.staged.values()) {
+    await blobs.commit(blob.hash, blob.temp);
+  }
+  store.transaction(() => {
+    store.run('DELETE FROM drafts WHERE document_id = ? AND user_id = ?', doc.id, userId);
+    store.run('INSERT INTO drafts (document_id, user_id, manifest, size, base_revision, saved_at) VALUES (?, ?, ?, ?, ?, ?)',
+      doc.id, userId, JSON.stringify(split.manifest), split.size, doc.revision, now);
+    for (const hash of manifestHashes(split.manifest)) {
+      store.run('INSERT INTO draft_chunks (document_id, user_id, hash) VALUES (?, ?, ?)', doc.id, userId, hash);
+    }
+  });
+  return { savedAt: now, size: split.size };
+}
+
+/** A person's draft of a document: { savedAt, baseRevision, size, file (laid out) }, or null. */
+export function draftOf(store, doc, userId) {
+  const row = store.get('SELECT * FROM drafts WHERE document_id = ? AND user_id = ?', doc.id, userId);
+  return row ? { savedAt: row.saved_at, baseRevision: row.base_revision, size: row.size, file: layout(JSON.parse(row.manifest)) } : null;
+}
+
+export function deleteDraft(store, documentId, userId) {
+  store.run('DELETE FROM drafts WHERE document_id = ? AND user_id = ?', documentId, userId);
+}
+
+/** Writes a laid-out file (revisionFile) to disk at `file`, a blob at a time. */
+export async function writeFile(blobs, laidOut, file) {
+  const out = fs.createWriteStream(file);
+  await sendFile(blobs, laidOut, out);
+  await once(out, 'close');
+}
+
+/** Keeps `bytes` (a picture: a preview, a profile picture) as a blob; its hash. */
+export async function keepPicture(store, blobs, bytes) {
+  const hash = sha256(bytes);
+  store.run('INSERT INTO blobs (hash, size, created_at) VALUES (?, ?, ?) ON CONFLICT (hash) DO UPDATE SET created_at = excluded.created_at', hash, bytes.length, Date.now());
+  await blobs.put(hash, bytes);
+  return hash;
+}
+
 /** Makes revision `number` of `source` the next revision of `target` (restore, duplicate). */
 export function copyRevision(store, source, number, target, { userId, label = '' }) {
   return store.transaction(() => {
@@ -221,9 +286,17 @@ export async function sendFile(blobs, file, out) {
   out.end();
 }
 
-/** Deletes blobs no revision uses, older than `graceMs` (so an upload in flight keeps its chunks). */
+/**
+ * Deletes blobs nothing uses (no revision, draft, preview or profile
+ * picture), older than `graceMs` (so an upload in flight keeps its chunks).
+ */
 export async function collectGarbage(store, blobs, graceMs = 24 * 60 * 60 * 1000) {
-  const unused = store.all('SELECT hash, size FROM blobs WHERE created_at < ? AND hash NOT IN (SELECT hash FROM revision_chunks)', Date.now() - graceMs);
+  const unused = store.all(
+    `SELECT hash, size FROM blobs WHERE created_at < ?
+       AND hash NOT IN (SELECT hash FROM revision_chunks)
+       AND hash NOT IN (SELECT hash FROM draft_chunks)
+       AND hash NOT IN (SELECT preview FROM documents WHERE preview IS NOT NULL)
+       AND hash NOT IN (SELECT avatar_blob FROM users WHERE avatar_blob IS NOT NULL)`, Date.now() - graceMs);
   let bytes = 0;
   for (const blob of unused) {
     await blobs.remove(blob.hash);

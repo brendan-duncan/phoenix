@@ -6,6 +6,7 @@ import { groupRole, SHARE_ROLES } from '../access.mjs';
 import { findUser, makeHandle, publicUser, validHandle } from '../accounts.mjs';
 import { badRequest, forbidden, HttpError, notFound } from '../http.mjs';
 import { newId } from '../ids.mjs';
+import { notify } from '../notify.mjs';
 
 const MEMBER_ROLES = ['member', 'admin'];
 
@@ -47,7 +48,7 @@ function checkHandle(store, handle, exceptGroupId = null) {
   }
 }
 
-export function registerGroups(router) {
+export function registerGroups(router, app) {
   router.get('/api/groups', (ctx) => {
     const user = ctx.requireUser();
     const rows = ctx.store.all(
@@ -148,6 +149,7 @@ export function registerGroups(router) {
     }
     ctx.store.run('INSERT INTO group_members (group_id, user_id, role, added_by, added_at) VALUES (?, ?, ?, ?, ?)', group.id, user.id, memberRole, ctx.user.id, Date.now());
     ctx.store.audit(ctx.user.id, 'group.member_add', 'group', group.id, { user: user.id, role: memberRole });
+    notify(app, [user.id], { kind: 'group', text: `${ctx.user.name} added you to ${group.name}`, link: `/groups/${group.id}`, actorId: ctx.user.id });
     ctx.status = 201;
     return detail(ctx, group, role);
   });

@@ -8,7 +8,8 @@
 //   node server.mjs set-password --handle H --password P
 //   node server.mjs make-admin --handle H             make an account an admin
 //   node server.mjs invite [--email E] [--note N] [--days D] [--admin]
-//   node server.mjs gc                                delete stored chunks no revision uses
+//   node server.mjs fonts                             download the starter font library
+//   node server.mjs gc                                delete stored chunks nothing uses
 //   node server.mjs status                            print totals
 //   node server.mjs reset                             dev: delete all dev data
 //
@@ -24,6 +25,7 @@ import { createApp } from './lib/app.mjs';
 import { BlobStore } from './lib/blobs.mjs';
 import { CLOUD_DIR, editorAvailable, loadConfig } from './lib/config.mjs';
 import { Converter } from './lib/convert.mjs';
+import { installStarterFonts } from './lib/fonts.mjs';
 import { newId } from './lib/ids.mjs';
 import { hashPassword, passwordProblem } from './lib/passwords.mjs';
 import { Store } from './lib/store.mjs';
@@ -186,6 +188,12 @@ function invite(args) {
   console.log(`${config.publicUrl}/invite/${token}`);
 }
 
+async function fonts() {
+  const { config } = open();
+  const written = await installStarterFonts(config.fontsDir);
+  console.log(`Put ${written.length} fonts in ${config.fontsDir}.`);
+}
+
 async function gc() {
   const { store, blobs } = open();
   const { blobs: count, bytes } = await collectGarbage(store, blobs);
@@ -222,6 +230,7 @@ const commands = {
   'set-password': () => setPassword(args),
   'make-admin': () => makeAdmin(args),
   invite: () => invite(args),
+  fonts,
   gc,
   status,
   reset,

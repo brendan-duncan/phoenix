@@ -93,6 +93,7 @@ export class Converter {
     this.exe = config.phoenix;
     this.workDir = path.join(config.dataDir, 'work');
     this.maxMemoryMB = config.convertMaxMemoryMB;
+    this.fontsDir = config.fontsDir;
     this.maxUploadBytes = config.convertMaxUploadBytes;
     this.maxExpandedBytes = config.convertMaxExpandedBytes;
     this.queue = Promise.resolve();
@@ -141,6 +142,8 @@ export class Converter {
         PHOENIX_SETTINGS_DIR: path.join(dir, 'settings'),
         PHOENIX_NATIVE_EXTENSIONS: 'off',
         PHOENIX_GPU_DISABLE: '1',
+        // The server's font library, as the editor has it.
+        ...(this.fontsDir && fs.existsSync(this.fontsDir) ? { PHOENIX_FONTS_DIR: this.fontsDir } : {}),
         TEMP: dir,
         TMP: dir,
         TMPDIR: dir,
@@ -232,6 +235,54 @@ export class Converter {
     return { file, thumbnail: png };
   }
 
+  /**
+   * Work nobody waits for (previews, bundles): left out while people's own
+   * jobs are waiting, so it never holds them up.
+   */
+  background(job) {
+    if (!this.exe || this.waiting > 1) {
+      return Promise.resolve(null);
+    }
+    return this.enqueue(job).catch(() => null);
+  }
+
+  /**
+   * An animated preview of the start of a document (`phxFile`, its stage
+   * `size`): a small WebP of up to PREVIEW_FRAMES frames; null if it can't.
+   */
+  preview(phxFile, size) {
+    return this.background(() => this.withFolder(async (dir) => {
+      const width = PREVIEW_WIDTH;
+      const height = Math.max(8, Math.min(800, Math.round(width * size.height / Math.max(1, size.width))));
+      const out = path.join(dir, 'preview.webp');
+      const { outOfMemory } = await this.run(dir, ['render', phxFile, '--range', `1-${PREVIEW_FRAMES}`, '--out', out,
+        '--size', `${width}x${height}`, '--fps', '12', '--quality', '60', '--no-audio']);
+      return !outOfMemory && fs.existsSync(out) ? fsp.readFile(out) : null;
+    }));
+  }
+
+  /**
+   * Publishes `phxFile` as HTML5 (a page, its runtime and the movie's
+   * content and media) into the folder `target`; true when it did.
+   */
+  publish(phxFile, target) {
+    return this.enqueue(() => this.withFolder(async (dir) => {
+      const page = path.join(dir, 'bundle', 'index.html');
+      await fsp.mkdir(path.dirname(page), { recursive: true });
+      const { output, outOfMemory } = await this.run(dir, ['render', phxFile, '--out', page]);
+      if (outOfMemory) {
+        throw this.memoryError();
+      }
+      if (!fs.existsSync(page)) {
+        throw new ConvertError(`Phoenix could not publish it: ${Converter.problem(output, dir)}`);
+      }
+      await fsp.mkdir(path.dirname(target), { recursive: true });
+      await fsp.rm(target, { recursive: true, force: true });
+      await fsp.rename(path.dirname(page), target);
+      return true;
+    }));
+  }
+
   /** A new, empty document: { file, thumbnail }. */
   newDocument({ width, height, fps, background }) {
     return this.enqueue(() => this.withFolder(async (dir) => {
@@ -319,6 +370,9 @@ export class Converter {
 }
 
 const MAX_ARCHIVE_FILES = 200000;
+// Animated previews: how wide, and how many frames of the start.
+const PREVIEW_WIDTH = 256;
+const PREVIEW_FRAMES = 48;
 
 function mb(bytes) {
   return Math.ceil(bytes / (1024 * 1024));

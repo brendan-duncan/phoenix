@@ -76,6 +76,9 @@ export function loadConfig(env = process.env, overrides = {}) {
     secureCookies: publicUrl.startsWith('https:'),
     dataDir: path.resolve(env.PHOENIX_CLOUD_DATA ?? path.join(CLOUD_DIR, 'dev-data')),
     editorDir: path.resolve(env.PHOENIX_CLOUD_EDITOR ?? path.join(REPO_DIR, 'build-wasm32', 'webeditor')),
+    // The font library the editor and the server's Phoenix use (lib/
+    // fonts.mjs; `server.mjs fonts` fills it, admins add more).
+    fontsDir: path.resolve(env.PHOENIX_CLOUD_FONTS ?? path.join(env.PHOENIX_CLOUD_DATA ?? path.join(CLOUD_DIR, 'dev-data'), 'fonts')),
     // Phoenix's resources: its starter templates and tutorials.
     resourcesDir: path.resolve(env.PHOENIX_CLOUD_RESOURCES ?? path.join(REPO_DIR, 'resources')),
     // Behind Apache in production, the client address is the last

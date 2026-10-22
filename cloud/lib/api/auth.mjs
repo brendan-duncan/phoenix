@@ -1,15 +1,36 @@
 // Signing in (password or provider) and out, registering, confirming an
 // email address, the signed-in person's account, and invite pages.
 
+import fsp from 'node:fs/promises';
 import {
-  claimInvite, createUser, findAccount, findInvite, LoginRefused, nameProblem, newAccountStatus, normalizeName, renameUser, requireName, resolveLogin, safeReturnPath,
-  selfUser, sendConfirmation, STATUS_MESSAGES, takeEmailToken, validEmail,
+  claimInvite, createUser, findAccount, findInvite, LoginRefused, makeEmailToken, nameProblem, newAccountStatus, normalizeName, renameUser, requireName,
+  resolveLogin, safeReturnPath, selfUser, sendConfirmation, STATUS_MESSAGES, takeEmailToken, validEmail,
 } from '../accounts.mjs';
 import { editorAvailable } from '../config.mjs';
-import { badRequest, HttpError, notFound, redirect } from '../http.mjs';
+import { fontName, listFonts } from '../fonts.mjs';
+import { badRequest, HttpError, notFound, redirect, serveStatic } from '../http.mjs';
 import { clientAddress } from '../limits.mjs';
+import { adminIds, notificationsView, notify, unreadCount } from '../notify.mjs';
 import { finishLogin, startLogin, takeLoginState } from '../oauth.mjs';
 import { hashPassword, passwordProblem, verifyPassword } from '../passwords.mjs';
+import { keepPicture } from '../storage.mjs';
+
+/** A picture's media type from its first bytes, or null when it is not one we take. */
+function pictureType(bytes) {
+  if (bytes.length >= 8 && bytes.readUInt32BE(0) === 0x89504e47) {
+    return 'image/png';
+  }
+  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
+    return 'image/jpeg';
+  }
+  if (bytes.length >= 12 && bytes.toString('latin1', 0, 4) === 'RIFF' && bytes.toString('latin1', 8, 12) === 'WEBP') {
+    return 'image/webp';
+  }
+  if (bytes.length >= 6 && bytes.toString('latin1', 0, 4) === 'GIF8') {
+    return 'image/gif';
+  }
+  return null;
+}
 
 function myGroups(store, userId) {
   return store.all(
@@ -44,6 +65,7 @@ export function registerAuth(router, app) {
       settings: { beta: settings.beta, newAccounts: settings.newAccounts, banner: settings.banner },
       providers: Object.values(config.providers).map((p) => ({ id: p.id, name: p.name })),
       editor: editorAvailable(config),
+      unread: ctx.user ? unreadCount(store, ctx.user.id) : 0,
       converter: app.converter.available,
       playUrl: config.playUrl,
     };
@@ -130,6 +152,9 @@ export function registerAuth(router, app) {
     if (status === 'pending_email') {
       sendConfirmation(store, mailer, config, user);
     }
+    if (status === 'pending_admin') {
+      notify(app, adminIds(store), { kind: 'waiting', text: `${user.name} asked for an account`, link: '/admin', actorId: user.id });
+    }
     if (status === 'active') {
       sessions.create(ctx.res, user, ctx.req);
     }
@@ -169,6 +194,118 @@ export function registerAuth(router, app) {
     // The same answer either way, so this can't be used to find accounts.
     return { ok: true };
   }));
+
+  // A link to choose a new password, by email. The same answer whether or
+  // not there is such an account.
+  router.post('/api/auth/forgot', anonymous(async (ctx) => {
+    const body = await ctx.json();
+    const address = clientAddress(ctx.req, config.trustProxy);
+    if (attempts.blocked(`forgot:${address}`)) {
+      throw new HttpError(429, 'slow_down', 'Too many emails asked for. Try again later.');
+    }
+    attempts.fail(`forgot:${address}`);
+    const user = findAccount(store, body.email);
+    if (user?.status === 'active' && user.email) {
+      const token = makeEmailToken(store, user.id, 'reset', 2);
+      mailer.send({
+        to: user.email,
+        subject: 'A new Phoenix Cloud password',
+        text: `Hello ${user.name},\n\nChoose a new password for Phoenix Cloud here:\n${config.publicUrl}/reset/${token}\n\nThe link works for 2 hours. If you did not ask for it, ignore this email: your password stays as it is.`,
+      });
+    }
+    return { ok: true };
+  }));
+
+  // From that link: sets the password and signs them in (and out everywhere else).
+  router.post('/api/auth/reset', anonymous(async (ctx) => {
+    const body = await ctx.json();
+    const problem = passwordProblem(body.password);
+    if (problem) {
+      throw badRequest(problem);
+    }
+    const userId = takeEmailToken(store, String(body.token ?? ''), 'reset');
+    const user = userId ? store.get('SELECT * FROM users WHERE id = ?', userId) : null;
+    if (!user || user.status !== 'active') {
+      throw new HttpError(400, 'token', 'That link has been used or has run out. Ask for a new one.');
+    }
+    store.run('UPDATE users SET password_hash = ?, password_is_default = 0 WHERE id = ?', await hashPassword(body.password), user.id);
+    store.run('DELETE FROM sessions WHERE user_id = ?', user.id);
+    store.audit(user.id, 'user.password_reset_by_email', 'user', user.id);
+    sessions.create(ctx.res, user, ctx.req);
+    return { ok: true };
+  }));
+
+  // A profile picture: PNG, JPEG, WebP or GIF, up to 2 MB.
+  router.put('/api/me/avatar', async (ctx) => {
+    const user = ctx.requireUser();
+    const { file } = await ctx.upload('img', 2 * 1024 * 1024);
+    const bytes = await fsp.readFile(file);
+    if (!pictureType(bytes)) {
+      throw badRequest('A picture is a PNG, JPEG, WebP or GIF.');
+    }
+    const hash = await keepPicture(store, ctx.blobs, bytes);
+    store.run('UPDATE users SET avatar_blob = ?, avatar_url = ? WHERE id = ?', hash, `/api/users/${user.id}/avatar?v=${hash.slice(0, 12)}`, user.id);
+    return { user: selfUser(store.get('SELECT * FROM users WHERE id = ?', user.id)) };
+  });
+
+  router.delete('/api/me/avatar', (ctx) => {
+    const user = ctx.requireUser();
+    store.run("UPDATE users SET avatar_blob = NULL, avatar_url = '' WHERE id = ?", user.id);
+    return { user: selfUser(store.get('SELECT * FROM users WHERE id = ?', user.id)) };
+  });
+
+  router.get('/api/users/:id/avatar', async (ctx) => {
+    ctx.requireUser();
+    const row = store.get('SELECT avatar_blob FROM users WHERE id = ?', ctx.params.id);
+    if (!row?.avatar_blob) {
+      throw notFound('No picture.');
+    }
+    const bytes = await ctx.blobs.get(row.avatar_blob);
+    ctx.res.writeHead(200, { 'Content-Type': pictureType(bytes), 'Content-Length': bytes.length, 'Cache-Control': 'private, max-age=31536000, immutable' });
+    ctx.res.end(bytes);
+    return undefined;
+  });
+
+  // ── Notifications ───────────────────────────────────────────────────────
+
+  router.get('/api/notifications', (ctx) => {
+    const user = ctx.requireUser();
+    return { notifications: notificationsView(store, user.id), unread: unreadCount(store, user.id) };
+  });
+
+  // Marks them read: { ids } or, with none, all.
+  router.post('/api/notifications/read', async (ctx) => {
+    const user = ctx.requireUser();
+    const body = await ctx.json();
+    const now = Date.now();
+    if (Array.isArray(body.ids) && body.ids.length) {
+      for (const id of body.ids.slice(0, 500)) {
+        store.run('UPDATE notifications SET read_at = ? WHERE id = ? AND user_id = ? AND read_at IS NULL', now, Number(id), user.id);
+      }
+    } else {
+      store.run('UPDATE notifications SET read_at = ? WHERE user_id = ? AND read_at IS NULL', now, user.id);
+    }
+    return { unread: unreadCount(store, user.id) };
+  });
+
+  // ── The font library ────────────────────────────────────────────────────
+
+  router.get('/api/fonts', (ctx) => {
+    ctx.requireUser();
+    return { fonts: listFonts(config.fontsDir).map((f) => ({ ...f, url: `/api/fonts/${encodeURIComponent(f.name)}` })) };
+  });
+
+  router.get('/api/fonts/:name', async (ctx) => {
+    ctx.requireUser();
+    const name = fontName(ctx.params.name);
+    if (!name || name !== ctx.params.name || !(await serveStatic(ctx.req, ctx.res, config.fontsDir, name, {
+      'Cache-Control': 'private, max-age=86400',
+      'Cross-Origin-Resource-Policy': 'same-origin',
+    }))) {
+      throw notFound('No such font.');
+    }
+    return undefined;
+  });
 
   router.patch('/api/me/password', async (ctx) => {
     const user = ctx.requireUser();
