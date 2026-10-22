@@ -253,6 +253,30 @@ a user of its own with no access to anything else.
 - **Per person**, so many documents made by Phoenix an hour (new, template,
   tutorial, converted upload).
 
+## Running it on a server
+
+`tools/deploy_cloud.py` sets up a Debian or Ubuntu server and deploys to it;
+the server, the SSH key and the two names (the service's, and the play
+origin's) are in `tools/deploy_cloud.ini`, which the first run writes.
+
+- `setup` (once): Node 22, the libraries Phoenix needs, the user
+  `phoenix-cloud`, `/opt/phoenix-cloud` (releases), `/var/lib/phoenix-cloud`
+  (data), `/etc/phoenix-cloud.env` (settings, with a random first admin
+  password), the systemd service `phoenix-cloud` (with a memory ceiling of
+  70% of the server's), a site for Apache or nginx proxying both names to
+  ports 8792 and 8793, and a Let's Encrypt certificate for both.
+- `deploy` runs the tests, sends `cloud/` and Phoenix's templates and
+  tutorials as a new release, and makes it current if the service answers
+  with it (otherwise the release before comes back). `--editor` also sends
+  `build-wasm32/webeditor`; `--phoenix release` (or a path) also sends
+  Phoenix's Linux AppImage, which is unpacked and run with no window for
+  new documents and conversions, then checked (`server.mjs check`).
+- `status`, `logs [-f]`, `restart`, `rollback`, `backup` (a copy of the
+  database, downloaded) and `cli COMMAND` (`server.mjs` there: `fonts`,
+  `check`, `invite`, `set-password`, `make-admin`, `gc`).
+
+On the server, `sudo phoenix-cloud-admin` does the same (`tools/cloud/`).
+
 ## Running parts on other machines
 
 The service is cut where it can be split later:

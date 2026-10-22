@@ -30,6 +30,8 @@ analytics/collector/data/
 # Cloud server local development data and secrets
 cloud/dev-data/
 cloud/dev.env
+# Database copies downloaded by tools/deploy_cloud.py backup
+cloud-backups/
 
 # Secrets and data that must never be committed, wherever they are
 .env

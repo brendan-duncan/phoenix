@@ -11,6 +11,7 @@
 //   node server.mjs fonts                             download the starter font library
 //   node server.mjs gc                                delete stored chunks nothing uses
 //   node server.mjs status                            print totals
+//   node server.mjs check                             what is set up, and a test of Phoenix converting
 //   node server.mjs reset                             dev: delete all dev data
 //
 // A server with no accounts makes the admin @phoenix: password "animate" in
@@ -26,7 +27,7 @@ import { createApp } from './lib/app.mjs';
 import { BlobStore } from './lib/blobs.mjs';
 import { CLOUD_DIR, editorAvailable, loadConfig } from './lib/config.mjs';
 import { Converter } from './lib/convert.mjs';
-import { installStarterFonts } from './lib/fonts.mjs';
+import { installStarterFonts, listFonts } from './lib/fonts.mjs';
 import { newId } from './lib/ids.mjs';
 import { hashPassword, passwordProblem } from './lib/passwords.mjs';
 import { Store } from './lib/store.mjs';
@@ -214,6 +215,46 @@ function status() {
   console.log(`chunks    ${blobs.n} (${(blobs.bytes / 1048576).toFixed(1)} MB)`);
 }
 
+/**
+ * What the service will use (addresses, data, editor, Phoenix, fonts), then
+ * Phoenix made to do what the server asks of it: a new document, its
+ * animated preview and its HTML5 version. Exits 1 when something is wrong.
+ */
+async function check() {
+  const { config } = open();
+  let ok = true;
+  const say = (good, label, text) => {
+    ok &&= good;
+    console.log(`${good ? 'ok  ' : 'FAIL'} ${label.padEnd(10)} ${text}`);
+  };
+  say(true, 'address', `${config.publicUrl} (play ${config.playUrl})`);
+  say(fs.existsSync(config.dataDir), 'data', config.dataDir);
+  say(editorAvailable(config), 'editor', config.editorDir);
+  say(Boolean(config.phoenix), 'phoenix', config.phoenix ?? 'not found (set PHOENIX_CLOUD_PHOENIX)');
+  const fonts = fs.existsSync(config.fontsDir) ? listFonts(config.fontsDir) : [];
+  say(true, 'fonts', `${fonts.length} in ${config.fontsDir}${fonts.length ? '' : ' (run: fonts)'}`);
+  if (config.phoenix) {
+    const converter = new Converter(config);
+    const started = Date.now();
+    try {
+      const made = await converter.newDocument({ width: 320, height: 240, fps: 24, background: '#ffffff' });
+      say(fs.existsSync(made.file) && made.thumbnail?.length > 0, 'convert', `new document in ${Date.now() - started} ms`);
+      const preview = await converter.preview(made.file, { width: 320, height: 240 });
+      say(Boolean(preview?.length), 'preview', preview ? `${preview.length} bytes` : 'none');
+      const target = path.join(config.dataDir, 'work', `check-${newId()}`);
+      await converter.publish(made.file, target);
+      say(fs.existsSync(path.join(target, 'index.html')), 'html5', 'published');
+      fs.rmSync(target, { recursive: true, force: true });
+      fs.rmSync(made.file, { force: true });
+    } catch (err) {
+      say(false, 'convert', err.message);
+    }
+  }
+  if (!ok) {
+    process.exitCode = 1;
+  }
+}
+
 function reset() {
   loadEnvFile('dev');
   const config = loadConfig(process.env, { mode: 'dev' });
@@ -235,6 +276,7 @@ const commands = {
   fonts,
   gc,
   status,
+  check,
   reset,
 };
 if (!commands[command]) {

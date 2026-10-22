@@ -1,0 +1,194 @@
+#!/usr/bin/env bash
+# Phoenix Cloud on this server: installs what tools/deploy_cloud.py sends,
+# and looks after the service. Run with sudo.
+#
+#   phoenix-cloud-admin install-app ARCHIVE       a release of cloud/ (and Phoenix's templates and tutorials)
+#   phoenix-cloud-admin install-editor ARCHIVE    a build of the web editor
+#   phoenix-cloud-admin install-phoenix APPIMAGE  Phoenix for Linux, for new documents and conversions
+#   phoenix-cloud-admin rollback                  back to the release before
+#   phoenix-cloud-admin status | restart | logs [N] | follow
+#   phoenix-cloud-admin backup                    a copy of the database, gzipped, in /tmp
+#   phoenix-cloud-admin cli COMMAND ...           node server.mjs COMMAND (fonts, status, check, invite, ...)
+#
+# A release goes in beside the others and becomes current only if the
+# service answers with it; otherwise the one before comes back. The last few
+# of each are kept.
+
+set -euo pipefail
+
+BASE=/opt/phoenix-cloud
+DATA=/var/lib/phoenix-cloud
+ENV_FILE=/etc/phoenix-cloud.env
+SERVICE=phoenix-cloud
+KEEP=5
+
+die() { printf 'phoenix-cloud-admin: %s\n' "$*" >&2; exit 1; }
+[ "$(id -u)" = 0 ] || die "run with sudo"
+
+PORT=$(sed -n 's/^PHOENIX_CLOUD_PORT=//p' "$ENV_FILE" 2>/dev/null | tail -n 1)
+PORT=${PORT:-8792}
+
+stamp() { date -u +%Y%m%d-%H%M%S; }
+
+# Points `link` at `target` in one step.
+flip() {
+  ln -sfn "$2" "$1.new"
+  mv -Tf "$1.new" "$1"
+}
+
+healthy() {
+  for _ in $(seq 1 30); do
+    if curl -fsS -o /dev/null "http://127.0.0.1:$PORT/api/me"; then
+      return 0
+    fi
+    sleep 1
+  done
+  return 1
+}
+
+# Deletes all but the newest $KEEP folders in $1, never one a link in $BASE points at.
+prune() {
+  local keep
+  keep=$(for l in current previous editor; do readlink -f "$BASE/$l" 2>/dev/null || true; done)
+  ls -1dt "$1"/*/ 2>/dev/null | tail -n +$((KEEP + 1)) | while read -r d; do
+    d=${d%/}
+    if ! grep -qxF "$(readlink -f "$d")" <<< "$keep"; then
+      rm -rf "$d"
+    fi
+  done
+}
+
+unpack() {
+  local archive=$1 dir=$2
+  [ -f "$archive" ] || die "no file $archive"
+  mkdir -p "$dir"
+  tar -xzf "$archive" -C "$dir" --no-same-owner
+  chown -R root:root "$dir"
+  chmod -R u=rwX,go=rX "$dir"
+  rm -f "$archive"
+}
+
+cli() {
+  cd /
+  sudo -u phoenix-cloud env PHOENIX_CLOUD_ENV="$ENV_FILE" PHOENIX_CLOUD_MODE=production \
+    node --disable-warning=ExperimentalWarning "$BASE/current/cloud/server.mjs" "$@"
+}
+
+version_of() {
+  cat "$1/VERSION" 2>/dev/null || basename "$1"
+}
+
+command=${1:-status}
+shift || true
+case "$command" in
+  install-app)
+    dir="$BASE/releases/$(stamp)"
+    unpack "${1:?archive}" "$dir"
+    before=$(readlink -f "$BASE/current" 2>/dev/null || true)
+    flip "$BASE/current" "$dir"
+    systemctl restart "$SERVICE"
+    if healthy; then
+      [ -n "$before" ] && [ "$before" != "$dir" ] && flip "$BASE/previous" "$before"
+      prune "$BASE/releases"
+      echo "running $(version_of "$dir")"
+    else
+      echo "The new release did not answer. Its log:" >&2
+      journalctl -u "$SERVICE" -n 40 --no-pager >&2 || true
+      if [ -n "$before" ]; then
+        flip "$BASE/current" "$before"
+        systemctl restart "$SERVICE"
+        healthy && echo "back on $(version_of "$before")" >&2
+      fi
+      rm -rf "$dir"
+      exit 1
+    fi
+    ;;
+  install-editor)
+    dir="$BASE/editors/$(stamp)"
+    unpack "${1:?archive}" "$dir"
+    [ -f "$dir/index.html" ] || { rm -rf "$dir"; die "that archive has no index.html"; }
+    flip "$BASE/editor" "$dir"
+    prune "$BASE/editors"
+    echo "editor $(version_of "$dir")"
+    ;;
+  install-phoenix)
+    image=${1:?AppImage}
+    [ -f "$image" ] || die "no file $image"
+    work=$(mktemp -d)
+    trap 'rm -rf "$work"' EXIT
+    install -m 755 "$image" "$work/Phoenix.AppImage"
+    (cd "$work" && ./Phoenix.AppImage --appimage-extract >/dev/null)
+    exe=$(find "$work/squashfs-root" -type f -name Phoenix -perm -u+x | head -n 1)
+    [ -n "$exe" ] || die "no Phoenix program in that AppImage"
+    dir="$BASE/phoenix-builds/$(stamp)"
+    mv "$work/squashfs-root" "$dir"
+    chown -R root:root "$dir"
+    chmod -R u=rwX,go=rX "$dir"
+    # exec, so the service's memory watchdog watches Phoenix itself.
+    printf '#!/bin/sh\nexec "%s/%s" "$@"\n' "$dir" "${exe#"$work/squashfs-root/"}" > "$BASE/bin/phoenix.new"
+    chmod 755 "$BASE/bin/phoenix.new"
+    mv -f "$BASE/bin/phoenix.new" "$BASE/bin/phoenix"
+    rm -f "$image"
+    # The newest few builds; the one the wrapper runs is the newest.
+    ls -1dt "$BASE/phoenix-builds"/*/ | tail -n +$((KEEP + 1)) | xargs -r rm -rf
+    systemctl restart "$SERVICE"
+    healthy || die "the service did not answer after the restart"
+    echo "Phoenix installed; checking it converts:"
+    cli check || true
+    ;;
+  rollback)
+    before=$(readlink -f "$BASE/previous" 2>/dev/null || true)
+    [ -n "$before" ] && [ -d "$before" ] || die "there is no release before this one"
+    now=$(readlink -f "$BASE/current")
+    flip "$BASE/current" "$before"
+    flip "$BASE/previous" "$now"
+    systemctl restart "$SERVICE"
+    healthy || die "the service did not answer after going back"
+    echo "running $(version_of "$before") (was $(version_of "$now"))"
+    ;;
+  restart)
+    systemctl restart "$SERVICE"
+    healthy || die "the service did not answer"
+    echo "restarted"
+    ;;
+  status)
+    echo "service   $(systemctl is-active "$SERVICE" || true)"
+    echo "release   $(version_of "$(readlink -f "$BASE/current" 2>/dev/null || echo none)")"
+    echo "before    $(version_of "$(readlink -f "$BASE/previous" 2>/dev/null || echo none)")"
+    echo "editor    $(version_of "$(readlink -f "$BASE/editor" 2>/dev/null || echo none)")"
+    echo "phoenix   $(sed -n 's/^exec "\(.*\)" .*/\1/p' "$BASE/bin/phoenix" 2>/dev/null || echo none)"
+    echo "answers   $(curl -fsS -o /dev/null -w '%{http_code}' "http://127.0.0.1:$PORT/api/me" 2>/dev/null || echo no)"
+    echo "disk      $(du -sh "$DATA" 2>/dev/null | cut -f1) in $DATA, $(df -h --output=avail "$DATA" | tail -n 1 | tr -d ' ') free"
+    echo
+    [ -e "$BASE/current" ] && cli status
+    ;;
+  logs)
+    journalctl -u "$SERVICE" -n "${1:-100}" --no-pager
+    ;;
+  follow)
+    journalctl -u "$SERVICE" -f
+    ;;
+  backup)
+    name="cloud-$(stamp).db"
+    # VACUUM INTO: a consistent copy while the service runs.
+    sudo -u phoenix-cloud node --disable-warning=ExperimentalWarning -e '
+      const { DatabaseSync } = require("node:sqlite");
+      const q = String.fromCharCode(39);
+      new DatabaseSync(process.argv[1]).exec("VACUUM INTO " + q + process.argv[2].replaceAll(q, q + q) + q);
+    ' "$DATA/cloud.db" "$DATA/backups/$name"
+    gzip -f "$DATA/backups/$name"
+    out="/tmp/$name.gz"
+    cp "$DATA/backups/$name.gz" "$out"
+    chown "${SUDO_USER:-root}" "$out"
+    chmod 600 "$out"
+    # Backups kept on the server too: the newest few.
+    ls -1t "$DATA/backups"/cloud-*.db.gz | tail -n +$((KEEP * 2 + 1)) | xargs -r rm -f
+    echo "$out"
+    ;;
+  cli)
+    cli "$@"
+    ;;
+  *)
+    die "unknown command $command (see the top of this script)"
+    ;;
+esac
