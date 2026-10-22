@@ -1,5 +1,6 @@
 // Documents, their revisions and files, folders, sharing, favorites and recents.
 
+import fsp from 'node:fs/promises';
 import { atLeast, documentRole, groupRole, mayReadSource, SHARE_ROLES, spaceRole, VISIBILITIES } from '../access.mjs';
 import { findUser, publicUser } from '../accounts.mjs';
 import { badRequest, forbidden, HttpError, notFound } from '../http.mjs';
@@ -278,10 +279,56 @@ async function documentFrom(ctx, space, name, bytes) {
 export function registerDocuments(router, app) {
   router.get('/api/documents', (ctx) => list(ctx));
 
-  // A new, empty document, made by Phoenix: { name, width, height, fps, background }.
+  // What a new document can start from: starter templates and tutorials.
+  router.get('/api/starters', (ctx) => {
+    ctx.requireUser();
+    return app.starters.view();
+  });
+
+  router.get('/api/starters/:kind/:id/thumbnail', async (ctx) => {
+    ctx.requireUser();
+    const starter = ctx.params.kind === 'templates' ? app.starters.template(ctx.params.id)
+      : ctx.params.kind === 'tutorials' ? app.starters.tutorial(ctx.params.id) : null;
+    if (!starter?.thumbnail) {
+      throw notFound('No such picture.');
+    }
+    const bytes = await fsp.readFile(starter.thumbnail);
+    ctx.res.writeHead(200, {
+      'Content-Type': starter.thumbnail.endsWith('.gif') ? 'image/gif' : 'image/png',
+      'Content-Length': bytes.length,
+      'Cache-Control': 'private, max-age=86400',
+    });
+    ctx.res.end(bytes);
+    return undefined;
+  });
+
+  // A new document, made by Phoenix: blank ({ name, width, height, fps,
+  // background }), a copy of a starter template ({ template }), or a
+  // tutorial's starting document ({ tutorial }), which the editor then runs
+  // the lesson on.
   router.post('/api/documents', async (ctx) => {
     const body = await ctx.json();
     const space = targetSpace(ctx, { groupId: body.groupId, folderId: body.folderId });
+    if (body.template) {
+      const template = app.starters.template(String(body.template));
+      if (!template) {
+        throw notFound('No such template.');
+      }
+      const thumbnail = template.thumbnail ? await fsp.readFile(template.thumbnail) : null;
+      const bytes = await app.converter.fromFile(template.document, thumbnail);
+      return documentFrom(ctx, space, cleanName(body.name, template.title), bytes);
+    }
+    if (body.tutorial) {
+      const lesson = app.starters.tutorial(String(body.tutorial));
+      if (!lesson) {
+        throw notFound('No such tutorial.');
+      }
+      const bytes = lesson.document
+        ? await app.converter.fromFile(lesson.document)
+        : await app.converter.newDocument({ ...lesson.stage, background: '#ffffff' });
+      const made = await documentFrom(ctx, space, cleanName(body.name, lesson.title), bytes);
+      return { ...made, tutorial: lesson.id };
+    }
     const background = String(body.background ?? '#ffffff');
     if (!/^#[0-9a-f]{6}$/i.test(background)) {
       throw badRequest('The background is a color like #ffffff.');

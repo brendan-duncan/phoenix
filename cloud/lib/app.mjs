@@ -14,6 +14,7 @@ import { Converter } from './convert.mjs';
 import { HttpError, notFound, readBody, readJson, Router, sendJson, serveStatic } from './http.mjs';
 import { Attempts } from './limits.mjs';
 import { Mailer } from './mail.mjs';
+import { Starters } from './starters.mjs';
 import { Jwks } from './oauth.mjs';
 
 const DASHBOARD_DIR = path.join(CLOUD_DIR, 'dashboard');
@@ -84,6 +85,7 @@ export function createApp({ config, store, blobs }) {
     sessions: new Sessions(store, config),
     jwks: new Jwks(),
     converter: new Converter(config),
+    starters: new Starters(config.resourcesDir),
     mailer: new Mailer(config),
     attempts: new Attempts(),
   };

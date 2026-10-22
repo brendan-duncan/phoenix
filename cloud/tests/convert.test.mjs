@@ -90,6 +90,33 @@ describe('Phoenix on the server', { skip }, () => {
     assert.ok(doc.thumbnailUrl);
   });
 
+  it('lists the starter templates and tutorials', async () => {
+    const { templates, tutorials } = await me.get('/api/starters');
+    assert.ok(templates.some((t) => t.id === 'bouncing-ball' && t.thumbnailUrl));
+    assert.ok(tutorials.some((t) => t.id === '01-first-animation' && t.minutes > 0 && t.tags.length));
+    const picture = await me.request('GET', templates[0].thumbnailUrl);
+    assert.equal(picture.headers.get('content-type'), 'image/png');
+    assert.equal(await me.fails('GET', '/api/starters/templates/..%2F..%2Fsecret/thumbnail', 404), 'not_found');
+  });
+
+  it('makes a copy of a starter template, with its picture', async () => {
+    const { document: doc } = await me.post('/api/documents', { template: 'bouncing-ball' });
+    assert.equal(doc.name, 'Bouncing Ball');
+    assert.equal(doc.revision, 1);
+    assert.ok((await stored(doc)).thumbnail);
+    assert.equal(await me.fails('POST', '/api/documents', 404, { json: { template: 'nope' } }), 'not_found');
+  });
+
+  it("makes a tutorial's starting document, new or its own", async () => {
+    const fresh = await me.post('/api/documents', { tutorial: '01-first-animation' });
+    assert.equal(fresh.tutorial, '01-first-animation');
+    assert.equal(fresh.document.info.width, 1280);
+    const own = await me.post('/api/documents', { tutorial: '05-symbols-in-place' });
+    assert.equal(own.tutorial, '05-symbols-in-place');
+    assert.equal(own.document.revision, 1);
+    assert.ok(own.document.thumbnailUrl);
+  });
+
   it('says what went wrong with a file it cannot read, and keeps nothing', async () => {
     const before = server.store.get('SELECT COUNT(*) AS n FROM documents').n;
     const res = await me.request('POST', '/api/documents/upload?name=broken.svg', { body: Buffer.from('not an svg'), headers: { 'Content-Type': 'application/octet-stream' } });

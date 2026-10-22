@@ -86,6 +86,7 @@ function buildShell() {
     class: 'btn primary wide new',
     onclick: (e) => popup(e.currentTarget, [
       { label: 'New document', icon: 'file', onclick: () => newDocumentDialog() },
+      { label: 'Start a tutorial', icon: 'play', onclick: () => newDocumentDialog('tutorials') },
       { label: 'Upload files', icon: 'upload', onclick: () => fileInput.click() },
       { label: 'New folder', icon: 'folder', onclick: () => newFolder() },
       '-',
@@ -204,6 +205,7 @@ async function route() {
   const outside = { '/signin': renderSignin, '/register': renderRegister };
   if (outside[path] || path.startsWith('/invite/') || path.startsWith('/confirm/')) {
     shell = null;
+    place.drop = false;
     if (state.me.user && (path === '/signin' || path === '/register')) {
       navigate(params.get('return') || '/', { replace: true });
       return;
@@ -233,7 +235,8 @@ async function route() {
   place.groupId = null;
   place.folderId = null;
   place.editable = true;
-  place.drop = false;
+  // Files dropped on any page upload: here, or into My Files.
+  place.drop = true;
   const id = ++renderId;
   const target = h('div', { class: 'page' });
   clear(main,

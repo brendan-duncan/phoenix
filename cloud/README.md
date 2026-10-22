@@ -31,6 +31,11 @@ Files (or `--to HANDLE`'s), converting them as uploads are.
 `http://127.0.0.1:8793`. Data goes in `cloud/dev-data/` (gitignored);
 `node cloud/server.mjs reset` deletes it.
 
+Files dropped on any page of the dashboard upload: into the folder shown
+when files can be added there, otherwise into My Files. A dropped folder is
+made again in the cloud, folders inside it too, with its documents uploaded
+into them; files of other kinds are left out (and listed).
+
 New documents and uploads other than `.phx` (FLA, SWF, SVG, EPS, AI) need
 Phoenix: the server uses `build/Release/Phoenix.exe` (or RelWithDebInfo)
 from this repository, or `PHOENIX_CLOUD_PHOENIX`. Without one, only `.phx`
@@ -79,6 +84,7 @@ From the environment (or `cloud/dev.env`):
 | `PHOENIX_CLOUD_DATA` | `cloud/dev-data` (required in production) |
 | `PHOENIX_CLOUD_EDITOR` | `build-wasm32/webeditor` |
 | `PHOENIX_CLOUD_PHOENIX` | `build/Release/Phoenix.exe` in this repository |
+| `PHOENIX_CLOUD_RESOURCES` | `resources` in this repository (templates and tutorials) |
 | `PHOENIX_CLOUD_MAX_UPLOAD_MB` | `1024` |
 | `PHOENIX_CLOUD_<PROVIDER>_ID`, `_SECRET` | Google and GitHub sign-in |
 
@@ -114,7 +120,10 @@ and a banner.
 ## Editing and playing
 
 `/editor/?doc=ID` is the web editor on a cloud document, `&play=1` to play
-it. The server serves the editor's page with `dashboard/editor-host.js`
+it, `&tutorial=LESSON` to run a lesson on it. Phoenix starts with
+`--hosted`, so New, Open, Save As, templates, Close, the Start Screen and
+Tutorials are left out of its menus: new documents, templates and tutorials
+start from the dashboard's New document window. The server serves the editor's page with `dashboard/editor-host.js`
 added, which fetches the document, puts it in Phoenix's file system and
 starts Phoenix on it (with `--play` to play); each Save in Phoenix comes
 back to it (docs/web-editor.md, "A page that keeps documents") and is
@@ -130,6 +139,12 @@ settings are never touched), with a time limit:
 
 - a new document: a JSFL script for `Phoenix run-script` makes it at the
   size, frame rate and background asked for;
+- a starter template (Phoenix's `resources/templates`, as on its Start
+  Screen): the script opens the template's XFL folder and saves a copy,
+  with the template's own picture as the thumbnail;
+- a tutorial (`resources/tutorials`): its starting document, new at the
+  lesson's size or opened from its `start`; the editor then runs the lesson
+  on it (`/editor/?doc=ID&tutorial=LESSON`);
 - an FLA or SWF upload: the script opens it and saves it as `.phx`;
 - an SVG, EPS or AI upload: the script imports it into a new document, the
   stage sized to an SVG's own page or fitted round the artwork;
@@ -156,6 +171,7 @@ a user of its own with no access to anything else.
 | `lib/access.mjs` | Every access decision: roles on documents and spaces. |
 | `lib/phx.mjs` | Reads, checks, splits and rebuilds `.phx` containers; adds thumbnails. |
 | `lib/convert.mjs` | Phoenix with no window: new documents, conversions, thumbnails. |
+| `lib/starters.mjs` | Phoenix's starter templates and tutorials, read from its resources. |
 | `lib/storage.mjs` | Revisions, quotas, rebuilding files, garbage collection. |
 | `lib/blobs.mjs` | Content-addressed files on disk. |
 | `lib/api/*.mjs` | The API: auth, documents (with folders, shares, links, favorites), groups, admin. |

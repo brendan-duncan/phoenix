@@ -1,4 +1,5 @@
-// The cloud's part of the editor page (/editor/?doc=ID, &play=1 to play).
+// The cloud's part of the editor page (/editor/?doc=ID, &play=1 to play,
+// &tutorial=LESSON to run one of Phoenix's tutorials on it).
 // Phoenix's page asks window.phoenixHost to prepare it before it starts;
 // this fetches the document, puts it in Phoenix's file system and starts
 // Phoenix on it, and takes Phoenix's saves of it (src/gui/web_files.h) as
@@ -14,6 +15,7 @@
     id: params.get('doc'),
     link: params.get('link'),
     play: params.get('play') === '1',
+    tutorial: params.get('tutorial'),
     path: null,
     revision: 0,
     role: 'viewer',
@@ -146,7 +148,13 @@
     state.revision = Number(file.headers.get('X-Phoenix-Revision')) || doc.revision;
     const bytes = new Uint8Array(await file.arrayBuffer());
     state.path = `/cloud/${doc.name.replace(/[\\/:*?"<>|\u0000-\u001f]+/g, '_').slice(0, 100) || 'Untitled'}.phx`;
-    config.arguments = [state.path, ...(state.play ? ['--play'] : [])];
+    // --hosted: the document is this page's, so Phoenix leaves out New,
+    // Open, Save As and the like.
+    config.arguments = [state.path, '--hosted', ...(state.play ? ['--play'] : []), ...(state.tutorial && !state.play ? ['--tutorial', state.tutorial] : [])];
+    // A reload (or Play and back) does not start the lesson again.
+    if (state.tutorial) {
+      history.replaceState(null, '', pageUrl(state.play));
+    }
     config.preRun = [...(config.preRun ?? []), (instance) => {
       try {
         instance.FS.mkdir('/cloud');

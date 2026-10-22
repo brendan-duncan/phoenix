@@ -64,71 +64,174 @@ function thumbnail(doc, cls = 'placeholder') {
 /** What can be uploaded: Phoenix documents, and what Phoenix on the server turns into one. */
 export const UPLOAD_TYPES = '.phx,.fla,.swf,.svg,.eps,.ai';
 
+function extensionOf(name) {
+  return /\.([a-z0-9]+)$/i.exec(name)?.[1]?.toLowerCase() ?? '';
+}
+
+function uploadable(name) {
+  return UPLOAD_TYPES.split(',').includes(`.${extensionOf(name)}`);
+}
+
+/** Where an upload goes: the folder shown when files can be added there, else the top of My Files. */
+function uploadTarget() {
+  return place.editable ? { groupId: place.groupId, folderId: place.folderId } : { groupId: null, folderId: null };
+}
+
+/** Uploads one file into `target`; true when it was stored. Problems are toasts. */
+async function uploadOne(file, target, label = file.name) {
+  const ext = extensionOf(file.name);
+  if (ext !== 'phx' && !state.me.converter) {
+    toast(`${label}: this server has no Phoenix to convert .${ext} files with.`, { error: true, ms: 7000 });
+    return false;
+  }
+  const note = toast(`Uploading ${label}…`, { ms: 0 });
+  const query = new URLSearchParams({ name: file.name });
+  if (target.folderId) {
+    query.set('folderId', target.folderId);
+  }
+  if (target.groupId) {
+    query.set('groupId', target.groupId);
+  }
+  try {
+    await send('POST', `/api/documents/upload?${query}`, file, (p) => {
+      note.textContent = p < 1 ? `Uploading ${label}… ${Math.round(p * 100)}%`
+        : (ext === 'phx' ? `Storing ${label}…` : `Converting ${label} with Phoenix…`);
+    });
+    return true;
+  } catch (err) {
+    showError(new Error(`${label}: ${err.message}`));
+    return false;
+  } finally {
+    note.remove();
+  }
+}
+
+/** After uploading: says how it went and shows where the files went. */
+function uploaded(made, skipped, target) {
+  if (skipped.length) {
+    toast(`Left out ${skipped.length} file${skipped.length === 1 ? '' : 's'} Phoenix Cloud does not take (it takes ${UPLOAD_TYPES.split(',').join(' ')}): ${skipped.slice(0, 3).join(', ')}${skipped.length > 3 ? '…' : ''}`, { ms: 8000 });
+  }
+  if (!made) {
+    return;
+  }
+  toast(made === 1 ? 'Uploaded.' : `Uploaded ${made} files.`);
+  if (!place.editable && !target.groupId && !location.pathname.startsWith('/files')) {
+    navigate('/files');
+  } else {
+    rerender();
+  }
+}
+
 export async function uploadFiles(files) {
-  const target = place.editable ? place : { groupId: null, folderId: null };
+  const target = uploadTarget();
+  const skipped = [];
   let made = 0;
   for (const file of files) {
-    const ext = /\.([a-z0-9]+)$/i.exec(file.name)?.[1]?.toLowerCase();
-    if (!UPLOAD_TYPES.split(',').includes(`.${ext}`)) {
-      toast(`${file.name}: Phoenix Cloud takes ${UPLOAD_TYPES.split(',').join(' ')} files.`, { error: true, ms: 7000 });
-      continue;
-    }
-    if (ext !== 'phx' && !state.me.converter) {
-      toast(`${file.name}: this server has no Phoenix to convert .${ext} files with.`, { error: true, ms: 7000 });
-      continue;
-    }
-    const note = toast(`Uploading ${file.name}…`, { ms: 0 });
-    const query = new URLSearchParams({ name: file.name });
-    if (target.folderId) {
-      query.set('folderId', target.folderId);
-    }
-    if (target.groupId) {
-      query.set('groupId', target.groupId);
-    }
-    try {
-      await send('POST', `/api/documents/upload?${query}`, file, (p) => {
-        note.textContent = p < 1 ? `Uploading ${file.name}… ${Math.round(p * 100)}%`
-          : (ext === 'phx' ? `Storing ${file.name}…` : `Converting ${file.name} with Phoenix…`);
-      });
+    if (!uploadable(file.name)) {
+      skipped.push(file.name);
+    } else if (await uploadOne(file, target)) {
       made++;
-    } catch (err) {
-      showError(new Error(`${file.name}: ${err.message}`));
-    } finally {
-      note.remove();
     }
   }
-  if (made) {
-    toast(made === 1 ? 'Uploaded.' : `Uploaded ${made} files.`);
-    if (!place.editable && !location.pathname.startsWith('/files')) {
-      navigate('/files');
-    } else {
-      rerender();
+  uploaded(made, skipped, target);
+}
+
+/** Every entry in a dropped folder (the browser hands them over in batches). */
+function readFolder(entry) {
+  const reader = entry.createReader();
+  const all = [];
+  return new Promise((resolve, reject) => {
+    const next = () => reader.readEntries((batch) => {
+      if (!batch.length) {
+        resolve(all);
+        return;
+      }
+      all.push(...batch);
+      next();
+    }, reject);
+    next();
+  });
+}
+
+function fileOf(entry) {
+  return new Promise((resolve, reject) => entry.file(resolve, reject));
+}
+
+/**
+ * Uploads dropped files and folders: each folder made again in the cloud,
+ * with the documents in it (and its folders) uploaded into it. Files of
+ * other kinds are left out.
+ */
+async function uploadEntries(entries) {
+  const target = uploadTarget();
+  const skipped = [];
+  let made = 0;
+  const walk = async (list, folderId, path) => {
+    for (const entry of list) {
+      const label = `${path}${entry.name}`;
+      if (entry.isDirectory) {
+        let folder;
+        try {
+          ({ folder } = await post('/api/folders', { name: entry.name, parentId: folderId, groupId: target.groupId }));
+        } catch (err) {
+          showError(new Error(`${label}: ${err.message}`));
+          continue;
+        }
+        await walk(await readFolder(entry), folder.id, `${label}/`);
+      } else if (!uploadable(entry.name) || entry.name.startsWith('.')) {
+        if (!entry.name.startsWith('.')) {
+          skipped.push(label);
+        }
+      } else if (await uploadOne(await fileOf(entry), { groupId: target.groupId, folderId }, label)) {
+        made++;
+      }
     }
-  }
+  };
+  await walk(entries, target.folderId, '');
+  uploaded(made, skipped, target);
 }
 
 let dragDepth = 0;
 let dropzone = null;
+// A drag that started in this page (a card, its picture): never an upload,
+// though the browser lists a dragged picture as a file too.
+let draggingInside = false;
 
+/** Files dragged in from outside the page. */
 function hasFiles(e) {
-  return [...(e.dataTransfer?.types ?? [])].includes('Files');
+  return !draggingInside && [...(e.dataTransfer?.types ?? [])].includes('Files');
 }
 
+function hideDropzone() {
+  dropzone?.remove();
+  dropzone = null;
+  dragDepth = 0;
+}
+
+addEventListener('dragstart', () => {
+  draggingInside = true;
+});
+// The card dragged may be gone by the time the drag ends (moved into a
+// folder, the page drawn again), so its dragend may never arrive: any drop
+// ends a drag from inside too.
+addEventListener('dragend', () => {
+  draggingInside = false;
+  hideDropzone();
+});
 addEventListener('dragenter', (e) => {
   if (!place.drop || !hasFiles(e)) {
     return;
   }
   dragDepth++;
   if (!dropzone) {
-    dropzone = h('div', { class: 'dropzone' }, 'Drop .phx files to upload them here');
+    const where = place.editable && place.folderId ? 'into this folder' : place.editable && place.groupId ? 'into this group' : 'into your files';
+    dropzone = h('div', { class: 'dropzone' }, `Drop files or folders to upload them ${where}`);
     document.body.append(dropzone);
   }
 });
 addEventListener('dragleave', (e) => {
   if (dropzone && hasFiles(e) && --dragDepth <= 0) {
-    dropzone.remove();
-    dropzone = null;
-    dragDepth = 0;
+    hideDropzone();
   }
 });
 addEventListener('dragover', (e) => {
@@ -136,15 +239,27 @@ addEventListener('dragover', (e) => {
     e.preventDefault();
   }
 });
+// Seen first (capture), whatever takes the drop: whether it came from
+// inside the page is noted for the handler below, and the drag is over.
+let dropFromInside = false;
+addEventListener('drop', () => {
+  dropFromInside = draggingInside;
+  draggingInside = false;
+  hideDropzone();
+}, true);
 addEventListener('drop', (e) => {
-  if (!hasFiles(e)) {
+  if (dropFromInside || ![...(e.dataTransfer?.types ?? [])].includes('Files')) {
     return;
   }
   e.preventDefault();
-  dropzone?.remove();
-  dropzone = null;
-  dragDepth = 0;
-  if (place.drop) {
+  if (!place.drop) {
+    return;
+  }
+  // Entries are taken now: the drop's items are gone once the handler returns.
+  const entries = [...e.dataTransfer.items].map((item) => item.webkitGetAsEntry?.()).filter(Boolean);
+  if (entries.some((entry) => entry.isDirectory)) {
+    uploadEntries(entries);
+  } else {
     uploadFiles([...e.dataTransfer.files]);
   }
 });
@@ -558,7 +673,6 @@ export async function renderListing(target, { view, folder, q, title, groupId, r
     place.groupId = groupId ?? null;
     place.folderId = folder ?? null;
     place.editable = Boolean(data.canEdit);
-    place.drop = Boolean(data.canEdit);
   } else {
     place.editable = false;
   }
@@ -777,16 +891,36 @@ const STAGE_SIZES = [
   ['custom', 'Another size'],
 ];
 
-/** Asks for a name, stage size, frame rate and background; makes the document and opens it in the editor. */
-export async function newDocumentDialog() {
-  if (!state.me.converter) {
-    showError(new Error('This server has no Phoenix to make new documents with.'));
+let startersCache = null;
+
+/** Phoenix's starter templates and tutorials, fetched once. */
+function starters() {
+  startersCache ??= get('/api/starters').catch((err) => {
+    startersCache = null;
+    throw err;
+  });
+  return startersCache;
+}
+
+/** Makes a document from `body` where the page is (or in My Files) and opens it in the editor. */
+async function makeAndOpen(body, { tutorial = null } = {}) {
+  const target = place.editable ? { groupId: place.groupId, folderId: place.folderId } : { groupId: null, folderId: null };
+  const made = await post('/api/documents', { ...body, ...target });
+  const doc = made.document;
+  if (!state.me.editor) {
+    navigate(`/d/${doc.id}`);
     return;
   }
-  const target = place.editable ? { groupId: place.groupId, folderId: place.folderId } : { groupId: null, folderId: null };
+  location.href = `${editorUrl(doc)}${tutorial ? `&tutorial=${encodeURIComponent(tutorial)}` : ''}`;
+}
+
+function blankPanel(busy) {
+  const name = h('input', { type: 'text', name: 'name', value: 'Untitled', required: true, maxlength: 120, autofocus: true });
   const size = h('select', { name: 'size' }, STAGE_SIZES.map(([v, l]) => h('option', { value: v }, l)));
   const width = h('input', { type: 'number', name: 'width', min: 1, max: 8192, value: 1920 });
   const height = h('input', { type: 'number', name: 'height', min: 1, max: 8192, value: 1080 });
+  const fps = h('select', { name: 'fps' }, [24, 25, 30, 12, 15, 48, 50, 60].map((f) => h('option', { value: f }, `${f} fps`)));
+  const background = h('input', { type: 'color', name: 'background', value: '#ffffff' });
   const custom = h('div', { class: 'row hidden' }, h('label', { class: 'field grow' }, h('span', {}, 'Width'), width), h('label', { class: 'field grow' }, h('span', {}, 'Height'), height));
   size.addEventListener('change', () => {
     custom.classList.toggle('hidden', size.value !== 'custom');
@@ -794,27 +928,114 @@ export async function newDocumentDialog() {
       [width.value, height.value] = size.value.split('x');
     }
   });
-  const made = await formDialog({
-    title: 'New document',
-    submit: 'Create and edit',
-    fields: [
-      h('label', { class: 'field' }, h('span', {}, 'Name'), h('input', { type: 'text', name: 'name', value: 'Untitled', required: true, maxlength: 120, autofocus: true })),
-      h('label', { class: 'field' }, h('span', {}, 'Stage'), size),
-      custom,
-      h('div', { class: 'row' },
-        h('label', { class: 'field grow' }, h('span', {}, 'Frame rate'), h('select', { name: 'fps' }, [24, 25, 30, 12, 15, 48, 50, 60].map((f) => h('option', { value: f }, `${f} fps`)))),
-        h('label', { class: 'field' }, h('span', {}, 'Background'), h('input', { type: 'color', name: 'background', value: '#ffffff' }))),
-    ],
-    onSubmit: (data) => post('/api/documents', {
-      name: data.name, width: Number(width.value), height: Number(height.value), fps: Number(data.fps), background: data.background, ...target,
-    }),
+  const form = h('form', { class: 'stack' },
+    h('label', { class: 'field' }, h('span', {}, 'Name'), name),
+    h('label', { class: 'field' }, h('span', {}, 'Stage'), size),
+    custom,
+    h('div', { class: 'row' }, h('label', { class: 'field grow' }, h('span', {}, 'Frame rate'), fps), h('label', { class: 'field' }, h('span', {}, 'Background'), background)),
+    h('div', { class: 'buttons' }, h('button', { type: 'submit', class: 'btn primary' }, 'Create and edit')));
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    busy(() => makeAndOpen({ name: name.value, width: Number(width.value), height: Number(height.value), fps: Number(fps.value), background: background.value }), 'Making the document…');
   });
-  if (!made?.document) {
+  return form;
+}
+
+function starterCard({ title, summary, thumbnailUrl, meta = null, onclick }) {
+  return h('button', { type: 'button', class: 'starter', onclick },
+    h('div', { class: 'starter-thumb' }, thumbnailUrl ? h('img', { src: thumbnailUrl, alt: '', loading: 'lazy' }) : icon('file')),
+    h('div', { class: 'starter-title' }, title),
+    meta ? h('div', { class: 'muted small' }, meta) : null,
+    h('div', { class: 'starter-summary muted small' }, summary));
+}
+
+function templatesPanel(list, busy) {
+  if (!list.length) {
+    return h('div', { class: 'empty' }, h('h2', {}, 'No templates on this server'));
+  }
+  return h('div', { class: 'stack' },
+    h('p', { class: 'muted small flush' }, 'Ready-made documents with art in them, to change as you like. You get a copy of your own.'),
+    h('div', { class: 'starters' }, list.map((t) => starterCard({
+      ...t,
+      onclick: () => busy(() => makeAndOpen({ template: t.id }), `Making “${t.title}”…`),
+    }))));
+}
+
+function tutorialsPanel(list, busy) {
+  if (!list.length) {
+    return h('div', { class: 'empty' }, h('h2', {}, 'No tutorials on this server'));
+  }
+  const tags = [...new Set(list.flatMap((t) => t.tags))];
+  const grid = h('div', { class: 'starters' });
+  const show = (tag) => {
+    for (const chip of chips.children) {
+      chip.classList.toggle('active', chip.dataset.tag === tag);
+    }
+    clear(grid, list.filter((t) => !tag || t.tags.includes(tag)).map((t) => starterCard({
+      ...t,
+      meta: `${t.minutes} min · ${t.tags.join(', ')}`,
+      onclick: () => busy(() => makeAndOpen({ tutorial: t.id }, { tutorial: t.id }), `Setting up “${t.title}”…`),
+    })));
+  };
+  const chips = h('div', { class: 'chips' },
+    h('button', { type: 'button', class: 'chip', dataset: { tag: '' }, onclick: () => show('') }, 'All'),
+    tags.map((tag) => h('button', { type: 'button', class: 'chip', dataset: { tag }, onclick: () => show(tag) }, tag)));
+  show('');
+  return h('div', { class: 'stack' },
+    h('p', { class: 'muted small flush' }, 'Lessons that walk you through Phoenix a step at a time, pointing at what to use next. Each starts a document of your own to work in, kept in your files.'),
+    chips,
+    grid);
+}
+
+/**
+ * New document: blank, from a starter template, or a tutorial's starting
+ * document with the lesson running in the editor. `tab` picks the one shown.
+ */
+export async function newDocumentDialog(tab = 'blank') {
+  if (!state.me.converter) {
+    showError(new Error('This server has no Phoenix to make new documents with.'));
     return;
   }
-  if (state.me.editor) {
-    location.href = editorUrl(made.document);
-  } else {
-    navigate(`/d/${made.document.id}`);
-  }
+  await dialog((close) => {
+    const body = h('div', { class: 'newdoc-body' });
+    const status = h('div', { class: 'newdoc-busy hidden' });
+    let working = false;
+    // Runs `fn` with the dialog showing `what`; errors come back as a toast.
+    const busy = async (fn, what) => {
+      if (working) {
+        return;
+      }
+      working = true;
+      clear(status, what);
+      status.classList.remove('hidden');
+      try {
+        await fn();
+      } catch (err) {
+        showError(err);
+        working = false;
+        status.classList.add('hidden');
+      }
+    };
+    const tabs = [['blank', 'Blank'], ['templates', 'Templates'], ['tutorials', 'Tutorials']];
+    const bar = h('div', { class: 'tabs' });
+    const select = async (which) => {
+      clear(bar, tabs.map(([t, label]) => h('a', { href: '#', class: t === which ? 'active' : null, onclick: (e) => { e.preventDefault(); select(t); } }, label)));
+      if (which === 'blank') {
+        clear(body, blankPanel(busy));
+        return;
+      }
+      clear(body, h('div', { class: 'muted' }, 'Loading…'));
+      try {
+        const list = await starters();
+        clear(body, which === 'templates' ? templatesPanel(list.templates, busy) : tutorialsPanel(list.tutorials, busy));
+      } catch (err) {
+        clear(body, h('div', { class: 'status-bad' }, err.message));
+      }
+    };
+    select(tab);
+    return h('div', { class: 'dialog-body newdoc' },
+      h('div', { class: 'row' }, h('h2', { class: 'grow' }, 'New document'),
+        h('button', { type: 'button', class: 'btn ghost icon-only', 'aria-label': 'Close', onclick: () => close() }, icon('x'))),
+      bar, body, status);
+  }, { wide: true });
 }

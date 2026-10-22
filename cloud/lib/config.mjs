@@ -76,6 +76,8 @@ export function loadConfig(env = process.env, overrides = {}) {
     secureCookies: publicUrl.startsWith('https:'),
     dataDir: path.resolve(env.PHOENIX_CLOUD_DATA ?? path.join(CLOUD_DIR, 'dev-data')),
     editorDir: path.resolve(env.PHOENIX_CLOUD_EDITOR ?? path.join(REPO_DIR, 'build-wasm32', 'webeditor')),
+    // Phoenix's resources: its starter templates and tutorials.
+    resourcesDir: path.resolve(env.PHOENIX_CLOUD_RESOURCES ?? path.join(REPO_DIR, 'resources')),
     // Behind Apache in production, the client address is the last
     // X-Forwarded-For entry; in dev nothing forwards.
     trustProxy: env.PHOENIX_CLOUD_TRUST_PROXY ? env.PHOENIX_CLOUD_TRUST_PROXY === '1' : mode === 'production',

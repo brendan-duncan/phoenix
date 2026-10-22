@@ -195,6 +195,19 @@ export class Converter {
     }));
   }
 
+  /**
+   * A document Phoenix opens where it lies (a starter template's or a
+   * lesson's: an XFL DOMDocument.xml, an FLA or a .phx) as .phx bytes, with
+   * `thumbnail` (PNG bytes) as its picture, or one drawn from it.
+   */
+  fromFile(file, thumbnail = null) {
+    return this.enqueue(() => this.withFolder(async (dir) => {
+      const out = path.join(dir, 'out.phx');
+      const size = await this.runScript(dir, { kind: 'document', input: file, out });
+      return thumbnail ? withThumbnail(await fsp.readFile(out), thumbnail) : this.finish(dir, out, size);
+    }));
+  }
+
   /** An upload as .phx bytes: converted, or a .phx given a thumbnail if it has none. */
   fromUpload(bytes, ext) {
     const kind = UPLOAD_KINDS[ext];
