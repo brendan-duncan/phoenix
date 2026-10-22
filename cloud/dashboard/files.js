@@ -387,6 +387,7 @@ function docMenu(doc, { view, onDone = rerender }) {
     { label: 'Details', icon: 'file', onclick: () => navigate(`/d/${doc.id}`) },
     doc.canDownload && doc.revision ? { label: 'Download', icon: 'download', onclick: () => download(`/api/documents/${doc.id}/download`) } : null,
     editor ? { label: 'Share…', icon: 'share', onclick: run(() => shareDialog(doc)) } : null,
+    doc.role === 'owner' ? { label: 'Transfer ownership…', icon: 'users', onclick: run(() => transferDialog(doc)) } : null,
     '-',
     editor ? { label: 'Rename…', icon: 'edit', onclick: run(() => rename(doc)) } : null,
     editor && (isMine(doc) || doc.owner.kind === 'group') ? { label: 'Move…', icon: 'move', onclick: run(() => move(doc)) } : null,
@@ -403,6 +404,34 @@ function docMenu(doc, { view, onDone = rerender }) {
     doc.role === 'owner' ? '-' : null,
     doc.role === 'owner' ? { label: 'Move to trash', icon: 'trash', danger: true, onclick: run(async () => { await trash(doc); onDone(); }) } : null,
   ].filter((item, i, all) => item !== null && !(item === '-' && (i === 0 || all.slice(i + 1).every((x) => x === null || x === '-'))));
+}
+
+// ── Handing a document on ─────────────────────────────────────────────────
+
+/** The owner gives the document to another person, or to a group they are in. */
+export async function transferDialog(doc) {
+  const groups = state.me.groups.filter((g) => !(doc.owner.kind === 'group' && doc.owner.id === g.id));
+  const kind = h('select', { name: 'kind', 'aria-label': 'Person or group' },
+    h('option', { value: 'user' }, 'A person'), groups.length ? h('option', { value: 'group' }, 'A group') : null);
+  const who = h('input', { type: 'text', name: 'who', placeholder: 'Name or email', 'aria-label': 'Who' });
+  const group = h('select', { name: 'group', class: 'hidden', 'aria-label': 'Group' }, groups.map((g) => h('option', { value: g.id }, g.name)));
+  kind.addEventListener('change', () => {
+    who.classList.toggle('hidden', kind.value === 'group');
+    group.classList.toggle('hidden', kind.value !== 'group');
+    who.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  const result = await formDialog({
+    title: `Transfer “${doc.name}”`,
+    submit: 'Transfer',
+    note: 'They become its owner, and it moves to the top of their files. You keep working on it as an editor who can download it.',
+    fields: h('div', { class: 'row wrap' }, kind, who, group),
+    valid: () => kind.value === 'group' || Boolean(who.value.trim()),
+    onSubmit: (data) => post(`/api/documents/${doc.id}/transfer`, data.kind === 'group' ? { kind: 'group', to: data.group } : { kind: 'user', to: data.who.trim() }),
+  });
+  if (result) {
+    toast('Transferred.');
+  }
+  return result;
 }
 
 // ── The share dialog ──────────────────────────────────────────────────────

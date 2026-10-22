@@ -10,10 +10,16 @@ import { addFont, fontName, listFonts } from '../fonts.mjs';
 import { badRequest, forbidden, HttpError, notFound } from '../http.mjs';
 import { notify } from '../notify.mjs';
 import { hashPassword, passwordProblem } from '../passwords.mjs';
+import { deleteAccount } from '../ownership.mjs';
+import { effectivePlan, PLANS, validPlan } from '../plans.mjs';
 import { SETTING_DEFAULTS } from '../store.mjs';
 import { usageBytes } from '../storage.mjs';
 
 const NEW_ACCOUNTS = ['open', 'email', 'admin'];
+
+function offeredPlans() {
+  return Object.keys(PLANS).filter((p) => PLANS[p].offered);
+}
 const STATUSES = ['active', 'suspended'];
 
 function adminUser(store, u) {
@@ -22,6 +28,8 @@ function adminUser(store, u) {
     email: u.email,
     emailVerified: Boolean(u.email_verified),
     isAdmin: Boolean(u.is_admin),
+    plan: u.plan,
+    effectivePlan: effectivePlan(store, u),
     status: u.status,
     quotaMB: u.quota_mb,
     createdAt: u.created_at,
@@ -45,6 +53,11 @@ function validateSettings(input) {
         throw badRequest(`New accounts are one of ${NEW_ACCOUNTS.join(', ')}.`);
       }
       out[key] = value;
+    } else if (key === 'defaultPlan') {
+      if (!validPlan(value) || !PLANS[value].offered) {
+        throw badRequest(`New accounts start on one of the plans offered: ${offeredPlans().join(', ')}.`);
+      }
+      out[key] = value;
     } else if (key === 'beta' || key === 'registration' || key === 'locked') {
       out[key] = Boolean(value);
     } else if (key === 'lockMessage') {
@@ -60,32 +73,6 @@ function validateSettings(input) {
     }
   }
   return out;
-}
-
-/**
- * Deletes an account and everything it owns. Groups it is the only member
- * of go with it; a group it is the last admin of, with other members, has
- * to get another admin first.
- */
-function deleteAccount(store, user) {
-  store.transaction(() => {
-    for (const g of store.all("SELECT g.* FROM groups g JOIN group_members m ON m.group_id = g.id WHERE m.user_id = ? AND m.role = 'admin'", user.id)) {
-      const members = store.get('SELECT COUNT(*) AS n FROM group_members WHERE group_id = ?', g.id).n;
-      const admins = store.get("SELECT COUNT(*) AS n FROM group_members WHERE group_id = ? AND role = 'admin'", g.id).n;
-      if (members === 1) {
-        store.run("DELETE FROM documents WHERE owner_kind = 'group' AND owner_id = ?", g.id);
-        store.run("DELETE FROM folders WHERE owner_kind = 'group' AND owner_id = ?", g.id);
-        store.run("DELETE FROM shares WHERE principal_kind = 'group' AND principal_id = ?", g.id);
-        store.run('DELETE FROM groups WHERE id = ?', g.id);
-      } else if (admins === 1) {
-        throw new HttpError(409, 'last_admin', `They are the only admin of ${g.name}. Make someone else an admin of it first.`);
-      }
-    }
-    store.run("DELETE FROM documents WHERE owner_kind = 'user' AND owner_id = ?", user.id);
-    store.run("DELETE FROM folders WHERE owner_kind = 'user' AND owner_id = ?", user.id);
-    store.run("DELETE FROM shares WHERE principal_kind = 'user' AND principal_id = ?", user.id);
-    store.run('DELETE FROM users WHERE id = ?', user.id);
-  });
 }
 
 export function registerAdmin(router, app) {
@@ -152,6 +139,13 @@ export function registerAdmin(router, app) {
         });
       }
     }
+    if (body.plan !== undefined) {
+      if (!validPlan(body.plan) || !PLANS[body.plan].offered) {
+        throw badRequest(`A plan is one of ${offeredPlans().join(', ')}.`);
+      }
+      store.run('UPDATE users SET plan = ? WHERE id = ?', body.plan, user.id);
+      store.audit(me.id, 'user.plan', 'user', user.id, { plan: body.plan });
+    }
     if (body.isAdmin !== undefined) {
       store.run('UPDATE users SET is_admin = ? WHERE id = ?', Boolean(body.isAdmin), user.id);
       store.audit(me.id, 'user.admin', 'user', user.id, { admin: Boolean(body.isAdmin) });
@@ -199,7 +193,8 @@ export function registerAdmin(router, app) {
     if (user.id === me.id) {
       throw forbidden('You cannot delete your own account here.');
     }
-    deleteAccount(ctx.store, user);
+    // Groups they own go to another of their members.
+    deleteAccount(ctx.store, user, { auto: true });
     ctx.store.audit(me.id, 'user.delete', 'user', user.id, { handle: user.handle });
     return { ok: true };
   });
@@ -241,6 +236,11 @@ export function registerAdmin(router, app) {
     }
     ctx.store.audit(me.id, 'invite.revoke', 'invite', ctx.params.id);
     return { ok: true };
+  });
+
+  router.get('/api/admin/plans', (ctx) => {
+    ctx.requireAdmin();
+    return { plans: Object.entries(PLANS).map(([id, p]) => ({ id, label: p.label, offered: p.offered })) };
   });
 
   router.get('/api/admin/settings', (ctx) => {

@@ -296,17 +296,17 @@ describe('groups', () => {
     assert.equal((await bob.get(`/api/documents/${d.id}`)).document.role, 'commenter');
   });
 
-  it('keeps at least one admin', async () => {
-    assert.equal(await alice.fails('DELETE', `/api/groups/${group.id}/members/${alice.user.id}`, 409), 'last_admin');
-    assert.equal(await alice.fails('PATCH', `/api/groups/${group.id}/members/${alice.user.id}`, 409, { json: { role: 'member' } }), 'last_admin');
-    await alice.patch(`/api/groups/${group.id}/members/${bob.user.id}`, { role: 'admin' });
+  it('keeps its owner until they hand it on', async () => {
+    assert.equal(await alice.fails('DELETE', `/api/groups/${group.id}/members/${alice.user.id}`, 409), 'owner');
+    assert.equal(await alice.fails('PATCH', `/api/groups/${group.id}/members/${alice.user.id}`, 409, { json: { role: 'member' } }), 'owner');
+    await alice.post(`/api/groups/${group.id}/transfer`, { to: 'bob' });
     await alice.del(`/api/groups/${group.id}/members/${alice.user.id}`);
     // She has left (as a site admin she could still look at it).
     assert.ok(!(await alice.get('/api/groups')).groups.some((g) => g.id === group.id));
     assert.equal((await alice.get(`/api/groups/${group.id}`)).role, null);
   });
 
-  it('hands its files to the admin who deletes it', async () => {
+  it('hands its files to the owner who deletes it', async () => {
     const before = await bob.get(`/api/documents?view=group&group=${group.id}`);
     await bob.del(`/api/groups/${group.id}`);
     const mine = await bob.get('/api/documents?view=files');

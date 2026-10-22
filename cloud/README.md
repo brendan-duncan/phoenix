@@ -127,10 +127,28 @@ play origin serves nothing, and everyone else sees the lock message.
   the data folder's `outbox/`, listed under Admin > Email, and printed by
   `dev`.
 - Admin > Accounts unlocks waiting accounts, makes accounts (ready at
-  once), sets passwords, suspends, makes admins, sets storage quotas and
-  deletes accounts with what they own. An admin cannot suspend, demote or
-  delete themself; an account that is the last admin of a group with other
-  members can't be deleted until the group has another admin.
+  once), sets plans and passwords, suspends, makes admins, sets storage
+  quotas and deletes accounts with what they own (groups they own go to
+  another member). An admin cannot suspend, demote or delete themself.
+- Plans (`lib/plans.mjs`): every account has one: beta or free now, pro and
+  enterprise later. New accounts start on Admin > Settings' default plan
+  (beta). What each plan allows is not decided: `planLimits()` is where
+  limits will come from, by the plan `effectivePlan()` gives.
+- Teams are in the database only, for later: a team (`teams`) has an
+  owner, a plan and members (`team_members`), and groups can belong to it
+  (`groups.team_id`), for a company with a group for each production. A
+  member gets the better of their own plan and the team's; a managed member
+  gets the team's, and cannot delete their own account.
+- Anyone can delete their own account (Account > Delete account), with
+  their password (or their name, without one). Their documents and folders
+  go with it; first they can give each document others use to one of the
+  people who use it, and must give each group they own, with other
+  members, to one of them. The only site admin can't.
+- Documents can be handed on (Transfer ownership…, `POST
+  /api/documents/:id/transfer`) to another person or to a group the owner
+  is in; the owner before keeps it as an editor who can download it. A
+  document is in one group's files, and shared with any number of other
+  groups, each with its own role (a view-only group, say).
 
 ## Editing and playing
 
@@ -284,10 +302,12 @@ Editors without it still open the document in the web editor
 (`/file`), which then leaves out Download a Copy and Export FLA for Other
 Apps (`--no-download`).
 
-**Groups.** The creator is the first admin; a group can have many admins,
-and its last admin can neither leave nor be demoted. Members get the
-group's default role on its files. Deleting a group gives its files to the
-admin who deletes it, in a folder named after the group.
+**Groups.** A group is owned like a person's files: by its creator first,
+who can hand it to another member (`groups.owner_id`). The owner is always
+an admin; a group can have many admins, and its last admin can neither
+leave nor be demoted. Members get the group's default role on its files.
+Only the owner deletes a group, and its files become theirs, in a folder
+named after the group.
 
 **Sessions** are random tokens in an HttpOnly cookie, stored hashed.
 Every change must come from our origin and carry the session's CSRF token.

@@ -1,17 +1,24 @@
 // Groups: members with a role (member or admin), and a shared space of
-// folders and documents. The creator is the first admin; a group can have
-// many, and its last admin can neither leave nor be demoted.
+// folders and documents. A group is owned, like a person's own files, by one
+// member: the creator first, who can hand it to another member. The owner
+// is always an admin; a group can have many admins. Only the owner deletes
+// the group, and the owner can neither leave nor be demoted until someone
+// else owns it.
 
 import { groupRole, SHARE_ROLES } from '../access.mjs';
 import { findUser, makeHandle, publicUser, validHandle } from '../accounts.mjs';
 import { badRequest, forbidden, HttpError, notFound } from '../http.mjs';
 import { newId } from '../ids.mjs';
 import { notify } from '../notify.mjs';
+import { transferGroup } from '../ownership.mjs';
 
 const MEMBER_ROLES = ['member', 'admin'];
 
 function groupView(g) {
-  return { id: g.id, handle: g.handle, name: g.name, description: g.description, defaultRole: g.default_role, joinPolicy: g.join_policy, createdAt: g.created_at };
+  return {
+    id: g.id, handle: g.handle, name: g.name, description: g.description, defaultRole: g.default_role, joinPolicy: g.join_policy,
+    ownerId: g.owner_id, createdAt: g.created_at,
+  };
 }
 
 function membership(ctx, needed = 'member') {
@@ -69,8 +76,8 @@ export function registerGroups(router, app) {
     const id = newId();
     const now = Date.now();
     ctx.store.transaction(() => {
-      ctx.store.run('INSERT INTO groups (id, handle, name, description, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?)',
-        id, handle, name, String(body.description ?? '').slice(0, 500), user.id, now);
+      ctx.store.run('INSERT INTO groups (id, handle, name, description, owner_id, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        id, handle, name, String(body.description ?? '').slice(0, 500), user.id, user.id, now);
       ctx.store.run("INSERT INTO group_members (group_id, user_id, role, added_by, added_at) VALUES (?, ?, 'admin', ?, ?)", id, user.id, user.id, now);
       ctx.store.audit(user.id, 'group.create', 'group', id, { handle });
     });
@@ -108,9 +115,29 @@ export function registerGroups(router, app) {
     return detail(ctx, store.get('SELECT * FROM groups WHERE id = ?', group.id), role);
   });
 
-  // The group's files go to the admin who deletes it, in a folder named after it.
+  // The owner hands the group to another member.
+  router.post('/api/groups/:id/transfer', async (ctx) => {
+    const { group } = membership(ctx);
+    if (group.owner_id !== ctx.user.id && !ctx.user.is_admin) {
+      throw forbidden("Only the group's owner can hand it on.");
+    }
+    const body = await ctx.json();
+    const to = findUser(ctx.store, body.to) ?? ctx.store.get('SELECT * FROM users WHERE id = ?', String(body.to ?? ''));
+    if (!to) {
+      throw notFound('No one with an account has that name.');
+    }
+    transferGroup(ctx.store, group, to.id, ctx.user.id);
+    notify(app, [to.id], { kind: 'group', text: `${ctx.user.name} made you the owner of ${group.name}`, link: `/groups/${group.id}`, actorId: ctx.user.id });
+    const updated = ctx.store.get('SELECT * FROM groups WHERE id = ?', group.id);
+    return detail(ctx, updated, groupRole(ctx.store, ctx.user.id, group.id));
+  });
+
+  // The group's files go to the owner who deletes it, in a folder named after it.
   router.delete('/api/groups/:id', (ctx) => {
     const { group } = membership(ctx, 'admin');
+    if (group.owner_id && group.owner_id !== ctx.user.id) {
+      throw forbidden("Only the group's owner can delete it.");
+    }
     const { store } = ctx;
     const user = ctx.user;
     store.transaction(() => {
@@ -164,6 +191,9 @@ export function registerGroups(router, app) {
     if (!current) {
       throw notFound('They are not in the group.');
     }
+    if (ctx.params.user === group.owner_id && body.role !== 'admin') {
+      throw new HttpError(409, 'owner', "The group's owner is always an admin. Hand the group to someone else first.");
+    }
     if (current === 'admin' && body.role !== 'admin' && admins(ctx.store, group.id) <= 1) {
       throw new HttpError(409, 'last_admin', 'A group needs an admin. Make someone else an admin first.');
     }
@@ -182,6 +212,11 @@ export function registerGroups(router, app) {
     const current = groupRole(ctx.store, ctx.params.user, group.id);
     if (!current) {
       throw notFound('They are not in the group.');
+    }
+    if (ctx.params.user === group.owner_id) {
+      throw new HttpError(409, 'owner', self
+        ? 'You own this group. Hand it to another member first, or delete it.'
+        : 'They own this group; only they can hand it on.');
     }
     if (current === 'admin' && admins(ctx.store, group.id) <= 1) {
       throw new HttpError(409, 'last_admin', 'A group needs an admin. Make someone else an admin first, or delete the group.');

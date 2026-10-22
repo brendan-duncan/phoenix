@@ -1,7 +1,7 @@
 // Pages other than the file views: signing in, invites, the account page,
 // a group's members and settings, and the admin pages.
 
-import { del, get, patch, post, send } from './api.js';
+import { api, del, get, patch, post, send } from './api.js';
 import { navigate, refreshMe, reloadShell, rerender, state } from './app.js';
 import { renderListing } from './files.js';
 import {
@@ -511,10 +511,76 @@ export async function renderAccount(target) {
       h('div', { class: 'grow' }, h('div', {}, s.userAgent || 'Unknown browser'), h('div', { class: 'muted small' }, `${s.current ? 'This browser · ' : ''}active ${timeAgo(s.lastSeenAt)} · signed in ${dateTime(s.createdAt)}`)),
       s.current ? null : h('button', { type: 'button', class: 'btn ghost', onclick: async () => { await del(`/api/me/sessions/${s.id}`).catch(showError); rerender(); } }, 'Sign out'))));
 
-  clear(target, h('div', { class: 'page-head' }, h('h1', {}, 'Account')), h('div', { class: 'stack' }, profile, passwordForm, signins, sessionList));
+  const plan = state.me.plan;
+  const planPanel = h('div', { class: 'panel stack cards-form' },
+    h('h2', {}, 'Plan'),
+    h('div', { class: 'row' }, h('strong', {}, plan.label),
+      plan.team ? h('span', { class: 'muted small' }, plan.managed ? `Your account is managed by ${plan.team.name}.` : `From your team, ${plan.team.name}.`) : null),
+    plan.id === 'beta' ? h('p', { class: 'muted small flush' }, 'Free while Phoenix Cloud is in beta.') : null);
+
+  const leaving = h('div', { class: 'panel stack cards-form' },
+    h('h2', {}, 'Delete your account'),
+    h('p', { class: 'muted small flush' }, 'Your documents and folders are deleted with it. Before it goes, you can give the documents others use, and the groups you own, to someone else.'),
+    h('div', {}, h('button', { type: 'button', class: 'btn danger', onclick: () => deleteAccountDialog().catch(showError) }, icon('trash'), 'Delete account…')));
+
+  clear(target, h('div', { class: 'page-head' }, h('h1', {}, 'Account')),
+    h('div', { class: 'stack' }, profile, planPanel, passwordForm, signins, sessionList, leaving));
   if (location.hash === '#password') {
     passwordForm.scrollIntoView();
     (me.hasPassword ? current : fresh).focus();
+  }
+}
+
+/**
+ * Deleting one's own account: who takes the documents others use and the
+ * groups one owns, then the password (or name) to be sure.
+ */
+async function deleteAccountDialog() {
+  const plan = await get('/api/me/deletion');
+  if (plan.managedBy) {
+    showError(new Error(`${plan.managedBy.name} manages your account. Ask its owner to remove it.`));
+    return;
+  }
+  if (plan.lastAdmin) {
+    showError(new Error('You are the only admin of Phoenix Cloud. Make someone else an admin first.'));
+    return;
+  }
+  const choose = (name, label, candidates, required) => h('label', { class: 'field' }, h('span', {}, label),
+    h('select', { name, required },
+      required ? null : h('option', { value: '' }, 'Delete it'),
+      candidates.map((c) => h('option', { value: c.id }, `Give it to ${c.name}`))));
+  const fields = [
+    h('p', { class: 'flush' }, `This deletes your account and ${plan.documentCount === 1 ? 'your 1 document' : `your ${plan.documentCount} documents`} (${bytes(plan.bytes)}), with your folders. It cannot be undone.`),
+    plan.documents.length ? [h('h3', {}, 'Documents others use'), plan.documents.map((d) => choose(`doc:${d.id}`, d.name, d.candidates, false))] : null,
+    plan.groups.length ? [h('h3', {}, 'Groups you own'),
+      plan.groups.map((g) => (g.candidates.length
+        ? choose(`group:${g.id}`, `${g.name} (it needs a new owner)`, g.candidates, true)
+        : h('div', { class: 'muted small' }, `${g.name} has no one else in it, so it is deleted with its files.`)))] : null,
+    plan.needsPassword
+      ? h('label', { class: 'field' }, h('span', {}, 'Your password'), h('input', { type: 'password', name: 'password', required: true, autocomplete: 'current-password' }))
+      : h('label', { class: 'field' }, h('span', {}, `Type your name, ${state.me.user.name}, to confirm`), h('input', { type: 'text', name: 'name', required: true })),
+  ];
+  const done = await formDialog({
+    title: 'Delete your account?',
+    submit: 'Delete my account',
+    danger: true,
+    fields,
+    onSubmit: (data) => {
+      const documents = {};
+      const groups = {};
+      for (const [key, value] of Object.entries(data)) {
+        if (key.startsWith('doc:') && value) {
+          documents[key.slice(4)] = value;
+        } else if (key.startsWith('group:') && value) {
+          groups[key.slice(6)] = value;
+        }
+      }
+      return api('DELETE', '/api/me', { password: data.password, name: data.name, documents, groups });
+    },
+  });
+  if (done) {
+    await refreshMe();
+    navigate('/signin', { replace: true });
   }
 }
 
@@ -565,9 +631,12 @@ function membersView(detail, rerenderPage) {
     act(() => post(`/api/groups/${group.id}/members`, { who: who.value.trim(), role: memberRole.value }))();
   });
   const rows = members.map((m) => {
-    const roleBox = h('select', { 'aria-label': 'Role', disabled: !admin },
+    const owner = m.user.id === group.ownerId;
+    const roleBox = owner ? h('span', { class: 'badge accent' }, 'Owner') : h('select', { 'aria-label': 'Role', disabled: !admin },
       h('option', { value: 'member', selected: m.role === 'member' }, 'Member'), h('option', { value: 'admin', selected: m.role === 'admin' }, 'Admin'));
-    roleBox.addEventListener('change', act(() => patch(`/api/groups/${group.id}/members/${m.user.id}`, { role: roleBox.value })));
+    if (!owner) {
+      roleBox.addEventListener('change', act(() => patch(`/api/groups/${group.id}/members/${m.user.id}`, { role: roleBox.value })));
+    }
     const self = m.user.id === me.id;
     const leave = async () => {
       if (!(await confirmDialog({ title: `Leave ${group.name}?`, message: 'You will lose access to its files unless they are shared with you.', confirm: 'Leave', danger: true }))) {
@@ -581,7 +650,7 @@ function membersView(detail, rerenderPage) {
         showError(err);
       }
     };
-    const remove = admin || self ? h('button', {
+    const remove = owner ? null : admin || self ? h('button', {
       type: 'button', class: 'btn ghost', onclick: self ? leave : act(() => del(`/api/groups/${group.id}/members/${m.user.id}`)),
     }, self ? 'Leave' : 'Remove') : null;
     return h('tr', {}, h('td', {}, person(m.user)), h('td', {}, roleBox), h('td', { class: 'muted' }, `added ${timeAgo(m.addedAt)}`), h('td', {}, remove));
@@ -592,7 +661,7 @@ function membersView(detail, rerenderPage) {
     h('div', { class: 'table-wrap' }, h('table', { class: 'table' },
       h('thead', {}, h('tr', {}, h('th', {}, 'Member'), h('th', {}, 'Role'), h('th', {}, 'Joined'), h('th'))),
       h('tbody', {}, rows))),
-    h('p', { class: 'muted small' }, 'Admins add and remove members, choose what members can do with the group\'s files, and own those files. A group keeps at least one admin.'),
+    h('p', { class: 'muted small' }, 'Admins add and remove members and choose what members can do with the group\'s files. The owner is always an admin, and is the one who can hand the group on or delete it.'),
   ];
 }
 
@@ -620,7 +689,27 @@ function settingsView(detail) {
       showError(err);
     }
   });
-  const danger = h('div', { class: 'panel stack cards-form' },
+  const mine = group.ownerId === state.me.user.id;
+  const others = detail.members.filter((m) => m.user.id !== group.ownerId);
+  const handOn = mine ? h('div', { class: 'panel stack cards-form' },
+    h('h2', {}, 'Owner'),
+    h('p', { class: 'muted flush' }, 'You own this group. Hand it to another member to make them its owner; you stay an admin.'),
+    h('div', {}, h('button', {
+      type: 'button', class: 'btn', disabled: !others.length, onclick: async () => {
+        const result = await formDialog({
+          title: `Hand ${group.name} on`,
+          submit: 'Make them the owner',
+          fields: h('label', { class: 'field' }, h('span', {}, 'New owner'),
+            h('select', { name: 'to', required: true }, others.map((m) => h('option', { value: m.user.id }, m.user.name)))),
+          onSubmit: (data) => post(`/api/groups/${group.id}/transfer`, { to: data.to }),
+        });
+        if (result) {
+          toast('Handed on.');
+          rerender();
+        }
+      },
+    }, icon('users'), 'Transfer ownership…'))) : null;
+  const danger = mine ? h('div', { class: 'panel stack cards-form' },
     h('h2', {}, 'Delete the group'),
     h('p', { class: 'muted flush' }, 'Its files become yours, in a folder named after it. Members lose access to them.'),
     h('div', {}, h('button', {
@@ -636,8 +725,8 @@ function settingsView(detail) {
           showError(err);
         }
       },
-    }, icon('trash'), 'Delete group')));
-  return [form, danger];
+    }, icon('trash'), 'Delete group'))) : null;
+  return [form, handOn, danger];
 }
 
 export async function renderGroupPage(target, id, tab, folder) {
@@ -761,7 +850,14 @@ function accountButtons(u, me) {
 }
 
 async function adminUsers() {
-  const [{ users }, stats] = await Promise.all([get('/api/admin/users'), get('/api/admin/stats')]);
+  const [{ users }, stats, { plans }] = await Promise.all([get('/api/admin/users'), get('/api/admin/stats'), get('/api/admin/plans')]);
+  const planBox = (u) => {
+    const box = h('select', { 'aria-label': `${u.name}'s plan` },
+      plans.filter((p) => p.offered || p.id === u.plan).map((p) => h('option', { value: p.id, selected: p.id === u.plan }, p.label)));
+    box.addEventListener('change', change(() => patch(`/api/admin/users/${u.id}`, { plan: box.value })));
+    const from = u.effectivePlan.team ? h('div', { class: 'muted small' }, `${u.effectivePlan.plan} from ${u.effectivePlan.team.name}`) : null;
+    return [box, from];
+  };
   const me = state.me.user;
   const waiting = users.filter((u) => u.status.startsWith('pending'));
   const search = h('input', { type: 'search', placeholder: 'Find an account', 'aria-label': 'Find an account' });
@@ -770,6 +866,7 @@ async function adminUsers() {
       h('td', {}, person(u, u.isAdmin ? 'admin' : null)),
       h('td', {}, u.email ?? '', u.email && !u.emailVerified ? h('div', { class: 'muted small' }, 'not confirmed') : null),
       h('td', { class: u.status === 'active' ? 'status-ok' : 'status-bad' }, STATUS_LABELS[u.status] ?? u.status),
+      h('td', {}, planBox(u)),
       h('td', {}, String(u.documents)),
       h('td', {}, `${bytes(u.bytes)}${u.quotaMB !== null ? ` of ${u.quotaMB} MB` : ''}`),
       h('td', {}, u.lastSeenAt ? timeAgo(u.lastSeenAt) : 'never'),
@@ -794,7 +891,7 @@ async function adminUsers() {
         h('button', { type: 'button', class: 'btn danger', onclick: deleteAccount(u) }, 'Delete')))) : null,
     h('div', { class: 'row wrap admin-tools' }, search, h('div', { class: 'grow' }), h('button', { type: 'button', class: 'btn primary', onclick: createAccount }, icon('plus'), 'Create account')),
     h('div', { class: 'table-wrap' }, h('table', { class: 'table' },
-      h('thead', {}, h('tr', {}, ['Account', 'Email', 'Status', 'Files', 'Storage', 'Last seen', ''].map((t) => h('th', {}, t)))),
+      h('thead', {}, h('tr', {}, ['Account', 'Email', 'Status', 'Plan', 'Files', 'Storage', 'Last seen', ''].map((t) => h('th', {}, t)))),
       h('tbody', {}, rows))),
   ];
 }
@@ -843,7 +940,8 @@ function inviteTable(invites) {
 }
 
 async function adminSettings() {
-  const { settings } = await get('/api/admin/settings');
+  const [{ settings }, { plans }] = await Promise.all([get('/api/admin/settings'), get('/api/admin/plans')]);
+  const defaultPlan = h('select', {}, plans.filter((p) => p.offered).map((p) => h('option', { value: p.id, selected: p.id === settings.defaultPlan }, p.label)));
   const choice = (value, title, text) => h('label', { class: 'choice' },
     h('input', { type: 'radio', name: 'newAccounts', value, checked: settings.newAccounts === value }),
     h('div', {}, h('div', { class: 'choice-title' }, title), h('div', { class: 'muted small' }, text)));
@@ -860,6 +958,7 @@ async function adminSettings() {
     choice('admin', 'Locked until an admin unlocks it', 'You see new accounts under Accounts and unlock the ones you want.'),
     choice('email', 'Locked until they confirm their email address', 'They get a link by email. (There is no mail server yet: the emails wait under Email.)'),
     choice('open', 'Open', 'Anyone who registers can sign in straight away.'),
+    h('label', { class: 'field' }, h('span', {}, 'Plan new accounts start on'), defaultPlan),
     h('h2', {}, 'Sharing'),
     h('label', { class: 'check' }, beta, 'Public and link-shared documents only for people who are signed in; ask search engines not to index'),
     h('label', { class: 'field' }, h('span', {}, 'Storage for each account and group, in MB'), quota),
@@ -878,7 +977,7 @@ async function adminSettings() {
         return;
       }
       await patch('/api/admin/settings', {
-        newAccounts, registration: registration.checked, beta: beta.checked, defaultQuotaMB: Number(quota.value), banner: banner.value,
+        newAccounts, registration: registration.checked, defaultPlan: defaultPlan.value, beta: beta.checked, defaultQuotaMB: Number(quota.value), banner: banner.value,
         locked: locked.checked, lockMessage: lockMessage.value.trim(),
       });
       await reloadShell();

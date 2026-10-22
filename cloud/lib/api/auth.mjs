@@ -12,6 +12,8 @@ import { badRequest, HttpError, lockedError, notFound, redirect, serveStatic } f
 import { clientAddress } from '../limits.mjs';
 import { adminIds, notificationsView, notify, unreadCount } from '../notify.mjs';
 import { finishLogin, startLogin, takeLoginState } from '../oauth.mjs';
+import { deleteAccount, deletionChoices } from '../ownership.mjs';
+import { effectivePlan, managingTeam, PLANS } from '../plans.mjs';
 import { hashPassword, passwordProblem, verifyPassword } from '../passwords.mjs';
 import { keepPicture } from '../storage.mjs';
 
@@ -54,8 +56,14 @@ function anonymous(handler) {
   return handler;
 }
 
+function planView({ plan, team, managed }) {
+  return { id: plan, label: PLANS[plan]?.label ?? plan, team, managed };
+}
+
 export function registerAuth(router, app) {
   const { config, store, sessions, mailer, attempts } = app;
+  const lastAdmin = (user) => Boolean(user.is_admin) &&
+    store.get("SELECT COUNT(*) AS n FROM users WHERE is_admin = 1 AND status = 'active'").n <= 1;
 
   router.get('/api/me', (ctx) => {
     const settings = ctx.settings;
@@ -74,6 +82,7 @@ export function registerAuth(router, app) {
       providers: Object.values(config.providers).map((p) => ({ id: p.id, name: p.name })),
       editor: editorAvailable(config),
       unread: ctx.user ? unreadCount(store, ctx.user.id) : 0,
+      plan: ctx.user ? planView(effectivePlan(store, ctx.user)) : null,
       converter: app.converter.available,
       playUrl: config.playUrl,
     };
@@ -337,6 +346,44 @@ export function registerAuth(router, app) {
     store.run('UPDATE users SET password_hash = ?, password_is_default = 0 WHERE id = ?', await hashPassword(body.password), user.id);
     sessions.endOthers(user.id, ctx.session);
     store.audit(user.id, 'user.password', 'user', user.id);
+    return { ok: true };
+  });
+
+  // What deleting the account would take with it, and who could take
+  // over the documents others use and the groups they own.
+  router.get('/api/me/deletion', (ctx) => {
+    const user = ctx.requireUser();
+    const team = managingTeam(store, user.id);
+    return {
+      ...deletionChoices(store, user),
+      managedBy: team ? { id: team.id, name: team.name } : null,
+      lastAdmin: lastAdmin(user),
+      needsPassword: Boolean(user.password_hash),
+    };
+  });
+
+  // Deletes the account: { password (or name, without one), documents:
+  // { id: userId }, groups: { id: userId } } hand those on first.
+  router.delete('/api/me', async (ctx) => {
+    const user = ctx.requireUser();
+    const body = await ctx.json();
+    const team = managingTeam(store, user.id);
+    if (team) {
+      throw new HttpError(403, 'managed', `${team.name} manages your account. Ask its owner to remove it.`);
+    }
+    if (lastAdmin(user)) {
+      throw new HttpError(409, 'last_admin', 'You are the only admin of Phoenix Cloud. Make someone else an admin first.');
+    }
+    const confirmed = user.password_hash
+      ? await verifyPassword(String(body.password ?? ''), user.password_hash)
+      : String(body.name ?? '').trim().toLowerCase() === user.name.toLowerCase();
+    if (!confirmed) {
+      throw new HttpError(403, 'confirm', user.password_hash ? 'That password is not right.' : 'Type your name to confirm.');
+    }
+    const entries = (o) => new Map(Object.entries(o && typeof o === 'object' ? o : {}).filter(([, to]) => typeof to === 'string' && to));
+    deleteAccount(store, user, { documentTransfers: entries(body.documents), groupTransfers: entries(body.groups) });
+    store.audit(null, 'user.delete_self', 'user', user.id, { handle: user.handle });
+    sessions.destroy(ctx.res, ctx.session);
     return { ok: true };
   });
 

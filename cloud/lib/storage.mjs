@@ -60,6 +60,15 @@ function checkQuota(store, ownerKind, ownerId, sizes) {
   }
 }
 
+/** Refuses when `doc`'s stored chunks would pass the quota of the space it moves to. */
+export function checkRoomForDocument(store, doc, ownerKind, ownerId) {
+  const rows = store.all(
+    `SELECT DISTINCT b.hash, b.size FROM revision_chunks rc
+     JOIN revisions r ON r.id = rc.revision_id JOIN blobs b ON b.hash = rc.hash
+     WHERE r.document_id = ?`, doc.id);
+  checkQuota(store, ownerKind, ownerId, new Map(rows.map((r) => [r.hash, r.size])));
+}
+
 function insertRevision(store, doc, { manifest, size, application, label, userId, sizes }) {
   const current = store.get('SELECT revision FROM documents WHERE id = ?', doc.id).revision;
   const number = current + 1;

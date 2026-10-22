@@ -285,6 +285,36 @@ ALTER TABLE shares ADD COLUMN can_download INTEGER NOT NULL DEFAULT 0;
 UPDATE shares SET can_download = 1
   WHERE role = 'editor' OR document_id IN (SELECT id FROM documents WHERE allow_download = 1);
 `,
+  // v6: account plans; teams (lib/plans.mjs); a group's owner, who can hand
+  // it on, and the team it belongs to.
+  `
+ALTER TABLE users ADD COLUMN plan TEXT NOT NULL DEFAULT 'beta';
+
+CREATE TABLE teams (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  owner_id TEXT REFERENCES users (id) ON DELETE SET NULL,
+  plan TEXT NOT NULL DEFAULT 'free',
+  quota_mb INTEGER,
+  created_at INTEGER NOT NULL
+);
+CREATE TABLE team_members (
+  team_id TEXT NOT NULL REFERENCES teams (id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  role TEXT NOT NULL DEFAULT 'member',
+  managed INTEGER NOT NULL DEFAULT 0,
+  added_by TEXT,
+  added_at INTEGER NOT NULL,
+  PRIMARY KEY (team_id, user_id)
+) WITHOUT ROWID;
+CREATE INDEX team_members_user ON team_members (user_id);
+
+ALTER TABLE groups ADD COLUMN owner_id TEXT;
+ALTER TABLE groups ADD COLUMN team_id TEXT REFERENCES teams (id) ON DELETE SET NULL;
+UPDATE groups SET owner_id = COALESCE(
+  (SELECT m.user_id FROM group_members m WHERE m.group_id = groups.id AND m.user_id = groups.created_by AND m.role = 'admin'),
+  (SELECT m.user_id FROM group_members m WHERE m.group_id = groups.id AND m.role = 'admin' ORDER BY m.added_at LIMIT 1));
+`,
 ];
 
 /** Settings an admin changes at runtime; stored as JSON in `settings`. */
@@ -305,6 +335,8 @@ export const SETTING_DEFAULTS = {
   // members only, and every page asks search engines not to index it.
   beta: true,
   defaultQuotaMB: 2048,
+  // The plan a new account starts on (lib/plans.mjs).
+  defaultPlan: 'beta',
   banner: '',
 };
 

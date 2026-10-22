@@ -143,17 +143,16 @@ describe('admin account controls', () => {
     await server.client().signInWith('max', 'reset-by-admin');
   });
 
-  it('deletes an account and what it owns, but not the last admin of a shared group', async () => {
+  it('deletes an account and what it owns, handing its groups to another member', async () => {
     const nia = server.client();
     await nia.signIn('nia');
     const { document: doc } = await nia.upload('Gone', await makePhx({ document: 'gone' }));
     const { group } = await nia.post('/api/groups', { name: 'Nia Crew' });
     await nia.post(`/api/groups/${group.id}/members`, { who: 'max' });
-    assert.equal(await admin.fails('DELETE', `/api/admin/users/${nia.user.id}`, 409), 'last_admin');
     const { members } = await nia.get(`/api/groups/${group.id}`);
     const maxId = members.find((m) => m.user.handle === 'max').user.id;
-    await nia.patch(`/api/groups/${group.id}/members/${maxId}`, { role: 'admin' });
     await admin.del(`/api/admin/users/${nia.user.id}`);
+    assert.equal(server.store.get('SELECT owner_id FROM groups WHERE id = ?', group.id).owner_id, maxId);
     assert.equal(server.store.get('SELECT 1 FROM documents WHERE id = ?', doc.id), undefined);
     assert.equal(await server.client().fails('POST', '/api/auth/login', 401, { json: { login: 'nia', password: 'password-123' } }), 'bad_login');
   });

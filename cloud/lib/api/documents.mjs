@@ -8,6 +8,7 @@ import { UPLOAD_KINDS } from '../convert.mjs';
 import { badRequest, forbidden, HttpError, notFound } from '../http.mjs';
 import { hashToken, newId, newToken } from '../ids.mjs';
 import { notify } from '../notify.mjs';
+import { transferDocument } from '../ownership.mjs';
 import { bundleUrl, ensureBundle, refreshPreview } from '../renders.mjs';
 import { copyRevision, deleteDraft, draftOf, fileBytes, quotaBytes, revisionFile, saveDraft, saveRevision, sendFile, usageBytes } from '../storage.mjs';
 import { writeZip, ZIP_LIMIT, zipSize } from '../zip.mjs';
@@ -829,6 +830,39 @@ export function registerDocuments(router, app) {
       r, download ? 1 : 0, doc.id, ctx.params.kind, ctx.params.principal);
     ctx.store.audit(ctx.user.id, 'share.set', 'document', doc.id, { kind: ctx.params.kind, principalId: ctx.params.principal, role: r, canDownload: download });
     return sharesView(ctx, doc, role);
+  });
+
+  // The owner hands the document to another person, or to a group they are
+  // in: { kind: 'user' | 'group', to }. They go on as an editor of it.
+  router.post('/api/documents/:id/transfer', async (ctx) => {
+    const { doc } = access(ctx, ctx.params.id, 'owner');
+    const body = await ctx.json();
+    const { store } = ctx;
+    let to;
+    let told;
+    let toName;
+    if (body.kind === 'group') {
+      const group = store.get('SELECT * FROM groups WHERE id = ? OR handle = ?', String(body.to ?? ''), String(body.to ?? '').replace(/^@/, ''));
+      if (!group || !groupRole(store, ctx.user.id, group.id)) {
+        throw notFound('No such group, or you are not in it.');
+      }
+      to = { kind: 'group', id: group.id };
+      told = group.owner_id ? [group.owner_id] : [];
+      toName = group.name;
+    } else {
+      const user = findUser(store, body.to);
+      if (!user) {
+        throw notFound('No one with an account has that name or email.');
+      }
+      to = { kind: 'user', id: user.id };
+      told = [user.id];
+      toName = user.name;
+    }
+    transferDocument(store, doc, to, ctx.user.id);
+    notify(app, told.filter((id) => id !== ctx.user.id), {
+      kind: 'transfer', text: `${ctx.user.name} gave ${to.kind === 'group' ? toName : 'you'} “${doc.name}”`, link: `/d/${doc.id}`, actorId: ctx.user.id,
+    });
+    return { ok: true, owner: to };
   });
 
   // The owner removes a share; anyone may remove their own (leave it).
