@@ -144,6 +144,10 @@ someone who can only view, offers to save a copy instead. A bar above
 Phoenix shows the document, whether its last save reached the cloud, and
 a mark while there are unsaved changes.
 
+- Save (and Ctrl+S anywhere on the page) only ever saves to the cloud;
+  File > Download a Copy keeps a copy in the browser's downloads, and
+  File > Back to Phoenix Cloud closes the editor, offering to save first.
+
 - The loading screen shows the document's picture and name, and the
   dashboard fetches the editor ahead of time, so it opens quickly.
 - Drafts: every two minutes the editor sends unsaved work to the server as

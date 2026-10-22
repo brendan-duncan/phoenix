@@ -47,8 +47,9 @@ bool isTouchTablet();
 /// Tells the page Phoenix runs inside (window.phoenixHost, as a document
 /// server sets) that \a event happened: "playerClosed" (Test Movie closed
 /// when Phoenix only plays), "pickLibrary" (a library from the page's own
-/// documents is wanted). Nothing happens on the desktop, or in a page with
-/// no host.
+/// documents is wanted), "close" (File > Back to Phoenix Cloud: the page
+/// is to close the editor). Nothing happens on the desktop, or in a page
+/// with no host.
 inline void tellHost(const char* event)
 {
 #ifdef PHOENIX_WEB

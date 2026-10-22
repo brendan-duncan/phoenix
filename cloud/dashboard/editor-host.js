@@ -274,6 +274,9 @@
       history.replaceState(null, '', pageUrl(state.play));
     }
     config.preRun = [...(config.preRun ?? []), (instance) => {
+      // Phoenix's instance from the start: the loader hands it to started()
+      // only some time after Phoenix is up.
+      started(instance);
       for (const dir of ['/cloud', '/cloud/libraries', '/fonts']) {
         try {
           instance.FS.mkdir(dir);
@@ -458,20 +461,67 @@
 
   // ── Events from Phoenix ──────────────────────────────────────────────────
 
-  function event(name) {
-    if (name === 'playerClosed') {
-      // Back to where the person came from, or the document's page.
-      if (document.referrer && new URL(document.referrer).origin === location.origin && history.length > 1) {
-        history.back();
-      } else {
-        location.href = detailsUrl();
-      }
-    } else if (name === 'pickLibrary') {
-      pickLibrary();
+  /** Back to where the person came from, or the document's page. */
+  function leave() {
+    state.leaving = true;
+    if (document.referrer && new URL(document.referrer).origin === location.origin && history.length > 1) {
+      history.back();
+    } else {
+      location.href = detailsUrl();
     }
   }
 
+  const unsavedWork = () => Boolean(state.instance?._phoenix_has_unsaved_work?.());
+
+  /** File > Back to Phoenix Cloud: asks about unsaved changes, then goes. */
+  async function close() {
+    if (unsavedWork()) {
+      const choice = await ask('Save before going back?', `“${state.name}” has changes that are not saved.`,
+        [['Cancel', 'cancel'], ["Don't save", 'leave'], ['Save', 'save', true]]);
+      if (choice === 'cancel') {
+        return;
+      }
+      if (choice === 'save') {
+        state.instance._phoenix_save();
+        while (state.saving || state.queued) {
+          await new Promise((resolve) => setTimeout(resolve, 100));
+        }
+        // Not saved (the bar says why): stay.
+        if (unsavedWork() || state.unsent) {
+          return;
+        }
+      }
+    }
+    leave();
+  }
+
+  function event(name) {
+    if (name === 'playerClosed') {
+      leave();
+    } else if (name === 'pickLibrary') {
+      pickLibrary();
+    } else if (name === 'close') {
+      close();
+    }
+  }
+
+  // Ctrl+S anywhere on the page saves to the cloud, never the browser's
+  // Save Page. The page takes it before Phoenix does: Phoenix ignores keys
+  // until its window has been clicked, and this way saves once either way.
+  addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 's') {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      if (!state.play && !e.repeat) {
+        state.instance?._phoenix_save?.();
+      }
+    }
+  }, true);
+
   function started(instance) {
+    if (!instance || state.instance) {
+      return;
+    }
     state.instance = instance;
     if (state.play || typeof instance._phoenix_has_unsaved_work !== 'function') {
       return;
@@ -486,7 +536,7 @@
   }
 
   addEventListener('beforeunload', (event) => {
-    if (state.unsent || state.saving || state.queued) {
+    if (!state.leaving && (state.unsent || state.saving || state.queued)) {
       event.preventDefault();
       event.returnValue = '';
     }
@@ -496,6 +546,8 @@
     prepare,
     started,
     owns: (path) => Boolean(state.path) && path === state.path,
+    // Leaving on purpose (File > Back to Phoenix Cloud): no "Leave site?".
+    leaving: () => Boolean(state.leaving),
     save,
     draft,
     event,

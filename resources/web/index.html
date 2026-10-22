@@ -109,14 +109,19 @@
       // (src/gui/web_files.h).
       if (window.phoenixHost && window.phoenixHost.prepare)
         await window.phoenixHost.prepare(config, status);
-      const phoenix = await qtLoad(config);
+      // Phoenix's instance, from before it runs: qtLoad gives none back
+      // when main ends without an event loop of its own, as it does here.
+      let phoenix = null;
+      config.preRun = [...(config.preRun || []), (instance) => { phoenix = instance; }];
+      phoenix = (await qtLoad(config)) || phoenix;
       // The host may watch Phoenix from now on (its unsaved work, say).
       if (window.phoenixHost && window.phoenixHost.started)
         window.phoenixHost.started(phoenix);
       // Closing or reloading the page with changes not saved: the browser
       // asks first.
       window.addEventListener("beforeunload", (event) => {
-        if (phoenix && phoenix._phoenix_has_unsaved_work && phoenix._phoenix_has_unsaved_work()) {
+        const leaving = window.phoenixHost && window.phoenixHost.leaving && window.phoenixHost.leaving();
+        if (!leaving && phoenix && phoenix._phoenix_has_unsaved_work && phoenix._phoenix_has_unsaved_work()) {
           event.preventDefault();
           event.returnValue = "";
         }

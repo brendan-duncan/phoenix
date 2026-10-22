@@ -1690,6 +1690,14 @@ void MainWindow::startDrafts()
 
 // For a page that keeps documents: it put one at the path written in
 // /cloud/libraries/next.txt, to open as an external library.
+// For a page that keeps documents: Save, as File > Save does (the page
+// catches Ctrl+S when Phoenix does not have the keyboard).
+extern "C" EMSCRIPTEN_KEEPALIVE void phoenix_save()
+{
+    if (!s_windows.isEmpty())
+        s_windows.first()->saveForHost();
+}
+
 extern "C" EMSCRIPTEN_KEEPALIVE void phoenix_open_library()
 {
     QFile next("/cloud/libraries/next.txt");
@@ -7196,6 +7204,14 @@ void MainWindow::setupMenus()
     saveAsAction->setStatusTip("Save the document to a new file or XFL folder");
     connect(saveAsAction, &QAction::triggered, this, &MainWindow::saveFileAs);
     fileMenu->addAction(saveAsAction);
+    // In a page that keeps the document, Save goes to the page; a copy of
+    // one's own is a download.
+    if (s_hosted)
+    {
+        QAction* downloadAction = fileMenu->addAction("&Download a Copy");
+        downloadAction->setStatusTip("Keep a copy of the document as it is now in the browser's downloads");
+        connect(downloadAction, &QAction::triggered, this, &MainWindow::downloadCopy);
+    }
 
     QAction* fromTemplateAction = new QAction("New from &Template...", this);
     fromTemplateAction->setStatusTip("Start a document from one saved as a template");
@@ -7416,6 +7432,15 @@ void MainWindow::setupMenus()
     connect(compareAction, &QAction::triggered, this, &MainWindow::compareWith);
 
     fileMenu->addSeparator();
+
+    // In a page that keeps the document, leaving Phoenix is the page's
+    // to do (it asks about unsaved changes first).
+    if (s_hosted)
+    {
+        QAction* backAction = fileMenu->addAction("&Back to Phoenix Cloud");
+        backAction->setStatusTip("Close the editor and go back to your documents");
+        connect(backAction, &QAction::triggered, this, []() { web_page::tellHost("close"); });
+    }
 
     QAction* exitAction = new QAction("&Exit", this);
     web_page::desktopOnly(exitAction);
@@ -9016,8 +9041,9 @@ void MainWindow::saveToPath(const QString& filePath, std::function<void()> saved
         statusBar()->showMessage(QString("Saved %1").arg(filePath), 5000);
 #ifdef PHOENIX_WEB
         // Written to the page's own file system. A page that keeps the
-        // document itself takes it; otherwise the browser keeps it as a download.
-        if (!web_files::handToHost(filePath))
+        // document itself takes it (and a save there is never a download);
+        // otherwise the browser keeps it as a download.
+        if (!web_files::handToHost(filePath) && !s_hosted)
             web_files::download(filePath);
 #endif
         scriptEvent("documentSaved");
@@ -9039,6 +9065,15 @@ void MainWindow::saveFileThen(std::function<void()> saved)
 {
     if (_documentPath.isEmpty())
     {
+        // In a page that keeps the document, Save goes only to the page:
+        // a document with no path (not open yet, or one a lesson made) has
+        // nowhere there to go.
+        if (s_hosted)
+        {
+            if (_flaDocument)
+                statusBar()->showMessage("Only the cloud document saves here; File > Download a Copy keeps this one", 8000);
+            return;
+        }
         saveFileAsThen(saved);
         return;
     }
@@ -9070,6 +9105,27 @@ void MainWindow::saveFileThen(std::function<void()> saved)
 void MainWindow::saveFileAs()
 {
     saveFileAsThen({});
+}
+
+void MainWindow::downloadCopy()
+{
+#ifdef PHOENIX_WEB
+    if (!_flaDocument || !_flaDocument->document)
+        return;
+    settleGestures();
+    if (AutoSave* autoSave = activeAutoSave())
+        autoSave->waitForWrite();
+    const QString name = _documentPath.isEmpty() ? QString("untitled") : QFileInfo(_documentPath).completeBaseName();
+    const QString path = QDir(web_files::folder()).filePath(name + ".phx");
+    QString error;
+    if (!writeDocumentFile(*_flaDocument->document, path, error))
+    {
+        modal::warning(this, "Download Failed", QString("Failed to write the copy:\n%1").arg(error));
+        return;
+    }
+    web_files::download(path);
+    QFile::remove(path);
+#endif
 }
 
 void MainWindow::saveFileAsThen(std::function<void()> saved)

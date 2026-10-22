@@ -206,6 +206,8 @@ public:
     /// In a page that keeps the document: every two minutes, while there
     /// are unsaved changes, a copy goes to the page as a draft.
     void startDrafts();
+    /// File > Save, for the page (Ctrl+S pressed outside Phoenix).
+    void saveForHost() { saveFile(); }
 #endif
     /// Plays the document in Test Movie filling the screen, once it has
     /// opened (Phoenix <file> --play: a page that only plays).
@@ -241,6 +243,10 @@ private slots:
     void saveFile();
 
     void saveFileAs();
+    /// File > Download a Copy, in a page that keeps the document: the
+    /// document as it is now, to the browser's downloads, leaving the
+    /// page's copy as it was.
+    void downloadCopy();
 
     void exportSvg();
     void exportMovie();

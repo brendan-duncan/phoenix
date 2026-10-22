@@ -168,7 +168,13 @@ A page can run Phoenix on documents it keeps itself, as Phoenix Cloud does
 - `owns(path)` says whether a file in the page's file system is the page's.
 - `save(path, bytes)` gets the file's bytes (a `Uint8Array` copy) each time
   Phoenix saves a file the page owns, in place of a download
-  (`web_files::handToHost`).
+  (`web_files::handToHost`). With `--hosted` a save is never a download:
+  File > Download a Copy is, and Save on a document with no path (one not
+  open yet) does nothing. The page can save with `instance._phoenix_save()`,
+  as Phoenix Cloud does for Ctrl+S pressed outside Phoenix's canvas, which
+  would otherwise be the browser's Save Page.
+- `leaving()` says the page is going on purpose, so `index.html` doesn't
+  ask about unsaved changes.
 - `draft(bytes)`, with `--hosted`: every two minutes while there are
   unsaved changes, a copy of the document (`web_files::draftToHost`), to
   keep the person's work if the page closes.
@@ -179,7 +185,9 @@ A page can run Phoenix on documents it keeps itself, as Phoenix Cloud does
   when File > Import > Open Library from Phoenix Cloud (shown with
   `--hosted`) is chosen. The page then writes a document to the file
   system, its path in `/cloud/libraries/next.txt`, and calls
-  `instance._phoenix_open_library()` to open it as an external library.
+  `instance._phoenix_open_library()` to open it as an external library;
+  `"close"` when File > Back to Phoenix Cloud (shown with `--hosted`) is
+  chosen, for the page to close the editor (asking about unsaved changes).
 - `PHOENIX_FONTS_DIR` (in `config.qt.environment`) names a folder of fonts
   Phoenix loads at startup, such as a library the page wrote there.
 
