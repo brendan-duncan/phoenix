@@ -55,6 +55,16 @@ export function loadConfig(env = process.env, overrides = {}) {
   if (mode === 'production' && !env.PHOENIX_CLOUD_DATA) {
     throw new Error('PHOENIX_CLOUD_DATA must name the data folder in production');
   }
+  // In production, cookies must be Secure and the Origin check must know
+  // the real address, so a forgotten URL stops the server rather than
+  // quietly running as localhost.
+  if (mode === 'production' && !overrides.commandLine) {
+    for (const name of ['PHOENIX_CLOUD_URL', 'PHOENIX_CLOUD_PLAY_URL']) {
+      if (!/^https:\/\//.test(env[name] ?? '')) {
+        throw new Error(`${name} must be the https:// address of the service in production`);
+      }
+    }
+  }
   const providers = {};
   for (const [id, provider] of Object.entries(PROVIDERS)) {
     const key = id.toUpperCase();
@@ -67,6 +77,8 @@ export function loadConfig(env = process.env, overrides = {}) {
   return {
     mode,
     bind: env.PHOENIX_CLOUD_BIND ?? '127.0.0.1',
+    // The first admin's password on a new production server.
+    adminPassword: env.PHOENIX_CLOUD_ADMIN_PASSWORD || null,
     port,
     playPort,
     publicUrl,

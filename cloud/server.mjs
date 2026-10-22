@@ -13,7 +13,8 @@
 //   node server.mjs status                            print totals
 //   node server.mjs reset                             dev: delete all dev data
 //
-// A server with no accounts makes the admin @phoenix, password "animate".
+// A server with no accounts makes the admin @phoenix: password "animate" in
+// dev; in production PHOENIX_CLOUD_ADMIN_PASSWORD, or a random one it prints.
 // Commands other than serve read cloud/dev.env and work on the dev data
 // unless PHOENIX_CLOUD_MODE=production is set.
 
@@ -63,9 +64,10 @@ function toolMode() {
   return process.env.PHOENIX_CLOUD_MODE ?? 'dev';
 }
 
-function open(mode = toolMode()) {
+function open(mode = toolMode(), serving = false) {
   loadEnvFile(mode);
-  const config = loadConfig(process.env, { mode });
+  // Commands run from a shell need not know the service's public address.
+  const config = loadConfig(process.env, { mode, commandLine: !serving });
   const store = new Store(path.join(config.dataDir, 'cloud.db'));
   const blobs = new BlobStore(path.join(config.dataDir, 'blobs'));
   return { config, store, blobs };
@@ -79,7 +81,7 @@ function listen(server, port, host) {
 }
 
 async function serve(mode) {
-  const { config, store, blobs } = open(mode);
+  const { config, store, blobs } = open(mode, true);
   const app = createApp({ config, store, blobs });
   await app.ready;
   const cloud = http.createServer(app.handle);
@@ -111,7 +113,7 @@ async function serve(mode) {
 /** Files into an account's My Files, converted by Phoenix where they are not .phx. */
 async function importFiles(args) {
   const { config, store, blobs } = open();
-  await ensureDefaultAdmin(store);
+  await ensureDefaultAdmin(store, config);
   const handle = option(args, '--to') ?? 'phoenix';
   const user = findAccount(store, handle);
   if (!user) {
@@ -124,20 +126,20 @@ async function importFiles(args) {
     const ext = path.extname(file).slice(1).toLowerCase();
     const name = path.basename(file).replace(/\.[^.]+$/, '');
     try {
-      const made = await converter.fromUpload(path.resolve(file), ext);
+      const converted = await converter.fromUpload(path.resolve(file), ext);
       const id = newId();
       const now = Date.now();
       store.run("INSERT INTO documents (id, owner_kind, owner_id, name, created_by, created_at, modified_at, modified_by) VALUES (?, 'user', ?, ?, ?, ?, ?, ?)",
         id, user.id, name, user.id, now, now, user.id);
       try {
-        await saveRevision(store, blobs, store.get('SELECT * FROM documents WHERE id = ?', id), made, { userId: user.id });
+        await saveRevision(store, blobs, store.get('SELECT * FROM documents WHERE id = ?', id), converted, { userId: user.id });
       } catch (err) {
         store.run('DELETE FROM documents WHERE id = ?', id);
         throw err;
       } finally {
         // What Phoenix made, never the file given.
-        if (path.resolve(made.file) !== path.resolve(file)) {
-          fs.rmSync(made.file, { force: true });
+        if (path.resolve(converted.file) !== path.resolve(file)) {
+          fs.rmSync(converted.file, { force: true });
         }
       }
       made++;
@@ -150,8 +152,8 @@ async function importFiles(args) {
 }
 
 async function setPassword(args) {
-  const { store } = open();
-  await ensureDefaultAdmin(store);
+  const { config, store } = open();
+  await ensureDefaultAdmin(store, config);
   const user = findAccount(store, option(args, '--handle') ?? '');
   const password = option(args, '--password');
   if (!user) {
@@ -168,8 +170,8 @@ async function setPassword(args) {
 }
 
 async function makeAdmin(args) {
-  const { store } = open();
-  await ensureDefaultAdmin(store);
+  const { config, store } = open();
+  await ensureDefaultAdmin(store, config);
   const user = findAccount(store, option(args, '--handle') ?? '');
   if (!user) {
     throw new Error('make-admin needs --handle of an existing account');

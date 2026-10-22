@@ -28,7 +28,8 @@ const previewing = new Set();
  * has none, in the background (nobody waits for it). Never throws.
  */
 export function refreshPreview(app, documentId) {
-  if (!app.converter.available || previewing.has(documentId)) {
+  // Busy with people's own work: another time.
+  if (!app.converter.available || previewing.has(documentId) || app.converter.waiting > 1) {
     return;
   }
   previewing.add(documentId);

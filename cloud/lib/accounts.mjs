@@ -143,19 +143,26 @@ export function findAccount(store, handleOrEmail) {
 }
 
 /**
- * On a server with no accounts at all, the admin account @phoenix with the
- * password "animate", to be changed after signing in.
+ * On a server with no accounts at all, the admin account @phoenix. In dev
+ * its password is "animate"; in production it is PHOENIX_CLOUD_ADMIN_PASSWORD,
+ * or a random one printed once, since "animate" is no secret in a public
+ * repository and anyone could sign in with it before you.
  */
-export async function ensureDefaultAdmin(store) {
+export async function ensureDefaultAdmin(store, config) {
   if (store.get('SELECT 1 FROM users LIMIT 1')) {
     return null;
   }
+  const given = config.mode === 'dev' ? null : config.adminPassword;
+  const password = config.mode === 'dev' ? DEFAULT_ADMIN.password : (given ?? newToken().slice(0, 16));
   const user = createUser(store, {
     name: DEFAULT_ADMIN.name,
     isAdmin: true,
-    passwordHash: await hashPassword(DEFAULT_ADMIN.password),
-    passwordIsDefault: true,
+    passwordHash: await hashPassword(password),
+    passwordIsDefault: !given,
   });
+  console.log(given
+    ? `[cloud] made the admin account @${DEFAULT_ADMIN.name} with the password in PHOENIX_CLOUD_ADMIN_PASSWORD`
+    : `[cloud] made the admin account @${DEFAULT_ADMIN.name} with the password "${password}"; change it after signing in`);
   return user;
 }
 

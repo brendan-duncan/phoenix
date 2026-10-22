@@ -30,3 +30,16 @@ analytics/collector/data/
 # Cloud server local development data and secrets
 cloud/dev-data/
 cloud/dev.env
+
+# Secrets and data that must never be committed, wherever they are
+.env
+*.env
+*.pem
+*.key
+*.p12
+*.pfx
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.log

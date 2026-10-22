@@ -1,7 +1,7 @@
 // Pages other than the file views: signing in, invites, the account page,
 // a group's members and settings, and the admin pages.
 
-import { del, get, patch, post } from './api.js';
+import { del, get, patch, post, send } from './api.js';
 import { navigate, refreshMe, reloadShell, rerender, state } from './app.js';
 import { renderListing } from './files.js';
 import {
@@ -100,7 +100,7 @@ export function renderSignin(params) {
     form,
     providerButtons(me.providers, query),
     h('p', { class: 'small' }, 'New here? ', h('a', { class: 'link', href: `/register${returnTo !== '/' ? `?return=${encodeURIComponent(returnTo)}` : ''}` }, 'Create an account')),
-    h('p', { class: 'small muted' }, 'Forgot your password? Ask an admin to set a new one.'));
+    h('p', { class: 'small' }, h('a', { class: 'link', href: '/forgot' }, 'Forgot your password?')));
 }
 
 /**
@@ -238,6 +238,109 @@ export function renderRegister(params) {
     h('p', { class: 'small' }, 'Have an account? ', h('a', { class: 'link', href: '/signin' }, 'Sign in')));
 }
 
+export function renderForgot() {
+  const email = h('input', { type: 'email', name: 'email', autocomplete: 'email', required: true, autofocus: true });
+  const body = h('div', { class: 'stack' });
+  const form = h('form', { class: 'stack' },
+    h('p', { class: 'muted flush' }, 'We email you a link to choose a new password.'),
+    field('Email', email),
+    h('button', { type: 'submit', class: 'btn primary wide' }, 'Send the link'));
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    try {
+      await post('/api/auth/forgot', { email: email.value.trim() });
+      clear(body, h('div', { class: 'note' }, `If ${email.value.trim()} has an account, a link to choose a new password is on its way. It works for 2 hours.`),
+        h('a', { class: 'btn wide', href: '/signin' }, 'Back to sign in'));
+    } catch (err) {
+      showError(err);
+    }
+  });
+  clear(body, form);
+  return card(logo(), h('h1', {}, 'Forgot your password?'), body,
+    h('p', { class: 'small' }, h('a', { class: 'link', href: '/signin' }, 'Back to sign in')));
+}
+
+export function renderReset(token) {
+  const password = h('input', { type: 'password', autocomplete: 'new-password', required: true, minlength: 8, autofocus: true });
+  const again = h('input', { type: 'password', autocomplete: 'new-password', required: true, minlength: 8 });
+  const submit = h('button', { type: 'submit', class: 'btn primary wide', disabled: true }, 'Set password');
+  const hint = h('div', { class: 'hint' });
+  const box = messageBox();
+  const check = () => {
+    const ok = password.value.length >= 8 && password.value === again.value;
+    hint.textContent = again.value && password.value !== again.value ? 'The two passwords are not the same.' : '';
+    hint.className = `hint ${hint.textContent ? 'bad' : ''}`;
+    submit.disabled = !ok;
+  };
+  password.addEventListener('input', check);
+  again.addEventListener('input', check);
+  const form = h('form', { class: 'stack' },
+    field('New password (at least 8 characters)', password),
+    h('label', { class: 'field' }, h('span', {}, 'New password again'), again, hint),
+    submit);
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    try {
+      await post('/api/auth/reset', { token, password: password.value });
+      await refreshMe();
+      navigate('/', { replace: true });
+    } catch (err) {
+      say(box, err.message);
+    }
+  });
+  return card(logo(), h('h1', {}, 'Choose a new password'), box, form);
+}
+
+// ── The player ────────────────────────────────────────────────────────────
+
+/**
+ * A document played full size: its picture with a play button first (so it
+ * starts with sound, and loads only when wanted), then Phoenix's player
+ * for people who may open it, or an HTML5 version for people who may not.
+ */
+export function renderPlayer(id) {
+  const stage = h('div', { class: 'player-stage' }, h('div', { class: 'muted' }, 'Loading…'));
+  const title = h('span', { class: 'player-title' }, '');
+  const back = h('a', { class: 'btn ghost', href: `/d/${encodeURIComponent(id)}` }, icon('x'), 'Close');
+  const fill = h('button', {
+    type: 'button', class: 'btn ghost', onclick: () => (document.fullscreenElement ? document.exitFullscreen() : stage.requestFullscreen()).catch(() => {}),
+  }, 'Full screen');
+  const edit = h('a', { class: 'btn ghost hidden', href: '#' }, icon('edit'), 'Edit');
+  const page = h('div', { class: 'player' },
+    h('div', { class: 'player-bar' }, h('a', { class: 'brand', href: '/' }, h('img', { src: '/ui/logo.png', alt: '' })), title, h('div', { class: 'grow' }), edit, fill, back),
+    stage);
+  get(`/api/documents/${encodeURIComponent(id)}`).then(({ document: doc }) => {
+    document.title = `${doc.name} · Phoenix Cloud`;
+    title.textContent = doc.name;
+    if (doc.canDownload && state.me.editor) {
+      edit.href = `/editor/?doc=${encodeURIComponent(doc.id)}`;
+      edit.classList.remove('hidden');
+    }
+    const start = h('button', { type: 'button', class: 'player-start', 'aria-label': `Play ${doc.name}` },
+      doc.thumbnailUrl ? h('img', { src: doc.thumbnailUrl, alt: '' }) : null,
+      h('span', { class: 'player-button' }, icon('play')));
+    start.addEventListener('click', async () => {
+      clear(stage, h('div', { class: 'muted' }, 'Getting it ready…'));
+      try {
+        const play = await get(`/api/documents/${encodeURIComponent(doc.id)}/play`);
+        if (play.mode === 'editor') {
+          location.href = play.url;
+          return;
+        }
+        const frame = h('iframe', { src: play.url, title: doc.name, allow: 'autoplay; fullscreen', sandbox: 'allow-scripts allow-same-origin' });
+        if (play.width && play.height) {
+          frame.style.aspectRatio = `${play.width} / ${play.height}`;
+        }
+        clear(stage, frame);
+      } catch (err) {
+        clear(stage, h('div', { class: 'status-bad' }, err.message));
+      }
+    });
+    clear(stage, start);
+  }).catch((err) => clear(stage, h('div', { class: 'status-bad' }, err.message)));
+  return page;
+}
+
 export function renderConfirm(token) {
   const body = h('div', { class: 'stack' }, h('p', {}, 'Confirming your email address…'));
   post('/api/auth/confirm', { token }).then(async (result) => {
@@ -272,6 +375,33 @@ export function renderInvite(token) {
 
 // ── Account ───────────────────────────────────────────────────────────────
 
+/** The profile picture, with ways to change or remove it. */
+function pictureRow(me) {
+  const input = h('input', { type: 'file', accept: 'image/png,image/jpeg,image/webp,image/gif', class: 'hidden' });
+  input.addEventListener('change', async () => {
+    const file = input.files[0];
+    if (!file) {
+      return;
+    }
+    try {
+      await send('PUT', '/api/me/avatar', file);
+      await reloadShell();
+      toast('Picture changed.');
+    } catch (err) {
+      showError(err);
+    }
+  });
+  return h('div', { class: 'row' }, avatar(me, 'large'),
+    h('button', { type: 'button', class: 'btn', onclick: () => input.click() }, 'Change picture'),
+    me.avatarUrl ? h('button', {
+      type: 'button', class: 'btn ghost', onclick: async () => {
+        await del('/api/me/avatar').catch(showError);
+        await reloadShell();
+      },
+    }, 'Remove') : null,
+    input);
+}
+
 export async function renderAccount(target) {
   const [{ sessions }, { identities }] = await Promise.all([get('/api/me/sessions'), get('/api/me/identities')]);
   if (!target.isConnected) {
@@ -289,7 +419,7 @@ export async function renderAccount(target) {
   }, { current: me.name });
   const profile = h('form', { class: 'panel stack cards-form' },
     h('h2', {}, 'Profile'),
-    h('div', { class: 'row' }, avatar(me)),
+    pictureRow(me),
     h('label', { class: 'field' }, h('span', {}, 'Name'), name, nameHint,
       h('span', { class: 'muted small' }, 'What others see, and what you sign in with.')),
     h('label', { class: 'field' }, h('span', {}, 'Email'), email),
@@ -526,7 +656,7 @@ const STATUS_LABELS = {
 };
 
 function adminTabs(tab, waiting) {
-  return h('div', { class: 'tabs' }, [['users', waiting ? `Accounts (${waiting} waiting)` : 'Accounts'], ['invites', 'Invites'], ['settings', 'Settings'], ['email', 'Email'], ['audit', 'Activity']]
+  return h('div', { class: 'tabs' }, [['users', waiting ? `Accounts (${waiting} waiting)` : 'Accounts'], ['invites', 'Invites'], ['settings', 'Settings'], ['fonts', 'Fonts'], ['email', 'Email'], ['audit', 'Activity']]
     .map(([t, label]) => h('a', { href: `/admin/${t}`, class: tab === t ? 'active' : null }, label)));
 }
 
@@ -724,6 +854,26 @@ async function adminSettings() {
   return [form];
 }
 
+async function adminFonts() {
+  const { fonts } = await get('/api/admin/fonts');
+  const input = h('input', { type: 'file', accept: '.ttf,.otf', multiple: true, class: 'hidden' });
+  input.addEventListener('change', async () => {
+    for (const file of input.files) {
+      await send('POST', `/api/admin/fonts?name=${encodeURIComponent(file.name)}`, file).catch((err) => showError(new Error(`${file.name}: ${err.message}`)));
+    }
+    rerender();
+  });
+  return [
+    h('p', { class: 'muted' }, 'The fonts the web editor loads and Phoenix on the server draws with. Liberation Sans, Serif and Mono, Carlito and Caladea stand in for Arial, Times New Roman, Courier New, Calibri and Cambria with the same widths. Run node cloud/server.mjs fonts to get them; add any .ttf or .otf you have the right to share.'),
+    h('div', { class: 'row admin-tools' }, h('button', { type: 'button', class: 'btn primary', onclick: () => input.click() }, icon('upload'), 'Add fonts'), input,
+      h('span', { class: 'muted small' }, `${count(fonts.length, 'font')}, ${bytes(fonts.reduce((n, f) => n + f.size, 0))} for the editor to load`)),
+    fonts.length ? h('div', { class: 'table-wrap' }, h('table', { class: 'table' },
+      h('thead', {}, h('tr', {}, ['Font', 'Size', ''].map((t) => h('th', {}, t)))),
+      h('tbody', {}, fonts.map((f) => h('tr', {}, h('td', {}, f.name), h('td', {}, bytes(f.size)),
+        h('td', {}, h('button', { type: 'button', class: 'btn ghost small-btn danger', onclick: change(() => del(`/api/admin/fonts/${encodeURIComponent(f.name)}`)) }, 'Remove'))))))) : null,
+  ];
+}
+
 async function adminEmail() {
   const { messages } = await get('/api/admin/outbox');
   return [
@@ -751,7 +901,7 @@ export async function renderAdmin(target, tab) {
     clear(target, h('div', { class: 'empty' }, icon('lock'), h('h2', {}, 'Admins only')));
     return;
   }
-  const build = { users: adminUsers, invites: adminInvites, settings: adminSettings, email: adminEmail, audit: adminAudit }[tab] ?? adminUsers;
+  const build = { users: adminUsers, invites: adminInvites, settings: adminSettings, fonts: adminFonts, email: adminEmail, audit: adminAudit }[tab] ?? adminUsers;
   const [content, stats] = await Promise.all([build(), get('/api/admin/stats')]);
   if (target.isConnected) {
     clear(target, h('div', { class: 'page-head' }, h('h1', {}, 'Admin')), adminTabs(tab, stats.waiting), content);

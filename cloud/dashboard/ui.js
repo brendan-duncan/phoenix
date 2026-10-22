@@ -81,6 +81,7 @@ const ICONS = {
   sparkle: '<path d="M12 3l1.8 5.4L19 10l-5.2 1.6L12 17l-1.8-5.4L5 10l5.2-1.6z"/>',
   move: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM10 13h6M13 10l3 3-3 3"/>',
   play: '<path d="M7 4l13 8-13 8z"/>',
+  bell: '<path d="M6 9a6 6 0 0 1 12 0c0 6 3 7 3 7H3s3-1 3-7M10 20a2 2 0 0 0 4 0"/>',
 };
 
 export function icon(name, cls = '') {
@@ -292,7 +293,7 @@ export function timeAgo(ms) {
     return '';
   }
   const s = Math.round((Date.now() - ms) / 1000);
-  if (s < 45) {
+  if (s < 60) {
     return 'just now';
   }
   const steps = [[60, 'minute'], [3600, 'hour'], [86400, 'day'], [604800, 'week']];

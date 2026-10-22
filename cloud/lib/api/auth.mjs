@@ -77,16 +77,19 @@ export function registerAuth(router, app) {
     const body = await ctx.json();
     const login = String(body.login ?? '').trim().replace(/^@/, '').toLowerCase();
     const address = clientAddress(ctx.req, config.trustProxy);
-    if (attempts.blocked(`login:${login}`) || attempts.blocked(`ip:${address}`)) {
+    // Failures count per name from one address, so nobody else can lock
+    // an account (the admin's, say) by guessing at it.
+    const tries = `login:${login}:${address}`;
+    if (attempts.blocked(tries) || attempts.blocked(`ip:${address}`)) {
       throw new HttpError(429, 'slow_down', 'Too many tries. Wait a few minutes and try again.');
     }
     const user = findAccount(store, login);
     if (!(await verifyPassword(String(body.password ?? ''), user?.password_hash))) {
-      attempts.fail(`login:${login}`);
+      attempts.fail(tries);
       attempts.fail(`ip:${address}`);
       throw new HttpError(401, 'bad_login', 'That name or password is not right.');
     }
-    attempts.clear(`login:${login}`);
+    attempts.clear(tries);
     if (user.status !== 'active') {
       throw new HttpError(403, user.status, STATUS_MESSAGES[user.status] ?? 'This account cannot sign in.');
     }

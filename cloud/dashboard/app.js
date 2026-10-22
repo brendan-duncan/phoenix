@@ -3,8 +3,10 @@
 
 import { get, post, setCsrf, setLink } from './api.js';
 import { newDocumentDialog, renderDocument, renderListing, UPLOAD_TYPES, uploadFiles } from './files.js';
-import { newGroupDialog, renderAccount, renderAdmin, renderConfirm, renderGroupPage, renderInvite, renderRegister, renderSignin } from './pages.js';
-import { avatar, clear, closeMenu, h, icon, popup, promptDialog, showError, toast } from './ui.js';
+import {
+  newGroupDialog, renderAccount, renderAdmin, renderConfirm, renderForgot, renderGroupPage, renderInvite, renderPlayer, renderRegister, renderReset, renderSignin,
+} from './pages.js';
+import { avatar, clear, closeMenu, h, icon, popup, promptDialog, showError, timeAgo, toast } from './ui.js';
 
 export const state = {
   me: null,
@@ -129,6 +131,7 @@ function buildShell() {
     h('button', { type: 'button', class: 'btn ghost icon-only menu-toggle', 'aria-label': 'Menu', onclick: () => shell.classList.toggle('drawer') }, icon('menu')),
     h('div', { class: 'search' }, icon('search'), search),
     h('div', { class: 'grow' }),
+    bell(),
     account);
 
   main = h('main', { id: 'main' });
@@ -141,6 +144,59 @@ function buildShell() {
   });
   shell.search = search;
   return shell;
+}
+
+/** The bell: what happened that concerns this person, with how many are unread. */
+function bell() {
+  const count = h('span', { class: 'bell-count hidden' });
+  const show = (n) => {
+    count.textContent = n > 9 ? '9+' : String(n);
+    count.classList.toggle('hidden', !n);
+  };
+  show(state.me.unread ?? 0);
+  const button = h('button', { type: 'button', class: 'btn ghost icon-only bell', 'aria-label': 'Notifications', title: 'Notifications' }, icon('bell'), count);
+  button.addEventListener('click', async () => {
+    let list = [];
+    try {
+      ({ notifications: list } = await get('/api/notifications'));
+    } catch (err) {
+      showError(err);
+      return;
+    }
+    popup(button, list.length
+      ? [{ head: 'Notifications' }, ...list.slice(0, 15).map((n) => ({
+        label: `${n.read ? '' : '● '}${n.text} · ${timeAgo(n.createdAt)}`,
+        onclick: () => navigate(n.link || '/'),
+      }))]
+      : [{ head: 'Nothing new' }]);
+    if (list.some((n) => !n.read)) {
+      post('/api/notifications/read').then(({ unread }) => show(unread)).catch(() => {});
+    }
+  });
+  // Checks now and then while the page is open.
+  setInterval(() => {
+    if (document.visibilityState === 'visible') {
+      get('/api/me').then((me) => show(me.unread ?? 0)).catch(() => {});
+    }
+  }, 60 * 1000);
+  return button;
+}
+
+/**
+ * Fetches the web editor into the browser's cache while nothing else is
+ * going on, so Edit and Play open quickly.
+ */
+function warmEditor() {
+  if (!state.me.editor || warmEditor.done) {
+    return;
+  }
+  warmEditor.done = true;
+  const idle = window.requestIdleCallback ?? ((fn) => setTimeout(fn, 3000));
+  idle(() => {
+    for (const file of ['/editor/qtloader.js', '/editor/Phoenix.js', '/editor/Phoenix.wasm']) {
+      document.head.append(h('link', { rel: 'prefetch', href: file }));
+    }
+  });
 }
 
 async function newFolder() {
@@ -202,8 +258,8 @@ async function route() {
   // A share link's token rides along on the document page only.
   setLink(path.startsWith('/d/') ? params.get('link') : null);
 
-  const outside = { '/signin': renderSignin, '/register': renderRegister };
-  if (outside[path] || path.startsWith('/invite/') || path.startsWith('/confirm/')) {
+  const outside = { '/signin': renderSignin, '/register': renderRegister, '/forgot': renderForgot };
+  if (outside[path] || path.startsWith('/invite/') || path.startsWith('/confirm/') || path.startsWith('/reset/')) {
     shell = null;
     place.drop = false;
     if (state.me.user && (path === '/signin' || path === '/register')) {
@@ -211,16 +267,26 @@ async function route() {
       return;
     }
     const token = decodeURIComponent(path.slice(path.indexOf('/', 1) + 1));
-    clear(root, outside[path] ? outside[path](params) : (path.startsWith('/invite/') ? renderInvite(token) : renderConfirm(token)));
+    const tokenPages = { '/invite/': renderInvite, '/confirm/': renderConfirm, '/reset/': renderReset };
+    const tokenPage = Object.entries(tokenPages).find(([prefix]) => path.startsWith(prefix))?.[1];
+    clear(root, outside[path] ? outside[path](params) : tokenPage(token));
     return;
   }
   if (!state.me.user) {
-    const back = path.startsWith('/d/') ? `${path}${location.search}` : path;
+    const back = path.startsWith('/d/') || path.startsWith('/play/') ? `${path}${location.search}` : path;
     navigate(`/signin?return=${encodeURIComponent(back)}`, { replace: true });
+    return;
+  }
+  const player = /^\/play\/([^/]+)$/.exec(path);
+  if (player) {
+    shell = null;
+    place.drop = false;
+    clear(root, renderPlayer(decodeURIComponent(player[1])));
     return;
   }
   if (!shell) {
     clear(root, buildShell());
+    warmEditor();
   }
   shell.classList.remove('drawer');
   const found = ROUTES.map(([re, make]) => {

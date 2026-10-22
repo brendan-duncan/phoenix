@@ -33,14 +33,14 @@ describe('drafts', () => {
   it('keep each person\'s unsaved work until they save', async () => {
     const draft = await makePhx({ symbols: ['One', 'Two', 'Three'] });
     await ann.ok('PUT', `/api/documents/${doc.id}/draft`, { body: draft, headers: octets });
-    const info = await ann.get(`/api/documents/${doc.id}/draft`);
+    const { draft: info } = await ann.get(`/api/documents/${doc.id}/draft`);
     assert.equal(info.baseRevision, 1);
     const res = await ann.request('GET', `/api/documents/${doc.id}/draft/file`);
     assert.ok(Buffer.from(await res.arrayBuffer()).equals(draft));
     // Ben has none of his own.
-    assert.equal(await ben.fails('GET', `/api/documents/${doc.id}/draft`, 404), 'not_found');
+    assert.equal((await ben.get(`/api/documents/${doc.id}/draft`)).draft, null);
     await ann.ok('PUT', `/api/documents/${doc.id}/file`, { body: draft, headers: octets });
-    assert.equal(await ann.fails('GET', `/api/documents/${doc.id}/draft`, 404), 'not_found');
+    assert.equal((await ann.get(`/api/documents/${doc.id}/draft`)).draft, null);
   });
 });
 

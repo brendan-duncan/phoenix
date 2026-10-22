@@ -43,11 +43,16 @@ function download(url) {
 }
 
 /** The editor's address for a document (to play it, with `play`); null when it can't open there. */
-function editorUrl(doc, play = false) {
+function editorUrl(doc) {
   if (!state.me.editor || !doc.revision || !doc.canDownload) {
     return null;
   }
-  return `/editor/?doc=${encodeURIComponent(doc.id)}${play ? '&play=1' : ''}`;
+  return `/editor/?doc=${encodeURIComponent(doc.id)}`;
+}
+
+/** The player page's address: anyone who may view can play (in the editor or as HTML5). */
+function playUrl(doc) {
+  return doc.revision && (state.me.editor || state.me.converter) ? `/play/${encodeURIComponent(doc.id)}` : null;
 }
 
 function thumbnail(doc, cls = 'placeholder') {
@@ -378,7 +383,7 @@ function docMenu(doc, { view, onDone = rerender }) {
   const editor = atLeast(doc.role, 'editor');
   return [
     editorUrl(doc) ? { label: editor ? 'Edit' : 'Open in the editor', icon: 'edit', onclick: () => { location.href = editorUrl(doc); } } : null,
-    editorUrl(doc) ? { label: 'Play', icon: 'play', onclick: () => { location.href = editorUrl(doc, true); } } : null,
+    playUrl(doc) ? { label: 'Play', icon: 'play', onclick: () => navigate(playUrl(doc)) } : null,
     { label: 'Details', icon: 'file', onclick: () => navigate(`/d/${doc.id}`) },
     doc.canDownload && doc.revision ? { label: 'Download', icon: 'download', onclick: () => download(`/api/documents/${doc.id}/file`) } : null,
     editor ? { label: 'Share…', icon: 'share', onclick: run(() => shareDialog(doc)) } : null,
@@ -527,8 +532,129 @@ function badge(doc, view) {
 
 function meta(doc) {
   const by = doc.modifiedBy && doc.modifiedBy.id !== state.me.user.id ? ` by ${doc.modifiedBy.name}` : '';
-  const owner = isMine(doc) ? '' : `${ownerName(doc)} · `;
+  const owner = doc.where ? `${doc.where} · ` : (isMine(doc) ? '' : `${ownerName(doc)} · `);
   return doc.revision ? `${owner}Edited ${timeAgo(doc.modifiedAt)}${by}` : `${owner}Empty`;
+}
+
+// ── Selecting several, renaming in place ─────────────────────────────────
+
+const selected = new Set();
+let selectedDocs = new Map();
+let selectionBar = null;
+
+function toggleSelected(doc, el, on) {
+  if (on) {
+    selected.add(doc.id);
+    selectedDocs.set(doc.id, doc);
+  } else {
+    selected.delete(doc.id);
+    selectedDocs.delete(doc.id);
+  }
+  el.classList.toggle('selected', on);
+  document.querySelector('.grid, .list')?.classList.toggle('selecting', selected.size > 0);
+  showSelectionBar();
+}
+
+/** Forgets the selection (a new page). */
+export function clearSelection() {
+  selected.clear();
+  selectedDocs = new Map();
+  selectionBar?.remove();
+  selectionBar = null;
+}
+
+function showSelectionBar() {
+  if (!selected.size) {
+    selectionBar?.remove();
+    selectionBar = null;
+    return;
+  }
+  const docs = [...selectedDocs.values()];
+  const all = async (fn, done) => {
+    let failed = 0;
+    for (const doc of docs) {
+      try {
+        await fn(doc);
+      } catch {
+        failed++;
+      }
+    }
+    toast(failed ? `${done}, but ${failed} could not be.` : done);
+    clearSelection();
+    rerender();
+  };
+  const owned = docs.filter((d) => d.role === 'owner');
+  const movable = docs.filter((d) => atLeast(d.role, 'editor') && (isMine(d) || d.owner.kind === 'group'));
+  const bar = h('div', { class: 'selection-bar', role: 'toolbar' },
+    h('strong', {}, `${docs.length} selected`),
+    movable.length === docs.length ? h('button', {
+      type: 'button', class: 'btn', onclick: async () => {
+        const groupId = docs[0].owner.kind === 'group' ? docs[0].owner.id : null;
+        if (docs.some((d) => (d.owner.kind === 'group' ? d.owner.id : null) !== groupId)) {
+          showError(new Error('Those are in different spaces; move them a space at a time.'));
+          return;
+        }
+        const options = await folderOptions(groupId, null);
+        const result = await formDialog({
+          title: `Move ${docs.length} documents`,
+          submit: 'Move',
+          fields: h('label', { class: 'field' }, h('span', {}, 'Folder'), h('select', { name: 'folder' }, options)),
+        });
+        if (result) {
+          all((d) => patch(`/api/documents/${d.id}`, { folderId: result.folder || null }), `Moved ${docs.length}`);
+        }
+      },
+    }, icon('move'), 'Move…') : null,
+    h('button', { type: 'button', class: 'btn', onclick: () => all((d) => put(`/api/favorites/document/${d.id}`), 'Added to favorites') }, icon('star'), 'Favorite'),
+    owned.length === docs.length ? h('button', {
+      type: 'button', class: 'btn danger', onclick: async () => {
+        if (await confirmDialog({ title: `Move ${docs.length} documents to the trash?`, message: 'You can bring them back from the trash.', confirm: 'Move to trash', danger: true })) {
+          all((d) => del(`/api/documents/${d.id}`), `Moved ${docs.length} to the trash`);
+        }
+      },
+    }, icon('trash'), 'Move to trash') : null,
+    h('button', { type: 'button', class: 'btn ghost', onclick: () => { clearSelection(); rerender(); } }, 'Clear'));
+  if (selectionBar) {
+    selectionBar.replaceWith(bar);
+  } else {
+    document.body.append(bar);
+  }
+  selectionBar = bar;
+}
+
+/** Turns a title into a box to type the new name in; Enter keeps it, Escape doesn't. */
+function renameInPlace(doc, title) {
+  const input = h('input', { type: 'text', class: 'rename', value: doc.name, maxlength: 120, 'aria-label': 'Name' });
+  title.replaceWith(input);
+  input.focus();
+  input.select();
+  let done = false;
+  const finish = async (keep) => {
+    if (done) {
+      return;
+    }
+    done = true;
+    const name = input.value.trim();
+    if (keep && name && name !== doc.name) {
+      try {
+        await patch(`/api/documents/${doc.id}`, { name });
+        doc.name = name;
+        title.textContent = name;
+      } catch (err) {
+        showError(err);
+      }
+    }
+    input.replaceWith(title);
+  };
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      finish(true);
+    } else if (e.key === 'Escape') {
+      finish(false);
+    }
+  });
+  input.addEventListener('blur', () => finish(true));
+  input.addEventListener('click', (e) => e.stopPropagation());
 }
 
 function card(doc, view, movable) {
@@ -536,18 +662,50 @@ function card(doc, view, movable) {
   const star = view === 'trash' ? null : h('button', { type: 'button', class: `star${doc.favorite ? ' on' : ''}`, 'aria-label': doc.favorite ? 'Remove from favorites' : 'Add to favorites', title: 'Favorite' }, icon('star'));
   const el = h('div', { class: 'card', tabindex: 0, role: 'link', 'aria-label': doc.name, draggable: movable ? 'true' : null },
     h('div', { class: 'thumb' }, thumbnail(doc), badge(doc, view),
-      view !== 'trash' && editorUrl(doc) ? h('div', { class: 'card-actions' },
-        h('a', { class: 'btn primary', href: editorUrl(doc) }, icon('edit'), atLeast(doc.role, 'editor') ? 'Edit' : 'Open'),
-        h('a', { class: 'btn', href: editorUrl(doc, true) }, icon('play'), 'Play')) : null),
+      view !== 'trash' && (editorUrl(doc) || playUrl(doc)) ? h('div', { class: 'card-actions' },
+        editorUrl(doc) ? h('a', { class: 'btn primary', href: editorUrl(doc) }, icon('edit'), atLeast(doc.role, 'editor') ? 'Edit' : 'Open') : null,
+        playUrl(doc) ? h('a', { class: 'btn', href: playUrl(doc) }, icon('play'), 'Play') : null) : null,
+      doc.editing ? h('span', { class: 'badge editing' }, icon('edit'), `${doc.editing.name} is editing`) : null),
+    view !== 'trash' ? h('input', { type: 'checkbox', class: 'pick', 'aria-label': `Select ${doc.name}`, checked: selected.has(doc.id) }) : null,
     star,
     h('div', { class: 'info' }, h('div', { class: 'text' }, h('div', { class: 'title' }, doc.name), h('div', { class: 'meta' }, meta(doc))), more));
   const open = () => (view === 'trash' ? null : navigate(`/d/${doc.id}`));
+  const pick = el.querySelector('.pick');
+  el.classList.toggle('selected', selected.has(doc.id));
+  pick?.addEventListener('change', () => toggleSelected(doc, el, pick.checked));
   el.addEventListener('click', (e) => {
-    if (e.target.closest('button')) {
+    if (e.target.closest('button, input, a')) {
+      return;
+    }
+    // Ctrl/Cmd-click, or any click while some are selected, selects.
+    if (pick && (e.ctrlKey || e.metaKey || selected.size)) {
+      pick.checked = !pick.checked;
+      toggleSelected(doc, el, pick.checked);
       return;
     }
     open();
   });
+  if (atLeast(doc.role, 'editor') && view !== 'trash') {
+    const title = el.querySelector('.title');
+    title.title = 'Double-click to rename';
+    title.addEventListener('dblclick', (e) => {
+      e.stopPropagation();
+      renameInPlace(doc, title);
+    });
+  }
+  if (doc.previewUrl) {
+    const picture = el.querySelector('.thumb img');
+    el.addEventListener('mouseenter', () => {
+      if (picture) {
+        picture.src = doc.previewUrl;
+      }
+    });
+    el.addEventListener('mouseleave', () => {
+      if (picture) {
+        picture.src = doc.thumbnailUrl;
+      }
+    });
+  }
   el.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && e.target === el) {
       open();
@@ -636,6 +794,46 @@ function folderTile(folder, href, editable) {
   return el;
 }
 
+const SORTS = {
+  modified: { label: 'Last edited', compare: (a, b) => (b.modifiedAt ?? 0) - (a.modifiedAt ?? 0) },
+  name: { label: 'Name', compare: (a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }) },
+  created: { label: 'Newest', compare: (a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0) },
+  size: { label: 'Largest', compare: (a, b) => (b.size ?? 0) - (a.size ?? 0) },
+};
+
+function sortOrder() {
+  try {
+    const kept = localStorage.getItem('phoenix.cloud.sort');
+    return SORTS[kept] ? kept : 'modified';
+  } catch {
+    return 'modified';
+  }
+}
+
+/** An empty My Files: ways to start, rather than a blank page. */
+function welcome() {
+  const lessons = h('div', { class: 'starters' });
+  const templates = h('div', { class: 'starters' });
+  const box = h('div', { class: 'welcome' },
+    h('h2', {}, `Welcome to Phoenix Cloud, ${state.me.user.name}`),
+    h('p', { class: 'muted' }, 'Your documents live here. Start with a lesson that walks you through Phoenix, open a template, or bring in your own files.'),
+    h('div', { class: 'row wrap' },
+      state.me.converter ? h('button', { type: 'button', class: 'btn primary', onclick: () => newDocumentDialog() }, icon('plus'), 'New document') : null,
+      h('button', { type: 'button', class: 'btn', onclick: () => document.querySelector('input[type=file]')?.click() }, icon('upload'), 'Upload files'),
+      h('span', { class: 'muted small' }, `or drop ${UPLOAD_TYPES.split(',').join(' ')} files or folders anywhere`)),
+    state.me.converter ? [h('div', { class: 'section-title' }, 'Start with a lesson'), lessons, h('div', { class: 'section-title' }, 'Or a template'), templates] : null);
+  if (state.me.converter) {
+    starters().then(({ tutorials, templates: list }) => {
+      const first = tutorials.filter((t) => t.tags.includes('Getting Started')).slice(0, 4);
+      clear(lessons, (first.length ? first : tutorials.slice(0, 4)).map((t) => starterCard({
+        ...t, meta: `${t.minutes} min`, onclick: () => makeAndOpen({ tutorial: t.id }, { tutorial: t.id }).catch(showError),
+      })));
+      clear(templates, list.map((t) => starterCard({ ...t, onclick: () => makeAndOpen({ template: t.id }).catch(showError) })));
+    }).catch(() => {});
+  }
+  return box;
+}
+
 const EMPTY = {
   recent: ['clock', 'Nothing opened yet', 'Documents you open or save show up here.'],
   files: ['folder', 'No files yet', 'Upload .phx files with New, or drop them here.'],
@@ -664,9 +862,15 @@ export async function renderListing(target, { view, folder, q, title, groupId, r
   if (groupId) {
     query.set('group', groupId);
   }
+  clearSelection();
   const data = await get(`/api/documents?${query}`);
   if (!target.isConnected) {
     return;
+  }
+  // Recents keep their own order (latest opened first); the rest sort as chosen.
+  const sort = view === 'recent' ? null : sortOrder();
+  if (sort) {
+    data.documents.sort(SORTS[sort].compare);
   }
   const spaced = view === 'files' || view === 'group';
   if (spaced) {
@@ -733,16 +937,28 @@ export async function renderListing(target, { view, folder, q, title, groupId, r
     },
   }, 'Empty trash') : null;
 
+  const sortBox = sort ? h('select', { class: 'sort', 'aria-label': 'Sort by' },
+    Object.entries(SORTS).map(([key, s2]) => h('option', { value: key, selected: key === sort }, s2.label))) : null;
+  sortBox?.addEventListener('change', () => {
+    try {
+      localStorage.setItem('phoenix.cloud.sort', sortBox.value);
+    } catch {
+      // Kept for this page only.
+    }
+    rerender();
+  });
   const head = h('div', { class: 'page-head' }, heading, h('div', { class: 'grow' }),
     data.usage ? h('span', { class: 'usage' }, `${bytes(data.usage.bytes)} of ${bytes(data.usage.quota)}`) : null,
-    actions, trashAll, viewToggle);
+    actions, trashAll, sortBox, viewToggle);
 
   const folders = data.folders.length
     ? h('div', { class: 'folders' }, data.folders.map((f) => folderTile(f, folderHref(f.id), data.canEdit)))
     : null;
 
   let docs;
-  if (!data.documents.length) {
+  if (!data.documents.length && view === 'files' && !folder && !data.folders.length) {
+    docs = welcome();
+  } else if (!data.documents.length) {
     const [ic, heading2, text] = EMPTY[view] ?? EMPTY.files;
     docs = data.folders.length ? null : h('div', { class: 'empty' }, icon(ic), h('h2', {}, heading2), h('p', {}, text));
   } else if (state.view === 'list') {
@@ -790,6 +1006,7 @@ function revisionRow(doc, r) {
   }
   const more = actions.length ? h('button', { type: 'button', class: 'btn ghost icon-only', 'aria-label': 'Version actions', onclick: (e) => popup(e.currentTarget, actions) }, icon('more')) : null;
   return h('div', { class: 'revision' },
+    h('div', { class: 'rev-thumb' }, r.thumbnailUrl ? h('img', { src: r.thumbnailUrl, alt: '', loading: 'lazy' }) : icon('file')),
     h('span', { class: 'num' }, `v${r.number}`),
     h('div', { class: 'what' },
       r.label ? h('div', { class: 'label' }, r.label) : null,
@@ -832,7 +1049,7 @@ export async function renderDocument(target, id) {
   const v = VISIBILITY[doc.visibility];
   const actions = h('div', { class: 'actions' },
     editorUrl(doc) ? h('a', { class: 'btn primary', href: editorUrl(doc) }, icon('edit'), editor ? 'Edit' : 'Open in the editor') : null,
-    editorUrl(doc) ? h('a', { class: 'btn', href: editorUrl(doc, true) }, icon('play'), 'Play') : null,
+    playUrl(doc) ? h('a', { class: 'btn', href: playUrl(doc) }, icon('play'), 'Play') : null,
     doc.canDownload && doc.revision ? h('button', { type: 'button', class: 'btn', onclick: () => download(`/api/documents/${doc.id}/file`) }, icon('download'), 'Download') : null,
     editor ? h('button', { type: 'button', class: 'btn', onclick: () => shareDialog(doc) }, icon('share'), 'Share') : null,
     doc.allowDuplicate || editor ? h('button', { type: 'button', class: 'btn', onclick: () => duplicate(doc).catch(showError) }, icon('copy'), 'Make a copy') : null,

@@ -114,12 +114,8 @@ export function createApp({ config, store, blobs }) {
     // Documents made or converted by Phoenix, per person per hour.
     conversions: new Budget(config.conversionsPerHour, 60 * 60 * 1000),
   };
-  // A server with no accounts gets the admin @phoenix (password "animate").
-  app.ready = ensureDefaultAdmin(store).then((made) => {
-    if (made) {
-      console.log('[cloud] made the admin account @phoenix with the password "animate"; change it after signing in');
-    }
-  });
+  // A server with no accounts gets the admin @phoenix.
+  app.ready = ensureDefaultAdmin(store, config);
   registerAuth(router, app);
   registerDocuments(router, app);
   registerGroups(router, app);

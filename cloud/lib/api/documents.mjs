@@ -100,6 +100,11 @@ class Viewer {
   }
 
   document(doc, role) {
+    // A document without a preview of its latest version gets one, in the
+    // background (a few at a time; the rest when next listed).
+    if (doc.revision && doc.preview_revision !== doc.revision) {
+      refreshPreview(this.ctx.app, doc.id);
+    }
     const owner = doc.owner_kind === 'user' ? { kind: 'user', ...this.user(doc.owner_id) } : { kind: 'group', ...this.group(doc.owner_id) };
     return {
       id: doc.id,
@@ -620,10 +625,8 @@ export function registerDocuments(router, app) {
   router.get('/api/documents/:id/draft', (ctx) => {
     const { doc } = access(ctx, ctx.params.id);
     const draft = draftOf(ctx.store, doc, ctx.user.id);
-    if (!draft) {
-      throw notFound('No draft.');
-    }
-    return { savedAt: draft.savedAt, baseRevision: draft.baseRevision, size: draft.size };
+    // None is an ordinary answer (the editor asks every time it opens).
+    return { draft: draft ? { savedAt: draft.savedAt, baseRevision: draft.baseRevision, size: draft.size } : null };
   });
 
   router.get('/api/documents/:id/draft/file', async (ctx) => {

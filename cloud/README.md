@@ -18,7 +18,9 @@ node cloud/server.mjs dev                    # http://localhost:8792
 
 Sign in as **phoenix** with the password **animate**: a server with no
 accounts makes this admin account, and the dashboard asks you to choose
-your own password until you do. Anyone can register an account; what it is
+your own password until you do. That password is only for `dev`; in
+production the first admin's password is `PHOENIX_CLOUD_ADMIN_PASSWORD`,
+or a random one the server prints once when it makes the account. Anyone can register an account; what it is
 then (ready, waiting for its email address to be confirmed, or waiting for
 an admin to unlock it, the default) is an admin setting.
 
@@ -78,8 +80,9 @@ From the environment (or `cloud/dev.env`):
 | Variable | Default |
 |---|---|
 | `PHOENIX_CLOUD_MODE` | `production` for `serve`, `dev` otherwise |
-| `PHOENIX_CLOUD_URL` | `http://localhost:8792`; the address people use |
-| `PHOENIX_CLOUD_PLAY_URL` | `http://127.0.0.1:8793`; the play origin |
+| `PHOENIX_CLOUD_URL` | `http://localhost:8792`; the address people use (`serve` needs an `https://` one) |
+| `PHOENIX_CLOUD_PLAY_URL` | `http://127.0.0.1:8793`; the play origin (`serve` needs an `https://` one) |
+| `PHOENIX_CLOUD_ADMIN_PASSWORD` | the first admin's password on a new production server; random and printed when unset |
 | `PHOENIX_CLOUD_PORT`, `_PLAY_PORT`, `_BIND` | `8792`, port + 1, `127.0.0.1` |
 | `PHOENIX_CLOUD_DATA` | `cloud/dev-data` (required in production) |
 | `PHOENIX_CLOUD_EDITOR` | `build-wasm32/webeditor` |
@@ -104,8 +107,13 @@ and a banner.
   digits, with spaces, `.`, `-`, `_` or `'` between them, never `@`.
   `GET /api/auth/name?name=` says whether one is free as it is typed.
 - Passwords are hashed with scrypt.
-  Failed sign-ins are counted per name and per address, and slowed down
-  after ten in fifteen minutes.
+  Failed sign-ins are counted per name from each address, and per
+  address, and slowed down after ten in fifteen minutes (so nobody can
+  lock someone else out by guessing at their name).
+- Forgot your password? emails a link to choose a new one (good for 2
+  hours). Account > Change picture sets a profile picture.
+- The bell shows notifications: a document or group shared with you, an
+  account waiting for an admin, an account unlocked.
 - Registering asks for a name, email and password (8 characters or more,
   typed twice); the button is on only when all of them are right. While an
   admin unlocks new accounts, the page says it is a closed beta and asks for
@@ -133,7 +141,33 @@ starts Phoenix on it (with `--play` to play); each Save in Phoenix comes
 back to it (docs/web-editor.md, "A page that keeps documents") and is
 uploaded as a new version. A save on top of someone else's newer one, or by
 someone who can only view, offers to save a copy instead. A bar above
-Phoenix shows the document and whether its last save reached the cloud.
+Phoenix shows the document, whether its last save reached the cloud, and
+a mark while there are unsaved changes.
+
+- The loading screen shows the document's picture and name, and the
+  dashboard fetches the editor ahead of time, so it opens quickly.
+- Drafts: every two minutes the editor sends unsaved work to the server as
+  a draft, kept per person. Opening the document again offers the unsaved
+  changes or the last saved version; a save deletes the draft.
+- Edit locks: an editor holds the document's lock while it is open (renewed
+  every 30 s, let go when the page closes). Cards show who is editing, and
+  someone else's save then goes to a copy.
+- File > Import > Open Library from Phoenix Cloud opens another cloud
+  document's library beside this one.
+- `/play/ID` is the player page: the document's picture with a play button,
+  then Phoenix's player for people who may open the document, or an HTML5
+  version (rendered once a version, served from the play origin with a
+  signed, expiring address) for people who may only view it.
+- Cards play an animated preview when the pointer is over them, made in
+  the background after each save. Versions show their pictures.
+- Fonts: the font library (Admin > Fonts; `node server.mjs fonts` gets
+  Liberation, Carlito and Caladea, which stand in for Arial, Times New
+  Roman, Courier New, Calibri and Cambria with the same widths) is loaded
+  by the web editor and used by Phoenix on the server.
+- My Files sorts by last edited, name, newest or size; Ctrl-click or the
+  check box selects several to move, favorite or trash at once; double-click
+  a title to rename it. An empty My Files welcomes new people with lessons
+  and templates.
 
 ## New documents and conversion
 
