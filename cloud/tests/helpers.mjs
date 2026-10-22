@@ -111,7 +111,7 @@ export class Client {
   /** Signs in as `handle`, making the account (active, password PASSWORD) if there is none. */
   async signIn(handle, { admin = false } = {}) {
     if (!findAccount(this.store, handle)) {
-      createUser(this.store, { name: handle.charAt(0).toUpperCase() + handle.slice(1), handle, email: `${handle}@example.com`, isAdmin: admin, passwordHash: await hashPassword(PASSWORD) });
+      createUser(this.store, { name: handle, email: `${handle}@example.com`, isAdmin: admin, passwordHash: await hashPassword(PASSWORD) });
     }
     await this.signInWith(handle, PASSWORD);
     return this.user;

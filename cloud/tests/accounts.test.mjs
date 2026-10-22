@@ -18,7 +18,7 @@ before(async () => {
 after(() => server.close());
 
 function register(client, handle, extra = {}) {
-  return client.request('POST', '/api/auth/register', { json: { handle, name: handle, email: `${handle}@example.com`, password: 'a-good-password', ...extra } });
+  return client.request('POST', '/api/auth/register', { json: { name: handle, email: `${handle}@example.com`, password: 'a-good-password', ...extra } });
 }
 
 async function setNewAccounts(value) {
@@ -76,11 +76,33 @@ describe('registering', () => {
   it('lets someone with an invite in at once, and holds it to its email', async () => {
     const { token } = createInvite(server.store, { email: 'kai@example.com' });
     const wrong = server.client();
-    assert.equal(await wrong.fails('POST', '/api/auth/register', 400, { json: { handle: 'kai', email: 'other@example.com', password: 'a-good-password', invite: token } }), 'invite_email');
+    assert.equal(await wrong.fails('POST', '/api/auth/register', 400, { json: { name: 'kai', email: 'other@example.com', password: 'a-good-password', invite: token } }), 'invite_email');
     const c = server.client();
     assert.equal((await (await register(c, 'kai', { invite: token })).json()).status, 'active');
     assert.equal((await c.get('/api/me')).user.handle, 'kai');
-    assert.equal(await server.client().fails('POST', '/api/auth/register', 400, { json: { handle: 'kai2', email: 'kai@example.com', password: 'a-good-password', invite: token } }), 'invite_invalid');
+    assert.equal(await server.client().fails('POST', '/api/auth/register', 400, { json: { name: 'kai2', email: 'kai@example.com', password: 'a-good-password', invite: token } }), 'invite_invalid');
+  });
+
+  it('says as it is typed whether a name is free', async () => {
+    const c = server.client();
+    assert.deepEqual(await c.get('/api/auth/name?name=' + encodeURIComponent('  New   Person ')), { name: 'New Person', available: true, problem: null });
+    const taken = await c.get('/api/auth/name?name=HANA');
+    assert.equal(taken.available, false);
+    assert.match(taken.problem, /already/);
+    assert.match((await c.get('/api/auth/name?name=x')).problem, /2 to 30/);
+    assert.match((await c.get('/api/auth/name?name=a%40b')).problem, /2 to 30/);
+  });
+
+  it('takes a name with spaces, which is also what they sign in with', async () => {
+    await setNewAccounts('open');
+    const c = server.client();
+    const res = await c.request('POST', '/api/auth/register', { json: { name: 'Rosa  Díaz', email: 'rosa@example.com', password: 'a-good-password' } });
+    assert.equal(res.status, 201);
+    const me = (await c.get('/api/me')).user;
+    assert.equal(me.name, 'Rosa Díaz');
+    assert.equal(me.handle, 'Rosa Díaz');
+    await server.client().signInWith('rosa díaz', 'a-good-password');
+    await setNewAccounts('admin');
   });
 
   it('checks names, addresses and passwords', async () => {
@@ -95,10 +117,10 @@ describe('registering', () => {
 
 describe('admin account controls', () => {
   it('makes accounts that are ready to use', async () => {
-    const { user } = await admin.post('/api/admin/users', { handle: 'max', name: 'Max', email: 'max@example.com', password: 'made-by-admin', isAdmin: false });
+    const { user } = await admin.post('/api/admin/users', { name: 'max', email: 'max@example.com', password: 'made-by-admin', isAdmin: false });
     assert.equal(user.status, 'active');
     await server.client().signInWith('max', 'made-by-admin');
-    assert.equal(await admin.fails('POST', '/api/admin/users', 409, { json: { handle: 'max', password: 'whatever-123' } }), 'taken');
+    assert.equal(await admin.fails('POST', '/api/admin/users', 409, { json: { name: 'MAX', password: 'whatever-123' } }), 'taken');
   });
 
   it('sets a password, which signs the account out', async () => {

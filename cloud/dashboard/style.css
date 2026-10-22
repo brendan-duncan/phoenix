@@ -490,3 +490,7 @@ a.link, .link { color: var(--accent-text); text-decoration: underline; text-unde
   .card .card-actions { opacity: 1; }
 }
 input[type="color"] { width: 52px; height: 34px; padding: 2px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); cursor: pointer; }
+.hint { font-size: 12px; min-height: 0; }
+.hint.good { color: var(--ok); }
+.hint.bad { color: var(--danger); }
+.btn:disabled, .btn.primary:disabled { opacity: .45; cursor: not-allowed; }

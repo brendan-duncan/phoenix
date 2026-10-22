@@ -2,8 +2,8 @@
 // email address, the signed-in person's account, and invite pages.
 
 import {
-  claimInvite, createUser, findAccount, findInvite, handleTaken, LoginRefused, newAccountStatus, resolveLogin, safeReturnPath, selfUser,
-  sendConfirmation, STATUS_MESSAGES, takeEmailToken, validEmail, validHandle,
+  claimInvite, createUser, findAccount, findInvite, LoginRefused, nameProblem, newAccountStatus, normalizeName, renameUser, requireName, resolveLogin, safeReturnPath,
+  selfUser, sendConfirmation, STATUS_MESSAGES, takeEmailToken, validEmail,
 } from '../accounts.mjs';
 import { editorAvailable } from '../config.mjs';
 import { badRequest, HttpError, notFound, redirect } from '../http.mjs';
@@ -73,6 +73,13 @@ export function registerAuth(router, app) {
     return { user: selfUser(user) };
   }));
 
+  // Whether a name can be registered (or taken by the signed-in person), as it is typed.
+  router.get('/api/auth/name', anonymous((ctx) => {
+    const name = normalizeName(ctx.query('name'));
+    const problem = nameProblem(store, name, ctx.user?.id ?? null);
+    return { name, available: !problem, problem };
+  }));
+
   // A new account: ready, waiting for its email to be confirmed, or waiting
   // for an admin, as the newAccounts setting says. An invite lets it in.
   router.post('/api/auth/register', anonymous(async (ctx) => {
@@ -81,12 +88,8 @@ export function registerAuth(router, app) {
     if (attempts.blocked(`register:${address}`)) {
       throw new HttpError(429, 'slow_down', 'Too many new accounts from here. Try again later.');
     }
-    const handle = String(body.handle ?? '').trim();
+    const name = requireName(store, body.name);
     const email = String(body.email ?? '').trim();
-    const name = String(body.name ?? '').trim().slice(0, 80) || handle;
-    if (!validHandle(handle)) {
-      throw badRequest('A user name is 2 to 30 letters, digits, - or _, starting with a letter or digit.');
-    }
     if (!validEmail(email)) {
       throw badRequest('That is not an email address.');
     }
@@ -104,9 +107,6 @@ export function registerAuth(router, app) {
         throw new HttpError(400, 'invite_email', `That invite is for another email address.`);
       }
     }
-    if (handleTaken(store, handle)) {
-      throw new HttpError(409, 'taken', 'That user name is taken.');
-    }
     if (store.get('SELECT 1 FROM users WHERE email = ?', email)) {
       throw new HttpError(409, 'email_taken', 'There is already an account with that email address. Sign in instead.');
     }
@@ -114,7 +114,7 @@ export function registerAuth(router, app) {
     const status = newAccountStatus(ctx.settings, { invited: Boolean(invite) });
     const passwordHash = await hashPassword(body.password);
     const user = store.transaction(() => {
-      const made = createUser(store, { name, email, handle, status, passwordHash });
+      const made = createUser(store, { name, email, status, passwordHash });
       if (invite) {
         claimInvite(store, invite, made.id);
       }
@@ -182,17 +182,8 @@ export function registerAuth(router, app) {
   router.patch('/api/me', async (ctx) => {
     const user = ctx.requireUser();
     const body = await ctx.json();
-    if (body.handle !== undefined && body.handle !== user.handle) {
-      if (!validHandle(body.handle)) {
-        throw badRequest('A user name is 2 to 30 letters, digits, - or _, starting with a letter or digit.');
-      }
-      if (handleTaken(store, body.handle, user.id)) {
-        throw new HttpError(409, 'taken', 'That user name is taken.');
-      }
-      store.run('UPDATE users SET handle = ? WHERE id = ?', body.handle, user.id);
-    }
-    if (typeof body.name === 'string' && body.name.trim()) {
-      store.run('UPDATE users SET name = ? WHERE id = ?', body.name.trim().slice(0, 80), user.id);
+    if (body.name !== undefined && normalizeName(body.name) !== user.name) {
+      renameUser(store, user.id, requireName(store, body.name, user.id));
     }
     if (body.email !== undefined && body.email !== user.email) {
       if (!validEmail(body.email)) {

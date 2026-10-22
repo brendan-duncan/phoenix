@@ -76,7 +76,7 @@ export function renderSignin(params) {
     },
   }, 'Send the confirmation email again');
   const form = h('form', { class: 'stack' },
-    field('User name or email', login),
+    field('Name or email', login),
     field('Password', password),
     h('button', { type: 'submit', class: 'btn primary wide' }, 'Sign in'));
   form.addEventListener('submit', async (e) => {
@@ -103,33 +103,114 @@ export function renderSignin(params) {
     h('p', { class: 'small muted' }, 'Forgot your password? Ask an admin to set a new one.'));
 }
 
-export function renderRegister(params) {
-  const me = state.me;
-  const invite = params.get('invite');
-  const handle = h('input', { type: 'text', name: 'handle', autocomplete: 'username', required: true, maxlength: 30, autofocus: true, pattern: '[A-Za-z0-9][A-Za-z0-9_\\-]{1,29}', title: '2 to 30 letters, digits, - or _' });
-  const name = h('input', { type: 'text', name: 'name', autocomplete: 'name', maxlength: 80, placeholder: 'How others see you' });
-  const email = h('input', { type: 'email', name: 'email', autocomplete: 'email', required: true });
-  const password = h('input', { type: 'password', name: 'password', autocomplete: 'new-password', required: true, minlength: 8 });
-  const again = h('input', { type: 'password', name: 'again', autocomplete: 'new-password', required: true, minlength: 8 });
-  const box = messageBox();
-  const note = invite ? 'Your invite lets you in as soon as the account is made.' : NEW_ACCOUNT_NOTES[me.settings.newAccounts];
-  const form = h('form', { class: 'stack' },
-    field('User name', handle),
-    field('Name', name),
-    field('Email', email),
-    field('Password (at least 8 characters)', password),
-    field('Password again', again),
-    note ? h('p', { class: 'small muted' }, note) : null,
-    h('button', { type: 'submit', class: 'btn primary wide' }, 'Create account'));
-  const holder = h('div', { class: 'stack' }, box, form);
-  form.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    if (password.value !== again.value) {
-      say(box, 'The two passwords are not the same.');
+/**
+ * Checks a name with the server as it is typed (after a pause), showing
+ * the answer in `hint`. `onChange(ok)` hears each answer; `ok()` says
+ * whether the name as it stands is free.
+ */
+export function nameChecker(input, hint, onChange = () => {}, { current = null } = {}) {
+  let timer = null;
+  let asked = 0;
+  // A name that has not changed is fine as it is.
+  let good = Boolean(current) && input.value.trim() === current;
+  const show = (text, cls) => {
+    hint.textContent = text;
+    hint.className = `hint ${cls}`;
+  };
+  const check = async () => {
+    const n = ++asked;
+    const value = input.value;
+    if (!value.trim()) {
+      good = false;
+      show('', '');
+      onChange(false);
+      return;
+    }
+    if (current && value.trim().replace(/\s+/g, ' ') === current) {
+      good = true;
+      show('', '');
+      onChange(true);
       return;
     }
     try {
-      const made = await post('/api/auth/register', { handle: handle.value.trim(), name: name.value.trim(), email: email.value.trim(), password: password.value, invite });
+      const answer = await get(`/api/auth/name?name=${encodeURIComponent(value)}`);
+      if (n !== asked) {
+        return;
+      }
+      good = answer.available;
+      show(answer.available ? `“${answer.name}” is free` : answer.problem, answer.available ? 'good' : 'bad');
+    } catch {
+      good = false;
+      show('Could not check the name.', 'bad');
+    }
+    onChange(good);
+    // A form that switches its button on and off checks again (ui.js formDialog).
+    input.form?.dispatchEvent(new Event('recheck'));
+  };
+  input.addEventListener('input', () => {
+    good = false;
+    onChange(false);
+    clearTimeout(timer);
+    timer = setTimeout(check, 250);
+  });
+  return { ok: () => good, check };
+}
+
+export function renderRegister(params) {
+  const me = state.me;
+  const invite = params.get('invite');
+  const name = h('input', { type: 'text', name: 'name', autocomplete: 'username', required: true, maxlength: 30, autofocus: true });
+  const email = h('input', { type: 'email', name: 'email', autocomplete: 'email', required: true });
+  const password = h('input', { type: 'password', name: 'password', autocomplete: 'new-password', required: true, minlength: 8 });
+  const again = h('input', { type: 'password', name: 'again', autocomplete: 'new-password', required: true, minlength: 8 });
+  const nameHint = h('div', { class: 'hint' });
+  const passwordHint = h('div', { class: 'hint' });
+  const box = messageBox();
+  const note = invite ? 'Your invite lets you in as soon as the account is made.' : NEW_ACCOUNT_NOTES[me.settings.newAccounts];
+  const submit = h('button', { type: 'submit', class: 'btn primary wide', disabled: true }, 'Create account');
+
+  // The button is on only when every field is right.
+  const passwordsOk = () => {
+    const long = password.value.length >= 8;
+    const same = password.value === again.value;
+    if (!password.value) {
+      passwordHint.textContent = '';
+    } else if (!long) {
+      passwordHint.textContent = 'At least 8 characters.';
+    } else if (again.value && !same) {
+      passwordHint.textContent = 'The two passwords are not the same.';
+    } else {
+      passwordHint.textContent = '';
+    }
+    passwordHint.className = `hint ${passwordHint.textContent ? 'bad' : ''}`;
+    return long && Boolean(again.value) && same;
+  };
+  let checker;
+  const update = () => {
+    submit.disabled = !(checker?.ok() && email.checkValidity() && email.value.trim() && passwordsOk());
+  };
+  checker = nameChecker(name, nameHint, update);
+  for (const input of [email, password, again]) {
+    input.addEventListener('input', update);
+  }
+
+  const form = h('form', { class: 'stack' },
+    h('label', { class: 'field' }, h('span', {}, 'Name'), name, nameHint,
+      h('span', { class: 'muted small' }, 'What others see, and what you sign in with.')),
+    field('Email', email),
+    field('Password (at least 8 characters)', password),
+    h('label', { class: 'field' }, h('span', {}, 'Password again'), again, passwordHint),
+    note ? h('p', { class: 'small muted' }, note) : null,
+    submit);
+  const holder = h('div', { class: 'stack' }, box, form);
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (submit.disabled) {
+      return;
+    }
+    submit.disabled = true;
+    try {
+      const made = await post('/api/auth/register', { name: name.value, email: email.value.trim(), password: password.value, invite });
       if (made.status === 'active') {
         await refreshMe();
         navigate(params.get('return') || '/', { replace: true });
@@ -141,6 +222,7 @@ export function renderRegister(params) {
       h('a', { class: 'btn wide', href: '/signin' }, 'Back to sign in'));
     } catch (err) {
       say(box, err.message);
+      update();
     }
   });
   return card(
@@ -175,7 +257,7 @@ export function renderInvite(token) {
       return;
     }
     if (me.user) {
-      clear(body, h('p', {}, `You are signed in as @${me.user.handle}. The invite is for someone new.`), h('a', { class: 'btn primary wide', href: '/' }, 'Go to your files'));
+      clear(body, h('p', {}, `You are signed in as ${me.user.name}. The invite is for someone new.`), h('a', { class: 'btn primary wide', href: '/' }, 'Go to your files'));
       return;
     }
     navigate(`/register?invite=${encodeURIComponent(token)}`, { replace: true });
@@ -192,22 +274,29 @@ export async function renderAccount(target) {
   }
   const me = state.me.user;
   const params = new URLSearchParams(location.search);
-  const name = h('input', { type: 'text', name: 'name', value: me.name, maxlength: 80, required: true });
-  const handle = h('input', { type: 'text', name: 'handle', value: me.handle, maxlength: 30, required: true });
+  const name = h('input', { type: 'text', name: 'name', value: me.name, maxlength: 30, required: true, autocomplete: 'username' });
+  const nameHint = h('div', { class: 'hint' });
   const email = h('input', { type: 'email', name: 'email', value: me.email ?? '', autocomplete: 'email' });
   const bio = h('textarea', { name: 'bio', rows: 3, maxlength: 500, value: me.bio });
+  const save = h('button', { type: 'submit', class: 'btn primary' }, 'Save');
+  const names = nameChecker(name, nameHint, (ok) => {
+    save.disabled = !ok;
+  }, { current: me.name });
   const profile = h('form', { class: 'panel stack cards-form' },
     h('h2', {}, 'Profile'),
-    h('div', { class: 'row' }, avatar(me), h('div', { class: 'muted small' }, `@${me.handle}`)),
-    h('label', { class: 'field' }, h('span', {}, 'Name'), name),
-    h('label', { class: 'field' }, h('span', {}, 'User name'), handle),
+    h('div', { class: 'row' }, avatar(me)),
+    h('label', { class: 'field' }, h('span', {}, 'Name'), name, nameHint,
+      h('span', { class: 'muted small' }, 'What others see, and what you sign in with.')),
     h('label', { class: 'field' }, h('span', {}, 'Email'), email),
     h('label', { class: 'field' }, h('span', {}, 'About you'), bio),
-    h('div', {}, h('button', { type: 'submit', class: 'btn primary' }, 'Save')));
+    h('div', {}, save));
   profile.addEventListener('submit', async (e) => {
     e.preventDefault();
     try {
-      await patch('/api/me', { name: name.value, handle: handle.value.trim(), email: email.value.trim() || undefined, bio: bio.value });
+      if (!names.ok()) {
+        return;
+      }
+      await patch('/api/me', { name: name.value, email: email.value.trim() || undefined, bio: bio.value });
       await reloadShell();
       toast('Saved.');
     } catch (err) {
@@ -312,7 +401,7 @@ function membersView(detail, rerenderPage) {
       showError(err);
     }
   };
-  const who = h('input', { type: 'text', placeholder: 'Handle or email', 'aria-label': 'Who', required: true });
+  const who = h('input', { type: 'text', placeholder: 'Name or email', 'aria-label': 'Who', required: true });
   const memberRole = h('select', { 'aria-label': 'Role' }, h('option', { value: 'member' }, 'Member'), h('option', { value: 'admin' }, 'Admin'));
   const add = h('form', { class: 'row cards-form' }, who, memberRole, h('button', { type: 'submit', class: 'btn primary' }, icon('plus'), 'Add'));
   add.addEventListener('submit', (e) => {
@@ -452,47 +541,52 @@ function change(fn) {
 const setStatus = (u, status) => change(() => patch(`/api/admin/users/${u.id}`, { status }));
 
 const deleteAccount = (u) => change(async () => {
-  if (!(await confirmDialog({ title: `Delete @${u.handle}?`, message: `The account and its ${count(u.documents, 'document')} are deleted for good.`, confirm: 'Delete account', danger: true }))) {
+  if (!(await confirmDialog({ title: `Delete ${u.name}?`, message: `The account and its ${count(u.documents, 'document')} are deleted for good.`, confirm: 'Delete account', danger: true }))) {
     return false;
   }
   await del(`/api/admin/users/${u.id}`);
-  toast(`Deleted @${u.handle}.`);
+  toast(`Deleted ${u.name}.`);
   return true;
 });
 
 const setPassword = (u) => change(async () => {
   const done = await formDialog({
-    title: `New password for @${u.handle}`,
+    title: `New password for ${u.name}`,
     submit: 'Set password',
     note: 'They are signed out everywhere and sign in with this password. Send it to them yourself.',
     fields: h('label', { class: 'field' }, h('span', {}, 'Password (at least 8 characters)'), h('input', { type: 'text', name: 'password', required: true, minlength: 8, autofocus: true, autocomplete: 'off' })),
     onSubmit: (data) => patch(`/api/admin/users/${u.id}`, { password: data.password }),
   });
   if (done) {
-    toast(`Set a new password for @${u.handle}.`);
+    toast(`Set a new password for ${u.name}.`);
   }
   return Boolean(done);
 });
 
 const setQuota = (u) => change(async () => Boolean(await formDialog({
-  title: `Storage for @${u.handle}`,
+  title: `Storage for ${u.name}`,
   fields: h('label', { class: 'field' }, h('span', {}, 'Quota in MB (empty for the default)'), h('input', { type: 'number', name: 'quota', min: 0, value: u.quotaMB ?? '' })),
   onSubmit: (data) => patch(`/api/admin/users/${u.id}`, { quotaMB: data.quota === '' ? null : Number(data.quota) }),
 })));
 
-const createAccount = change(async () => Boolean(await formDialog({
-  title: 'Create an account',
-  submit: 'Create account',
-  note: 'The account is ready to use at once. Send them their user name and password yourself.',
-  fields: [
-    h('label', { class: 'field' }, h('span', {}, 'User name'), h('input', { type: 'text', name: 'handle', required: true, maxlength: 30, autofocus: true })),
-    h('label', { class: 'field' }, h('span', {}, 'Name'), h('input', { type: 'text', name: 'name', maxlength: 80 })),
-    h('label', { class: 'field' }, h('span', {}, 'Email (optional)'), h('input', { type: 'email', name: 'email' })),
-    h('label', { class: 'field' }, h('span', {}, 'Password (at least 8 characters)'), h('input', { type: 'text', name: 'password', required: true, minlength: 8, autocomplete: 'off' })),
-    h('label', { class: 'check' }, h('input', { type: 'checkbox', name: 'isAdmin' }), 'Make them an admin'),
-  ],
-  onSubmit: (data) => post('/api/admin/users', { handle: data.handle.trim(), name: data.name.trim(), email: data.email.trim() || null, password: data.password, isAdmin: data.isAdmin }),
-})));
+const createAccount = change(async () => {
+  const name = h('input', { type: 'text', name: 'name', required: true, maxlength: 30, autofocus: true, autocomplete: 'off' });
+  const hint = h('div', { class: 'hint' });
+  const names = nameChecker(name, hint);
+  return Boolean(await formDialog({
+    title: 'Create an account',
+    submit: 'Create account',
+    note: 'The account is ready to use at once. Send them their name and password yourself.',
+    fields: [
+      h('label', { class: 'field' }, h('span', {}, 'Name (what others see, and what they sign in with)'), name, hint),
+      h('label', { class: 'field' }, h('span', {}, 'Email (optional)'), h('input', { type: 'email', name: 'email' })),
+      h('label', { class: 'field' }, h('span', {}, 'Password (at least 8 characters)'), h('input', { type: 'text', name: 'password', required: true, minlength: 8, autocomplete: 'off' })),
+      h('label', { class: 'check' }, h('input', { type: 'checkbox', name: 'isAdmin' }), 'Make them an admin'),
+    ],
+    valid: (form) => names.ok() && form.elements.email.checkValidity() && form.elements.password.value.length >= 8,
+    onSubmit: (data) => post('/api/admin/users', { name: data.name, email: data.email.trim() || null, password: data.password, isAdmin: data.isAdmin }),
+  }));
+});
 
 function accountButtons(u, me) {
   if (u.id === me.id) {
@@ -516,8 +610,8 @@ async function adminUsers() {
   const waiting = users.filter((u) => u.status.startsWith('pending'));
   const search = h('input', { type: 'search', placeholder: 'Find an account', 'aria-label': 'Find an account' });
   const rows = users.map((u) => {
-    const row = h('tr', { dataset: { find: `${u.handle} ${u.name} ${u.email ?? ''}`.toLowerCase() } },
-      h('td', {}, person(u, u.isAdmin ? ' · admin' : '')),
+    const row = h('tr', { dataset: { find: `${u.name} ${u.email ?? ''}`.toLowerCase() } },
+      h('td', {}, person(u, u.isAdmin ? 'admin' : null)),
       h('td', {}, u.email ?? '', u.email && !u.emailVerified ? h('div', { class: 'muted small' }, 'not confirmed') : null),
       h('td', { class: u.status === 'active' ? 'status-ok' : 'status-bad' }, STATUS_LABELS[u.status] ?? u.status),
       h('td', {}, String(u.documents)),
@@ -538,7 +632,7 @@ async function adminUsers() {
     waiting.length ? h('div', { class: 'panel stack' },
       h('h2', {}, `Waiting to be unlocked (${waiting.length})`),
       waiting.map((u) => h('div', { class: 'row wrap' },
-        h('div', { class: 'grow' }, person(u, ` · ${u.email ?? 'no email'} · ${STATUS_LABELS[u.status]} · registered ${timeAgo(u.createdAt)}`)),
+        h('div', { class: 'grow' }, person(u, `${u.email ?? 'no email'} · ${STATUS_LABELS[u.status]} · registered ${timeAgo(u.createdAt)}`)),
         h('button', { type: 'button', class: 'btn primary', onclick: setStatus(u, 'active') }, 'Unlock'),
         h('button', { type: 'button', class: 'btn danger', onclick: deleteAccount(u) }, 'Delete')))) : null,
     h('div', { class: 'row wrap admin-tools' }, search, h('div', { class: 'grow' }), h('button', { type: 'button', class: 'btn primary', onclick: createAccount }, icon('plus'), 'Create account')),
@@ -587,7 +681,7 @@ function inviteTable(invites) {
       h('td', {}, i.email ?? 'anyone with the link', i.makeAdmin ? h('span', { class: 'muted' }, ' · admin') : null),
       h('td', {}, i.note),
       h('td', {}, `${timeAgo(i.createdAt)}${i.createdBy ? ` by ${i.createdBy.name}` : ''}`),
-      h('td', { class: i.status === 'pending' ? '' : 'muted' }, i.status === 'claimed' && i.claimedBy ? `claimed by @${i.claimedBy.handle}` : i.status),
+      h('td', { class: i.status === 'pending' ? '' : 'muted' }, i.status === 'claimed' && i.claimedBy ? `claimed by ${i.claimedBy.name}` : i.status),
       h('td', {}, i.status === 'pending' ? h('button', { type: 'button', class: 'btn ghost', onclick: change(() => del(`/api/admin/invites/${i.id}`)) }, 'Turn off') : null))))));
 }
 
@@ -640,7 +734,7 @@ async function adminAudit() {
     h('thead', {}, h('tr', {}, ['When', 'Who', 'What', 'On', 'Details'].map((t) => h('th', {}, t)))),
     h('tbody', {}, entries.map((e) => h('tr', {},
       h('td', { title: dateTime(e.ts) }, timeAgo(e.ts)),
-      h('td', {}, e.actor ? `@${e.actor.handle}` : 'system'),
+      h('td', {}, e.actor ? e.actor.name : 'system'),
       h('td', {}, e.action),
       h('td', {}, e.targetKind === 'document' ? h('a', { href: `/d/${e.targetId}` }, 'document') : `${e.targetKind} ${e.targetId}`),
       h('td', { class: 'muted small' }, Object.keys(e.detail).length ? JSON.stringify(e.detail) : ''))))))];

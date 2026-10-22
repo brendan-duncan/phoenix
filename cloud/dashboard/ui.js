@@ -99,7 +99,7 @@ export function icon(name, cls = '') {
 
 export function avatar(user, cls = '') {
   const initials = (user?.name || user?.handle || '?').split(/\s+/).map((w) => w[0]).join('').slice(0, 2).toUpperCase();
-  const el = h('span', { class: `avatar ${cls}`.trim(), title: user ? `${user.name} (@${user.handle})` : null });
+  const el = h('span', { class: `avatar ${cls}`.trim(), title: user ? user.name : null });
   if (user?.avatarUrl) {
     const img = h('img', { src: user.avatarUrl, alt: '', referrerpolicy: 'no-referrer' });
     img.addEventListener('error', () => clear(el, initials));
@@ -113,7 +113,7 @@ export function avatar(user, cls = '') {
 export function person(user, extra = null) {
   return h('div', { class: 'person' }, avatar(user), h('div', { class: 'who' },
     h('div', {}, user?.name ?? 'Someone'),
-    h('div', { class: 'muted small' }, user ? `@${user.handle}` : '', extra)));
+    extra ? h('div', { class: 'muted small' }, extra) : null));
 }
 
 // ── Toasts ────────────────────────────────────────────────────────────────
@@ -167,8 +167,12 @@ export function dialog(build, { wide = false } = {}) {
   });
 }
 
-/** A dialog with a form; `onSubmit(data)` may throw to keep it open with the message. */
-export function formDialog({ title, fields, submit = 'Save', note = null, danger = false, onSubmit }) {
+/**
+ * A dialog with a form; `onSubmit(data)` may throw to keep it open with the
+ * message. With `valid(form)`, the submit button is on only while it says
+ * yes, checked as anything is typed (and on a 'recheck' event).
+ */
+export function formDialog({ title, fields, submit = 'Save', note = null, danger = false, onSubmit, valid = null }) {
   return dialog((close) => {
     const error = h('div', { class: 'status-bad small hidden' });
     const form = h('form', { method: 'dialog' },
@@ -178,9 +182,19 @@ export function formDialog({ title, fields, submit = 'Save', note = null, danger
       error,
       h('div', { class: 'buttons' },
         h('button', { type: 'button', class: 'btn', onclick: () => close() }, 'Cancel'),
-        h('button', { type: 'submit', class: `btn ${danger ? 'danger' : 'primary'}` }, submit)));
+        h('button', { type: 'submit', class: `btn ${danger ? 'danger' : 'primary'}`, disabled: Boolean(valid) }, submit)));
+    if (valid) {
+      const recheck = () => {
+        form.querySelector('button[type="submit"]').disabled = !valid(form);
+      };
+      form.addEventListener('input', recheck);
+      form.addEventListener('recheck', recheck);
+    }
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
+      if (valid && !valid(form)) {
+        return;
+      }
       const data = Object.fromEntries(new FormData(form).entries());
       for (const box of form.querySelectorAll('input[type="checkbox"][name]')) {
         data[box.name] = box.checked;

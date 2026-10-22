@@ -82,9 +82,12 @@ describe('sessions', () => {
 
   it('updates the profile and keeps handles unique', async () => {
     await carol.patch('/api/me', { name: 'Carol C', bio: 'hi' });
-    assert.equal((await carol.get('/api/me')).user.name, 'Carol C');
-    assert.equal(await carol.fails('PATCH', '/api/me', 409, { json: { handle: 'alice' } }), 'taken');
-    assert.equal(await carol.fails('PATCH', '/api/me', 400, { json: { handle: '!' } }), 'bad_request');
+    const renamed = (await carol.get('/api/me')).user;
+    assert.equal(renamed.name, 'Carol C');
+    assert.equal(renamed.handle, 'Carol C');
+    await carol.patch('/api/me', { name: 'carol' });
+    assert.equal(await carol.fails('PATCH', '/api/me', 409, { json: { name: 'ALICE' } }), 'taken');
+    assert.equal(await carol.fails('PATCH', '/api/me', 400, { json: { name: '!' } }), 'bad_request');
   });
 });
 

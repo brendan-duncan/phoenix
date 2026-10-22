@@ -4,7 +4,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { createInvite, createUser, handleTaken, inviteView, publicUser, validEmail, validHandle } from '../accounts.mjs';
+import { createInvite, createUser, inviteView, normalizeName, publicUser, renameUser, requireName, validEmail } from '../accounts.mjs';
 import { badRequest, forbidden, HttpError, notFound } from '../http.mjs';
 import { hashPassword, passwordProblem } from '../passwords.mjs';
 import { SETTING_DEFAULTS } from '../store.mjs';
@@ -93,18 +93,12 @@ export function registerAdmin(router, app) {
     return { users: rows.map((u) => adminUser(ctx.store, u)) };
   });
 
-  // An account an admin makes is ready to use: { handle, name, email, password, isAdmin }.
+  // An account an admin makes is ready to use: { name, email, password, isAdmin }.
   router.post('/api/admin/users', async (ctx) => {
     const me = ctx.requireAdmin();
     const body = await ctx.json();
-    const handle = String(body.handle ?? '').trim();
+    const name = requireName(ctx.store, body.name);
     const email = body.email ? String(body.email).trim() : null;
-    if (!validHandle(handle)) {
-      throw badRequest('A user name is 2 to 30 letters, digits, - or _, starting with a letter or digit.');
-    }
-    if (handleTaken(ctx.store, handle)) {
-      throw new HttpError(409, 'taken', 'That user name is taken.');
-    }
     if (email && !validEmail(email)) {
       throw badRequest('That is not an email address.');
     }
@@ -116,9 +110,9 @@ export function registerAdmin(router, app) {
       throw badRequest(problem);
     }
     const user = createUser(ctx.store, {
-      name: String(body.name ?? '').trim() || handle, handle, email, isAdmin: Boolean(body.isAdmin), passwordHash: await hashPassword(body.password),
+      name, email, isAdmin: Boolean(body.isAdmin), passwordHash: await hashPassword(body.password),
     });
-    ctx.store.audit(me.id, 'user.create_by_admin', 'user', user.id, { handle });
+    ctx.store.audit(me.id, 'user.create_by_admin', 'user', user.id, { name });
     ctx.status = 201;
     return { user: adminUser(ctx.store, user) };
   });
@@ -169,8 +163,8 @@ export function registerAdmin(router, app) {
       }
       store.audit(me.id, 'user.password_reset', 'user', user.id);
     }
-    if (typeof body.name === 'string' && body.name.trim()) {
-      store.run('UPDATE users SET name = ? WHERE id = ?', body.name.trim().slice(0, 80), user.id);
+    if (body.name !== undefined && normalizeName(body.name) !== user.name) {
+      renameUser(store, user.id, requireName(store, body.name, user.id));
     }
     if (body.email !== undefined && body.email !== user.email) {
       if (body.email && !validEmail(body.email)) {

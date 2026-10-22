@@ -11,7 +11,7 @@ const DAY = 24 * HOUR;
 // A session's last-seen time is written at most this often.
 const TOUCH_INTERVAL = 5 * MINUTE;
 
-export const DEFAULT_ADMIN = { handle: 'phoenix', name: 'Phoenix', password: 'animate' };
+export const DEFAULT_ADMIN = { name: 'phoenix', password: 'animate' };
 
 /** What anyone may see of a user. */
 export function publicUser(u) {
@@ -38,6 +38,56 @@ export function validHandle(handle) {
   return typeof handle === 'string' && HANDLE_RE.test(handle);
 }
 
+// A person's name is what others see and what they sign in with, so it is
+// unique (whatever the capitals): 2 to 30 letters and digits, with spaces,
+// '.', '-', '_' or an apostrophe between them. Never an '@', which marks an
+// email address when signing in.
+const NAME_RE = /^[\p{L}\p{N}](?:[\p{L}\p{N} ._'-]*[\p{L}\p{N}])?$/u;
+
+/** A name as typed, tidied: trimmed, spaces run together. */
+export function normalizeName(name) {
+  return String(name ?? '').normalize('NFC').trim().replace(/\s+/g, ' ');
+}
+
+const NAME_RULE = "A name is 2 to 30 letters or digits, with spaces, ., -, _ or ' between them.";
+const NAME_TAKEN = 'Someone already has that name.';
+
+/** Why `name` can't be a person's name (already normalized), or null. */
+export function nameProblem(store, name, exceptUserId = null) {
+  if ([...name].length < 2 || [...name].length > 30 || !NAME_RE.test(name)) {
+    return NAME_RULE;
+  }
+  return handleTaken(store, name, exceptUserId) ? NAME_TAKEN : null;
+}
+
+/** `name` tidied, or an error: 400 when it breaks the rule, 409 when someone has it. */
+export function requireName(store, name, exceptUserId = null) {
+  const tidy = normalizeName(name);
+  const problem = nameProblem(store, tidy, exceptUserId);
+  if (problem === NAME_TAKEN) {
+    throw new HttpError(409, 'taken', problem);
+  }
+  if (problem) {
+    throw new HttpError(400, 'bad_request', problem);
+  }
+  return tidy;
+}
+
+/** A free name made from `base` (a provider's name or an email's local part). */
+export function freeName(store, base) {
+  let stem = normalizeName(base).replace(/[^\p{L}\p{N} ._'-]+/gu, '').replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '').slice(0, 26);
+  if ([...stem].length < 2) {
+    stem = 'User';
+  }
+  for (let n = 1; n < 1000; n++) {
+    const name = n === 1 ? stem : `${stem} ${n}`;
+    if (!nameProblem(store, name)) {
+      return name;
+    }
+  }
+  return `${stem} ${newId().slice(0, 6)}`;
+}
+
 export function validEmail(email) {
   return typeof email === 'string' && EMAIL_RE.test(email);
 }
@@ -61,13 +111,17 @@ export function makeHandle(store, base) {
   return `${stem}${newId().slice(0, 6).toLowerCase()}`;
 }
 
-export function createUser(store, { name, email = null, avatarUrl = '', handle = null, isAdmin = false, status = 'active', passwordHash = null, passwordIsDefault = false, emailVerified = false }) {
+/**
+ * A new account. `name` must be free (nameProblem); without one, a free
+ * name is made from the email address. The name is also its handle.
+ */
+export function createUser(store, { name = null, email = null, avatarUrl = '', isAdmin = false, status = 'active', passwordHash = null, passwordIsDefault = false, emailVerified = false }) {
   const id = newId();
-  const finalHandle = handle ?? makeHandle(store, email ? email.split('@')[0] : name);
+  const finalName = name ?? freeName(store, email ? email.split('@')[0] : 'User');
   store.run(`INSERT INTO users (id, handle, name, email, avatar_url, is_admin, status, password_hash, password_is_default, email_verified, created_at)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  id, finalHandle, String(name || finalHandle).slice(0, 80), email, avatarUrl, isAdmin, status, passwordHash, passwordIsDefault, emailVerified, Date.now());
-  store.audit(id, 'user.create', 'user', id, { handle: finalHandle, admin: isAdmin, status });
+  id, finalName, finalName, email, avatarUrl, isAdmin, status, passwordHash, passwordIsDefault, emailVerified, Date.now());
+  store.audit(id, 'user.create', 'user', id, { name: finalName, admin: isAdmin, status });
   return store.get('SELECT * FROM users WHERE id = ?', id);
 }
 
@@ -98,7 +152,6 @@ export async function ensureDefaultAdmin(store) {
   }
   const user = createUser(store, {
     name: DEFAULT_ADMIN.name,
-    handle: DEFAULT_ADMIN.handle,
     isAdmin: true,
     passwordHash: await hashPassword(DEFAULT_ADMIN.password),
     passwordIsDefault: true,
@@ -352,7 +405,7 @@ export function resolveLogin(store, settings, providerId, profile, state) {
     if (status === 'pending_email') {
       status = 'pending_admin';
     }
-    const user = createUser(store, { name: profile.name, email, avatarUrl: profile.avatarUrl, status, emailVerified: Boolean(email) });
+    const user = createUser(store, { name: freeName(store, profile.name || (email ?? '').split('@')[0]), email, avatarUrl: profile.avatarUrl, status, emailVerified: Boolean(email) });
     linkIdentity(store, user.id, providerId, profile, email, now);
     if (invite) {
       claimInvite(store, invite, user.id);
@@ -373,4 +426,9 @@ function linkIdentity(store, userId, providerId, profile, email, now) {
 export function safeReturnPath(value) {
   const s = String(value ?? '/');
   return s.startsWith('/') && !s.startsWith('//') && !s.startsWith('/\\') && !s.startsWith('/api/') ? s.slice(0, 500) : '/';
+}
+
+/** Renames a user (the name is also the handle). */
+export function renameUser(store, userId, name) {
+  store.run('UPDATE users SET name = ?, handle = ? WHERE id = ?', name, name, userId);
 }

@@ -114,7 +114,7 @@ function buildShell() {
     class: 'avatar-btn',
     'aria-label': 'Account',
     onclick: (e) => popup(e.currentTarget, [
-      { head: `${me.user.name} · @${me.user.handle}` },
+      { head: me.user.name },
       { label: 'Account', icon: 'user', onclick: () => navigate('/account') },
       { label: 'Theme: system', onclick: () => setTheme(null) },
       { label: 'Theme: light', onclick: () => setTheme('light') },

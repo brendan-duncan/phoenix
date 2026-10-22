@@ -32,7 +32,7 @@ function ownerName(doc) {
   if (isMine(doc)) {
     return 'You';
   }
-  return doc.owner.kind === 'group' ? doc.owner.name : doc.owner.name ?? `@${doc.owner.handle}`;
+  return doc.owner.kind === 'group' ? doc.owner.name : doc.owner.name;
 }
 
 function download(url) {
@@ -306,7 +306,7 @@ export function shareDialog(doc) {
         }
       };
 
-      const who = h('input', { type: 'text', placeholder: 'Handle or email', 'aria-label': 'Who', required: true });
+      const who = h('input', { type: 'text', placeholder: 'Name or email', 'aria-label': 'Who', required: true });
       const kind = h('select', { 'aria-label': 'Person or group' }, h('option', { value: 'user' }, 'Person'), h('option', { value: 'group' }, 'Group'));
       const groupPick = h('select', { 'aria-label': 'Group', class: 'hidden' }, state.me.groups.map((g) => h('option', { value: g.id }, g.name)));
       kind.addEventListener('change', () => {
@@ -738,7 +738,7 @@ export async function renderDocument(target, id) {
   const info = doc.info ?? {};
   const owner = doc.owner.kind === 'group'
     ? h('a', { href: `/groups/${doc.owner.id}` }, doc.owner.name)
-    : (isMine(doc) ? 'You' : `${doc.owner.name} (@${doc.owner.handle})`);
+    : (isMine(doc) ? 'You' : doc.owner.name);
   const details = h('div', { class: 'panel' }, h('h2', {}, 'Details'), h('dl', { class: 'props' },
     h('dt', {}, 'Owner'), h('dd', {}, owner),
     h('dt', {}, 'Access'), h('dd', {}, `${v.label} · ${YOUR_ROLE[doc.role] ?? doc.role}`),

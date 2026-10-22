@@ -55,9 +55,9 @@ with the redirect URIs `http://localhost:8792/api/auth/callback/google` and
 |---|---|
 | `dev` | Runs on this PC. |
 | `serve` | Runs in production; needs `PHOENIX_CLOUD_DATA` and `PHOENIX_CLOUD_URL`. |
-| `import [--to HANDLE] FILE ...` | Adds files to an account (default @phoenix), converted by Phoenix. |
-| `set-password --handle H --password P` | Sets an account's password (for when no admin can sign in). |
-| `make-admin --handle H` | Makes an account an admin (and unlocks it). |
+| `import [--to NAME] FILE ...` | Adds files to an account (default @phoenix), converted by Phoenix. |
+| `set-password --handle NAME --password P` | Sets an account's password (for when no admin can sign in). |
+| `make-admin --handle NAME` | Makes an account an admin (and unlocks it). |
 | `invite [--email E] [--note N] [--days D] [--admin]` | Prints an invite link: whoever registers from it is let in at once. |
 | `gc` | Deletes stored chunks that no revision uses. |
 | `status` | Totals. |
@@ -89,11 +89,16 @@ and a banner.
 
 ## Accounts
 
-- Passwords are hashed with scrypt; sign-in takes the user name or email.
+- A person has one name: what others see and what they sign in with (or
+  their email). Names are unique whatever the capitals: 2 to 30 letters or
+  digits, with spaces, `.`, `-`, `_` or `'` between them, never `@`.
+  `GET /api/auth/name?name=` says whether one is free as it is typed.
+- Passwords are hashed with scrypt.
   Failed sign-ins are counted per name and per address, and slowed down
   after ten in fifteen minutes.
-- Registering asks for a user name, name, email and password (8 characters
-  or more). An invite link (Admin > Invites) lets its holder in at once.
+- Registering asks for a name, email and password (8 characters or more,
+  typed twice); the button is on only when all of them are right. An invite
+  link (Admin > Invites) lets its holder in at once.
 - Email: there is no mail server yet. Confirmation emails are written to
   the data folder's `outbox/`, listed under Admin > Email, and printed by
   `dev`.
