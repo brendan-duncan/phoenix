@@ -108,7 +108,7 @@ def scp_down(config, remote, local):
 
 
 def git(*args):
-    result = subprocess.run(["git", "-C", str(ROOT), *args], capture_output=True, text=True)
+    result = subprocess.run(["git", "-C", str(ROOT), *args], capture_output=True, text=True, encoding="utf-8", errors="replace")
     return result.stdout.strip() if result.returncode == 0 else ""
 
 
@@ -187,7 +187,7 @@ def cmd_setup(config, args):
 def run_tests():
     print("Testing the cloud...")
     result = subprocess.run(["node", "--disable-warning=ExperimentalWarning", "--test", "tests/*.test.mjs"],
-                            cwd=CLOUD, capture_output=True, text=True)
+                            cwd=CLOUD, capture_output=True, text=True, encoding="utf-8", errors="replace")
     summary = [line for line in result.stdout.splitlines() if line.startswith(("# pass", "# fail"))]
     print("  " + ", ".join(s[2:] for s in summary))
     if result.returncode != 0:
@@ -245,7 +245,7 @@ def cmd_deploy(config, args):
 def cmd_backup(config, args):
     out = Path(args.out or ROOT / "cloud-backups")
     out.mkdir(parents=True, exist_ok=True)
-    result = subprocess.run(["ssh", *ssh_options(config), target(config), "sudo phoenix-cloud-admin backup"], capture_output=True, text=True)
+    result = subprocess.run(["ssh", *ssh_options(config), target(config), "sudo phoenix-cloud-admin backup"], capture_output=True, text=True, encoding="utf-8", errors="replace")
     remote = result.stdout.strip().splitlines()[-1] if result.stdout.strip() else ""
     if result.returncode != 0 or not remote.startswith("/tmp/"):
         sys.exit(f"The backup failed: {result.stderr.strip() or result.stdout.strip()}")
