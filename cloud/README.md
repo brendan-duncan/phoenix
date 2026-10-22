@@ -146,6 +146,21 @@ play origin serves nothing, and everyone else sees the lock message.
   once), sets plans and passwords, suspends, makes admins, sets storage
   quotas and deletes accounts with what they own (groups they own go to
   another member). An admin cannot suspend, demote or delete themself.
+- Admin > Accounts links each account to its page: who they are, their
+  groups, counts (documents, messages, reports about them), its controls,
+  and their documents. An admin opens anyone's document passively
+  (`ctx.adminView`): as a viewer, not counted as a view or kept in their
+  recents, with no edit lock, draft, favorite, copy or download, so its
+  owner goes on working undisturbed and is not told; each look goes in the
+  activity log (once an hour per document).
+- Moderation: anyone who can see a document can report it (Report… in its
+  menu); reports go to Admin > Reports beside reported messages. An admin
+  flags a document (links and public view no longer reach it; people it is
+  shared with still do) or removes it (only its owner sees that it was,
+  with the reason, and can only delete it; admins still see it all), from
+  a report or the document's Moderation panel, and can clear either. The
+  owner is told each time, always. Admins can also clear an account's
+  picture and About text.
 - Plans (`lib/plans.mjs`): every account has one: beta or free now, pro and
   enterprise later. New accounts start on Admin > Settings' default plan
   (beta). What each plan allows is not decided: `planLimits()` is where

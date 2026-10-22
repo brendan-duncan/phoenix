@@ -7,7 +7,7 @@ import { editorAvailable } from '../config.mjs';
 import { UPLOAD_KINDS } from '../convert.mjs';
 import { badRequest, forbidden, HttpError, notFound } from '../http.mjs';
 import { hashToken, newId, newToken } from '../ids.mjs';
-import { notify } from '../notify.mjs';
+import { adminIds, notify } from '../notify.mjs';
 import { transferDocument } from '../ownership.mjs';
 import { bundleUrl, ensureBundle, refreshPreview } from '../renders.mjs';
 import { copyRevision, deleteDraft, draftOf, fileBytes, quotaBytes, revisionFile, saveDraft, saveRevision, sendFile, usageBytes } from '../storage.mjs';
@@ -45,17 +45,51 @@ function getDocument(store, id) {
   return store.get('SELECT * FROM documents WHERE id = ?', id) ?? null;
 }
 
-/** The document and the caller's role on it; 404 when they have none. */
-function access(ctx, id, needed = 'viewer') {
+/**
+ * The document and the caller's role on it; 404 when they have none. An
+ * admin with no role of their own views it passively (ctx.adminView): as a
+ * viewer, with nothing recorded as theirs (no recents, drafts or locks) and
+ * nothing counted as a view. A removed document's owner reaches only what
+ * `removedOk` routes allow (seeing it, and deleting it).
+ */
+function access(ctx, id, needed = 'viewer', { removedOk = false } = {}) {
   const doc = getDocument(ctx.store, id);
-  const role = documentRole(ctx.store, ctx.user, doc, { linkToken: ctx.linkToken, beta: ctx.settings.beta });
+  let role = documentRole(ctx.store, ctx.user, doc, { linkToken: ctx.linkToken, beta: ctx.settings.beta });
+  ctx.adminView = false;
+  if (role === 'none' && doc && ctx.user?.is_admin) {
+    role = 'viewer';
+    ctx.adminView = true;
+  }
   if (role === 'none') {
     throw ctx.user ? notFound('No such document, or it is not shared with you.') : new HttpError(401, 'signed_out', 'Sign in to see this document.');
+  }
+  if (doc.moderation === 'removed' && !ctx.user?.is_admin && !removedOk) {
+    throw new HttpError(403, 'removed', `The moderators removed this document${doc.moderation_note ? `: ${doc.moderation_note}` : '.'}`);
   }
   if (!atLeast(role, needed)) {
     throw forbidden(needed === 'owner' ? 'Only its owner can do that.' : `That needs ${needed} access.`);
   }
-  return { doc, role };
+  return { doc, role, adminView: ctx.adminView };
+}
+
+/** Whether the caller may have the file in the web editor (an admin's passive view may). */
+function canOpen(ctx, doc, role) {
+  return ctx.adminView || mayOpen(ctx.store, ctx.user, doc, role, ctx.linkToken);
+}
+
+// An admin's look at a document is written to the audit log once an hour.
+const adminLooks = new Map();
+function noteAdminView(ctx, doc) {
+  const key = `${ctx.user.id}:${doc.id}`;
+  const now = Date.now();
+  if ((adminLooks.get(key) ?? 0) > now - 60 * 60 * 1000) {
+    return;
+  }
+  if (adminLooks.size > 5000) {
+    adminLooks.clear();
+  }
+  adminLooks.set(key, now);
+  ctx.store.audit(ctx.user.id, 'document.admin_view', 'document', doc.id, { name: doc.name });
 }
 
 /** Owner and folder for something new: the caller's space, or a group's. */
@@ -103,7 +137,7 @@ class Viewer {
     return this.groups.get(id);
   }
 
-  document(doc, role) {
+  document(doc, role, adminView = false) {
     // A document without a preview of its latest version gets one, in the
     // background (a few at a time; the rest when next listed).
     if (doc.revision && doc.preview_revision !== doc.revision) {
@@ -131,8 +165,12 @@ class Viewer {
       trashedAt: doc.trashed_at,
       forkedFrom: doc.forked_from,
       role,
-      canOpen: mayOpen(this.ctx.store, this.ctx.user, doc, role, this.ctx.linkToken),
-      canDownload: mayDownload(this.ctx.store, this.ctx.user, doc, role, this.ctx.linkToken),
+      canOpen: removedFor(this.ctx, doc) ? false : adminView || mayOpen(this.ctx.store, this.ctx.user, doc, role, this.ctx.linkToken),
+      canDownload: removedFor(this.ctx, doc) ? false : mayDownload(this.ctx.store, this.ctx.user, doc, role, this.ctx.linkToken),
+      adminView,
+      // Its owner and the admins see what the moderators did.
+      moderation: doc.moderation && (role === 'owner' || this.ctx.user?.is_admin)
+        ? { state: doc.moderation, note: doc.moderation_note, at: doc.moderated_at } : null,
       favorite: this.favorites.has(doc.id),
     };
   }
@@ -206,6 +244,12 @@ const SEARCH_SQL = `
       (principal_kind = 'group' AND principal_id IN (SELECT group_id FROM group_members WHERE user_id = :u))))
   ORDER BY d.modified_at DESC LIMIT 100`;
 
+/** `d` as an admin sees it: their own role if they have one, else a passive look. */
+function passiveView(ctx, viewer, d) {
+  const role = documentRole(ctx.store, ctx.user, d, { beta: ctx.settings.beta });
+  return role === 'none' ? viewer.document(d, 'viewer', true) : viewer.document(d, role);
+}
+
 function list(ctx) {
   const user = ctx.requireUser();
   const { store } = ctx;
@@ -218,10 +262,21 @@ function list(ctx) {
     const byId = new Map(rows.map((r) => [r.id, r]));
     return { documents: viewer.documents(rows).map((d) => ({ ...d, where: viewer.where(byId.get(d.id)) })), folders: [] };
   }
+  if (view === 'user') {
+    // An account's documents, everywhere in their files and in the trash, for admins.
+    ctx.requireAdmin();
+    const rows = store.all(`SELECT * FROM documents WHERE owner_kind = 'user' AND owner_id = ? ORDER BY modified_at DESC LIMIT ${LIST_LIMIT}`, String(ctx.query('user') ?? ''));
+    return { documents: rows.map((d) => passiveView(ctx, viewer, d)), folders: [] };
+  }
   if (view === 'files' || view === 'group') {
     const ownerKind = view === 'group' ? 'group' : 'user';
     const ownerId = view === 'group' ? ctx.query('group') : user.id;
-    const role = spaceRole(store, user, ownerKind, ownerId);
+    let role = spaceRole(store, user, ownerKind, ownerId);
+    // Admins look into any group's files, passively.
+    const looking = role === 'none' && view === 'group' && user.is_admin && store.get('SELECT 1 FROM groups WHERE id = ?', ownerId);
+    if (looking) {
+      role = 'viewer';
+    }
     if (role === 'none') {
       throw notFound('No such group, or you are not in it.');
     }
@@ -229,7 +284,7 @@ function list(ctx) {
     const docs = store.all(`SELECT * FROM documents WHERE owner_kind = ? AND owner_id = ? AND folder_id IS ? AND trashed_at IS NULL ORDER BY modified_at DESC LIMIT ${LIST_LIMIT}`, ownerKind, ownerId, folderId);
     const folders = store.all('SELECT * FROM folders WHERE owner_kind = ? AND owner_id = ? AND parent_id IS ? ORDER BY name COLLATE NOCASE', ownerKind, ownerId, folderId);
     return {
-      documents: docs.map((d) => viewer.document(d, documentRole(store, user, d, { beta: ctx.settings.beta }))),
+      documents: docs.map((d) => (looking ? passiveView(ctx, viewer, d) : viewer.document(d, documentRole(store, user, d, { beta: ctx.settings.beta })))),
       folders: folders.map(folderView),
       path: folderPath(store, folderId),
       canEdit: atLeast(role, 'editor'),
@@ -266,6 +321,11 @@ function createDocument(ctx, space, name) {
     id, space.ownerKind, space.ownerId, space.folderId, name, user.id, now, now, user.id);
   touchRecent(ctx.store, user.id, id);
   return getDocument(ctx.store, id);
+}
+
+/** Whether `doc` was removed by the moderators, as far as the caller is concerned. */
+function removedFor(ctx, doc) {
+  return doc.moderation === 'removed' && !ctx.user?.is_admin;
 }
 
 function touchRecent(store, userId, documentId) {
@@ -407,8 +467,11 @@ export function registerDocuments(router, app) {
   });
 
   router.get('/api/documents/:id', (ctx) => {
-    const { doc, role } = access(ctx, ctx.params.id);
-    return { document: new Viewer(ctx).document(doc, role) };
+    const { doc, role, adminView } = access(ctx, ctx.params.id, 'viewer', { removedOk: true });
+    if (adminView) {
+      noteAdminView(ctx, doc);
+    }
+    return { document: new Viewer(ctx).document(doc, role, adminView) };
   });
 
   router.patch('/api/documents/:id', async (ctx) => {
@@ -456,7 +519,7 @@ export function registerDocuments(router, app) {
 
   // To the trash; ?purge=1 deletes a trashed document for good.
   router.delete('/api/documents/:id', (ctx) => {
-    const { doc } = access(ctx, ctx.params.id, 'owner');
+    const { doc } = access(ctx, ctx.params.id, 'owner', { removedOk: true });
     if (ctx.query('purge') === '1') {
       if (!doc.trashed_at) {
         throw badRequest('Move it to the trash first.');
@@ -470,7 +533,7 @@ export function registerDocuments(router, app) {
   });
 
   router.post('/api/documents/:id/restore', (ctx) => {
-    const { doc } = access(ctx, ctx.params.id, 'owner');
+    const { doc } = access(ctx, ctx.params.id, 'owner', { removedOk: true });
     ctx.store.run('UPDATE documents SET trashed_at = NULL WHERE id = ?', doc.id);
     return { ok: true };
   });
@@ -503,15 +566,18 @@ export function registerDocuments(router, app) {
 
   router.post('/api/documents/:id/opened', (ctx) => {
     const user = ctx.requireUser();
-    const { doc } = access(ctx, ctx.params.id);
-    touchRecent(ctx.store, user.id, doc.id);
+    const { doc, adminView } = access(ctx, ctx.params.id);
+    // An admin's look is passive: not in their recents, not a view.
+    if (!adminView) {
+      touchRecent(ctx.store, user.id, doc.id);
+    }
     return { ok: true };
   });
 
   // The file for the web editor: editors, and anyone who may download it.
   router.get('/api/documents/:id/file', async (ctx) => {
     const { doc, role } = access(ctx, ctx.params.id);
-    if (!mayOpen(ctx.store, ctx.user, doc, role, ctx.linkToken)) {
+    if (!canOpen(ctx, doc, role)) {
       throw forbidden('You cannot open this document in the editor.');
     }
     return sendRevision(ctx, doc);
@@ -658,7 +724,7 @@ export function registerDocuments(router, app) {
     if (!doc.revision) {
       throw notFound('This document has nothing saved yet.');
     }
-    if (mayOpen(ctx.store, ctx.user, doc, role, ctx.linkToken) && editorAvailable(ctx.config) && ctx.query('as') !== 'bundle') {
+    if (canOpen(ctx, doc, role) && editorAvailable(ctx.config) && ctx.query('as') !== 'bundle') {
       return { mode: 'editor', url: `/editor/?doc=${doc.id}&play=1` };
     }
     await ensureBundle(app, doc);
@@ -691,7 +757,10 @@ export function registerDocuments(router, app) {
   // ── Drafts: each person's unsaved work, kept by the editor ───────────────
 
   router.put('/api/documents/:id/draft', async (ctx) => {
-    const { doc, role } = access(ctx, ctx.params.id);
+    const { doc, role, adminView } = access(ctx, ctx.params.id);
+    if (adminView) {
+      throw forbidden('An admin\'s look at a document keeps no draft.');
+    }
     if (!mayOpen(ctx.store, ctx.user, doc, role, ctx.linkToken)) {
       throw forbidden('You cannot open this document in the editor.');
     }
@@ -724,7 +793,7 @@ export function registerDocuments(router, app) {
   });
 
   router.get('/api/documents/:id/thumbnail', async (ctx) => {
-    const { doc } = access(ctx, ctx.params.id);
+    const { doc } = access(ctx, ctx.params.id, 'viewer', { removedOk: true });
     if (!doc.thumbnail) {
       throw notFound('No thumbnail.');
     }
@@ -1002,4 +1071,109 @@ export function registerDocuments(router, app) {
     ctx.store.run('DELETE FROM favorites WHERE user_id = ? AND kind = ? AND target_id = ?', user.id, ctx.params.kind, ctx.params.id);
     return { ok: true };
   });
+
+  // ── Moderation ──────────────────────────────────────────────────────────
+
+  // Anyone who can see a document (but not its owner) reports it to the admins: { reason }.
+  router.post('/api/documents/:id/report', async (ctx) => {
+    const user = ctx.requireUser();
+    const { doc, role } = access(ctx, ctx.params.id);
+    if (role === 'owner') {
+      throw badRequest('That is your own document.');
+    }
+    if (!ctx.store.get('SELECT 1 FROM document_reports WHERE document_id = ? AND reporter_id = ? AND resolved_at IS NULL', doc.id, user.id)) {
+      const body = await ctx.json();
+      ctx.store.run('INSERT INTO document_reports (document_id, reporter_id, reason, created_at) VALUES (?, ?, ?, ?)',
+        doc.id, user.id, String(body.reason ?? '').trim().slice(0, 1000), Date.now());
+      notify(app, adminIds(ctx.store), { kind: 'report', text: `${user.name} reported “${doc.name}”`, link: '/admin/reports', actorId: user.id });
+    }
+    ctx.status = 201;
+    return { ok: true };
+  });
+
+  router.get('/api/admin/document-reports', (ctx) => {
+    ctx.requireAdmin();
+    const all = ctx.query('all') === '1';
+    const viewer = new Viewer(ctx);
+    const rows = ctx.store.all(
+      `SELECT r.*, d.id AS doc_id FROM document_reports r JOIN documents d ON d.id = r.document_id
+       ${all ? '' : 'WHERE r.resolved_at IS NULL'} ORDER BY r.created_at DESC LIMIT 200`);
+    return {
+      reports: rows.map((r) => ({
+        id: r.id,
+        reason: r.reason,
+        createdAt: r.created_at,
+        reporter: viewer.user(r.reporter_id),
+        resolvedAt: r.resolved_at,
+        outcome: r.outcome,
+        document: passiveView(ctx, viewer, getDocument(ctx.store, r.doc_id)),
+      })),
+    };
+  });
+
+  // { outcome: 'dismissed' | 'flagged' | 'removed', note }: the last two moderate the document.
+  router.patch('/api/admin/document-reports/:id', async (ctx) => {
+    const admin = ctx.requireAdmin();
+    const report = ctx.store.get('SELECT * FROM document_reports WHERE id = ?', Number(ctx.params.id));
+    if (!report) {
+      throw notFound('No such report.');
+    }
+    const body = await ctx.json();
+    if (!['dismissed', 'flagged', 'removed'].includes(body.outcome)) {
+      throw badRequest('A report is dismissed, or its document flagged or removed.');
+    }
+    if (body.outcome !== 'dismissed') {
+      moderate(ctx, getDocument(ctx.store, report.document_id), body.outcome, body.note);
+    } else {
+      ctx.store.run('UPDATE document_reports SET resolved_at = ?, resolved_by = ?, outcome = ? WHERE document_id = ? AND resolved_at IS NULL',
+        Date.now(), admin.id, 'dismissed', report.document_id);
+    }
+    return { ok: true };
+  });
+
+  // { state: null | 'flagged' | 'removed', note }: what the admins say of a document.
+  router.patch('/api/admin/documents/:id/moderation', async (ctx) => {
+    ctx.requireAdmin();
+    const doc = getDocument(ctx.store, ctx.params.id);
+    if (!doc) {
+      throw notFound('No such document.');
+    }
+    const body = await ctx.json();
+    if (![null, 'flagged', 'removed'].includes(body.state ?? null)) {
+      throw badRequest('A document is flagged, removed, or neither.');
+    }
+    moderate(ctx, doc, body.state ?? null, body.note);
+    return { document: new Viewer(ctx).document(getDocument(ctx.store, doc.id), 'viewer', true) };
+  });
+
+  /** Sets `doc`'s moderation, settles its reports, and tells its owner. */
+  function moderate(ctx, doc, state, note) {
+    const text = String(note ?? '').trim().slice(0, 500);
+    const { store } = ctx;
+    const now = Date.now();
+    store.transaction(() => {
+      store.run('UPDATE documents SET moderation = ?, moderation_note = ?, moderated_by = ?, moderated_at = ? WHERE id = ?',
+        state, state ? text : '', ctx.user.id, now, doc.id);
+      if (state) {
+        store.run('UPDATE document_reports SET resolved_at = ?, resolved_by = ?, outcome = ? WHERE document_id = ? AND resolved_at IS NULL',
+          now, ctx.user.id, state, doc.id);
+      }
+      // Removed: no one goes on editing it.
+      if (state === 'removed') {
+        store.run('DELETE FROM locks WHERE document_id = ?', doc.id);
+      }
+      store.audit(ctx.user.id, `document.moderation.${state ?? 'cleared'}`, 'document', doc.id, { name: doc.name, note: text });
+    });
+    if ((state ?? null) === (doc.moderation ?? null)) {
+      return;
+    }
+    const owners = doc.owner_kind === 'user' ? [doc.owner_id]
+      : [store.get('SELECT owner_id FROM groups WHERE id = ?', doc.owner_id)?.owner_id].filter(Boolean);
+    const said = text ? ` (${text})` : '';
+    const message = {
+      flagged: `The moderators flagged “${doc.name}”: links and public view no longer reach it${said}`,
+      removed: `The moderators removed “${doc.name}”${said}`,
+    }[state] ?? `The moderators restored “${doc.name}”`;
+    notify(app, owners, { kind: 'moderation', text: message, link: `/d/${doc.id}`, actorId: null });
+  }
 }

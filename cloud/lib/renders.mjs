@@ -117,5 +117,9 @@ export function openPass(app, pass) {
   if (!/^[A-Za-z0-9_-]{12}$/.test(documentId ?? '') || !/^\d+$/.test(revision ?? '') || !(Number(expires) > Date.now())) {
     return null;
   }
+  // A pass made before the document was flagged or removed opens nothing.
+  if (app.store.get('SELECT 1 FROM documents WHERE id = ? AND moderation IS NOT NULL', documentId)) {
+    return null;
+  }
   return bundleDir(app, documentId, Number(revision));
 }

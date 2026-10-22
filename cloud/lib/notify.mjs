@@ -18,8 +18,9 @@ export const KINDS = {
   message: { label: 'Someone sends you a direct message', inApp: true, email: false },
   chat: { label: 'New messages in your groups\' chats', inApp: false, email: false },
   unlocked: { label: 'Your account is ready', inApp: true, email: true, always: true },
+  moderation: { label: 'Moderators flag or remove one of your documents', inApp: true, email: true, always: true },
   waiting: { label: 'An account is waiting to be unlocked', inApp: true, email: false, admins: true },
-  report: { label: 'A message is reported', inApp: true, email: true, admins: true },
+  report: { label: 'A message or document is reported', inApp: true, email: true, admins: true },
 };
 
 /** `user`'s choices for every kind they can get: { kind: { inApp, email } }. */

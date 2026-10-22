@@ -52,7 +52,12 @@ function editorUrl(doc) {
 
 /** The player page's address: anyone who may view can play (in the editor or as HTML5). */
 function playUrl(doc) {
-  return doc.revision && (state.me.editor || state.me.converter) ? `/play/${encodeURIComponent(doc.id)}` : null;
+  return doc.revision && !removed(doc) && (state.me.editor || state.me.converter) ? `/play/${encodeURIComponent(doc.id)}` : null;
+}
+
+/** Whether the moderators removed `doc`, for someone other than an admin (who still sees it all). */
+function removed(doc) {
+  return doc.moderation?.state === 'removed' && !state.me.user.isAdmin;
 }
 
 function thumbnail(doc, cls = 'placeholder') {
@@ -386,7 +391,7 @@ function docMenu(doc, { view, onDone = rerender }) {
     playUrl(doc) ? { label: 'Play', icon: 'play', onclick: () => navigate(playUrl(doc)) } : null,
     { label: 'Details', icon: 'file', onclick: () => navigate(`/d/${doc.id}`) },
     doc.canDownload && doc.revision ? { label: 'Download', icon: 'download', onclick: () => download(`/api/documents/${doc.id}/download`) } : null,
-    editor ? { label: 'Share…', icon: 'share', onclick: run(() => shareDialog(doc)) } : null,
+    editor && !removed(doc) ? { label: 'Share…', icon: 'share', onclick: run(() => shareDialog(doc)) } : null,
     doc.role === 'owner' ? { label: 'Transfer ownership…', icon: 'users', onclick: run(() => transferDialog(doc)) } : null,
     '-',
     editor ? { label: 'Rename…', icon: 'edit', onclick: run(() => rename(doc)) } : null,
@@ -394,6 +399,7 @@ function docMenu(doc, { view, onDone = rerender }) {
     (doc.allowDuplicate || editor) && doc.canDownload ? { label: 'Make a copy', icon: 'copy', onclick: run(() => duplicate(doc)) } : null,
     { label: doc.favorite ? 'Remove from favorites' : 'Add to favorites', icon: 'star', onclick: run(async () => { await toggleFavorite(doc); onDone(); }) },
     { label: 'Version history', icon: 'history', onclick: () => navigate(`/d/${doc.id}#versions`) },
+    doc.role !== 'owner' && !doc.adminView ? { label: 'Report…', icon: 'shield', onclick: run(() => reportDocument(doc)) } : null,
     view === 'shared' ? '-' : null,
     view === 'shared' ? {
       label: 'Remove from Shared with me', icon: 'x', onclick: run(async () => {
@@ -404,6 +410,58 @@ function docMenu(doc, { view, onDone = rerender }) {
     doc.role === 'owner' ? '-' : null,
     doc.role === 'owner' ? { label: 'Move to trash', icon: 'trash', danger: true, onclick: run(async () => { await trash(doc); onDone(); }) } : null,
   ].filter((item, i, all) => item !== null && !(item === '-' && (i === 0 || all.slice(i + 1).every((x) => x === null || x === '-'))));
+}
+
+// ── Reporting and moderating ──────────────────────────────────────────────
+
+async function reportDocument(doc) {
+  const reason = await promptDialog({ title: `Report “${doc.name}”`, label: 'What is wrong with it? (the admins see it with the document)', submit: 'Report' });
+  if (reason !== null) {
+    await post(`/api/documents/${doc.id}/report`, { reason });
+    toast('Reported. Thank you.');
+  }
+}
+
+const MODERATION_TEXT = {
+  flagged: 'Flagged by the moderators: links and public view no longer reach it.',
+  removed: 'Removed by the moderators: only its owner sees that it was, and can delete it.',
+};
+
+/** What the moderators did, for its owner and for admins. */
+function moderationNotice(doc) {
+  const m = doc.moderation;
+  return m ? h('div', { class: 'banner warn' }, MODERATION_TEXT[m.state], m.note ? ` ${m.note}` : '', m.at ? h('span', { class: 'muted small' }, ` · ${dateTime(m.at)}`) : null) : null;
+}
+
+/** For admins on a document's page: flag it, remove it, or clear what was done. */
+function moderationPanel(doc) {
+  const state = doc.moderation?.state ?? null;
+  const act = (next, title, confirm) => async () => {
+    const result = next === null ? true : await formDialog({
+      title,
+      submit: confirm,
+      danger: next === 'removed',
+      fields: h('label', { class: 'field' }, h('span', {}, 'Why (its owner is told)'), h('textarea', { name: 'note', rows: 3, maxlength: 500 })),
+      onSubmit: (data) => data,
+    });
+    if (!result) {
+      return;
+    }
+    try {
+      await patch(`/api/admin/documents/${doc.id}/moderation`, { state: next, note: result.note ?? '' });
+      toast(next === null ? 'Cleared.' : next === 'flagged' ? 'Flagged.' : 'Removed.');
+      rerender();
+    } catch (err) {
+      showError(err);
+    }
+  };
+  return h('div', { class: 'panel stack' },
+    h('h2', {}, 'Moderation'),
+    h('p', { class: 'muted small flush' }, state ? MODERATION_TEXT[state] : 'Nothing done. Flagging withdraws it from links and public view; removing leaves it to its owner, who can only delete it.'),
+    h('div', { class: 'row wrap' },
+      state !== 'flagged' ? h('button', { type: 'button', class: 'btn', onclick: act('flagged', `Flag “${doc.name}”`, 'Flag') }, icon('shield'), 'Flag…') : null,
+      state !== 'removed' ? h('button', { type: 'button', class: 'btn danger', onclick: act('removed', `Remove “${doc.name}”`, 'Remove') }, icon('trash'), 'Remove…') : null,
+      state ? h('button', { type: 'button', class: 'btn ghost', onclick: act(null) }, 'Clear') : null));
 }
 
 // ── Handing a document on ─────────────────────────────────────────────────
@@ -566,7 +624,10 @@ export function shareDialog(doc) {
 // ── Listings ──────────────────────────────────────────────────────────────
 
 function badge(doc, view) {
-  if (view === 'trash') {
+  if (doc.moderation) {
+    return h('span', { class: 'badge danger' }, icon('shield'), doc.moderation.state === 'removed' ? 'Removed by moderators' : 'Flagged');
+  }
+  if (view === 'trash' || doc.trashedAt) {
     return h('span', { class: 'badge' }, `Deleted ${timeAgo(doc.trashedAt)}`);
   }
   if (doc.visibility === 'private') {
@@ -904,7 +965,7 @@ const EMPTY = {
  * search; files and group take a folder. `rootHref`/`folderHref` build the
  * breadcrumb links; `before` goes above the heading.
  */
-export async function renderListing(target, { view, folder, q, title, groupId, rootHref = '/files', folderHref = (id) => `/files/${id}`, before = null }) {
+export async function renderListing(target, { view, folder, q, title, groupId, userId, rootHref = '/files', folderHref = (id) => `/files/${id}`, before = null }) {
   const query = new URLSearchParams();
   if (view === 'search') {
     query.set('q', q);
@@ -916,6 +977,9 @@ export async function renderListing(target, { view, folder, q, title, groupId, r
   }
   if (groupId) {
     query.set('group', groupId);
+  }
+  if (userId) {
+    query.set('user', userId);
   }
   clearSelection();
   const data = await get(`/api/documents?${query}`);
@@ -1075,7 +1139,10 @@ export async function renderDocument(target, id) {
   if (!target.isConnected) {
     return;
   }
-  post(`/api/documents/${id}/opened`).catch(() => {});
+  // Passive for an admin's look (the server keeps no recent of it either).
+  if (!doc.adminView) {
+    post(`/api/documents/${id}/opened`).catch(() => {});
+  }
   const editor = atLeast(doc.role, 'editor');
 
   const title = h('input', { class: 'doc-title', value: doc.name, readOnly: !editor, 'aria-label': 'Name', maxlength: 120 });
@@ -1106,9 +1173,9 @@ export async function renderDocument(target, id) {
     editorUrl(doc) ? h('a', { class: 'btn primary', href: editorUrl(doc) }, icon('edit'), editor ? 'Edit' : 'Open in the editor') : null,
     playUrl(doc) ? h('a', { class: 'btn', href: playUrl(doc) }, icon('play'), 'Play') : null,
     doc.canDownload && doc.revision ? h('button', { type: 'button', class: 'btn', onclick: () => download(`/api/documents/${doc.id}/download`) }, icon('download'), 'Download') : null,
-    editor ? h('button', { type: 'button', class: 'btn', onclick: () => shareDialog(doc) }, icon('share'), 'Share') : null,
+    editor && !removed(doc) ? h('button', { type: 'button', class: 'btn', onclick: () => shareDialog(doc) }, icon('share'), 'Share') : null,
     (doc.allowDuplicate || editor) && doc.canDownload ? h('button', { type: 'button', class: 'btn', onclick: () => duplicate(doc).catch(showError) }, icon('copy'), 'Make a copy') : null,
-    h('button', {
+    doc.adminView ? null : h('button', {
       type: 'button', class: 'btn', onclick: async (e) => {
         const btn = e.currentTarget;
         try {
@@ -1139,13 +1206,15 @@ export async function renderDocument(target, id) {
     revisions.length ? h('div', { class: 'revisions' }, revisions.map((r) => revisionRow(doc, r))) : h('div', { class: 'muted' }, 'Nothing saved yet.'));
 
   clear(target,
+    doc.adminView ? h('div', { class: 'banner' }, `You are looking at this as an admin. It is not counted as a view, takes no edit lock and saves nothing; ${doc.owner.name ?? 'its owner'} is not told.`) : null,
+    moderationNotice(doc),
     h('div', { class: 'doc' },
       h('div', { class: 'stack' },
         h('div', { class: 'preview' }, thumbnail(doc, '')),
         title,
         description,
         actions),
-      h('div', { class: 'stack' }, details, versions)));
+      h('div', { class: 'stack' }, state.me.user.isAdmin ? moderationPanel(doc) : null, details, versions)));
   if (location.hash === '#versions') {
     versions.scrollIntoView();
   }

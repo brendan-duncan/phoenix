@@ -450,12 +450,28 @@ export async function messagingPanel() {
 
 export async function adminReports(change) {
   const all = new URLSearchParams(location.search).get('all') === '1';
-  const { reports } = await get(`/api/admin/reports${all ? '?all=1' : ''}`);
+  const [{ reports }, { reports: documentReports }] = await Promise.all([
+    get(`/api/admin/reports${all ? '?all=1' : ''}`), get(`/api/admin/document-reports${all ? '?all=1' : ''}`)]);
+  const documentReport = (r) => h('div', { class: 'panel stack' },
+    h('div', { class: 'row wrap' },
+      h('div', { class: 'grow' }, `${r.reporter?.name ?? 'Someone'} reported a document · ${timeAgo(r.createdAt)}`),
+      r.resolvedAt ? h('span', { class: 'badge' }, r.outcome) : [
+        h('a', { class: 'btn', href: `/d/${r.document.id}` }, 'Look at it'),
+        h('button', { type: 'button', class: 'btn', onclick: change(() => patch(`/api/admin/document-reports/${r.id}`, { outcome: 'dismissed' })) }, 'Dismiss'),
+        h('button', { type: 'button', class: 'btn', onclick: change(() => patch(`/api/admin/document-reports/${r.id}`, { outcome: 'flagged', note: r.reason })) }, 'Flag'),
+        h('button', { type: 'button', class: 'btn danger', onclick: change(() => patch(`/api/admin/document-reports/${r.id}`, { outcome: 'removed', note: r.reason })) }, 'Remove'),
+      ]),
+    r.reason ? h('blockquote', { class: 'request' }, r.reason) : null,
+    h('a', { class: 'row', href: `/d/${r.document.id}` },
+      r.document.thumbnailUrl ? h('img', { class: 'report-thumb', src: r.document.thumbnailUrl, alt: '' }) : null,
+      h('div', {}, h('strong', {}, r.document.name), h('div', { class: 'muted small' }, `owned by ${r.document.owner.name ?? 'someone'}${r.document.moderation ? ` · ${r.document.moderation.state}` : ''}`))));
   const quote = (m) => h('div', { class: 'msg-quote' }, h('strong', {}, m.sender?.name ?? 'Deleted account'), ' ',
     h('span', { class: 'muted small' }, timeAgo(m.createdAt)), h('div', {}, m.deleted ? h('em', { class: 'muted' }, 'deleted') : m.body));
   return [
     h('div', { class: 'row' }, h('p', { class: 'muted grow flush' }, 'Messages people reported. Remove one to delete it for everyone; suspend its sender from Accounts if need be.'),
       h('a', { class: 'btn ghost', href: all ? '/admin/reports' : '/admin/reports?all=1' }, all ? 'Open ones only' : 'Show settled ones too')),
+    documentReports.length ? [h('h2', {}, 'Documents'), documentReports.map(documentReport)] : null,
+    reports.length || documentReports.length ? h('h2', {}, 'Messages') : null,
     reports.length ? reports.map((r) => h('div', { class: 'panel stack' },
       h('div', { class: 'row' }, h('div', { class: 'grow' }, `${r.reporter?.name ?? 'Someone'} reported a ${r.message.kind === 'dm' ? 'direct message' : 'group chat message'} · ${timeAgo(r.createdAt)}`),
         r.resolvedAt ? h('span', { class: 'badge' }, r.outcome) : [
@@ -466,6 +482,6 @@ export async function adminReports(change) {
       r.context.length ? h('div', { class: 'muted small' }, 'Before it:') : null,
       r.context.map(quote),
       h('div', { class: 'msg-reported' }, quote(r.message))))
-      : h('div', { class: 'empty' }, icon('shield'), h('h2', {}, 'No reports')),
+      : (documentReports.length ? h('div', { class: 'muted small' }, 'No message reports.') : h('div', { class: 'empty' }, icon('shield'), h('h2', {}, 'No reports'))),
   ];
 }

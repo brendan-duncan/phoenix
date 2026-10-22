@@ -326,7 +326,8 @@
     } else if (state.fromDraft) {
       setStatus('Opened your unsaved changes: save to keep them', 'bad');
     } else {
-      setStatus(editor ? `Version ${state.revision}` : 'You can view it; save to keep a copy in your files');
+      setStatus(doc.adminView ? 'Looking as an admin: nothing here is saved, and the owner is not disturbed'
+        : editor ? `Version ${state.revision}` : 'You can view it; save to keep a copy in your files');
     }
     if (editor && !state.play) {
       await keepLock();

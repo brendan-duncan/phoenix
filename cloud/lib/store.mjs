@@ -378,6 +378,26 @@ CREATE TABLE message_reports (
   outcome TEXT
 );
 `,
+  // v8: moderation. A document flagged by the admins is withdrawn from
+  // links and public view; one removed is the admins' alone (its owner sees
+  // that it was, and why). Anyone who can see a document can report it.
+  `
+ALTER TABLE documents ADD COLUMN moderation TEXT;
+ALTER TABLE documents ADD COLUMN moderation_note TEXT NOT NULL DEFAULT '';
+ALTER TABLE documents ADD COLUMN moderated_by TEXT;
+ALTER TABLE documents ADD COLUMN moderated_at INTEGER;
+
+CREATE TABLE document_reports (
+  id INTEGER PRIMARY KEY,
+  document_id TEXT NOT NULL REFERENCES documents (id) ON DELETE CASCADE,
+  reporter_id TEXT REFERENCES users (id) ON DELETE SET NULL,
+  reason TEXT NOT NULL DEFAULT '',
+  created_at INTEGER NOT NULL,
+  resolved_at INTEGER,
+  resolved_by TEXT,
+  outcome TEXT
+);
+`,
 ];
 
 /** Settings an admin changes at runtime; stored as JSON in `settings`. */

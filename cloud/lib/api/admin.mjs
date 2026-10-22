@@ -86,6 +86,31 @@ export function registerAdmin(router, app) {
     return { users: rows.map((u) => adminUser(ctx.store, u)) };
   });
 
+  // One account, for its page under Admin: the account, its groups, what it owns.
+  router.get('/api/admin/users/:id', (ctx) => {
+    ctx.requireAdmin();
+    const user = ctx.store.get('SELECT * FROM users WHERE id = ?', ctx.params.id);
+    if (!user) {
+      throw notFound('No such account.');
+    }
+    const { store } = ctx;
+    return {
+      user: { ...adminUser(store, user), bio: user.bio, emailVerified: Boolean(user.email_verified), hasAvatar: Boolean(user.avatar_blob || user.avatar_url) },
+      groups: store.all(
+        `SELECT g.id, g.name, g.handle, m.role, g.owner_id = ? AS owner FROM group_members m JOIN groups g ON g.id = m.group_id
+         WHERE m.user_id = ? ORDER BY g.name COLLATE NOCASE`, user.id, user.id)
+        .map((g) => ({ id: g.id, name: g.name, handle: g.handle, role: g.role, owner: Boolean(g.owner) })),
+      counts: {
+        trashed: store.get("SELECT COUNT(*) AS n FROM documents WHERE owner_kind = 'user' AND owner_id = ? AND trashed_at IS NOT NULL", user.id).n,
+        public: store.get("SELECT COUNT(*) AS n FROM documents WHERE owner_kind = 'user' AND owner_id = ? AND visibility != 'private'", user.id).n,
+        moderated: store.get("SELECT COUNT(*) AS n FROM documents WHERE owner_kind = 'user' AND owner_id = ? AND moderation IS NOT NULL", user.id).n,
+        messages: store.get('SELECT COUNT(*) AS n FROM messages WHERE sender_id = ?', user.id).n,
+        reportsAgainst: store.get('SELECT COUNT(*) AS n FROM message_reports r JOIN messages m ON m.id = r.message_id WHERE m.sender_id = ?', user.id).n
+          + store.get("SELECT COUNT(*) AS n FROM document_reports r JOIN documents d ON d.id = r.document_id WHERE d.owner_kind = 'user' AND d.owner_id = ?", user.id).n,
+      },
+    };
+  });
+
   // An account an admin makes is ready to use: { name, email, password, isAdmin }.
   router.post('/api/admin/users', async (ctx) => {
     const me = ctx.requireAdmin();
@@ -138,6 +163,15 @@ export function registerAdmin(router, app) {
           email: { subject: 'Your Phoenix Cloud account is ready', text: 'An admin has unlocked your account. Sign in here:' },
         });
       }
+    }
+    // An offensive profile: its picture or its words cleared.
+    if (body.clearAvatar) {
+      store.run("UPDATE users SET avatar_blob = NULL, avatar_url = '' WHERE id = ?", user.id);
+      store.audit(me.id, 'user.clear_avatar', 'user', user.id);
+    }
+    if (body.clearBio) {
+      store.run("UPDATE users SET bio = '' WHERE id = ?", user.id);
+      store.audit(me.id, 'user.clear_bio', 'user', user.id);
     }
     if (body.plan !== undefined) {
       if (!validPlan(body.plan) || !PLANS[body.plan].offered) {

@@ -4,7 +4,7 @@
 import { api, del, get, patch, post, send } from './api.js';
 import { navigate, refreshMe, reloadShell, rerender, state } from './app.js';
 import { renderListing } from './files.js';
-import { adminReports, messagingPanel, openGroupChat } from './messages.js';
+import { adminReports, messagingPanel, newMessageDialog, openGroupChat } from './messages.js';
 import {
   avatar, bytes, clear, confirmDialog, copyText, dateTime, formDialog, h, icon, person, showError, timeAgo, toast,
 } from './ui.js';
@@ -873,7 +873,7 @@ async function adminUsers() {
   const search = h('input', { type: 'search', placeholder: 'Find an account', 'aria-label': 'Find an account' });
   const rows = users.map((u) => {
     const row = h('tr', { dataset: { find: `${u.name} ${u.email ?? ''}`.toLowerCase() } },
-      h('td', {}, person(u, u.isAdmin ? 'admin' : null)),
+      h('td', {}, h('a', { class: 'plain-link', href: `/admin/users/${u.id}`, title: 'Their account and documents' }, person(u, u.isAdmin ? 'admin' : null))),
       h('td', {}, u.email ?? '', u.email && !u.emailVerified ? h('div', { class: 'muted small' }, 'not confirmed') : null),
       h('td', { class: u.status === 'active' ? 'status-ok' : 'status-bad' }, STATUS_LABELS[u.status] ?? u.status),
       h('td', {}, planBox(u)),
@@ -1039,6 +1039,48 @@ async function adminAudit() {
       h('td', {}, e.action),
       h('td', {}, e.targetKind === 'document' ? h('a', { href: `/d/${e.targetId}` }, 'document') : `${e.targetKind} ${e.targetId}`),
       h('td', { class: 'muted small' }, Object.keys(e.detail).length ? JSON.stringify(e.detail) : ''))))))];
+}
+
+/**
+ * One account, for admins: who they are, their groups, and their documents,
+ * which an admin opens passively (not a view, no lock, nothing saved).
+ */
+export async function renderAdminUser(target, id) {
+  if (!state.me.user.isAdmin) {
+    clear(target, h('div', { class: 'empty' }, icon('lock'), h('h2', {}, 'Admins only')));
+    return;
+  }
+  const { user: u, groups, counts } = await get(`/api/admin/users/${id}`);
+  const me = state.me.user;
+  const button = (label, onclick, cls = '') => h('button', { type: 'button', class: `btn small-btn ${cls}`.trim(), onclick }, label);
+  const before = h('div', { class: 'stack' },
+    h('div', {}, h('a', { class: 'link small', href: '/admin' }, '← Accounts')),
+    h('div', { class: 'page-head' }, h('span', { class: 'avatar large' }, avatar(u)), h('div', { class: 'grow' },
+      h('h1', {}, u.name),
+      h('div', { class: 'muted small' }, [`@${u.handle}`, u.email ?? 'no email', STATUS_LABELS[u.status] ?? u.status, `${u.effectivePlan.plan} plan`,
+        u.isAdmin ? 'admin' : null].filter(Boolean).join(' · '))),
+    u.id !== me.id ? h('button', { type: 'button', class: 'btn', onclick: () => newMessageDialog(u.name).catch(showError) }, icon('chat'), 'Message') : null),
+    h('div', { class: 'admin-user' },
+      h('div', { class: 'panel stack' },
+        h('h2', {}, 'Account'),
+        h('dl', { class: 'props' },
+          h('dt', {}, 'Joined'), h('dd', {}, dateTime(u.createdAt)),
+          h('dt', {}, 'Last seen'), h('dd', {}, u.lastSeenAt ? timeAgo(u.lastSeenAt) : 'never'),
+          h('dt', {}, 'Storage'), h('dd', {}, `${bytes(u.bytes)}${u.quotaMB !== null ? ` of ${u.quotaMB} MB` : ''}`),
+          h('dt', {}, 'Documents'), h('dd', {}, `${u.documents} (${counts.trashed} in the trash, ${counts.public} not private, ${counts.moderated} moderated)`),
+          h('dt', {}, 'Messages'), h('dd', {}, `${counts.messages} sent · ${counts.reportsAgainst} report${counts.reportsAgainst === 1 ? '' : 's'} about them`),
+          h('dt', {}, 'About'), h('dd', {}, u.bio || h('span', { class: 'muted' }, 'nothing'))),
+        u.requestMessage ? h('blockquote', { class: 'request' }, u.requestMessage) : null,
+        h('div', { class: 'row wrap' }, accountButtons(u, me),
+          u.hasAvatar ? button('Clear picture', change(() => patch(`/api/admin/users/${u.id}`, { clearAvatar: true }))) : null,
+          u.bio ? button('Clear about', change(() => patch(`/api/admin/users/${u.id}`, { clearBio: true }))) : null)),
+      h('div', { class: 'panel stack' },
+        h('h2', {}, 'Groups'),
+        groups.length ? groups.map((g) => h('div', { class: 'row' }, h('a', { class: 'grow', href: `/groups/${g.id}` }, g.name),
+          h('span', { class: 'muted small' }, g.owner ? 'owner' : g.role)))
+          : h('div', { class: 'muted small' }, 'In no groups.'))),
+    h('div', { class: 'note' }, 'Opening their documents is not counted as a view, takes no edit lock, and saves nothing: they go on working undisturbed. Each look is in the activity log.'));
+  await renderListing(target, { view: 'user', userId: u.id, title: 'Their documents', before });
 }
 
 export async function renderAdmin(target, tab) {

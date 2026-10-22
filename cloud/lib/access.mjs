@@ -7,7 +7,9 @@
 //   - the role of a share link the request carries;
 //   - viewer, when the document is public, showcase or unlisted.
 // While the beta setting is on, links and visibility count only for people
-// who are signed in. A trashed document is the owner's alone.
+// who are signed in. A trashed document is the owner's alone. Moderation:
+// a flagged document is not reached by links or public view; a removed one
+// only by its owner (who may see that, and delete it) and admins.
 
 import { hashToken } from './ids.mjs';
 
@@ -76,7 +78,7 @@ export function documentRole(store, user, doc, { linkToken, beta }) {
     return 'none';
   }
   let role = spaceRole(store, user, doc.owner_kind, doc.owner_id);
-  if (doc.trashed_at) {
+  if (doc.trashed_at || (doc.moderation === 'removed' && !user?.is_admin)) {
     return role === 'owner' ? 'owner' : 'none';
   }
   if (user) {
@@ -89,7 +91,7 @@ export function documentRole(store, user, doc, { linkToken, beta }) {
       role = higher(role, share.role);
     }
   }
-  const outsiders = !beta || user;
+  const outsiders = (!beta || user) && !doc.moderation;
   if (outsiders) {
     role = higher(role, linkRole(store, doc.id, linkToken));
     if (doc.visibility !== 'private') {

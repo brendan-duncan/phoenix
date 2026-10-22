@@ -4,7 +4,7 @@
 import { get, post, setCsrf, setLink } from './api.js';
 import { newDocumentDialog, renderDocument, renderListing, UPLOAD_TYPES, uploadFiles } from './files.js';
 import {
-  newGroupDialog, renderAccount, renderAdmin, renderConfirm, renderForgot, renderGroupPage, renderInvite, renderLocked, renderPlayer, renderRegister, renderReset, renderSignin,
+  newGroupDialog, renderAccount, renderAdmin, renderAdminUser, renderConfirm, renderForgot, renderGroupPage, renderInvite, renderLocked, renderPlayer, renderRegister, renderReset, renderSignin,
 } from './pages.js';
 import { renderMessages, renderNotifications } from './messages.js';
 import { avatar, clear, closeMenu, h, icon, popup, promptDialog, showError, timeAgo, toast } from './ui.js';
@@ -276,6 +276,7 @@ const ROUTES = [
   [/^\/account$/, () => ({ nav: null, render: (m) => renderAccount(m) })],
   [/^\/messages(?:\/([^/]+))?$/, ([id]) => ({ nav: 'messages', render: (m) => renderMessages(m, id) })],
   [/^\/notifications$/, () => ({ nav: null, render: (m) => renderNotifications(m) })],
+  [/^\/admin\/users\/([^/]+)$/, ([id]) => ({ nav: 'admin', render: (m) => renderAdminUser(m, id) })],
   [/^\/admin(?:\/(\w+))?$/, ([tab]) => ({ nav: 'admin', render: (m) => renderAdmin(m, tab ?? 'users') })],
 ];
 
