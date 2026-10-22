@@ -29,6 +29,7 @@
 #include <QJsonDocument>
 #include <QJsonArray>
 #include <QFileOpenEvent>
+#include <QFontDatabase>
 #include <QStringList>
 
 #include <cstdio>
@@ -237,6 +238,12 @@ int main(int argc, char *argv[])
 #else
     QApplication a(argc, argv);
 #endif
+    // PHOENIX_FONTS_DIR: fonts to use besides the system's, such as a
+    // library of them a page Phoenix runs in hands over.
+    const QString fontsDir = qEnvironmentVariable("PHOENIX_FONTS_DIR");
+    if (!fontsDir.isEmpty())
+        for (const QFileInfo& font : QDir(fontsDir).entryInfoList({"*.ttf", "*.otf", "*.ttc"}, QDir::Files))
+            QFontDatabase::addApplicationFont(font.absoluteFilePath());
     // Qt takes the system's locale on Linux and macOS, and with it a comma
     // for the decimal point in printf and strtod: files would be written
     // with "0,5" and read back wrong. Numbers in files are always "C".
@@ -441,7 +448,8 @@ int main(int argc, char *argv[])
     if (play)
         MainWindow::setPlayOnly();
     // Phoenix <file> --hosted: a page that keeps the document runs Phoenix.
-    if (launch.removeAll("--hosted") > 0)
+    const bool hosted = launch.removeAll("--hosted") > 0;
+    if (hosted)
         MainWindow::setHosted();
     QString initialFile = launch.size() > 1 ? launch.at(1) : QString();
 
@@ -481,6 +489,8 @@ int main(int argc, char *argv[])
 #ifdef PHOENIX_WEB
     MainWindow& window = *new MainWindow(initialFile);
     web_page::setUnsavedWorkCheck([]() { return MainWindow::hasUnsavedWork(); });
+    if (hosted && !play)
+        window.startDrafts();
 #else
     MainWindow window(initialFile);
 #endif

@@ -7,6 +7,8 @@ What changed in each release of Phoenix, newest first.
 - Drop a PHX, FLA, XFL or SWF file on the web editor to open it, on the window or the Welcome screen; on the desktop, SWF files and drops on the Welcome screen open too
 - `Phoenix <file> --play` opens the file and plays it in Test Movie, filling the window
 - `Phoenix <file> --tutorial <lesson>` runs the lesson on that file, rather than on a document of its own
+- Text set in Arial, Helvetica, Times New Roman, Courier New, Calibri or Cambria is drawn in Liberation Sans, Serif or Mono, Carlito or Caladea when those are installed and the original is not: they have the same widths, so text keeps its layout, and the font no longer counts as missing
+- Fonts in the folder `PHOENIX_FONTS_DIR` names are used beside the system's
 
 ## 0.23.1
 

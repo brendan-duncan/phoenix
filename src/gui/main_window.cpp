@@ -1668,6 +1668,37 @@ bool MainWindow::hasUnsavedWork()
                 return true;
     return false;
 }
+
+void MainWindow::startDrafts()
+{
+    QTimer* timer = new QTimer(this);
+    connect(timer, &QTimer::timeout, this, [this]() {
+        if (!_flaDocument || !_flaDocument->document || !hasUnsavedWork())
+            return;
+        if (_phoenixView)
+            _phoenixView->flushPendingMerge();
+        // Written beside the document, never over it: a draft is not a save.
+        const QString draft = QDir(QFileInfo(_documentPath).absolutePath()).filePath(".draft.phx");
+        QString error;
+        writeDocumentFile(*_flaDocument->document, draft, error);
+        if (error.isEmpty())
+            web_files::draftToHost(draft);
+        QFile::remove(draft);
+    });
+    timer->start(2 * 60 * 1000);
+}
+
+// For a page that keeps documents: it put one at the path written in
+// /cloud/libraries/next.txt, to open as an external library.
+extern "C" EMSCRIPTEN_KEEPALIVE void phoenix_open_library()
+{
+    QFile next("/cloud/libraries/next.txt");
+    if (s_windows.isEmpty() || !next.open(QIODevice::ReadOnly))
+        return;
+    const QString path = QString::fromUtf8(next.readAll()).trimmed();
+    if (!path.isEmpty())
+        s_windows.first()->openExternalLibraryFile(path);
+}
 #endif
 
 void MainWindow::settleUnsaved(const QList<MainWindow*>& windows, QWidget* parent, const DocumentTab* except,
@@ -7220,6 +7251,13 @@ void MainWindow::setupMenus()
     externalLibraryAction->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_O));
     externalLibraryAction->setStatusTip("Another file's library beside this one, to copy items from");
     connect(externalLibraryAction, &QAction::triggered, this, &MainWindow::openExternalLibrary);
+    // In a page that keeps documents, a library from one of them.
+    if (s_hosted)
+    {
+        QAction* hostLibraryAction = importMenu->addAction("Open Library from &Phoenix Cloud...");
+        hostLibraryAction->setStatusTip("Another of your cloud documents' library beside this one, to copy items from");
+        connect(hostLibraryAction, &QAction::triggered, this, []() { web_page::tellHost("pickLibrary"); });
+    }
     QAction* importAnimaticAction = importMenu->addAction("Import &Animatic...");
     importAnimaticAction->setStatusTip("An animatic's cut from Storyboard Pro or an editor (EDL, Final Cut XML): its shots as labels, boards and audio");
     connect(importAnimaticAction, &QAction::triggered, this, &MainWindow::importAnimatic);
@@ -16021,59 +16059,62 @@ std::vector<std::string> MainWindow::copyLibraryItems(const fla::Document& sourc
 void MainWindow::openExternalLibrary()
 {
     file_pick::open(this, "Open External Library", QSettings().value("importFolder").toString(),
-        "Documents (*.fla *.xfl *.phx);;All files (*)", [this](const QString& path) {
-            std::string error;
-            std::unique_ptr<fla::FLADocument> loaded = commands::load(
-                QFileInfo(path).suffix() == "xfl" ? QFileInfo(path).absolutePath().toStdString() : path.toStdString(), error);
-            if (!loaded || !loaded->document)
-            {
-                modal::warning(this, "Open External Library",
-                    QString("%1 could not be opened.\n\n%2").arg(QFileInfo(path).fileName(), QString::fromStdString(error)));
-                return;
-            }
-            auto library = std::make_unique<ExternalLibrary>();
-            library->document = std::move(loaded);
-            QDockWidget* dock = new QDockWidget("Library - " + QFileInfo(path).fileName(), this);
-            dock->setObjectName("externalLibrary" + QString::number(_externalLibraries.size()));
-            dock->setAttribute(Qt::WA_DeleteOnClose);
-            LibraryPanel* panel = new LibraryPanel(dock);
-            panel->setExternal(true);
-            panel->setDocument(library->document.get());
-            dock->setWidget(panel);
-            addDockWidget(Qt::RightDockWidgetArea, dock);
-            dock->setFloating(true);
-            dock->resize(320, 520);
-            dock->show();
-            library->dock = dock;
-            library->panel = panel;
-            const fla::Document* source = library->document->document;
-            connect(panel, &LibraryPanel::copyToDocumentRequested, this, [this, source](const QStringList& names) {
-                if (documentAlive(source))
-                    copyLibraryItems(*source, names);
-            });
-            connect(panel, &LibraryPanel::copyItemsRequested, this, [this, source](const QStringList& names) {
-                _libraryClipboardSource = source;
-                _libraryClipboard = names;
-            });
-            connect(panel, &LibraryPanel::externalDragStarted, this, [this, source](const QString&, const QString& name) {
-                _externalDragSource = source;
-                _externalDragName = name;
-            });
-            connect(panel, &LibraryPanel::externalDragEnded, this, [this]() {
-                // After the drop has been handled.
-                QTimer::singleShot(0, this, []() { _externalDragSource = nullptr; });
-            });
-            // Closing the panel lets the file go.
-            ExternalLibrary* raw = library.get();
-            connect(dock, &QObject::destroyed, this, [this, raw]() {
-                if (_libraryClipboardSource && raw->document && _libraryClipboardSource == raw->document->document)
-                    _libraryClipboard.clear();
-                _externalLibraries.erase(std::remove_if(_externalLibraries.begin(), _externalLibraries.end(),
-                                             [raw](const std::unique_ptr<ExternalLibrary>& entry) { return entry.get() == raw; }),
-                    _externalLibraries.end());
-            });
-            _externalLibraries.push_back(std::move(library));
-        });
+        "Documents (*.fla *.xfl *.phx);;All files (*)", [this](const QString& path) { openExternalLibraryFile(path); });
+}
+
+void MainWindow::openExternalLibraryFile(const QString& path)
+{
+    std::string error;
+    std::unique_ptr<fla::FLADocument> loaded = commands::load(
+        QFileInfo(path).suffix() == "xfl" ? QFileInfo(path).absolutePath().toStdString() : path.toStdString(), error);
+    if (!loaded || !loaded->document)
+    {
+        modal::warning(this, "Open External Library",
+            QString("%1 could not be opened.\n\n%2").arg(QFileInfo(path).fileName(), QString::fromStdString(error)));
+        return;
+    }
+    auto library = std::make_unique<ExternalLibrary>();
+    library->document = std::move(loaded);
+    QDockWidget* dock = new QDockWidget("Library - " + QFileInfo(path).fileName(), this);
+    dock->setObjectName("externalLibrary" + QString::number(_externalLibraries.size()));
+    dock->setAttribute(Qt::WA_DeleteOnClose);
+    LibraryPanel* panel = new LibraryPanel(dock);
+    panel->setExternal(true);
+    panel->setDocument(library->document.get());
+    dock->setWidget(panel);
+    addDockWidget(Qt::RightDockWidgetArea, dock);
+    dock->setFloating(true);
+    dock->resize(320, 520);
+    dock->show();
+    library->dock = dock;
+    library->panel = panel;
+    const fla::Document* source = library->document->document;
+    connect(panel, &LibraryPanel::copyToDocumentRequested, this, [this, source](const QStringList& names) {
+        if (documentAlive(source))
+            copyLibraryItems(*source, names);
+    });
+    connect(panel, &LibraryPanel::copyItemsRequested, this, [this, source](const QStringList& names) {
+        _libraryClipboardSource = source;
+        _libraryClipboard = names;
+    });
+    connect(panel, &LibraryPanel::externalDragStarted, this, [this, source](const QString&, const QString& name) {
+        _externalDragSource = source;
+        _externalDragName = name;
+    });
+    connect(panel, &LibraryPanel::externalDragEnded, this, [this]() {
+        // After the drop has been handled.
+        QTimer::singleShot(0, this, []() { _externalDragSource = nullptr; });
+    });
+    // Closing the panel lets the file go.
+    ExternalLibrary* raw = library.get();
+    connect(dock, &QObject::destroyed, this, [this, raw]() {
+        if (_libraryClipboardSource && raw->document && _libraryClipboardSource == raw->document->document)
+            _libraryClipboard.clear();
+        _externalLibraries.erase(std::remove_if(_externalLibraries.begin(), _externalLibraries.end(),
+                                     [raw](const std::unique_ptr<ExternalLibrary>& entry) { return entry.get() == raw; }),
+            _externalLibraries.end());
+    });
+    _externalLibraries.push_back(std::move(library));
 }
 
 void MainWindow::goToMatch(const fla::find::Match& match)
@@ -16135,6 +16176,13 @@ void MainWindow::testMovie()
             showOutput();
         },
         this, _documentPath);
+    // Only playing: the movie is the whole window, with no frame, and
+    // closing it is the page's to handle.
+    if (s_playOnly)
+    {
+        window->setWindowFlags(window->windowFlags() | Qt::FramelessWindowHint);
+        connect(window, &QDialog::finished, this, []() { web_page::tellHost("playerClosed"); });
+    }
     modal::open(window);
     if (_testMovieFills)
         window->showMaximized();

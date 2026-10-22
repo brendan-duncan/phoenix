@@ -38,4 +38,9 @@ bool download(const QString& path);
 /// file at \a path to it; false when the page does not keep that file.
 bool handToHost(const QString& path);
 
+/// Hands the file at \a path to the host page as a draft of its document
+/// (window.phoenixHost.draft(bytes)): unsaved work kept for the person, not
+/// a save. False when the page takes no drafts.
+bool draftToHost(const QString& path);
+
 } // namespace web_files

@@ -8,6 +8,10 @@
 
 #include <functional>
 
+#ifdef PHOENIX_WEB
+#include <emscripten.h>
+#endif
+
 class QPalette;
 class QWidget;
 
@@ -39,6 +43,24 @@ bool isPhoneSized();
 /// A touch screen larger than a phone's: a tablet.
 bool isTouchTablet();
 #endif
+
+/// Tells the page Phoenix runs inside (window.phoenixHost, as a document
+/// server sets) that \a event happened: "playerClosed" (Test Movie closed
+/// when Phoenix only plays), "pickLibrary" (a library from the page's own
+/// documents is wanted). Nothing happens on the desktop, or in a page with
+/// no host.
+inline void tellHost(const char* event)
+{
+#ifdef PHOENIX_WEB
+    EM_ASM({
+        const host = window.phoenixHost;
+        if (host && host.event)
+            host.event(UTF8ToString($0));
+    }, event);
+#else
+    Q_UNUSED(event);
+#endif
+}
 
 /// Leaves \a action out of the web build: hidden and disabled, so its
 /// shortcut does nothing either. For what a browser cannot do (run other

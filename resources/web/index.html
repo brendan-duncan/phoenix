@@ -110,6 +110,9 @@
       if (window.phoenixHost && window.phoenixHost.prepare)
         await window.phoenixHost.prepare(config, status);
       const phoenix = await qtLoad(config);
+      // The host may watch Phoenix from now on (its unsaved work, say).
+      if (window.phoenixHost && window.phoenixHost.started)
+        window.phoenixHost.started(phoenix);
       // Closing or reloading the page with changes not saved: the browser
       // asks first.
       window.addEventListener("beforeunload", (event) => {

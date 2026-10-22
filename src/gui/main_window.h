@@ -199,6 +199,14 @@ public:
     /// Runs lesson \a id on the document open (once it has opened), rather
     /// than on one of its own: the page made it from the lesson's start.
     void startTutorialOnDocument(const QString& id, int tries = 100);
+    /// Opens the document at \a path as an external library, beside this
+    /// one, to copy items from (File > Import > Open External Library).
+    void openExternalLibraryFile(const QString& path);
+#ifdef PHOENIX_WEB
+    /// In a page that keeps the document: every two minutes, while there
+    /// are unsaved changes, a copy goes to the page as a draft.
+    void startDrafts();
+#endif
     /// Plays the document in Test Movie filling the screen, once it has
     /// opened (Phoenix <file> --play: a page that only plays).
     void playMovie(int tries = 100);

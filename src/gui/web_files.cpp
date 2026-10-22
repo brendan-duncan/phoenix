@@ -54,6 +54,22 @@ bool download(const QString& path)
     return true;
 }
 
+bool draftToHost(const QString& path)
+{
+    const int takes = EM_ASM_INT({
+        const host = window.phoenixHost;
+        return host && typeof host.draft === "function" ? 1 : 0;
+    });
+    if (!takes)
+        return false;
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly))
+        return false;
+    const QByteArray bytes = file.readAll();
+    EM_ASM({ window.phoenixHost.draft(HEAPU8.slice($0, $0 + $1)); }, bytes.constData(), bytes.size());
+    return true;
+}
+
 bool handToHost(const QString& path)
 {
     const QByteArray name = path.toUtf8();

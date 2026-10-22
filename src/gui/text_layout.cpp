@@ -64,6 +64,28 @@ QHash<QString, QString>& mapping()
     return map;
 }
 
+/// An installed font drawn with exactly the same widths as \a family
+/// (metric-compatible), to stand in for it; empty when there is none.
+QString metricTwin(const QString& family, const QStringList& installed)
+{
+    static const QHash<QString, QStringList> twins = {
+        {"arial", {"Liberation Sans", "Arimo"}},
+        {"helvetica", {"Liberation Sans", "Arimo"}},
+        {"arial narrow", {"Liberation Sans Narrow"}},
+        {"times new roman", {"Liberation Serif", "Tinos"}},
+        {"times", {"Liberation Serif", "Tinos"}},
+        {"courier new", {"Liberation Mono", "Cousine"}},
+        {"courier", {"Liberation Mono", "Cousine"}},
+        {"calibri", {"Carlito"}},
+        {"cambria", {"Caladea"}},
+        {"georgia", {"Gelasio"}},
+    };
+    for (const QString& candidate : twins.value(family.toLower()))
+        if (installed.contains(candidate, Qt::CaseInsensitive))
+            return candidate;
+    return QString();
+}
+
 /// FLA files carry PostScript-style names: the family run together, then a
 /// dash and the style, with MT or PS tacked on by the foundry. Taking that
 /// apart gives a family Qt can find.
@@ -121,15 +143,23 @@ Face resolveFace(const QString& face)
 
     const QStringList families = QFontDatabase::families();
     const QString mapped = mapping().value(face);
+    QString twin = metricTwin(spaced, families);
+    if (twin.isEmpty())
+        twin = metricTwin(family, families);
     if (families.contains(spaced, Qt::CaseInsensitive))
         result.family = spaced;
     else if (families.contains(family, Qt::CaseInsensitive))
         result.family = family;
     else if (!mapped.isEmpty())
         result.family = mapped;
+    else if (!twin.isEmpty())
+        result.family = twin;
     else
         result.family = "Arial";
-    result.installed = families.contains(spaced, Qt::CaseInsensitive) || families.contains(family, Qt::CaseInsensitive);
+    // A font with the same widths as the one named lays the text out as it
+    // was made, so it is not missing.
+    result.installed = families.contains(spaced, Qt::CaseInsensitive) || families.contains(family, Qt::CaseInsensitive) ||
+        (mapped.isEmpty() && !twin.isEmpty());
 
     cache.insert(face, result);
     return result;
