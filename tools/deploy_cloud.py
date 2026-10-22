@@ -218,14 +218,11 @@ def cmd_deploy(config, args):
                 f"sudo install -m 644 {folder}/phoenix-cloud.service /etc/systemd/system/phoenix-cloud.service && "
                 f"sudo systemctl daemon-reload && rm -rf {folder}")
 
-    if args.phoenix:
-        with tempfile.TemporaryDirectory() as tmp:
-            image = latest_appimage(tmp) if args.phoenix == "release" else Path(args.phoenix)
-            if not image.is_file():
-                sys.exit(f"No file {image}")
-            print(f"Uploading Phoenix ({image.stat().st_size / 1048576:.0f} MB)...")
-            scp_up(config, image, "/tmp/Phoenix.AppImage")
-        admin(config, "install-phoenix", "/tmp/Phoenix.AppImage")
+    # The service first: the editor and Phoenix go in beside a running one.
+    content = archive(APP, {"VERSION": stamp.encode()})
+    print(f"Uploading the cloud ({len(content) / 1024:.0f} KB, {stamp})...")
+    remote = upload_bytes(config, content, "phoenix-cloud-app.tgz")
+    admin(config, "install-app", remote)
 
     if args.editor:
         if not (EDITOR / "index.html").exists():
@@ -235,10 +232,14 @@ def cmd_deploy(config, args):
         remote = upload_bytes(config, content, "phoenix-cloud-editor.tgz")
         admin(config, "install-editor", remote)
 
-    content = archive(APP, {"VERSION": stamp.encode()})
-    print(f"Uploading the cloud ({len(content) / 1024:.0f} KB, {stamp})...")
-    remote = upload_bytes(config, content, "phoenix-cloud-app.tgz")
-    admin(config, "install-app", remote)
+    if args.phoenix:
+        with tempfile.TemporaryDirectory() as tmp:
+            image = latest_appimage(tmp) if args.phoenix == "release" else Path(args.phoenix)
+            if not image.is_file():
+                sys.exit(f"No file {image}")
+            print(f"Uploading Phoenix ({image.stat().st_size / 1048576:.0f} MB)...")
+            scp_up(config, image, "/tmp/Phoenix.AppImage")
+        admin(config, "install-phoenix", "/tmp/Phoenix.AppImage")
     print(f"Deployed: https://{config['cloud_host']}/")
 
 

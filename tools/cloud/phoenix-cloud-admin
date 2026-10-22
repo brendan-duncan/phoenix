@@ -75,7 +75,16 @@ cli() {
 }
 
 version_of() {
-  cat "$1/VERSION" 2>/dev/null || basename "$1"
+  if [ -z "$1" ] || [ ! -d "$1" ]; then
+    echo none
+  else
+    cat "$1/VERSION" 2>/dev/null || basename "$1"
+  fi
+}
+
+# Where `link` in $BASE points, or nothing when it doesn't.
+target_of() {
+  readlink -e "$BASE/$1" 2>/dev/null || true
 }
 
 command=${1:-status}
@@ -84,7 +93,7 @@ case "$command" in
   install-app)
     dir="$BASE/releases/$(stamp)"
     unpack "${1:?archive}" "$dir"
-    before=$(readlink -f "$BASE/current" 2>/dev/null || true)
+    before=$(target_of current)
     flip "$BASE/current" "$dir"
     systemctl restart "$SERVICE"
     if healthy; then
@@ -131,13 +140,18 @@ case "$command" in
     rm -f "$image"
     # The newest few builds; the one the wrapper runs is the newest.
     ls -1dt "$BASE/phoenix-builds"/*/ | tail -n +$((KEEP + 1)) | xargs -r rm -rf
-    systemctl restart "$SERVICE"
-    healthy || die "the service did not answer after the restart"
-    echo "Phoenix installed; checking it converts:"
-    cli check || true
+    echo "Phoenix installed"
+    # The service picks it up when it starts; with no release yet, there is
+    # nothing to start (the app goes up next).
+    if [ -e "$BASE/current/cloud/server.mjs" ]; then
+      systemctl restart "$SERVICE"
+      healthy || die "the service did not answer after the restart"
+      echo "Checking it converts:"
+      cli check || true
+    fi
     ;;
   rollback)
-    before=$(readlink -f "$BASE/previous" 2>/dev/null || true)
+    before=$(target_of previous)
     [ -n "$before" ] && [ -d "$before" ] || die "there is no release before this one"
     now=$(readlink -f "$BASE/current")
     flip "$BASE/current" "$before"
@@ -153,14 +167,17 @@ case "$command" in
     ;;
   status)
     echo "service   $(systemctl is-active "$SERVICE" || true)"
-    echo "release   $(version_of "$(readlink -f "$BASE/current" 2>/dev/null || echo none)")"
-    echo "before    $(version_of "$(readlink -f "$BASE/previous" 2>/dev/null || echo none)")"
-    echo "editor    $(version_of "$(readlink -f "$BASE/editor" 2>/dev/null || echo none)")"
-    echo "phoenix   $(sed -n 's/^exec "\(.*\)" .*/\1/p' "$BASE/bin/phoenix" 2>/dev/null || echo none)"
-    echo "answers   $(curl -fsS -o /dev/null -w '%{http_code}' "http://127.0.0.1:$PORT/api/me" 2>/dev/null || echo no)"
+    echo "release   $(version_of "$(target_of current)")"
+    echo "before    $(version_of "$(target_of previous)")"
+    echo "editor    $(version_of "$(target_of editor)")"
+    echo "phoenix   $(sed -n 's/^exec "\(.*\)" .*/\1/p' "$BASE/bin/phoenix" 2>/dev/null || true)"
+    code=$(curl -sS -o /dev/null -w '%{http_code}' "http://127.0.0.1:$PORT/api/me" 2>/dev/null || true)
+    echo "answers   $([ "$code" = 200 ] && echo yes || echo "no (${code:-000})")"
     echo "disk      $(du -sh "$DATA" 2>/dev/null | cut -f1) in $DATA, $(df -h --output=avail "$DATA" | tail -n 1 | tr -d ' ') free"
-    echo
-    [ -e "$BASE/current" ] && cli status
+    if [ -e "$BASE/current/cloud/server.mjs" ]; then
+      echo
+      cli status
+    fi
     ;;
   logs)
     journalctl -u "$SERVICE" -n "${1:-100}" --no-pager
