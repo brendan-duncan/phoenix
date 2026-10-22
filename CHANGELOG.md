@@ -2,6 +2,10 @@
 
 What changed in each release of Phoenix, newest first.
 
+## Unreleased
+
+- Drop a PHX, FLA, XFL or SWF file on the web editor to open it, on the window or the Welcome screen; on the desktop, SWF files and drops on the Welcome screen open too
+
 ## 0.23.1
 
 - ActionScript 2 has flash.geom's Point, Rectangle, Matrix, ColorTransform and Transform (and a movie clip's transform) in movies made for SWF 8 or later; x, y, alpha and the other ActionScript 3 names are ordinary variables in a movie's compiled ActionScript 2; for-in visits properties newest first, NaN equals NaN, and joining an array writes undefined as undefined, as SWF movies have them

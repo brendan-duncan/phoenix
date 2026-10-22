@@ -787,11 +787,12 @@ MainWindow* MainWindow::openSecondaryWindow()
 
 namespace {
 
-/// Whether a dropped or passed path is a document Phoenix opens.
+/// Whether a dropped or passed path is a document Phoenix opens (a
+/// published movie too, read back as one).
 bool isDocumentPath(const QString& path)
 {
     const QString lower = path.toLower();
-    return lower.endsWith(".phx") || lower.endsWith(".fla") || lower.endsWith(".xfl");
+    return lower.endsWith(".phx") || lower.endsWith(".fla") || lower.endsWith(".xfl") || lower.endsWith(".swf");
 }
 
 bool isPhxPath(const QString& path)
@@ -815,6 +816,15 @@ void MainWindow::dragEnterEvent(QDragEnterEvent* event)
     const bool open = _flaDocument && _flaDocument->document;
     for (const QUrl& url : event->mimeData()->urls())
     {
+#ifdef __EMSCRIPTEN__
+        // A browser names the files dragged over the page only once they
+        // are dropped: any is taken, and the drop sorts them out.
+        if (url.isEmpty())
+        {
+            event->acceptProposedAction();
+            return;
+        }
+#endif
         const QString path = url.toLocalFile();
         if (url.isLocalFile() && (isDocumentPath(path) || isExtensionPackage(path) ||
             (open && (MediaImport::isImage(path) || MediaImport::isSound(path) || MediaImport::isArtwork(path)))))
@@ -832,7 +842,18 @@ void MainWindow::dropEvent(QDropEvent* event)
     {
         if (!url.isLocalFile())
             continue;
+#ifdef __EMSCRIPTEN__
+        // The browser's copy of a dropped file lasts only as long as the
+        // drop: what Phoenix takes is kept with the files it opens.
+        const QString given = url.toLocalFile();
+        const bool wanted = isDocumentPath(given) || isExtensionPackage(given) || MediaImport::isImage(given) ||
+            MediaImport::isSound(given) || MediaImport::isArtwork(given);
+        const QString path = wanted ? web_files::keepDropped(given) : QString();
+        if (path.isEmpty())
+            continue;
+#else
         const QString path = url.toLocalFile();
+#endif
         if (isDocumentPath(path))
         {
             event->acceptProposedAction();
@@ -3190,6 +3211,8 @@ void MainWindow::showStartDialog()
 {
     StartDialog* dialog = new StartDialog(_recentFiles, this);
     prepareStartDialog(*dialog);
+    // A document dropped on it opens, as on the window.
+    dialog->opensDropped = [](const QString& path) { return isDocumentPath(path); };
     // An update offer already up goes over the dialog rather than under it.
     QTimer::singleShot(0, dialog, [this, dialog]() {
         if (_updater)

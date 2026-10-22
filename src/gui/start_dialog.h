@@ -3,6 +3,8 @@
 #include <QDialog>
 #include <QStringList>
 
+#include <functional>
+
 class QCheckBox;
 class QLabel;
 class QListWidget;
@@ -50,9 +52,17 @@ public:
     /// for someone new when \a firstTime.
     void setWorkspace(const QString& current, bool firstTime);
 
+    /// Whether a file dropped on it is one it opens (as a recent file,
+    /// path() its path); unset, none is.
+    std::function<bool(const QString& path)> opensDropped;
+
 signals:
     /// Simple or Full was clicked: the window takes that workspace.
     void workspaceChosen(const QString& name);
+
+protected:
+    void dragEnterEvent(QDragEnterEvent* event) override;
+    void dropEvent(QDropEvent* event) override;
 
 private:
     void choose(Choice choice);

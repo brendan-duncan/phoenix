@@ -23,6 +23,11 @@ QString folder();
 /// there. Nothing is called when the picker is canceled.
 void open(QWidget* parent, const QString& nameFilter, std::function<void(const QString& path)> done);
 
+/// A file dropped on the page, which the browser hands over for the drop
+/// only, moved into folder() under its name (over one there already). Its
+/// path there; empty when it cannot be.
+QString keepDropped(const QString& path);
+
 /// Offers the file at \a path to the browser as a download named after it.
 /// False when it cannot be read.
 bool download(const QString& path);

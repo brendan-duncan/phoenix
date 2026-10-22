@@ -2,8 +2,15 @@
 
 #include "new_document_dialog.h"
 #include "starter_templates.h"
+#ifdef __EMSCRIPTEN__
+#include "web_files.h"
+#endif
 
 #include <QCheckBox>
+#include <QDragEnterEvent>
+#include <QDropEvent>
+#include <QMimeData>
+#include <QUrl>
 #include <QDialogButtonBox>
 #include <QFileInfo>
 #include <QHBoxLayout>
@@ -40,6 +47,8 @@ QLabel* heading(const QString& text, QWidget* parent)
 StartDialog::StartDialog(const QStringList& recentFiles, QWidget* parent)
     : QDialog(parent)
 {
+    // A document dropped on it opens (opensDropped says which).
+    setAcceptDrops(true);
     setWindowTitle("Welcome to Phoenix");
     setMinimumSize(860, 660);
 
@@ -235,6 +244,44 @@ void StartDialog::setWorkspace(const QString& current, bool firstTime)
 bool StartDialog::showAtStartup() const
 {
     return _showAtStartup->isChecked();
+}
+
+void StartDialog::dragEnterEvent(QDragEnterEvent* event)
+{
+    if (!opensDropped || !event->mimeData()->hasUrls())
+        return;
+    for (const QUrl& url : event->mimeData()->urls())
+    {
+        // A browser names what is dragged over the page only once it is
+        // dropped.
+        if (url.isEmpty() || (url.isLocalFile() && opensDropped(url.toLocalFile())))
+        {
+            event->acceptProposedAction();
+            return;
+        }
+    }
+}
+
+void StartDialog::dropEvent(QDropEvent* event)
+{
+    if (!opensDropped)
+        return;
+    for (const QUrl& url : event->mimeData()->urls())
+    {
+        if (!url.isLocalFile() || !opensDropped(url.toLocalFile()))
+            continue;
+#ifdef __EMSCRIPTEN__
+        // The browser's copy lasts only as long as the drop.
+        _path = web_files::keepDropped(url.toLocalFile());
+        if (_path.isEmpty())
+            continue;
+#else
+        _path = url.toLocalFile();
+#endif
+        event->acceptProposedAction();
+        choose(Choice::OpenRecent);
+        return;
+    }
 }
 
 void StartDialog::choose(Choice choice)

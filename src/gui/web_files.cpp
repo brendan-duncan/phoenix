@@ -31,6 +31,18 @@ void open(QWidget* parent, const QString& nameFilter, std::function<void(const Q
         parent);
 }
 
+QString keepDropped(const QString& path)
+{
+    const QString kept = QDir(folder()).filePath(QFileInfo(path).fileName());
+    if (QFileInfo(kept).absoluteFilePath() == QFileInfo(path).absoluteFilePath())
+        return kept;
+    QFile::remove(kept);
+    // Moved rather than copied: the page's memory holds it once.
+    if (!QFile::rename(path, kept) && !QFile::copy(path, kept))
+        return QString();
+    return kept;
+}
+
 bool download(const QString& path)
 {
     QFile file(path);
