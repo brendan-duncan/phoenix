@@ -229,6 +229,11 @@ CREATE TABLE email_tokens (
 CREATE INDEX email_tokens_user ON email_tokens (user_id);
 DELETE FROM settings WHERE key = 'signupPolicy';
 `,
+  // What someone who registers says about themself, for the admin who
+  // unlocks the account.
+  `
+ALTER TABLE users ADD COLUMN request_message TEXT NOT NULL DEFAULT '';
+`,
 ];
 
 /** Settings an admin changes at runtime; stored as JSON in `settings`. */

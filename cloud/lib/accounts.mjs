@@ -115,12 +115,12 @@ export function makeHandle(store, base) {
  * A new account. `name` must be free (nameProblem); without one, a free
  * name is made from the email address. The name is also its handle.
  */
-export function createUser(store, { name = null, email = null, avatarUrl = '', isAdmin = false, status = 'active', passwordHash = null, passwordIsDefault = false, emailVerified = false }) {
+export function createUser(store, { name = null, email = null, avatarUrl = '', isAdmin = false, status = 'active', passwordHash = null, passwordIsDefault = false, emailVerified = false, requestMessage = '' }) {
   const id = newId();
   const finalName = name ?? freeName(store, email ? email.split('@')[0] : 'User');
-  store.run(`INSERT INTO users (id, handle, name, email, avatar_url, is_admin, status, password_hash, password_is_default, email_verified, created_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  id, finalName, finalName, email, avatarUrl, isAdmin, status, passwordHash, passwordIsDefault, emailVerified, Date.now());
+  store.run(`INSERT INTO users (id, handle, name, email, avatar_url, is_admin, status, password_hash, password_is_default, email_verified, request_message, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  id, finalName, finalName, email, avatarUrl, isAdmin, status, passwordHash, passwordIsDefault, emailVerified, requestMessage, Date.now());
   store.audit(id, 'user.create', 'user', id, { name: finalName, admin: isAdmin, status });
   return store.get('SELECT * FROM users WHERE id = ?', id);
 }

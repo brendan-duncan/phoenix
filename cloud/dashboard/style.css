@@ -494,3 +494,8 @@ input[type="color"] { width: 52px; height: 34px; padding: 2px; border: 1px solid
 .hint.good { color: var(--ok); }
 .hint.bad { color: var(--danger); }
 .btn:disabled, .btn.primary:disabled { opacity: .45; cursor: not-allowed; }
+.waiting { align-items: flex-start; padding: 10px 0; border-top: 1px solid var(--border); }
+.waiting:first-of-type { border-top: none; }
+.request { margin: 8px 0 0 40px; padding: 8px 12px; border-left: 3px solid var(--accent); background: var(--bg); border-radius: 0 8px 8px 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.request-none { margin: 6px 0 0 40px; }
+.signin textarea { width: 100%; }

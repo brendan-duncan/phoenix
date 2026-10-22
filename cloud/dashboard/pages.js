@@ -167,6 +167,9 @@ export function renderRegister(params) {
   const passwordHint = h('div', { class: 'hint' });
   const box = messageBox();
   const note = invite ? 'Your invite lets you in as soon as the account is made.' : NEW_ACCOUNT_NOTES[me.settings.newAccounts];
+  // While an admin unlocks each new account, the request comes with a word about who is asking.
+  const asking = !invite && me.settings.newAccounts === 'admin';
+  const message = asking ? h('textarea', { name: 'message', rows: 4, maxlength: 1000, required: true, placeholder: 'Who you are, and what you would like to make with Phoenix' }) : null;
   const submit = h('button', { type: 'submit', class: 'btn primary wide', disabled: true }, 'Create account');
 
   // The button is on only when every field is right.
@@ -187,10 +190,10 @@ export function renderRegister(params) {
   };
   let checker;
   const update = () => {
-    submit.disabled = !(checker?.ok() && email.checkValidity() && email.value.trim() && passwordsOk());
+    submit.disabled = !(checker?.ok() && email.checkValidity() && email.value.trim() && passwordsOk() && (!message || message.value.trim()));
   };
   checker = nameChecker(name, nameHint, update);
-  for (const input of [email, password, again]) {
+  for (const input of [email, password, again, message].filter(Boolean)) {
     input.addEventListener('input', update);
   }
 
@@ -200,7 +203,9 @@ export function renderRegister(params) {
     field('Email', email),
     field('Password (at least 8 characters)', password),
     h('label', { class: 'field' }, h('span', {}, 'Password again'), again, passwordHint),
-    note ? h('p', { class: 'small muted' }, note) : null,
+    asking ? h('div', { class: 'note' }, 'Phoenix Cloud is in closed beta: an admin turns on each new account by hand. Introduce yourself in a line or two, so we can tell you are a real person.') : null,
+    asking ? h('label', { class: 'field' }, h('span', {}, 'Request message'), message) : null,
+    note && !asking ? h('p', { class: 'small muted' }, note) : null,
     submit);
   const holder = h('div', { class: 'stack' }, box, form);
   form.addEventListener('submit', async (e) => {
@@ -210,7 +215,7 @@ export function renderRegister(params) {
     }
     submit.disabled = true;
     try {
-      const made = await post('/api/auth/register', { name: name.value, email: email.value.trim(), password: password.value, invite });
+      const made = await post('/api/auth/register', { name: name.value, email: email.value.trim(), password: password.value, message: message?.value.trim(), invite });
       if (made.status === 'active') {
         await refreshMe();
         navigate(params.get('return') || '/', { replace: true });
@@ -631,8 +636,9 @@ async function adminUsers() {
       stats.converter ? '' : ' · no Phoenix on the server, so new documents and FLA, SWF, SVG, EPS and AI uploads are off'),
     waiting.length ? h('div', { class: 'panel stack' },
       h('h2', {}, `Waiting to be unlocked (${waiting.length})`),
-      waiting.map((u) => h('div', { class: 'row wrap' },
-        h('div', { class: 'grow' }, person(u, `${u.email ?? 'no email'} · ${STATUS_LABELS[u.status]} · registered ${timeAgo(u.createdAt)}`)),
+      waiting.map((u) => h('div', { class: 'row wrap waiting' },
+        h('div', { class: 'grow' }, person(u, `${u.email ?? 'no email'} · ${STATUS_LABELS[u.status]} · registered ${timeAgo(u.createdAt)}`),
+          u.requestMessage ? h('blockquote', { class: 'request' }, u.requestMessage) : h('div', { class: 'muted small request-none' }, 'No request message.')),
         h('button', { type: 'button', class: 'btn primary', onclick: setStatus(u, 'active') }, 'Unlock'),
         h('button', { type: 'button', class: 'btn danger', onclick: deleteAccount(u) }, 'Delete')))) : null,
     h('div', { class: 'row wrap admin-tools' }, search, h('div', { class: 'grow' }), h('button', { type: 'button', class: 'btn primary', onclick: createAccount }, icon('plus'), 'Create account')),

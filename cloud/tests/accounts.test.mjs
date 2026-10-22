@@ -18,7 +18,7 @@ before(async () => {
 after(() => server.close());
 
 function register(client, handle, extra = {}) {
-  return client.request('POST', '/api/auth/register', { json: { name: handle, email: `${handle}@example.com`, password: 'a-good-password', ...extra } });
+  return client.request('POST', '/api/auth/register', { json: { name: handle, email: `${handle}@example.com`, password: 'a-good-password', message: `Hello, I am ${handle}.`, ...extra } });
 }
 
 async function setNewAccounts(value) {
@@ -32,15 +32,17 @@ function confirmToken(to) {
 }
 
 describe('registering', () => {
-  it('waits for an admin by default', async () => {
+  it('waits for an admin by default, with a word about who is asking', async () => {
     const c = server.client();
-    const res = await register(c, 'hana');
+    assert.equal((await register(c, 'hana', { message: '   ' })).status, 400);
+    const res = await register(c, 'hana', { message: 'Animator at a small studio; Brendan pointed me here.' });
     assert.equal(res.status, 201);
     assert.equal((await res.json()).status, 'pending_admin');
     assert.equal(await c.fails('POST', '/api/auth/login', 403, { json: { login: 'hana', password: 'a-good-password' } }), 'pending_admin');
     const { users } = await admin.get('/api/admin/users');
     const hana = users.find((u) => u.handle === 'hana');
     assert.equal(hana.status, 'pending_admin');
+    assert.equal(hana.requestMessage, 'Animator at a small studio; Brendan pointed me here.');
     await admin.patch(`/api/admin/users/${hana.id}`, { status: 'active' });
     await c.signInWith('hana', 'a-good-password');
     assert.equal(c.user.handle, 'hana');
@@ -49,7 +51,7 @@ describe('registering', () => {
   it('is ready at once when accounts are open', async () => {
     await setNewAccounts('open');
     const c = server.client();
-    const res = await register(c, 'ivan');
+    const res = await register(c, 'ivan', { message: undefined });
     assert.equal((await res.json()).status, 'active');
     // Registering signs them in.
     assert.equal((await c.get('/api/me')).user.handle, 'ivan');

@@ -24,6 +24,8 @@ function maskEmail(email) {
   return `${local.slice(0, 1)}•••@${domain ?? ''}`;
 }
 
+const MAX_REQUEST_MESSAGE = 1000;
+
 /** Marks a handler that may be called by someone not signed in. */
 function anonymous(handler) {
   handler.anonymous = true;
@@ -112,9 +114,14 @@ export function registerAuth(router, app) {
     }
     attempts.fail(`register:${address}`);
     const status = newAccountStatus(ctx.settings, { invited: Boolean(invite) });
+    // An account an admin has to unlock comes with a word about who is asking.
+    const requestMessage = String(body.message ?? '').trim().slice(0, MAX_REQUEST_MESSAGE);
+    if (status === 'pending_admin' && !requestMessage) {
+      throw badRequest('Say a little about yourself, so the admin knows who is asking.');
+    }
     const passwordHash = await hashPassword(body.password);
     const user = store.transaction(() => {
-      const made = createUser(store, { name, email, status, passwordHash });
+      const made = createUser(store, { name, email, status, passwordHash, requestMessage: status === 'pending_admin' ? requestMessage : '' });
       if (invite) {
         claimInvite(store, invite, made.id);
       }

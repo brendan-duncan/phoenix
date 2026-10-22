@@ -97,8 +97,11 @@ and a banner.
   Failed sign-ins are counted per name and per address, and slowed down
   after ten in fifteen minutes.
 - Registering asks for a name, email and password (8 characters or more,
-  typed twice); the button is on only when all of them are right. An invite
-  link (Admin > Invites) lets its holder in at once.
+  typed twice); the button is on only when all of them are right. While an
+  admin unlocks new accounts, the page says it is a closed beta and asks for
+  a request message (who they are, to show they are a real person), which
+  Admin > Accounts shows beside Unlock. An invite link (Admin > Invites)
+  lets its holder in at once, with no message.
 - Email: there is no mail server yet. Confirmation emails are written to
   the data folder's `outbox/`, listed under Admin > Email, and printed by
   `dev`.

@@ -24,6 +24,7 @@ function adminUser(store, u) {
     createdAt: u.created_at,
     lastSeenAt: u.last_seen_at,
     hasPassword: Boolean(u.password_hash),
+    requestMessage: u.request_message,
     documents: store.get("SELECT COUNT(*) AS n FROM documents WHERE owner_kind = 'user' AND owner_id = ?", u.id).n,
     bytes: usageBytes(store, 'user', u.id),
     providers: store.all('SELECT provider FROM identities WHERE user_id = ?', u.id).map((i) => i.provider),
