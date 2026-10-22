@@ -3,9 +3,10 @@
 import fsp from 'node:fs/promises';
 import { atLeast, documentRole, groupRole, mayReadSource, SHARE_ROLES, spaceRole, VISIBILITIES } from '../access.mjs';
 import { findUser, publicUser } from '../accounts.mjs';
+import { UPLOAD_KINDS } from '../convert.mjs';
 import { badRequest, forbidden, HttpError, notFound } from '../http.mjs';
 import { hashToken, newId, newToken } from '../ids.mjs';
-import { copyRevision, quotaBytes, revisionFile, saveRevision, usageBytes } from '../storage.mjs';
+import { copyRevision, quotaBytes, revisionFile, saveRevision, sendFile, usageBytes } from '../storage.mjs';
 
 const LIST_LIMIT = 500;
 
@@ -262,11 +263,16 @@ function shareRole(value) {
   return value;
 }
 
-/** Saves `bytes` as the first revision of a new document in `space`, or makes nothing. */
-async function documentFrom(ctx, space, name, bytes) {
+/**
+ * Saves `made` ({ file, thumbnail }: a .phx on disk, as the converter
+ * leaves it) as the first revision of a new document in `space`, or makes
+ * nothing. The file is deleted when the request ends.
+ */
+async function documentFrom(ctx, space, name, made) {
+  ctx.temps.push(made.file);
   const doc = createDocument(ctx, space, name);
   try {
-    await saveRevision(ctx.store, ctx.blobs, doc, bytes, { userId: ctx.user.id });
+    await saveRevision(ctx.store, ctx.blobs, doc, made, { userId: ctx.user.id });
   } catch (err) {
     ctx.store.run('DELETE FROM documents WHERE id = ?', doc.id);
     throw err;
@@ -306,50 +312,62 @@ export function registerDocuments(router, app) {
   // background }), a copy of a starter template ({ template }), or a
   // tutorial's starting document ({ tutorial }), which the editor then runs
   // the lesson on.
+  // Each person may have Phoenix make so many documents an hour; admins any number.
+  const chargeConversion = (ctx) => {
+    if (!ctx.user.is_admin && !app.conversions.take(ctx.user.id)) {
+      throw new HttpError(429, 'slow_down', `Phoenix has made ${ctx.config.conversionsPerHour} documents for you in the last hour, the most it makes in an hour. Try again a little later.`);
+    }
+  };
+
   router.post('/api/documents', async (ctx) => {
     const body = await ctx.json();
     const space = targetSpace(ctx, { groupId: body.groupId, folderId: body.folderId });
+    chargeConversion(ctx);
     if (body.template) {
       const template = app.starters.template(String(body.template));
       if (!template) {
         throw notFound('No such template.');
       }
-      const thumbnail = template.thumbnail ? await fsp.readFile(template.thumbnail) : null;
-      const bytes = await app.converter.fromFile(template.document, thumbnail);
-      return documentFrom(ctx, space, cleanName(body.name, template.title), bytes);
+      const thumbnail = template.thumbnail ? await fsp.readFile(template.thumbnail) : undefined;
+      const made = await app.converter.fromFile(template.document, thumbnail);
+      return documentFrom(ctx, space, cleanName(body.name, template.title), made);
     }
     if (body.tutorial) {
       const lesson = app.starters.tutorial(String(body.tutorial));
       if (!lesson) {
         throw notFound('No such tutorial.');
       }
-      const bytes = lesson.document
+      const made = lesson.document
         ? await app.converter.fromFile(lesson.document)
         : await app.converter.newDocument({ ...lesson.stage, background: '#ffffff' });
-      const made = await documentFrom(ctx, space, cleanName(body.name, lesson.title), bytes);
-      return { ...made, tutorial: lesson.id };
+      return { ...(await documentFrom(ctx, space, cleanName(body.name, lesson.title), made)), tutorial: lesson.id };
     }
     const background = String(body.background ?? '#ffffff');
     if (!/^#[0-9a-f]{6}$/i.test(background)) {
       throw badRequest('The background is a color like #ffffff.');
     }
-    const bytes = await app.converter.newDocument({
+    const made = await app.converter.newDocument({
       width: Math.round(wholeNumber(body.width ?? 1920, 1, 8192, 'The width')),
       height: Math.round(wholeNumber(body.height ?? 1080, 1, 8192, 'The height')),
       fps: wholeNumber(body.fps ?? 24, 1, 120, 'The frame rate'),
       background,
     });
-    return documentFrom(ctx, space, cleanName(body.name), bytes);
+    return documentFrom(ctx, space, cleanName(body.name), made);
   });
 
   // The body is a file: a .phx, or an FLA, SWF, SVG, EPS or AI that Phoenix
-  // turns into one. ?name= (its file name), ?folderId=, ?groupId=.
+  // turns into one. ?name= (its file name), ?folderId=, ?groupId=. It goes
+  // to a file on disk as it arrives, never into memory whole.
   router.post('/api/documents/upload', async (ctx) => {
     const space = targetSpace(ctx, { groupId: ctx.query('groupId'), folderId: ctx.query('folderId') });
     const ext = extensionOf(ctx.query('name')) || 'phx';
-    const bytes = await ctx.body();
-    const phx = await app.converter.fromUpload(bytes, ext);
-    return documentFrom(ctx, space, nameFromFile(ctx.query('name')), phx);
+    if (ext !== 'phx' && UPLOAD_KINDS[ext]) {
+      chargeConversion(ctx);
+    }
+    const limit = ext === 'phx' ? ctx.config.maxUploadBytes : Math.min(ctx.config.maxUploadBytes, ctx.config.convertMaxUploadBytes);
+    const { file } = await ctx.upload(/^[a-z0-9]{1,5}$/.test(ext) ? ext : 'bin', limit);
+    const made = await app.converter.fromUpload(file, ext);
+    return documentFrom(ctx, space, nameFromFile(ctx.query('name')), made);
   });
 
   router.get('/api/documents/:id', (ctx) => {
@@ -458,12 +476,11 @@ export function registerDocuments(router, app) {
     if (!Number.isInteger(number) || number < 1) {
       throw notFound('This document has nothing saved yet.');
     }
-    const pieces = await revisionFile(ctx.store, ctx.blobs, doc, number);
-    const size = pieces.reduce((n, p) => n + p.length, 0);
+    const file = revisionFile(ctx.store, doc, number);
     const filename = `${doc.name.replace(/["\\/:*?<>|]+/g, '_')}.phx`;
     ctx.res.writeHead(200, {
       'Content-Type': 'application/octet-stream',
-      'Content-Length': size,
+      'Content-Length': file.size,
       'Content-Disposition': `attachment; filename="${filename.replace(/[^\x20-\x7e]/g, '_')}"; filename*=UTF-8''${encodeURIComponent(filename)}`,
       'Cache-Control': 'private, no-store',
       'X-Phoenix-Revision': String(number),
@@ -472,24 +489,21 @@ export function registerDocuments(router, app) {
       ctx.res.end();
       return undefined;
     }
-    for (const piece of pieces) {
-      if (!ctx.res.write(piece)) {
-        await new Promise((resolve) => ctx.res.once('drain', resolve));
-      }
-    }
-    ctx.res.end();
+    // Rebuilt as it is sent, a stored chunk at a time.
+    await sendFile(ctx.blobs, file, ctx.res);
     return undefined;
   });
 
-  // The body is the whole .phx. ?base= is the revision it was opened at.
+  // The body is the whole .phx, saved to a file as it arrives. ?base= is the
+  // revision it was opened at.
   router.put('/api/documents/:id/file', async (ctx) => {
     const { doc } = access(ctx, ctx.params.id, 'editor');
     const base = ctx.query('base') !== null ? Number(ctx.query('base')) : null;
     if (base !== null && !Number.isInteger(base)) {
       throw badRequest('base is a revision number.');
     }
-    const bytes = await ctx.body();
-    const number = await saveRevision(ctx.store, ctx.blobs, doc, bytes, { userId: ctx.user.id, base, label: ctx.query('label') ?? '' });
+    const { file } = await ctx.upload('phx');
+    const number = await saveRevision(ctx.store, ctx.blobs, doc, { file }, { userId: ctx.user.id, base, label: ctx.query('label') ?? '' });
     touchRecent(ctx.store, ctx.user.id, doc.id);
     return { revision: number };
   });

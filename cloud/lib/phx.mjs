@@ -1,11 +1,13 @@
 // Reading and rebuilding .phx containers, without any of Phoenix's code. The
 // server never needs a chunk's meaning: it checks a container is whole, keeps
 // each chunk's stored bytes once by hash, and rebuilds the file from a
-// manifest. Only META (title, application) and THMB (the PNG thumbnail) are
-// looked inside. docs/phx-format.md describes the layout; rebuilding follows
+// manifest. Only DOCU (the stage), META (the application) and THMB (the PNG
+// thumbnail) are looked inside. docs/phx-format.md describes the layout; rebuilding follows
 // ContainerWriter (src/phx/container.cpp) so a file Phoenix wrote comes back
 // byte for byte.
 
+import fs from 'node:fs';
+import { Readable } from 'node:stream';
 import zlib from 'node:zlib';
 import { sha256 } from './ids.mjs';
 
@@ -18,6 +20,9 @@ const TRAILER_MARK = Buffer.from('PHX!', 'latin1');
 const DEFLATE = 1;
 const COMPRESSION_MASK = 0xf;
 const CRITICAL = 0x10;
+// The most of an index, and of a chunk the server looks inside, read into memory.
+const MAX_INDEX = 64 * 1024 * 1024;
+const MAX_LOOK = 32 * 1024 * 1024;
 
 export class PhxError extends Error {}
 
@@ -50,10 +55,6 @@ function read64(buf, at) {
     throw new PhxError('a length or offset is too large');
   }
   return Number(v);
-}
-
-function fits(buf, offset, length) {
-  return offset >= 0 && length >= 0 && offset <= buf.length && length <= buf.length - offset;
 }
 
 // ── Protobuf wire format, the little this needs ───────────────────────────
@@ -164,6 +165,61 @@ class WireWriter {
   }
 }
 
+// ── Sources: where a container's bytes are read from ──────────────────────
+
+/** A container in memory. */
+export class BufferSource {
+  constructor(buf) {
+    this.buf = buf;
+    this.size = buf.length;
+  }
+
+  read(offset, length) {
+    return this.buf.subarray(offset, offset + length);
+  }
+
+  /** The bytes from `offset` as a stream. */
+  stream(offset, length) {
+    return Readable.from(length ? [this.buf.subarray(offset, offset + length)] : []);
+  }
+
+  close() {}
+}
+
+/**
+ * A container in a file, read a piece at a time: an upload of any size is
+ * never held in memory whole. The small reads (header, index, chunk
+ * headers) are synchronous; chunk bodies come as streams.
+ */
+export class FileSource {
+  constructor(file) {
+    this.file = file;
+    this.fd = fs.openSync(file, 'r');
+    this.size = fs.fstatSync(this.fd).size;
+  }
+
+  read(offset, length) {
+    const out = Buffer.alloc(length);
+    let done = 0;
+    while (done < length) {
+      const n = fs.readSync(this.fd, out, done, length - done, offset + done);
+      if (n === 0) {
+        break;
+      }
+      done += n;
+    }
+    return out.subarray(0, done);
+  }
+
+  stream(offset, length) {
+    return length ? fs.createReadStream(this.file, { start: offset, end: offset + length - 1 }) : Readable.from([]);
+  }
+
+  close() {
+    fs.closeSync(this.fd);
+  }
+}
+
 // ── Reading ───────────────────────────────────────────────────────────────
 
 function decodeIndex(bytes) {
@@ -194,68 +250,81 @@ function decodeIndex(bytes) {
   return chunks;
 }
 
-function readIndexAt(buf, offset) {
-  if (!fits(buf, offset, CHUNK_HEADER_SIZE) || buf.readUInt32LE(offset) !== INDX) {
+function fits(size, offset, length) {
+  return offset >= 0 && length >= 0 && offset <= size && length <= size - offset;
+}
+
+function readIndexAt(source, offset) {
+  if (!fits(source.size, offset, CHUNK_HEADER_SIZE)) {
     return null;
   }
-  const stored = read64(buf, offset + 8);
-  if (!fits(buf, offset + CHUNK_HEADER_SIZE, stored)) {
+  const header = source.read(offset, CHUNK_HEADER_SIZE);
+  if (header.readUInt32LE(0) !== INDX) {
     return null;
   }
-  const body = buf.subarray(offset + CHUNK_HEADER_SIZE, offset + CHUNK_HEADER_SIZE + stored);
-  if (crc32(body) !== buf.readUInt32LE(offset + 24)) {
+  const stored = read64(header, 8);
+  if (!fits(source.size, offset + CHUNK_HEADER_SIZE, stored) || stored > MAX_INDEX) {
+    return null;
+  }
+  const body = source.read(offset + CHUNK_HEADER_SIZE, stored);
+  if (crc32(body) !== header.readUInt32LE(24)) {
     return null;
   }
   return decodeIndex(body);
 }
 
 /**
- * Checks `buf` is a whole .phx container and lists its chunks in file order.
- * Throws PhxError for anything damaged: the server stores only whole files
- * (Phoenix's own reader can recover damaged ones; re-saving there fixes them).
+ * Checks the structure of the container in `source` (a BufferSource or a
+ * FileSource) and lists its chunks in file order. Each chunk's own checksum
+ * is checked as its bytes are read (storage.mjs, splitContainer). Throws
+ * PhxError for anything damaged: the server stores only whole files
+ * (Phoenix's own reader can recover damaged ones; saving again there fixes
+ * them).
  */
-export function readContainer(buf) {
-  if (buf.length < HEADER_SIZE + TRAILER_SIZE || !isPhx(buf)) {
+export function readContainer(source) {
+  if (source.size < HEADER_SIZE + TRAILER_SIZE || !isPhx(source.read(0, MAGIC.length))) {
     throw new PhxError('not a Phoenix document');
   }
-  const major = buf.readUInt16LE(8);
-  const minor = buf.readUInt16LE(10);
+  const header = source.read(0, HEADER_SIZE);
+  const major = header.readUInt16LE(8);
+  const minor = header.readUInt16LE(10);
   if (major > MAX_MAJOR) {
     throw new PhxError(`made by a newer Phoenix (format ${major}.${minor})`);
   }
   let chunks = null;
-  if (crc32(buf.subarray(0, 24)) === buf.readUInt32LE(24)) {
-    chunks = readIndexAt(buf, read64(buf, 16));
+  if (crc32(header.subarray(0, 24)) === header.readUInt32LE(24)) {
+    chunks = readIndexAt(source, read64(header, 16));
   }
   if (!chunks) {
     throw new PhxError('damaged: its header or index does not check out; open it in Phoenix and save it again');
   }
-  const trailer = buf.subarray(buf.length - TRAILER_SIZE);
+  const trailer = source.read(source.size - TRAILER_SIZE, TRAILER_SIZE);
   if (!trailer.subarray(8, 12).equals(TRAILER_MARK) || crc32(trailer.subarray(0, 12)) !== trailer.readUInt32LE(12)) {
     throw new PhxError('damaged: its end is missing (was the upload cut short?)');
   }
   for (const chunk of chunks) {
-    const start = chunk.offset + CHUNK_HEADER_SIZE;
-    if (!fits(buf, chunk.offset, CHUNK_HEADER_SIZE) || !fits(buf, start, chunk.storedLength)) {
+    if (!fits(source.size, chunk.offset, CHUNK_HEADER_SIZE) || !fits(source.size, chunk.offset + CHUNK_HEADER_SIZE, chunk.storedLength)) {
       throw new PhxError(`damaged: chunk ${chunk.id} lies outside the file`);
     }
-    if (buf.readUInt32LE(chunk.offset) !== chunk.type || read64(buf, chunk.offset + 8) !== chunk.storedLength || buf.readUInt32LE(chunk.offset + 24) !== chunk.crc) {
+    const own = source.read(chunk.offset, CHUNK_HEADER_SIZE);
+    if (own.readUInt32LE(0) !== chunk.type || read64(own, 8) !== chunk.storedLength || own.readUInt32LE(24) !== chunk.crc) {
       throw new PhxError(`damaged: chunk ${chunk.id} does not match the index`);
     }
     if ((chunk.flags & COMPRESSION_MASK) > DEFLATE) {
       throw new PhxError(`chunk ${chunk.id} uses a compression the server does not know`);
     }
-    if (crc32(buf.subarray(start, start + chunk.storedLength)) !== chunk.crc) {
-      throw new PhxError(`damaged: chunk ${chunk.id} (${typeName(chunk.type)}) fails its checksum`);
-    }
   }
   chunks.sort((a, b) => a.offset - b.offset);
-  return { major, minor, flags: buf.readUInt32LE(12), chunks };
+  return { major, minor, flags: header.readUInt32LE(12), chunks };
 }
 
-export function storedBytes(buf, chunk) {
-  const start = chunk.offset + CHUNK_HEADER_SIZE;
-  return buf.subarray(start, start + chunk.storedLength);
+/** Where a chunk's stored bytes start in its file. */
+export function bodyOffset(chunk) {
+  return chunk.offset + CHUNK_HEADER_SIZE;
+}
+
+export function checksumError(chunk) {
+  return new PhxError(`damaged: chunk ${chunk.id} (${typeName(chunk.type)}) fails its checksum`);
 }
 
 /** A chunk's content, inflated if it was stored deflated. */
@@ -303,58 +372,97 @@ export function decodeStage(content) {
   return out;
 }
 
+/** A chunk's manifest entry, its stored bytes being `hash`. */
+export function manifestEntry(chunk, hash) {
+  const entry = { t: typeName(chunk.type), f: chunk.flags, n: chunk.length, s: chunk.storedLength, c: chunk.crc, h: hash };
+  if (chunk.mediaId) {
+    entry.m = chunk.mediaId;
+  }
+  if (chunk.symbolName) {
+    entry.y = chunk.symbolName;
+  }
+  return entry;
+}
+
 /**
- * Splits a container for storage: each chunk's stored bytes with their hash,
- * and the manifest that rebuilds the file from them. Also pulls out the
- * metadata and thumbnail hash.
+ * What the server shows of a document: the application that wrote it and
+ * its stage size and frame rate, from META and the first DOCU. `bodyOf`
+ * gives a chunk's stored bytes. A DOCU too large to look into leaves the
+ * stage unknown.
+ */
+export function describe(container, bodyOf) {
+  let metadata = {};
+  const stage = {};
+  const docu = container.chunks.find((c) => c.type === DOCU);
+  if (docu && docu.storedLength <= MAX_LOOK && docu.length <= MAX_LOOK) {
+    try {
+      Object.assign(stage, decodeStage(chunkContent(bodyOf(docu), docu)));
+    } catch {
+      // The size stays unknown; the document is still stored.
+    }
+  }
+  const meta = container.chunks.find((c) => c.type === META);
+  if (meta && meta.storedLength <= MAX_LOOK && meta.length <= MAX_LOOK) {
+    try {
+      metadata = decodeMetadata(chunkContent(bodyOf(meta), meta));
+    } catch {
+      metadata = {};
+    }
+  }
+  return { ...metadata, ...stage };
+}
+
+/** Whether a chunk is a thumbnail the server can hand out as it is (an uncompressed THMB). */
+export function isThumbnail(chunk) {
+  return chunk.type === THMB && (chunk.flags & COMPRESSION_MASK) === 0;
+}
+
+/**
+ * Splits a container held in memory: each chunk's stored bytes with their
+ * hash (checksums checked), the manifest that rebuilds the file, and its
+ * metadata and thumbnail hash. For small containers; uploads are stored a
+ * chunk at a time from their files (storage.mjs).
  */
 export function splitContainer(buf) {
-  const container = readContainer(buf);
+  const source = new BufferSource(buf);
+  const container = readContainer(source);
   const parts = [];
   const manifest = { v: 1, major: container.major, minor: container.minor, chunks: [] };
   if (container.flags) {
     manifest.flags = container.flags;
   }
-  let metadata = {};
-  const stage = {};
-  let sawDocument = false;
   let thumbnail = null;
   for (const chunk of container.chunks) {
-    const body = storedBytes(buf, chunk);
+    const body = source.read(bodyOffset(chunk), chunk.storedLength);
+    if (crc32(body) !== chunk.crc) {
+      throw checksumError(chunk);
+    }
     const hash = sha256(body);
     parts.push({ hash, body });
-    const entry = { t: typeName(chunk.type), f: chunk.flags, n: chunk.length, s: chunk.storedLength, c: chunk.crc, h: hash };
-    if (chunk.mediaId) {
-      entry.m = chunk.mediaId;
-    }
-    if (chunk.symbolName) {
-      entry.y = chunk.symbolName;
-    }
-    manifest.chunks.push(entry);
-    if (chunk.type === DOCU && !sawDocument) {
-      sawDocument = true;
-      try {
-        Object.assign(stage, decodeStage(chunkContent(body, chunk)));
-      } catch {
-        // The size stays unknown; the document is still stored.
-      }
-    } else if (chunk.type === META) {
-      try {
-        metadata = decodeMetadata(chunkContent(body, chunk));
-      } catch {
-        metadata = {};
-      }
-    } else if (chunk.type === THMB && (chunk.flags & COMPRESSION_MASK) === 0) {
+    manifest.chunks.push(manifestEntry(chunk, hash));
+    if (isThumbnail(chunk)) {
       thumbnail = hash;
     }
   }
-  return { manifest, parts, metadata: { ...metadata, ...stage }, thumbnail, size: buf.length };
+  const metadata = describe(container, (chunk) => source.read(bodyOffset(chunk), chunk.storedLength));
+  return { manifest, parts, metadata, thumbnail, size: buf.length };
 }
 
 /** Every distinct chunk hash a manifest uses. */
 export function manifestHashes(manifest) {
   return [...new Set(manifest.chunks.map((c) => c.h))];
 }
+
+/** `manifest` with `png` (stored under `hash`) as its thumbnail, placed before META as Phoenix writes it. */
+export function withThumbnailEntry(manifest, hash, png) {
+  const chunks = manifest.chunks.filter((c) => c.t !== 'THMB');
+  const thumb = { t: 'THMB', f: 0, n: png.length, s: png.length, c: crc32(png), h: hash };
+  const meta = chunks.findIndex((c) => c.t === 'META');
+  chunks.splice(meta < 0 ? chunks.length : meta, 0, thumb);
+  return { ...manifest, chunks };
+}
+
+// ── Rebuilding ────────────────────────────────────────────────────────────
 
 function encodeIndex(entries, offsetOf) {
   const index = new WireWriter();
@@ -392,64 +500,64 @@ function chunkHeader(type, flags, storedLength, length, crc, id) {
 }
 
 /**
- * Rebuilds a container from a manifest. `bodyOf(hash)` gives each chunk's
- * stored bytes. Returns the pieces in order, so a caller can stream them.
+ * How the file a manifest rebuilds to is laid out, as ContainerWriter
+ * writes it: `parts` in order, each a Buffer or { hash, size } for a
+ * chunk's stored bytes, and the file's `size`. No chunk is read.
  */
-export async function buildContainer(manifest, bodyOf) {
-  const pieces = [Buffer.alloc(HEADER_SIZE)];
+export function layout(manifest) {
+  const parts = [null];
   let offset = HEADER_SIZE;
   const offsets = [];
   const pad = () => {
     if (offset % 8) {
       const n = 8 - (offset % 8);
-      pieces.push(Buffer.alloc(n));
+      parts.push(Buffer.alloc(n));
       offset += n;
     }
   };
-  for (let i = 0; i < manifest.chunks.length; i++) {
-    const c = manifest.chunks[i];
-    const body = await bodyOf(c.h);
-    if (body.length !== c.s) {
-      throw new PhxError(`stored chunk ${c.h} has the wrong size`);
-    }
+  manifest.chunks.forEach((c, i) => {
     pad();
     offsets.push(offset);
-    pieces.push(chunkHeader(fourcc(c.t), c.f, c.s, c.n, c.c, i + 1), body);
-    offset += CHUNK_HEADER_SIZE + body.length;
-  }
+    parts.push(chunkHeader(fourcc(c.t), c.f, c.s, c.n, c.c, i + 1), { hash: c.h, size: c.s });
+    offset += CHUNK_HEADER_SIZE + c.s;
+  });
   const index = encodeIndex(manifest.chunks, (i) => offsets[i]);
   pad();
   const indexOffset = offset;
-  pieces.push(chunkHeader(INDX, CRITICAL, index.length, index.length, crc32(index), manifest.chunks.length + 1), index);
+  parts.push(chunkHeader(INDX, CRITICAL, index.length, index.length, crc32(index), manifest.chunks.length + 1), index);
+  offset += CHUNK_HEADER_SIZE + index.length;
 
   const trailer = Buffer.alloc(TRAILER_SIZE);
   trailer.writeBigUInt64LE(BigInt(indexOffset), 0);
   TRAILER_MARK.copy(trailer, 8);
   trailer.writeUInt32LE(crc32(trailer.subarray(0, 12)), 12);
-  pieces.push(trailer);
+  parts.push(trailer);
+  offset += TRAILER_SIZE;
 
-  const header = pieces[0];
+  const header = Buffer.alloc(HEADER_SIZE);
   MAGIC.copy(header, 0);
   header.writeUInt16LE(manifest.major, 8);
   header.writeUInt16LE(manifest.minor, 10);
   header.writeUInt32LE(manifest.flags ?? 0, 12);
   header.writeBigUInt64LE(BigInt(indexOffset), 16);
   header.writeUInt32LE(crc32(header.subarray(0, 24)), 24);
-  return pieces;
+  parts[0] = header;
+  return { parts, size: offset };
 }
 
-/**
- * The container `buf` with `png` as its thumbnail (THMB), replacing any it
- * had, placed before META as Phoenix writes it.
- */
-export async function withThumbnail(buf, png) {
-  const { manifest, parts } = splitContainer(buf);
-  const bodies = new Map(parts.map((p) => [p.hash, p.body]));
-  const hash = sha256(png);
-  bodies.set(hash, png);
-  const chunks = manifest.chunks.filter((c) => c.t !== 'THMB');
-  const thumb = { t: 'THMB', f: 0, n: png.length, s: png.length, c: crc32(png), h: hash };
-  const meta = chunks.findIndex((c) => c.t === 'META');
-  chunks.splice(meta < 0 ? chunks.length : meta, 0, thumb);
-  return Buffer.concat(await buildContainer({ ...manifest, chunks }, (h) => bodies.get(h)));
+/** Rebuilds a container in memory; `bodyOf(hash)` gives each chunk's stored bytes. */
+export async function buildContainer(manifest, bodyOf) {
+  const pieces = [];
+  for (const part of layout(manifest).parts) {
+    if (Buffer.isBuffer(part)) {
+      pieces.push(part);
+    } else {
+      const body = await bodyOf(part.hash);
+      if (body.length !== part.size) {
+        throw new PhxError(`stored chunk ${part.hash} has the wrong size`);
+      }
+      pieces.push(body);
+    }
+  }
+  return pieces;
 }

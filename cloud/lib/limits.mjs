@@ -38,6 +38,31 @@ export class Attempts {
   }
 }
 
+/** At most `max` uses per key in a sliding window, held in memory and capped in size. */
+export class Budget {
+  constructor(max, windowMs, keys = 20000) {
+    this.max = max;
+    this.windowMs = windowMs;
+    this.keys = keys;
+    this.uses = new Map();
+  }
+
+  /** Takes one use for `key`; false when its budget is spent. */
+  take(key, now = Date.now()) {
+    const recent = (this.uses.get(key) ?? []).filter((t) => now - t < this.windowMs);
+    if (recent.length >= this.max) {
+      this.uses.set(key, recent);
+      return false;
+    }
+    if (!this.uses.has(key) && this.uses.size >= this.keys) {
+      this.uses.delete(this.uses.keys().next().value);
+    }
+    recent.push(now);
+    this.uses.set(key, recent);
+    return true;
+  }
+}
+
 /** The client's address: the last X-Forwarded-For entry behind our own proxy. */
 export function clientAddress(req, trustProxy) {
   const peer = req.socket.remoteAddress ?? '';

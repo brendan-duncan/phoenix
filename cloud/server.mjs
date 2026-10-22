@@ -122,16 +122,21 @@ async function importFiles(args) {
     const ext = path.extname(file).slice(1).toLowerCase();
     const name = path.basename(file).replace(/\.[^.]+$/, '');
     try {
-      const bytes = await converter.fromUpload(fs.readFileSync(file), ext);
+      const made = await converter.fromUpload(path.resolve(file), ext);
       const id = newId();
       const now = Date.now();
       store.run("INSERT INTO documents (id, owner_kind, owner_id, name, created_by, created_at, modified_at, modified_by) VALUES (?, 'user', ?, ?, ?, ?, ?, ?)",
         id, user.id, name, user.id, now, now, user.id);
       try {
-        await saveRevision(store, blobs, store.get('SELECT * FROM documents WHERE id = ?', id), bytes, { userId: user.id });
+        await saveRevision(store, blobs, store.get('SELECT * FROM documents WHERE id = ?', id), made, { userId: user.id });
       } catch (err) {
         store.run('DELETE FROM documents WHERE id = ?', id);
         throw err;
+      } finally {
+        // What Phoenix made, never the file given.
+        if (path.resolve(made.file) !== path.resolve(file)) {
+          fs.rmSync(made.file, { force: true });
+        }
       }
       made++;
       console.log(`added ${name}`);

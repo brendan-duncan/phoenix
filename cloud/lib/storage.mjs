@@ -1,8 +1,15 @@
 // Document bytes: saving an uploaded .phx as a revision (its chunks stored
-// once by hash), rebuilding a revision's file, quotas and garbage collection.
+// once by hash, read from the upload's file a chunk at a time), rebuilding a
+// revision's file as it is sent, quotas and garbage collection. Neither way
+// holds a whole document in memory.
 
+import { once } from 'node:events';
+import { Readable } from 'node:stream';
 import { HttpError } from './http.mjs';
-import { buildContainer, manifestHashes, PhxError, splitContainer } from './phx.mjs';
+import {
+  bodyOffset, BufferSource, checksumError, describe, FileSource, isThumbnail, layout, manifestEntry, manifestHashes, PhxError, readContainer,
+  withThumbnailEntry,
+} from './phx.mjs';
 
 const MB = 1024 * 1024;
 
@@ -67,21 +74,77 @@ function insertRevision(store, doc, { manifest, size, application, label, userId
 }
 
 /**
- * Stores `bytes` (a whole .phx) as the next revision of `doc`. With `base`,
- * refuses (409) when someone saved since that revision.
+ * Reads the container in `source` a chunk at a time, staging each chunk's
+ * stored bytes as a blob (checksums checked on the way); with `thumbnail`
+ * (PNG bytes), that is its THMB. Nothing is kept until commitStaged().
  */
-export async function saveRevision(store, blobs, doc, bytes, { userId, base = null, label = '' }) {
+async function stageContainer(blobs, source, thumbnail) {
+  const container = readContainer(source);
+  const staged = new Map();
+  let manifest = { v: 1, major: container.major, minor: container.minor, chunks: [] };
+  if (container.flags) {
+    manifest.flags = container.flags;
+  }
+  let thumb = null;
+  const keep = async (stream) => {
+    const blob = await blobs.stage(stream);
+    if (staged.has(blob.hash)) {
+      await blobs.discard(blob.temp);
+    } else {
+      staged.set(blob.hash, blob);
+    }
+    return blob;
+  };
+  try {
+    for (const chunk of container.chunks) {
+      const blob = await keep(source.stream(bodyOffset(chunk), chunk.storedLength));
+      if (blob.crc !== chunk.crc || blob.size !== chunk.storedLength) {
+        throw checksumError(chunk);
+      }
+      manifest.chunks.push(manifestEntry(chunk, blob.hash));
+      if (isThumbnail(chunk)) {
+        thumb = blob.hash;
+      }
+    }
+    const metadata = describe(container, (chunk) => source.read(bodyOffset(chunk), chunk.storedLength));
+    if (thumbnail) {
+      const blob = await keep(Readable.from([thumbnail]));
+      manifest = withThumbnailEntry(manifest, blob.hash, thumbnail);
+      thumb = blob.hash;
+    }
+    return { manifest, staged, metadata, thumbnail: thumb, size: layout(manifest).size };
+  } catch (err) {
+    await Promise.all([...staged.values()].map((b) => blobs.discard(b.temp)));
+    throw err;
+  }
+}
+
+/**
+ * Stores a .phx as the next revision of `doc`: `input` is { file } (a path,
+ * read a piece at a time) or { buffer }, with an optional { thumbnail } PNG
+ * to give it. With `base`, refuses (409) when someone saved since that
+ * revision.
+ */
+export async function saveRevision(store, blobs, doc, input, { userId, base = null, label = '' }) {
+  const source = input.file ? new FileSource(input.file) : new BufferSource(input.buffer);
   let split;
   try {
-    split = splitContainer(bytes);
+    split = await stageContainer(blobs, source, input.thumbnail ?? null);
   } catch (err) {
     if (err instanceof PhxError) {
       throw new HttpError(422, 'not_phx', `That file can't be stored: ${err.message}.`);
     }
     throw err;
+  } finally {
+    source.close();
   }
-  const sizes = new Map(split.parts.map((p) => [p.hash, p.body.length]));
-  checkQuota(store, doc.owner_kind, doc.owner_id, sizes);
+  const sizes = new Map([...split.staged.values()].map((b) => [b.hash, b.size]));
+  try {
+    checkQuota(store, doc.owner_kind, doc.owner_id, sizes);
+  } catch (err) {
+    await Promise.all([...split.staged.values()].map((b) => blobs.discard(b.temp)));
+    throw err;
+  }
   // Blob rows, then files, then the revision: if anything fails part way,
   // the blobs are only garbage that collectGarbage finds by their rows.
   // Touching created_at keeps a blob this upload reuses out of a collection
@@ -92,10 +155,8 @@ export async function saveRevision(store, blobs, doc, bytes, { userId, base = nu
       store.run('INSERT INTO blobs (hash, size, created_at) VALUES (?, ?, ?) ON CONFLICT (hash) DO UPDATE SET created_at = excluded.created_at', hash, bytes, now);
     }
   });
-  for (const part of split.parts) {
-    if (!blobs.has(part.hash)) {
-      await blobs.put(part.hash, part.body);
-    }
+  for (const blob of split.staged.values()) {
+    await blobs.commit(blob.hash, blob.temp);
   }
   return store.transaction(() => {
     const current = store.get('SELECT revision FROM documents WHERE id = ?', doc.id).revision;
@@ -130,13 +191,34 @@ export function copyRevision(store, source, number, target, { userId, label = ''
   });
 }
 
-/** The file of revision `number`, as pieces to write in order. */
-export async function revisionFile(store, blobs, doc, number) {
-  const rev = store.get('SELECT manifest, size FROM revisions WHERE document_id = ? AND number = ?', doc.id, number);
+/**
+ * The file of revision `number`, laid out to send: { size, parts }, each
+ * part a Buffer or { hash } of a blob to stream (phx.mjs layout()).
+ */
+export function revisionFile(store, doc, number) {
+  const rev = store.get('SELECT manifest FROM revisions WHERE document_id = ? AND number = ?', doc.id, number);
   if (!rev) {
     throw new HttpError(404, 'not_found', 'No such revision.');
   }
-  return buildContainer(JSON.parse(rev.manifest), (hash) => blobs.get(hash));
+  return layout(JSON.parse(rev.manifest));
+}
+
+/** Writes a laid-out file to `out` (a response), a blob at a time. */
+export async function sendFile(blobs, file, out) {
+  for (const part of file.parts) {
+    if (Buffer.isBuffer(part)) {
+      if (!out.write(part)) {
+        await once(out, 'drain');
+      }
+    } else {
+      for await (const piece of blobs.stream(part.hash)) {
+        if (!out.write(piece)) {
+          await once(out, 'drain');
+        }
+      }
+    }
+  }
+  out.end();
 }
 
 /** Deletes blobs no revision uses, older than `graceMs` (so an upload in flight keeps its chunks). */

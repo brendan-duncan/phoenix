@@ -86,6 +86,13 @@ export function loadConfig(env = process.env, overrides = {}) {
     // convert uploads (FLA, SWF, SVG, EPS, AI) into .phx with a thumbnail.
     phoenix: findPhoenix(env.PHOENIX_CLOUD_PHOENIX),
     maxUploadBytes: envInt(env, 'PHOENIX_CLOUD_MAX_UPLOAD_MB', 1024) * 1024 * 1024,
+    // Limits on Phoenix converting: what it takes in (as uploaded, and as
+    // its archive or movie unpacks), the memory it may use for one job, and
+    // how many documents each person may have it make in an hour.
+    convertMaxUploadBytes: envInt(env, 'PHOENIX_CLOUD_CONVERT_MAX_UPLOAD_MB', 200) * 1024 * 1024,
+    convertMaxExpandedBytes: envInt(env, 'PHOENIX_CLOUD_CONVERT_MAX_EXPANDED_MB', 2048) * 1024 * 1024,
+    convertMaxMemoryMB: envInt(env, 'PHOENIX_CLOUD_CONVERT_MAX_MEMORY_MB', 2048),
+    conversionsPerHour: envInt(env, 'PHOENIX_CLOUD_CONVERSIONS_PER_HOUR', 30),
     maxJsonBytes: 256 * 1024,
     sessionDays: 30,
     loginStateMinutes: 10,

@@ -1,6 +1,7 @@
 // HTTP plumbing with no framework: a path router, JSON and body helpers,
 // cookies, and static files with their precompressed copies.
 
+import { once } from 'node:events';
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
@@ -72,7 +73,7 @@ export function readBody(req, limit) {
   return new Promise((resolve, reject) => {
     const declared = Number(req.headers['content-length']);
     if (Number.isFinite(declared) && declared > limit) {
-      reject(new HttpError(413, 'too_large', `That is larger than the ${Math.round(limit / 1048576)} MB limit.`));
+      reject(tooLarge(limit));
       req.resume();
       return;
     }
@@ -81,7 +82,7 @@ export function readBody(req, limit) {
     req.on('data', (chunk) => {
       size += chunk.length;
       if (size > limit) {
-        reject(new HttpError(413, 'too_large', `That is larger than the ${Math.round(limit / 1048576)} MB limit.`));
+        reject(tooLarge(limit));
         req.destroy();
         return;
       }
@@ -90,6 +91,44 @@ export function readBody(req, limit) {
     req.on('end', () => resolve(Buffer.concat(parts)));
     req.on('error', reject);
   });
+}
+
+function tooLarge(limit) {
+  return new HttpError(413, 'too_large', `That is larger than the ${Math.round(limit / 1048576)} MB limit.`);
+}
+
+/**
+ * Streams the request body into `file`, refusing more than `limit` bytes;
+ * its size. Nothing of it is held in memory. On any failure the file is
+ * gone.
+ */
+export async function saveBody(req, file, limit) {
+  const declared = Number(req.headers['content-length']);
+  if (Number.isFinite(declared) && declared > limit) {
+    req.resume();
+    throw tooLarge(limit);
+  }
+  const out = fs.createWriteStream(file);
+  let size = 0;
+  try {
+    for await (const piece of req) {
+      size += piece.length;
+      if (size > limit) {
+        throw tooLarge(limit);
+      }
+      if (!out.write(piece)) {
+        await once(out, 'drain');
+      }
+    }
+    await new Promise((resolve, reject) => out.end((err) => (err ? reject(err) : resolve())));
+    return size;
+  } catch (err) {
+    out.destroy();
+    // Whatever is still coming is read and dropped, so the answer can be sent.
+    req.resume();
+    await fsp.rm(file, { force: true });
+    throw err;
+  }
 }
 
 export async function readJson(req, limit) {

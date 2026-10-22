@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { describe, it } from 'node:test';
-import { buildContainer, chunkContent, PhxError, readContainer, splitContainer, storedBytes } from '../lib/phx.mjs';
+import { bodyOffset, BufferSource, buildContainer, chunkContent, layout, PhxError, readContainer, splitContainer } from '../lib/phx.mjs';
 import { makePhx } from './helpers.mjs';
 
 async function rebuild(buf) {
@@ -18,10 +18,12 @@ describe('phx containers', () => {
 
   it('reads chunks, metadata and the thumbnail', async () => {
     const buf = await makePhx({ symbols: ['Hero'] });
-    const container = readContainer(buf);
+    const source = new BufferSource(buf);
+    const container = readContainer(source);
     assert.deepEqual(container.chunks.map((c) => c.symbolName || ''), ['', 'Hero', '', '']);
     const docu = container.chunks[0];
-    assert.equal(chunkContent(storedBytes(buf, docu), docu).toString().slice(0, 9), 'document ');
+    assert.equal(chunkContent(source.read(bodyOffset(docu), docu.storedLength), docu).toString().slice(0, 9), 'document ');
+    assert.equal(layout(splitContainer(buf).manifest).size, buf.length);
     const split = splitContainer(buf);
     assert.equal(split.metadata.application, 'Phoenix 0.22.0');
     assert.equal(split.metadata.author, 'Tester');
@@ -39,15 +41,16 @@ describe('phx containers', () => {
 
   it('refuses what is not whole', async () => {
     const buf = await makePhx();
-    assert.throws(() => readContainer(Buffer.from('hello world, not a phx file at all......')), PhxError);
+    const read = (b) => splitContainer(b);
+    assert.throws(() => read(Buffer.from('hello world, not a phx file at all......')), PhxError);
     const cut = buf.subarray(0, buf.length - 10);
-    assert.throws(() => readContainer(cut), PhxError);
+    assert.throws(() => read(cut), PhxError);
     const flipped = Buffer.from(buf);
     flipped[100] ^= 0xff;
-    assert.throws(() => readContainer(flipped), /checksum|damaged/);
+    assert.throws(() => read(flipped), /checksum|damaged/);
     const newer = Buffer.from(buf);
     newer.writeUInt16LE(2, 8);
-    assert.throws(() => readContainer(newer), /newer Phoenix/);
+    assert.throws(() => read(newer), /newer Phoenix/);
   });
 
   // A file Phoenix itself wrote, when there is one on this machine.

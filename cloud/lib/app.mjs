@@ -2,8 +2,8 @@
 // separate play origin. Every response's security headers are set here, the
 // same in dev and production; in production Apache only adds TLS and proxies.
 
-import path from 'node:path';
 import fsp from 'node:fs/promises';
+import path from 'node:path';
 import { ensureDefaultAdmin, Sessions } from './accounts.mjs';
 import { registerAdmin } from './api/admin.mjs';
 import { registerAuth } from './api/auth.mjs';
@@ -11,8 +11,9 @@ import { registerDocuments } from './api/documents.mjs';
 import { registerGroups } from './api/groups.mjs';
 import { CLOUD_DIR, editorAvailable } from './config.mjs';
 import { Converter } from './convert.mjs';
-import { HttpError, notFound, readBody, readJson, Router, sendJson, serveStatic } from './http.mjs';
-import { Attempts } from './limits.mjs';
+import { HttpError, notFound, readBody, readJson, Router, saveBody, sendJson, serveStatic } from './http.mjs';
+import { newId } from './ids.mjs';
+import { Attempts, Budget } from './limits.mjs';
 import { Mailer } from './mail.mjs';
 import { Starters } from './starters.mjs';
 import { Jwks } from './oauth.mjs';
@@ -35,6 +36,7 @@ class Context {
     this.user = auth?.user ?? null;
     this.status = 200;
     this.settingsCache = null;
+    this.temps = [];
   }
 
   get settings() {
@@ -73,6 +75,26 @@ class Context {
   body(limit = this.config.maxUploadBytes) {
     return readBody(this.req, limit);
   }
+
+  /** A temporary file's path (with `ext`), deleted when the request ends. */
+  temporary(ext = '') {
+    const file = path.join(this.config.dataDir, 'uploads', `${newId()}${ext ? `.${ext}` : ''}`);
+    this.temps.push(file);
+    return file;
+  }
+
+  /** Saves the request body to a temporary file (named with `ext`): { file, size }. */
+  async upload(ext = '', limit = this.config.maxUploadBytes) {
+    await fsp.mkdir(path.join(this.config.dataDir, 'uploads'), { recursive: true });
+    const file = this.temporary(ext);
+    const size = await saveBody(this.req, file, limit);
+    return { file, size };
+  }
+
+  /** Deletes the temporary files this request made. */
+  async cleanup() {
+    await Promise.all(this.temps.map((file) => fsp.rm(file, { force: true })));
+  }
 }
 
 export function createApp({ config, store, blobs }) {
@@ -88,6 +110,8 @@ export function createApp({ config, store, blobs }) {
     starters: new Starters(config.resourcesDir),
     mailer: new Mailer(config),
     attempts: new Attempts(),
+    // Documents made or converted by Phoenix, per person per hour.
+    conversions: new Budget(config.conversionsPerHour, 60 * 60 * 1000),
   };
   // A server with no accounts gets the admin @phoenix (password "animate").
   app.ready = ensureDefaultAdmin(store).then((made) => {
@@ -208,9 +232,13 @@ async function handleApi(app, req, res, url) {
       throw new HttpError(401, 'signed_out', 'Sign in first.');
     }
   }
-  const result = await match.handler(ctx);
-  if (result !== undefined && !res.headersSent) {
-    sendJson(res, ctx.status, result);
+  try {
+    const result = await match.handler(ctx);
+    if (result !== undefined && !res.headersSent) {
+      sendJson(res, ctx.status, result);
+    }
+  } finally {
+    await ctx.cleanup();
   }
 }
 

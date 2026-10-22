@@ -85,7 +85,11 @@ From the environment (or `cloud/dev.env`):
 | `PHOENIX_CLOUD_EDITOR` | `build-wasm32/webeditor` |
 | `PHOENIX_CLOUD_PHOENIX` | `build/Release/Phoenix.exe` in this repository |
 | `PHOENIX_CLOUD_RESOURCES` | `resources` in this repository (templates and tutorials) |
-| `PHOENIX_CLOUD_MAX_UPLOAD_MB` | `1024` |
+| `PHOENIX_CLOUD_MAX_UPLOAD_MB` | `1024`; any upload |
+| `PHOENIX_CLOUD_CONVERT_MAX_UPLOAD_MB` | `200`; a file Phoenix converts |
+| `PHOENIX_CLOUD_CONVERT_MAX_EXPANDED_MB` | `2048`; what an FLA's archive or a SWF may unpack to |
+| `PHOENIX_CLOUD_CONVERT_MAX_MEMORY_MB` | `2048`; Phoenix's memory for one job |
+| `PHOENIX_CLOUD_CONVERSIONS_PER_HOUR` | `30`; documents Phoenix makes for one person (admins: no limit) |
 | `PHOENIX_CLOUD_<PROVIDER>_ID`, `_SECRET` | Google and GitHub sign-in |
 
 Admins change the rest while it runs (Admin > Settings): what a new account
@@ -154,6 +158,41 @@ settings are never touched), with a time limit:
 
 Phoenix reads uploads that people send, so in production it should run as
 a user of its own with no access to anything else.
+
+## Keeping memory in hand
+
+- **Uploads go to disk.** A request's body is written to a file under the
+  data folder's `uploads/` as it arrives (with the size limit checked as it
+  comes) and deleted when the request ends. Storing a `.phx` reads its
+  structure in small pieces and streams each chunk into its blob, checking
+  its checksum on the way; a download is rebuilt as it is sent, a blob at a
+  time. No document is ever whole in the server's memory, whatever its size.
+- **One conversion at a time**, at most 20 waiting, 3 minutes each.
+- **Before Phoenix opens an upload**: its own size limit, and how large it
+  unpacks: an FLA's ZIP central directory (sizes and file count, ZIP64
+  too, read without unpacking anything) and a SWF's header.
+- **While Phoenix runs**, a watchdog reads its memory (from `/proc` on
+  Linux, `tasklist` on Windows, `ps` elsewhere) every 200 ms and stops the
+  job past the limit. In production it can also run under a hard limit of
+  the system's: `systemd-run --scope -p MemoryMax=…`.
+- **Per person**, so many documents made by Phoenix an hour (new, template,
+  tutorial, converted upload).
+
+## Running parts on other machines
+
+The service is cut where it can be split later:
+
+| Part | Here | On its own machine |
+|---|---|---|
+| Web and API | `server.mjs`, `lib/app.mjs` | several behind a load balancer, once the records move off SQLite |
+| Records | SQLite through `lib/store.mjs` | PostgreSQL (the SQL is plain; the store is the one place it lives) |
+| Document bytes | `lib/blobs.mjs`, a folder | object storage (S3-compatible): `stage`/`commit`/`stream` map onto upload and get |
+| Phoenix | `lib/convert.mjs`, a queue in the process | worker machines taking jobs from a queue, files in and out by blob store |
+| Mail | `lib/mail.mjs`, an outbox folder | an SMTP relay or mail service |
+
+Jobs already pass only files and small results between the API and the
+converter, so moving the converter means swapping the queue and how files
+reach it, not the code that uses it.
 
 ## How it works
 
