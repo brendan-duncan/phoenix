@@ -5,90 +5,182 @@ import { del, get, patch, post } from './api.js';
 import { navigate, refreshMe, reloadShell, rerender, state } from './app.js';
 import { renderListing } from './files.js';
 import {
-  avatar, bytes, clear, confirmDialog, copyText, dateTime, formDialog, h, icon, person, popup, showError, timeAgo, toast,
+  avatar, bytes, clear, confirmDialog, copyText, dateTime, formDialog, h, icon, person, showError, timeAgo, toast,
 } from './ui.js';
 
 const LOGIN_ERRORS = {
-  beta: 'Phoenix Cloud is in private beta. You need an invite to join.',
-  closed: 'Phoenix Cloud is not taking new members right now.',
   invite_invalid: 'That invite has been used, has run out or was turned off.',
   invite_email: 'That invite is for another email address. Sign in with the account it was sent to.',
   email_in_use: 'Someone already signs in with that email. Sign in the way you did before, then link this one from your account page.',
   identity_taken: 'That sign-in belongs to another Phoenix Cloud account.',
+  pending_email: 'Confirm your email address first: follow the link in the email we sent.',
+  pending_admin: 'Your account is made. An admin has to unlock it before you can sign in.',
   suspended: 'This account is suspended.',
   state: 'That sign-in took too long or was already used. Try again.',
   cancelled: 'Signing in was cancelled.',
   failed: 'Signing in did not work. Try again.',
 };
 
-function providerButtons(providers, query) {
-  return providers.map((p) => h('a', { class: 'btn wide', href: `/api/auth/start/${p.id}?${query}` }, `Continue with ${p.name}`));
+const NEW_ACCOUNT_NOTES = {
+  open: null,
+  email: 'We email you a link to confirm your address before you can sign in.',
+  admin: 'An admin unlocks new accounts before they can sign in.',
+};
+
+function logo() {
+  return h('img', { class: 'logo', src: '/ui/logo.png', alt: '' });
 }
 
-function devLogin(returnTo) {
-  const handle = h('input', { type: 'text', name: 'handle', placeholder: 'any handle, e.g. alice', 'aria-label': 'Handle', required: true, autofocus: true });
-  const go = async (name) => {
-    try {
-      await post('/api/auth/dev', { handle: name });
-      await refreshMe();
-      navigate(returnTo, { replace: true });
-    } catch (err) {
-      showError(err);
-    }
-  };
-  const form = h('form', { class: 'stack' },
-    h('div', { class: 'divider' }, 'Dev login (this PC only)'),
-    h('div', { class: 'row' }, handle, h('button', { type: 'submit', class: 'btn primary' }, 'Sign in')),
-    h('div', { class: 'quick' }, ['alice', 'bob', 'carol'].map((n) => h('button', { type: 'button', class: 'btn ghost', onclick: () => go(n) }, `@${n}`))));
-  form.addEventListener('submit', (e) => {
-    e.preventDefault();
-    go(handle.value.trim());
-  });
-  return form;
+function card(...children) {
+  return h('div', { class: 'center' }, h('div', { class: 'signin' }, children));
+}
+
+function providerButtons(providers, query) {
+  if (!providers.length) {
+    return null;
+  }
+  return [
+    h('div', { class: 'divider' }, 'or'),
+    providers.map((p) => h('a', { class: 'btn wide', href: `/api/auth/start/${p.id}?${query}` }, `Continue with ${p.name}`)),
+  ];
+}
+
+function field(label, input) {
+  return h('label', { class: 'field' }, h('span', {}, label), input);
+}
+
+/** A message box that a form fills in when the server says no. */
+function messageBox() {
+  return h('div', { class: 'error hidden', role: 'alert' });
+}
+
+function say(box, text, kind = 'error') {
+  box.className = kind;
+  clear(box, text);
 }
 
 export function renderSignin(params) {
   const me = state.me;
   const returnTo = params.get('return') || '/';
   const error = params.get('error');
-  const invite = params.get('invite');
-  const query = new URLSearchParams({ return: returnTo });
-  if (invite) {
-    query.set('invite', invite);
+  const login = h('input', { type: 'text', name: 'login', autocomplete: 'username', required: true, autofocus: true });
+  const password = h('input', { type: 'password', name: 'password', autocomplete: 'current-password', required: true });
+  const box = messageBox();
+  if (error) {
+    say(box, LOGIN_ERRORS[error] ?? LOGIN_ERRORS.failed);
   }
-  return h('div', { class: 'center' }, h('div', { class: 'signin' },
-    h('img', { class: 'logo', src: '/ui/logo.png', alt: '' }),
-    h('h1', {}, 'Phoenix Cloud'),
-    h('p', {}, me.settings.beta ? 'Private beta. Sign in to see your documents.' : 'Sign in to see your documents.'),
-    error ? h('div', { class: 'error' }, LOGIN_ERRORS[error] ?? LOGIN_ERRORS.failed) : null,
+  const resend = h('button', {
+    type: 'button', class: 'btn ghost hidden', onclick: async () => {
+      await post('/api/auth/resend', { login: login.value.trim() }).catch(showError);
+      say(box, 'If that account is waiting for its email to be confirmed, a new link is on its way.', 'note');
+    },
+  }, 'Send the confirmation email again');
+  const form = h('form', { class: 'stack' },
+    field('User name or email', login),
+    field('Password', password),
+    h('button', { type: 'submit', class: 'btn primary wide' }, 'Sign in'));
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    try {
+      await post('/api/auth/login', { login: login.value.trim(), password: password.value });
+      await refreshMe();
+      navigate(returnTo, { replace: true });
+    } catch (err) {
+      say(box, err.message);
+      resend.classList.toggle('hidden', err.code !== 'pending_email');
+      password.value = '';
+    }
+  });
+  const query = new URLSearchParams({ return: returnTo });
+  return card(
+    logo(),
+    h('h1', {}, 'Sign in to Phoenix Cloud'),
+    box,
+    resend,
+    form,
     providerButtons(me.providers, query),
-    !me.providers.length && !me.devLogin ? h('p', { class: 'small' }, 'No sign-in is set up on this server yet.') : null,
-    me.devLogin ? devLogin(returnTo) : null));
+    h('p', { class: 'small' }, 'New here? ', h('a', { class: 'link', href: `/register${returnTo !== '/' ? `?return=${encodeURIComponent(returnTo)}` : ''}` }, 'Create an account')),
+    h('p', { class: 'small muted' }, 'Forgot your password? Ask an admin to set a new one.'));
+}
+
+export function renderRegister(params) {
+  const me = state.me;
+  const invite = params.get('invite');
+  const handle = h('input', { type: 'text', name: 'handle', autocomplete: 'username', required: true, maxlength: 30, autofocus: true, pattern: '[A-Za-z0-9][A-Za-z0-9_\\-]{1,29}', title: '2 to 30 letters, digits, - or _' });
+  const name = h('input', { type: 'text', name: 'name', autocomplete: 'name', maxlength: 80, placeholder: 'How others see you' });
+  const email = h('input', { type: 'email', name: 'email', autocomplete: 'email', required: true });
+  const password = h('input', { type: 'password', name: 'password', autocomplete: 'new-password', required: true, minlength: 8 });
+  const again = h('input', { type: 'password', name: 'again', autocomplete: 'new-password', required: true, minlength: 8 });
+  const box = messageBox();
+  const note = invite ? 'Your invite lets you in as soon as the account is made.' : NEW_ACCOUNT_NOTES[me.settings.newAccounts];
+  const form = h('form', { class: 'stack' },
+    field('User name', handle),
+    field('Name', name),
+    field('Email', email),
+    field('Password (at least 8 characters)', password),
+    field('Password again', again),
+    note ? h('p', { class: 'small muted' }, note) : null,
+    h('button', { type: 'submit', class: 'btn primary wide' }, 'Create account'));
+  const holder = h('div', { class: 'stack' }, box, form);
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (password.value !== again.value) {
+      say(box, 'The two passwords are not the same.');
+      return;
+    }
+    try {
+      const made = await post('/api/auth/register', { handle: handle.value.trim(), name: name.value.trim(), email: email.value.trim(), password: password.value, invite });
+      if (made.status === 'active') {
+        await refreshMe();
+        navigate(params.get('return') || '/', { replace: true });
+        return;
+      }
+      clear(holder, h('div', { class: 'note' }, made.status === 'pending_email'
+        ? `Your account is made. We sent a link to ${email.value.trim()}: follow it to confirm your address, then sign in.`
+        : 'Your account is made. An admin unlocks new accounts; you can sign in once yours is unlocked.'),
+      h('a', { class: 'btn wide', href: '/signin' }, 'Back to sign in'));
+    } catch (err) {
+      say(box, err.message);
+    }
+  });
+  return card(
+    logo(),
+    h('h1', {}, invite ? 'You are invited' : 'Create your account'),
+    holder,
+    providerButtons(me.providers, new URLSearchParams({ return: '/', ...(invite ? { invite } : {}) })),
+    h('p', { class: 'small' }, 'Have an account? ', h('a', { class: 'link', href: '/signin' }, 'Sign in')));
+}
+
+export function renderConfirm(token) {
+  const body = h('div', { class: 'stack' }, h('p', {}, 'Confirming your email address…'));
+  post('/api/auth/confirm', { token }).then(async (result) => {
+    if (result.status === 'active') {
+      await refreshMe();
+      clear(body, h('p', {}, 'Your email address is confirmed.'), h('a', { class: 'btn primary wide', href: '/' }, 'Go to your files'));
+    } else {
+      clear(body, h('p', {}, `Your email address is confirmed. ${result.message ?? ''}`), h('a', { class: 'btn wide', href: '/signin' }, 'Back to sign in'));
+    }
+  }).catch((err) => {
+    clear(body, h('div', { class: 'error' }, err.message), h('a', { class: 'btn wide', href: '/signin' }, 'Back to sign in'));
+  });
+  return card(logo(), h('h1', {}, 'Phoenix Cloud'), body);
 }
 
 export function renderInvite(token) {
-  const box = h('div', { class: 'signin' }, h('img', { class: 'logo', src: '/ui/logo.png', alt: '' }), h('p', {}, 'Checking your invite…'));
+  const body = h('div', { class: 'stack' }, h('p', {}, 'Checking your invite…'));
   get(`/api/invites/${encodeURIComponent(token)}`).then((invite) => {
     const me = state.me;
     if (!invite.valid) {
-      clear(box, h('img', { class: 'logo', src: '/ui/logo.png', alt: '' }), h('h1', {}, 'This invite is not open'),
-        h('p', {}, LOGIN_ERRORS.invite_invalid), h('a', { class: 'btn wide', href: '/signin' }, 'Sign in'));
+      clear(body, h('p', {}, LOGIN_ERRORS.invite_invalid), h('a', { class: 'btn wide', href: '/signin' }, 'Sign in'));
       return;
     }
     if (me.user) {
-      clear(box, h('img', { class: 'logo', src: '/ui/logo.png', alt: '' }), h('h1', {}, 'You are already in'),
-        h('p', {}, `You are signed in as @${me.user.handle}. The invite is for someone new.`), h('a', { class: 'btn primary wide', href: '/' }, 'Go to your files'));
+      clear(body, h('p', {}, `You are signed in as @${me.user.handle}. The invite is for someone new.`), h('a', { class: 'btn primary wide', href: '/' }, 'Go to your files'));
       return;
     }
-    clear(box,
-      h('img', { class: 'logo', src: '/ui/logo.png', alt: '' }),
-      h('h1', {}, 'You are invited'),
-      h('p', {}, 'Join the Phoenix Cloud beta: keep your Phoenix documents online, open them anywhere and share them.'),
-      invite.email ? h('p', { class: 'small' }, `Sign in with the account for ${invite.email}.`) : null,
-      providerButtons(me.providers, new URLSearchParams({ invite: token, return: '/' })),
-      !me.providers.length ? h('p', { class: 'small' }, 'No sign-in providers are set up on this server yet.') : null);
+    navigate(`/register?invite=${encodeURIComponent(token)}`, { replace: true });
   }).catch(showError);
-  return h('div', { class: 'center' }, box);
+  return card(logo(), h('h1', {}, 'You are invited'), body);
 }
 
 // ── Account ───────────────────────────────────────────────────────────────
@@ -102,18 +194,20 @@ export async function renderAccount(target) {
   const params = new URLSearchParams(location.search);
   const name = h('input', { type: 'text', name: 'name', value: me.name, maxlength: 80, required: true });
   const handle = h('input', { type: 'text', name: 'handle', value: me.handle, maxlength: 30, required: true });
+  const email = h('input', { type: 'email', name: 'email', value: me.email ?? '', autocomplete: 'email' });
   const bio = h('textarea', { name: 'bio', rows: 3, maxlength: 500, value: me.bio });
   const profile = h('form', { class: 'panel stack cards-form' },
     h('h2', {}, 'Profile'),
-    h('div', { class: 'row' }, avatar(me), h('div', { class: 'muted small' }, me.email ?? '')),
+    h('div', { class: 'row' }, avatar(me), h('div', { class: 'muted small' }, `@${me.handle}`)),
     h('label', { class: 'field' }, h('span', {}, 'Name'), name),
-    h('label', { class: 'field' }, h('span', {}, 'Handle'), handle),
+    h('label', { class: 'field' }, h('span', {}, 'User name'), handle),
+    h('label', { class: 'field' }, h('span', {}, 'Email'), email),
     h('label', { class: 'field' }, h('span', {}, 'About you'), bio),
     h('div', {}, h('button', { type: 'submit', class: 'btn primary' }, 'Save')));
   profile.addEventListener('submit', async (e) => {
     e.preventDefault();
     try {
-      await patch('/api/me', { name: name.value, handle: handle.value.trim(), bio: bio.value });
+      await patch('/api/me', { name: name.value, handle: handle.value.trim(), email: email.value.trim() || undefined, bio: bio.value });
       await reloadShell();
       toast('Saved.');
     } catch (err) {
@@ -121,15 +215,41 @@ export async function renderAccount(target) {
     }
   });
 
+  const current = h('input', { type: 'password', autocomplete: 'current-password', required: me.hasPassword });
+  const fresh = h('input', { type: 'password', autocomplete: 'new-password', required: true, minlength: 8 });
+  const again = h('input', { type: 'password', autocomplete: 'new-password', required: true, minlength: 8 });
+  const passwordForm = h('form', { class: 'panel stack cards-form', id: 'password' },
+    h('h2', {}, 'Password'),
+    me.passwordIsDefault ? h('div', { class: 'status-bad' }, 'You still have the password this server started with. Choose your own.') : null,
+    me.hasPassword ? h('label', { class: 'field' }, h('span', {}, 'Current password'), current) : null,
+    h('label', { class: 'field' }, h('span', {}, 'New password (at least 8 characters)'), fresh),
+    h('label', { class: 'field' }, h('span', {}, 'New password again'), again),
+    h('div', {}, h('button', { type: 'submit', class: 'btn primary' }, 'Change password')),
+    h('p', { class: 'muted small flush' }, 'Changing it signs you out everywhere else.'));
+  passwordForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (fresh.value !== again.value) {
+      showError(new Error('The two new passwords are not the same.'));
+      return;
+    }
+    try {
+      await patch('/api/me/password', { current: current.value, password: fresh.value });
+      await reloadShell();
+      toast('Password changed.');
+    } catch (err) {
+      showError(err);
+    }
+  });
+
   const providerName = (id) => state.me.providers.find((p) => p.id === id)?.name ?? id;
   const linked = new Set(identities.map((i) => i.provider));
-  const signins = h('div', { class: 'panel stack cards-form' },
-    h('h2', {}, 'Ways to sign in'),
+  const signins = state.me.providers.length || identities.length ? h('div', { class: 'panel stack cards-form' },
+    h('h2', {}, 'Other ways to sign in'),
     params.get('error') ? h('div', { class: 'status-bad' }, LOGIN_ERRORS[params.get('error')] ?? LOGIN_ERRORS.failed) : null,
-    identities.length ? identities.map((i) => h('div', { class: 'row' },
+    identities.map((i) => h('div', { class: 'row' },
       h('div', { class: 'grow' }, h('div', {}, providerName(i.provider)), h('div', { class: 'muted small' }, `${i.email ?? ''} · last used ${timeAgo(i.lastUsedAt)}`)),
       h('button', {
-        type: 'button', class: 'btn ghost', disabled: identities.length < 2, title: identities.length < 2 ? 'Link another way first' : null, onclick: async () => {
+        type: 'button', class: 'btn ghost', onclick: async () => {
           try {
             await del(`/api/me/identities/${encodeURIComponent(i.provider)}/${encodeURIComponent(i.subject)}`);
             rerender();
@@ -137,8 +257,8 @@ export async function renderAccount(target) {
             showError(err);
           }
         },
-      }, 'Remove'))) : h('div', { class: 'muted' }, 'You sign in with dev login only.'),
-    state.me.providers.filter((p) => !linked.has(p.id)).map((p) => h('div', {}, h('a', { class: 'btn', href: `/api/auth/start/${p.id}?link=1` }, `Link ${p.name}`))));
+      }, 'Remove'))),
+    state.me.providers.filter((p) => !linked.has(p.id)).map((p) => h('div', {}, h('a', { class: 'btn', href: `/api/auth/start/${p.id}?link=1` }, `Link ${p.name}`)))) : null;
 
   const sessionList = h('div', { class: 'panel stack cards-form' },
     h('h2', {}, 'Where you are signed in'),
@@ -146,7 +266,11 @@ export async function renderAccount(target) {
       h('div', { class: 'grow' }, h('div', {}, s.userAgent || 'Unknown browser'), h('div', { class: 'muted small' }, `${s.current ? 'This browser · ' : ''}active ${timeAgo(s.lastSeenAt)} · signed in ${dateTime(s.createdAt)}`)),
       s.current ? null : h('button', { type: 'button', class: 'btn ghost', onclick: async () => { await del(`/api/me/sessions/${s.id}`).catch(showError); rerender(); } }, 'Sign out'))));
 
-  clear(target, h('div', { class: 'page-head' }, h('h1', {}, 'Account')), h('div', { class: 'stack' }, profile, signins, sessionList));
+  clear(target, h('div', { class: 'page-head' }, h('h1', {}, 'Account')), h('div', { class: 'stack' }, profile, passwordForm, signins, sessionList));
+  if (location.hash === '#password') {
+    passwordForm.scrollIntoView();
+    (me.hasPassword ? current : fresh).focus();
+  }
 }
 
 // ── Groups ────────────────────────────────────────────────────────────────
@@ -300,51 +424,127 @@ function count(n, one, many = `${one}s`) {
   return `${n} ${n === 1 ? one : many}`;
 }
 
-function adminTabs(tab) {
-  return h('div', { class: 'tabs' }, [['users', 'People'], ['invites', 'Invites'], ['settings', 'Settings'], ['audit', 'Activity']]
+const STATUS_LABELS = {
+  active: 'Active',
+  pending_email: 'Waiting for email confirmation',
+  pending_admin: 'Waiting to be unlocked',
+  suspended: 'Suspended',
+};
+
+function adminTabs(tab, waiting) {
+  return h('div', { class: 'tabs' }, [['users', waiting ? `Accounts (${waiting} waiting)` : 'Accounts'], ['invites', 'Invites'], ['settings', 'Settings'], ['email', 'Email'], ['audit', 'Activity']]
     .map(([t, label]) => h('a', { href: `/admin/${t}`, class: tab === t ? 'active' : null }, label)));
+}
+
+/** Runs an admin change, then shows the page again (errors as a toast). */
+function change(fn) {
+  return async () => {
+    try {
+      if ((await fn()) !== false) {
+        rerender();
+      }
+    } catch (err) {
+      showError(err);
+    }
+  };
+}
+
+const setStatus = (u, status) => change(() => patch(`/api/admin/users/${u.id}`, { status }));
+
+const deleteAccount = (u) => change(async () => {
+  if (!(await confirmDialog({ title: `Delete @${u.handle}?`, message: `The account and its ${count(u.documents, 'document')} are deleted for good.`, confirm: 'Delete account', danger: true }))) {
+    return false;
+  }
+  await del(`/api/admin/users/${u.id}`);
+  toast(`Deleted @${u.handle}.`);
+  return true;
+});
+
+const setPassword = (u) => change(async () => {
+  const done = await formDialog({
+    title: `New password for @${u.handle}`,
+    submit: 'Set password',
+    note: 'They are signed out everywhere and sign in with this password. Send it to them yourself.',
+    fields: h('label', { class: 'field' }, h('span', {}, 'Password (at least 8 characters)'), h('input', { type: 'text', name: 'password', required: true, minlength: 8, autofocus: true, autocomplete: 'off' })),
+    onSubmit: (data) => patch(`/api/admin/users/${u.id}`, { password: data.password }),
+  });
+  if (done) {
+    toast(`Set a new password for @${u.handle}.`);
+  }
+  return Boolean(done);
+});
+
+const setQuota = (u) => change(async () => Boolean(await formDialog({
+  title: `Storage for @${u.handle}`,
+  fields: h('label', { class: 'field' }, h('span', {}, 'Quota in MB (empty for the default)'), h('input', { type: 'number', name: 'quota', min: 0, value: u.quotaMB ?? '' })),
+  onSubmit: (data) => patch(`/api/admin/users/${u.id}`, { quotaMB: data.quota === '' ? null : Number(data.quota) }),
+})));
+
+const createAccount = change(async () => Boolean(await formDialog({
+  title: 'Create an account',
+  submit: 'Create account',
+  note: 'The account is ready to use at once. Send them their user name and password yourself.',
+  fields: [
+    h('label', { class: 'field' }, h('span', {}, 'User name'), h('input', { type: 'text', name: 'handle', required: true, maxlength: 30, autofocus: true })),
+    h('label', { class: 'field' }, h('span', {}, 'Name'), h('input', { type: 'text', name: 'name', maxlength: 80 })),
+    h('label', { class: 'field' }, h('span', {}, 'Email (optional)'), h('input', { type: 'email', name: 'email' })),
+    h('label', { class: 'field' }, h('span', {}, 'Password (at least 8 characters)'), h('input', { type: 'text', name: 'password', required: true, minlength: 8, autocomplete: 'off' })),
+    h('label', { class: 'check' }, h('input', { type: 'checkbox', name: 'isAdmin' }), 'Make them an admin'),
+  ],
+  onSubmit: (data) => post('/api/admin/users', { handle: data.handle.trim(), name: data.name.trim(), email: data.email.trim() || null, password: data.password, isAdmin: data.isAdmin }),
+})));
+
+function accountButtons(u, me) {
+  if (u.id === me.id) {
+    return [h('span', { class: 'muted small' }, 'You'), h('a', { class: 'btn ghost small-btn', href: '/account#password' }, 'Password…')];
+  }
+  const button = (label, onclick, cls = '') => h('button', { type: 'button', class: `btn ghost small-btn ${cls}`.trim(), onclick }, label);
+  return [
+    u.status.startsWith('pending') ? button('Unlock', setStatus(u, 'active'), 'accent') : null,
+    u.status === 'active' ? button('Suspend', setStatus(u, 'suspended')) : null,
+    u.status === 'suspended' ? button('Unsuspend', setStatus(u, 'active')) : null,
+    button(u.isAdmin ? 'Remove admin' : 'Make admin', change(() => patch(`/api/admin/users/${u.id}`, { isAdmin: !u.isAdmin }))),
+    button('Password…', setPassword(u)),
+    button('Storage…', setQuota(u)),
+    button('Delete', deleteAccount(u), 'danger'),
+  ];
 }
 
 async function adminUsers() {
   const [{ users }, stats] = await Promise.all([get('/api/admin/users'), get('/api/admin/stats')]);
   const me = state.me.user;
-  const act = (fn) => async () => {
-    try {
-      await fn();
-      rerender();
-    } catch (err) {
-      showError(err);
+  const waiting = users.filter((u) => u.status.startsWith('pending'));
+  const search = h('input', { type: 'search', placeholder: 'Find an account', 'aria-label': 'Find an account' });
+  const rows = users.map((u) => {
+    const row = h('tr', { dataset: { find: `${u.handle} ${u.name} ${u.email ?? ''}`.toLowerCase() } },
+      h('td', {}, person(u, u.isAdmin ? ' · admin' : '')),
+      h('td', {}, u.email ?? '', u.email && !u.emailVerified ? h('div', { class: 'muted small' }, 'not confirmed') : null),
+      h('td', { class: u.status === 'active' ? 'status-ok' : 'status-bad' }, STATUS_LABELS[u.status] ?? u.status),
+      h('td', {}, String(u.documents)),
+      h('td', {}, `${bytes(u.bytes)}${u.quotaMB !== null ? ` of ${u.quotaMB} MB` : ''}`),
+      h('td', {}, u.lastSeenAt ? timeAgo(u.lastSeenAt) : 'never'),
+      h('td', {}, h('div', { class: 'row wrap' }, accountButtons(u, me))));
+    return row;
+  });
+  search.addEventListener('input', () => {
+    const q = search.value.trim().toLowerCase();
+    for (const row of rows) {
+      row.classList.toggle('hidden', Boolean(q) && !row.dataset.find.includes(q));
     }
-  };
-  const quota = (u) => async () => {
-    const result = await formDialog({
-      title: `Storage for @${u.handle}`,
-      fields: h('label', { class: 'field' }, h('span', {}, 'Quota in MB (empty for the default)'), h('input', { type: 'number', name: 'quota', min: 0, value: u.quotaMB ?? '' })),
-      onSubmit: (data) => patch(`/api/admin/users/${u.id}`, { quotaMB: data.quota === '' ? null : Number(data.quota) }),
-    });
-    if (result) {
-      rerender();
-    }
-  };
+  });
   return [
-    h('p', { class: 'muted' }, `${count(stats.users, 'person', 'people')} · ${count(stats.groups, 'group')} · ${count(stats.documents, 'document')} (${stats.trashed} in the trash) · ${count(stats.revisions, 'version')} · ${bytes(stats.blobs.bytes)} stored in ${count(stats.blobs.count, 'chunk')} · database ${bytes(stats.databaseBytes)}`),
+    h('p', { class: 'muted' }, `${count(stats.users, 'account')} · ${count(stats.groups, 'group')} · ${count(stats.documents, 'document')} (${stats.trashed} in the trash) · ${count(stats.revisions, 'version')} · ${bytes(stats.blobs.bytes)} stored · database ${bytes(stats.databaseBytes)}`,
+      stats.converter ? '' : ' · no Phoenix on the server, so new documents and FLA, SWF, SVG, EPS and AI uploads are off'),
+    waiting.length ? h('div', { class: 'panel stack' },
+      h('h2', {}, `Waiting to be unlocked (${waiting.length})`),
+      waiting.map((u) => h('div', { class: 'row wrap' },
+        h('div', { class: 'grow' }, person(u, ` · ${u.email ?? 'no email'} · ${STATUS_LABELS[u.status]} · registered ${timeAgo(u.createdAt)}`)),
+        h('button', { type: 'button', class: 'btn primary', onclick: setStatus(u, 'active') }, 'Unlock'),
+        h('button', { type: 'button', class: 'btn danger', onclick: deleteAccount(u) }, 'Delete')))) : null,
+    h('div', { class: 'row wrap admin-tools' }, search, h('div', { class: 'grow' }), h('button', { type: 'button', class: 'btn primary', onclick: createAccount }, icon('plus'), 'Create account')),
     h('div', { class: 'table-wrap' }, h('table', { class: 'table' },
-      h('thead', {}, h('tr', {}, ['Person', 'Email', 'Signs in with', 'Files', 'Storage', 'Last seen', 'Status', ''].map((t) => h('th', {}, t)))),
-      h('tbody', {}, users.map((u) => h('tr', {},
-        h('td', {}, person(u, u.isAdmin ? ' · admin' : '')),
-        h('td', {}, u.email ?? ''),
-        h('td', {}, u.providers.join(', ') || 'dev login'),
-        h('td', {}, String(u.documents)),
-        h('td', {}, `${bytes(u.bytes)}${u.quotaMB !== null ? ` of ${u.quotaMB} MB` : ''}`),
-        h('td', {}, timeAgo(u.lastSeenAt)),
-        h('td', { class: u.status === 'active' ? 'status-ok' : 'status-bad' }, u.status),
-        h('td', {}, u.id === me.id ? null : h('button', {
-          type: 'button', class: 'btn ghost icon-only', 'aria-label': 'Actions', onclick: (e) => popup(e.currentTarget, [
-            { label: u.status === 'active' ? 'Suspend' : 'Unsuspend', icon: 'lock', danger: u.status === 'active', onclick: act(() => patch(`/api/admin/users/${u.id}`, { status: u.status === 'active' ? 'suspended' : 'active' })) },
-            { label: u.isAdmin ? 'Remove admin' : 'Make admin', icon: 'shield', onclick: act(() => patch(`/api/admin/users/${u.id}`, { isAdmin: !u.isAdmin })) },
-            { label: 'Storage quota…', icon: 'settings', onclick: quota(u) },
-          ]),
-        }, icon('more')))))))),
+      h('thead', {}, h('tr', {}, ['Account', 'Email', 'Status', 'Files', 'Storage', 'Last seen', ''].map((t) => h('th', {}, t)))),
+      h('tbody', {}, rows))),
   ];
 }
 
@@ -357,6 +557,7 @@ async function adminInvites() {
   const admin = h('input', { type: 'checkbox' });
   const form = h('form', { class: 'panel stack cards-form' },
     h('h2', {}, 'Invite someone'),
+    h('p', { class: 'muted small flush' }, 'Someone who registers from an invite link can sign in straight away, whatever the setting for new accounts.'),
     email, note,
     h('div', { class: 'row' }, h('span', { class: 'muted small' }, 'Lasts'), days, h('label', { class: 'check' }, admin, 'Make them an admin')),
     h('div', {}, h('button', { type: 'submit', class: 'btn primary' }, icon('link'), 'Make invite link')),
@@ -371,8 +572,7 @@ async function adminInvites() {
         h('p', { class: 'muted small' }, 'Send this link yourself. It is shown only once and works for one person.'));
       email.value = '';
       note.value = '';
-      const list = await adminInviteTable();
-      form.parentNode.querySelector('.invite-table')?.replaceWith(list);
+      form.parentNode.querySelector('.invite-table')?.replaceWith(inviteTable((await get('/api/admin/invites')).invites));
     } catch (err) {
       showError(err);
     }
@@ -388,35 +588,33 @@ function inviteTable(invites) {
       h('td', {}, i.note),
       h('td', {}, `${timeAgo(i.createdAt)}${i.createdBy ? ` by ${i.createdBy.name}` : ''}`),
       h('td', { class: i.status === 'pending' ? '' : 'muted' }, i.status === 'claimed' && i.claimedBy ? `claimed by @${i.claimedBy.handle}` : i.status),
-      h('td', {}, i.status === 'pending' ? h('button', {
-        type: 'button', class: 'btn ghost', onclick: async () => {
-          await del(`/api/admin/invites/${i.id}`).catch(showError);
-          rerender();
-        },
-      }, 'Turn off') : null))))));
-}
-
-async function adminInviteTable() {
-  return inviteTable((await get('/api/admin/invites')).invites);
+      h('td', {}, i.status === 'pending' ? h('button', { type: 'button', class: 'btn ghost', onclick: change(() => del(`/api/admin/invites/${i.id}`)) }, 'Turn off') : null))))));
 }
 
 async function adminSettings() {
   const { settings } = await get('/api/admin/settings');
-  const policy = h('select', {}, [['invite_only', 'By invite only (closed beta)'], ['open', 'Open to anyone'], ['closed', 'Closed to new people']]
-    .map(([v, l]) => h('option', { value: v, selected: settings.signupPolicy === v }, l)));
+  const choice = (value, title, text) => h('label', { class: 'choice' },
+    h('input', { type: 'radio', name: 'newAccounts', value, checked: settings.newAccounts === value }),
+    h('div', {}, h('div', { class: 'choice-title' }, title), h('div', { class: 'muted small' }, text)));
   const beta = h('input', { type: 'checkbox', checked: settings.beta });
   const quota = h('input', { type: 'number', min: 1, value: settings.defaultQuotaMB });
   const banner = h('input', { type: 'text', value: settings.banner, maxlength: 300, placeholder: 'A message at the top of every page' });
   const form = h('form', { class: 'panel stack cards-form' },
-    h('label', { class: 'field' }, h('span', {}, 'Who can join'), policy),
-    h('label', { class: 'check' }, beta, 'Beta: public and link-shared documents only for signed-in members; ask search engines not to index'),
-    h('label', { class: 'field' }, h('span', {}, 'Storage for each person and group, in MB'), quota),
+    h('h2', {}, 'New accounts'),
+    h('p', { class: 'muted small flush' }, 'What an account is when someone registers. People with an invite link, and accounts an admin makes, are ready at once.'),
+    choice('admin', 'Locked until an admin unlocks it', 'You see new accounts under Accounts and unlock the ones you want.'),
+    choice('email', 'Locked until they confirm their email address', 'They get a link by email. (There is no mail server yet: the emails wait under Email.)'),
+    choice('open', 'Open', 'Anyone who registers can sign in straight away.'),
+    h('h2', {}, 'Sharing'),
+    h('label', { class: 'check' }, beta, 'Public and link-shared documents only for people who are signed in; ask search engines not to index'),
+    h('label', { class: 'field' }, h('span', {}, 'Storage for each account and group, in MB'), quota),
     h('label', { class: 'field' }, h('span', {}, 'Banner'), banner),
     h('div', {}, h('button', { type: 'submit', class: 'btn primary' }, 'Save')));
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     try {
-      await patch('/api/admin/settings', { signupPolicy: policy.value, beta: beta.checked, defaultQuotaMB: Number(quota.value), banner: banner.value });
+      const newAccounts = form.querySelector('input[name="newAccounts"]:checked')?.value ?? 'admin';
+      await patch('/api/admin/settings', { newAccounts, beta: beta.checked, defaultQuotaMB: Number(quota.value), banner: banner.value });
       await reloadShell();
       toast('Saved.');
     } catch (err) {
@@ -424,6 +622,16 @@ async function adminSettings() {
     }
   });
   return [form];
+}
+
+async function adminEmail() {
+  const { messages } = await get('/api/admin/outbox');
+  return [
+    h('p', { class: 'muted' }, 'There is no mail server yet, so emails are kept here (and in the outbox folder of the server\'s data) instead of being sent.'),
+    messages.length ? messages.map((m) => h('div', { class: 'panel stack mail' },
+      h('div', { class: 'row' }, h('strong', {}, m.subject), h('div', { class: 'grow' }), h('span', { class: 'muted small' }, `to ${m.to}`)),
+      h('pre', { class: 'mail-text' }, m.text))) : h('div', { class: 'empty' }, icon('file'), h('h2', {}, 'No emails yet')),
+  ];
 }
 
 async function adminAudit() {
@@ -443,9 +651,9 @@ export async function renderAdmin(target, tab) {
     clear(target, h('div', { class: 'empty' }, icon('lock'), h('h2', {}, 'Admins only')));
     return;
   }
-  const build = { users: adminUsers, invites: adminInvites, settings: adminSettings, audit: adminAudit }[tab] ?? adminUsers;
-  const content = await build();
+  const build = { users: adminUsers, invites: adminInvites, settings: adminSettings, email: adminEmail, audit: adminAudit }[tab] ?? adminUsers;
+  const [content, stats] = await Promise.all([build(), get('/api/admin/stats')]);
   if (target.isConnected) {
-    clear(target, h('div', { class: 'page-head' }, h('h1', {}, 'Admin')), adminTabs(tab), content);
+    clear(target, h('div', { class: 'page-head' }, h('h1', {}, 'Admin')), adminTabs(tab, stats.waiting), content);
   }
 }

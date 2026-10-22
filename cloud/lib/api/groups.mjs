@@ -141,9 +141,7 @@ export function registerGroups(router) {
     }
     const user = findUser(ctx.store, body.who);
     if (!user) {
-      throw notFound(ctx.settings.signupPolicy === 'open'
-        ? 'No one has that handle or email.'
-        : 'No member has that handle or email. During the beta, an admin has to invite them first.');
+      throw notFound('No one with an account has that user name or email. They can register, or an admin can make an account for them.');
     }
     if (groupRole(ctx.store, user.id, group.id)) {
       throw new HttpError(409, 'member', 'They are in the group already.');

@@ -15,7 +15,19 @@ function cleanName(value, fallback = 'Untitled') {
 
 /** "scene.phx" → "scene" */
 function nameFromFile(file) {
-  return cleanName(String(file ?? '').replace(/^.*[\\/]/, '').replace(/\.phx$/i, ''));
+  return cleanName(String(file ?? '').replace(/^.*[\\/]/, '').replace(/\.(phx|fla|swf|svg|eps|ai)$/i, ''));
+}
+
+function extensionOf(file) {
+  return /\.([a-z0-9]+)$/i.exec(String(file ?? ''))?.[1]?.toLowerCase() ?? '';
+}
+
+function wholeNumber(value, low, high, what) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n < low || n > high) {
+    throw badRequest(`${what} is from ${low} to ${high}.`);
+  }
+  return n;
 }
 
 function getDocument(store, id) {
@@ -249,31 +261,48 @@ function shareRole(value) {
   return value;
 }
 
-export function registerDocuments(router) {
+/** Saves `bytes` as the first revision of a new document in `space`, or makes nothing. */
+async function documentFrom(ctx, space, name, bytes) {
+  const doc = createDocument(ctx, space, name);
+  try {
+    await saveRevision(ctx.store, ctx.blobs, doc, bytes, { userId: ctx.user.id });
+  } catch (err) {
+    ctx.store.run('DELETE FROM documents WHERE id = ?', doc.id);
+    throw err;
+  }
+  const saved = getDocument(ctx.store, doc.id);
+  ctx.status = 201;
+  return { document: new Viewer(ctx).document(saved, documentRole(ctx.store, ctx.user, saved, { beta: ctx.settings.beta })) };
+}
+
+export function registerDocuments(router, app) {
   router.get('/api/documents', (ctx) => list(ctx));
 
+  // A new, empty document, made by Phoenix: { name, width, height, fps, background }.
   router.post('/api/documents', async (ctx) => {
     const body = await ctx.json();
     const space = targetSpace(ctx, { groupId: body.groupId, folderId: body.folderId });
-    const doc = createDocument(ctx, space, cleanName(body.name));
-    ctx.status = 201;
-    return { document: new Viewer(ctx).document(doc, 'owner') };
+    const background = String(body.background ?? '#ffffff');
+    if (!/^#[0-9a-f]{6}$/i.test(background)) {
+      throw badRequest('The background is a color like #ffffff.');
+    }
+    const bytes = await app.converter.newDocument({
+      width: Math.round(wholeNumber(body.width ?? 1920, 1, 8192, 'The width')),
+      height: Math.round(wholeNumber(body.height ?? 1080, 1, 8192, 'The height')),
+      fps: wholeNumber(body.fps ?? 24, 1, 120, 'The frame rate'),
+      background,
+    });
+    return documentFrom(ctx, space, cleanName(body.name), bytes);
   });
 
-  // The body is a .phx; ?name= (or the file name), ?folderId=, ?groupId=.
+  // The body is a file: a .phx, or an FLA, SWF, SVG, EPS or AI that Phoenix
+  // turns into one. ?name= (its file name), ?folderId=, ?groupId=.
   router.post('/api/documents/upload', async (ctx) => {
     const space = targetSpace(ctx, { groupId: ctx.query('groupId'), folderId: ctx.query('folderId') });
+    const ext = extensionOf(ctx.query('name')) || 'phx';
     const bytes = await ctx.body();
-    const doc = createDocument(ctx, space, nameFromFile(ctx.query('name')));
-    try {
-      await saveRevision(ctx.store, ctx.blobs, doc, bytes, { userId: ctx.user.id });
-    } catch (err) {
-      ctx.store.run('DELETE FROM documents WHERE id = ?', doc.id);
-      throw err;
-    }
-    const saved = getDocument(ctx.store, doc.id);
-    ctx.status = 201;
-    return { document: new Viewer(ctx).document(saved, documentRole(ctx.store, ctx.user, saved, { beta: ctx.settings.beta })) };
+    const phx = await app.converter.fromUpload(bytes, ext);
+    return documentFrom(ctx, space, nameFromFile(ctx.query('name')), phx);
   });
 
   router.get('/api/documents/:id', (ctx) => {
@@ -483,9 +512,7 @@ export function registerDocuments(router) {
     } else {
       const user = findUser(store, body.who);
       if (!user) {
-        throw notFound(ctx.settings.signupPolicy === 'open'
-          ? 'No one has that handle or email.'
-          : 'No member has that handle or email. During the beta, an admin has to invite them first.');
+        throw notFound('No one with an account has that user name or email. They can register, or an admin can make an account for them.');
       }
       if (doc.owner_kind === 'user' && doc.owner_id === user.id) {
         throw badRequest('They own it.');

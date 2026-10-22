@@ -1,28 +1,31 @@
 #!/usr/bin/env node
-// Phoenix Cloud: accounts, documents, sharing and groups for the web editor.
-// See cloud/README.md.
+// Phoenix Cloud: accounts, documents, sharing and groups, with the web
+// editor. See cloud/README.md.
 //
-//   node server.mjs dev                        run on this PC (dev login, cloud/dev-data)
-//   node server.mjs serve                      run in production (settings from the environment)
-//   node server.mjs make-admin --email E       make an invite that makes its claimant an admin
-//   node server.mjs make-admin --handle H      make an existing user an admin
-//   node server.mjs invite [--email E] [--note N] [--days D]
-//   node server.mjs seed [file.phx ...]        dev: sample users, a group and documents
-//   node server.mjs gc                         delete stored chunks no revision uses
-//   node server.mjs status                     print totals
-//   node server.mjs reset                      dev: delete all dev data
+//   node server.mjs dev                               run on this PC (cloud/dev-data)
+//   node server.mjs serve                             run in production (settings from the environment)
+//   node server.mjs import [--to HANDLE] FILE ...     add .phx/.fla/.swf/.svg/.eps/.ai files to an account
+//   node server.mjs set-password --handle H --password P
+//   node server.mjs make-admin --handle H             make an account an admin
+//   node server.mjs invite [--email E] [--note N] [--days D] [--admin]
+//   node server.mjs gc                                delete stored chunks no revision uses
+//   node server.mjs status                            print totals
+//   node server.mjs reset                             dev: delete all dev data
 //
+// A server with no accounts makes the admin @phoenix, password "animate".
 // Commands other than serve read cloud/dev.env and work on the dev data
 // unless PHOENIX_CLOUD_MODE=production is set.
 
 import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
-import { createInvite, createUser, findUser } from './lib/accounts.mjs';
+import { createInvite, ensureDefaultAdmin, findAccount } from './lib/accounts.mjs';
 import { createApp } from './lib/app.mjs';
 import { BlobStore } from './lib/blobs.mjs';
 import { CLOUD_DIR, editorAvailable, loadConfig } from './lib/config.mjs';
+import { Converter } from './lib/convert.mjs';
 import { newId } from './lib/ids.mjs';
+import { hashPassword, passwordProblem } from './lib/passwords.mjs';
 import { Store } from './lib/store.mjs';
 import { collectGarbage, saveRevision } from './lib/storage.mjs';
 
@@ -38,6 +41,19 @@ function loadEnvFile(mode) {
 function option(args, name) {
   const i = args.indexOf(name);
   return i >= 0 ? args[i + 1] : undefined;
+}
+
+/** The arguments that are not options or their values. */
+function plain(args, withValues) {
+  const out = [];
+  for (let i = 0; i < args.length; i++) {
+    if (withValues.includes(args[i])) {
+      i++;
+    } else if (!args[i].startsWith('--')) {
+      out.push(args[i]);
+    }
+  }
+  return out;
 }
 
 /** The mode for commands other than serve: dev unless PHOENIX_CLOUD_MODE says otherwise. */
@@ -63,20 +79,20 @@ function listen(server, port, host) {
 async function serve(mode) {
   const { config, store, blobs } = open(mode);
   const app = createApp({ config, store, blobs });
+  await app.ready;
   const cloud = http.createServer(app.handle);
   const play = http.createServer(app.handlePlay);
-  // Uploads may take a while; idle keep-alive sockets go quickly.
+  // Uploads and conversions may take a while; idle keep-alive sockets go quickly.
   cloud.requestTimeout = 15 * 60 * 1000;
   cloud.keepAliveTimeout = 5000;
   const port = await listen(cloud, config.port, config.bind);
   const playPort = await listen(play, config.playPort, config.bind);
   console.log(`[cloud] ${config.mode} listening on ${config.bind}:${port} (play ${playPort})`);
   console.log(`[cloud] ${config.publicUrl}  data ${config.dataDir}`);
-  if (config.mode === 'dev') {
-    const providers = Object.keys(config.providers);
-    console.log(`[cloud] sign-in: dev login${providers.length ? `, ${providers.join(', ')}` : ' (no OAuth clients in cloud/dev.env)'}`);
-    console.log(`[cloud] editor: ${editorAvailable(config) ? config.editorDir : 'not built (python tools/web/build_web.py)'}`);
-  }
+  const providers = Object.keys(config.providers);
+  console.log(`[cloud] sign-in: passwords${providers.length ? `, ${providers.join(', ')}` : ''}`);
+  console.log(`[cloud] editor: ${editorAvailable(config) ? config.editorDir : 'not built (python tools/web/build_web.py)'}`);
+  console.log(`[cloud] new documents and conversion: ${config.phoenix ?? 'off (no Phoenix build; set PHOENIX_CLOUD_PHOENIX)'}`);
   const tidy = () => app.sessions.purgeExpired();
   tidy();
   setInterval(tidy, HOUR).unref();
@@ -90,93 +106,79 @@ async function serve(mode) {
   process.on('SIGTERM', stop);
 }
 
-function makeAdmin(args) {
-  const { config, store } = open();
-  const handle = option(args, '--handle');
-  if (handle) {
-    const user = findUser(store, handle);
-    if (!user) {
-      throw new Error(`no active user @${handle}`);
+/** Files into an account's My Files, converted by Phoenix where they are not .phx. */
+async function importFiles(args) {
+  const { config, store, blobs } = open();
+  await ensureDefaultAdmin(store);
+  const handle = option(args, '--to') ?? 'phoenix';
+  const user = findAccount(store, handle);
+  if (!user) {
+    throw new Error(`no account @${handle}`);
+  }
+  const converter = new Converter(config);
+  const files = plain(args, ['--to']);
+  let made = 0;
+  for (const file of files) {
+    const ext = path.extname(file).slice(1).toLowerCase();
+    const name = path.basename(file).replace(/\.[^.]+$/, '');
+    try {
+      const bytes = await converter.fromUpload(fs.readFileSync(file), ext);
+      const id = newId();
+      const now = Date.now();
+      store.run("INSERT INTO documents (id, owner_kind, owner_id, name, created_by, created_at, modified_at, modified_by) VALUES (?, 'user', ?, ?, ?, ?, ?, ?)",
+        id, user.id, name, user.id, now, now, user.id);
+      try {
+        await saveRevision(store, blobs, store.get('SELECT * FROM documents WHERE id = ?', id), bytes, { userId: user.id });
+      } catch (err) {
+        store.run('DELETE FROM documents WHERE id = ?', id);
+        throw err;
+      }
+      made++;
+      console.log(`added ${name}`);
+    } catch (err) {
+      console.log(`skipped ${file}: ${err.message}`);
     }
-    store.run('UPDATE users SET is_admin = 1 WHERE id = ?', user.id);
-    store.audit(null, 'user.admin', 'user', user.id, { admin: true, by: 'cli' });
-    console.log(`@${user.handle} is an admin.`);
-    return;
   }
-  const email = option(args, '--email');
-  if (!email) {
-    throw new Error('make-admin needs --email or --handle');
+  console.log(`Added ${made} of ${files.length} file(s) to @${user.handle}.`);
+}
+
+async function setPassword(args) {
+  const { store } = open();
+  await ensureDefaultAdmin(store);
+  const user = findAccount(store, option(args, '--handle') ?? '');
+  const password = option(args, '--password');
+  if (!user) {
+    throw new Error('set-password needs --handle of an existing account');
   }
-  const { token } = createInvite(store, { email, note: 'admin (from the command line)', makeAdmin: true, days: 7 });
-  console.log(`Sign in from this link, as ${email}, within 7 days:\n${config.publicUrl}/invite/${token}`);
+  const problem = passwordProblem(password);
+  if (problem) {
+    throw new Error(problem);
+  }
+  store.run('UPDATE users SET password_hash = ?, password_is_default = 0 WHERE id = ?', await hashPassword(password), user.id);
+  store.run('DELETE FROM sessions WHERE user_id = ?', user.id);
+  store.audit(null, 'user.password_reset', 'user', user.id, { by: 'cli' });
+  console.log(`Set the password of @${user.handle}.`);
+}
+
+async function makeAdmin(args) {
+  const { store } = open();
+  await ensureDefaultAdmin(store);
+  const user = findAccount(store, option(args, '--handle') ?? '');
+  if (!user) {
+    throw new Error('make-admin needs --handle of an existing account');
+  }
+  store.run("UPDATE users SET is_admin = 1, status = 'active' WHERE id = ?", user.id);
+  store.audit(null, 'user.admin', 'user', user.id, { admin: true, by: 'cli' });
+  console.log(`@${user.handle} is an admin.`);
 }
 
 function invite(args) {
   const { config, store } = open();
   const days = option(args, '--days');
-  const { token } = createInvite(store, { email: option(args, '--email') ?? null, note: option(args, '--note') ?? '', days: days === undefined ? 14 : Number(days) });
+  const { token } = createInvite(store, {
+    email: option(args, '--email') ?? null, note: option(args, '--note') ?? '', makeAdmin: args.includes('--admin'), days: days === undefined ? 14 : Number(days),
+  });
   console.log(`${config.publicUrl}/invite/${token}`);
-}
-
-/** Dev sample data: alice (admin), bob, carol; a group; folders; shares; the given .phx files. */
-async function seed(files) {
-  const { config, store, blobs } = open('dev');
-  const user = (handle, isAdmin = false) => findUser(store, handle) ??
-    createUser(store, { name: handle.charAt(0).toUpperCase() + handle.slice(1), email: `${handle}@dev.local`, handle, isAdmin });
-  const alice = user('alice', true);
-  const bob = user('bob');
-  const carol = user('carol');
-  const now = Date.now();
-  let group = store.get("SELECT * FROM groups WHERE handle = 'studio'");
-  if (!group) {
-    const id = newId();
-    store.run("INSERT INTO groups (id, handle, name, description, created_by, created_at) VALUES (?, 'studio', 'Studio', 'A sample group', ?, ?)", id, alice.id, now);
-    store.run("INSERT INTO group_members (group_id, user_id, role, added_by, added_at) VALUES (?, ?, 'admin', ?, ?)", id, alice.id, alice.id, now);
-    store.run("INSERT INTO group_members (group_id, user_id, role, added_by, added_at) VALUES (?, ?, 'member', ?, ?)", id, bob.id, alice.id, now);
-    group = store.get('SELECT * FROM groups WHERE id = ?', id);
-  }
-  const folder = (ownerKind, ownerId, name) => {
-    const found = store.get('SELECT id FROM folders WHERE owner_kind = ? AND owner_id = ? AND parent_id IS NULL AND name = ?', ownerKind, ownerId, name);
-    if (found) {
-      return found.id;
-    }
-    const id = newId();
-    store.run('INSERT INTO folders (id, owner_kind, owner_id, parent_id, name, created_by, created_at) VALUES (?, ?, ?, NULL, ?, ?, ?)', id, ownerKind, ownerId, name, alice.id, now);
-    return id;
-  };
-  const spaces = [
-    { kind: 'user', id: alice.id, folder: null },
-    { kind: 'user', id: alice.id, folder: folder('user', alice.id, 'Scenes') },
-    { kind: 'group', id: group.id, folder: null },
-    { kind: 'user', id: bob.id, folder: null },
-  ];
-  let made = 0;
-  for (const [i, file] of files.entries()) {
-    const space = spaces[i % spaces.length];
-    const docId = newId();
-    const name = path.basename(file).replace(/\.phx$/i, '');
-    const owner = space.kind === 'user' ? space.id : alice.id;
-    store.run('INSERT INTO documents (id, owner_kind, owner_id, folder_id, name, created_by, created_at, modified_at, modified_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      docId, space.kind, space.id, space.folder, name, owner, now, now, owner);
-    try {
-      await saveRevision(store, blobs, store.get('SELECT * FROM documents WHERE id = ?', docId), fs.readFileSync(file), { userId: owner });
-    } catch (err) {
-      store.run('DELETE FROM documents WHERE id = ?', docId);
-      console.log(`skipped ${file}: ${err.message}`);
-      continue;
-    }
-    // Bob's documents are shared with carol; alice's first one with bob.
-    if (space.kind === 'user' && space.id === bob.id) {
-      store.run("INSERT INTO shares (document_id, principal_kind, principal_id, role, granted_by, granted_at) VALUES (?, 'user', ?, 'viewer', ?, ?)", docId, carol.id, bob.id, now);
-    } else if (i === 0) {
-      store.run("INSERT INTO shares (document_id, principal_kind, principal_id, role, granted_by, granted_at) VALUES (?, 'user', ?, 'editor', ?, ?)", docId, bob.id, alice.id, now);
-    }
-    made++;
-  }
-  console.log(`Seeded @alice (admin), @bob, @carol, group @studio and ${made} document(s) in ${config.dataDir}.`);
-  if (files.length === 0) {
-    console.log('Pass .phx files to add documents: node server.mjs seed D:/fla/*.phx');
-  }
 }
 
 async function gc() {
@@ -190,7 +192,7 @@ function status() {
   const n = (sql) => store.get(sql).n;
   const blobs = store.get('SELECT COUNT(*) AS n, COALESCE(SUM(size), 0) AS bytes FROM blobs');
   console.log(`data      ${config.dataDir}`);
-  console.log(`users     ${n('SELECT COUNT(*) AS n FROM users')}`);
+  console.log(`accounts  ${n('SELECT COUNT(*) AS n FROM users')} (${n("SELECT COUNT(*) AS n FROM users WHERE status LIKE 'pending%'")} waiting)`);
   console.log(`groups    ${n('SELECT COUNT(*) AS n FROM groups')}`);
   console.log(`documents ${n('SELECT COUNT(*) AS n FROM documents')}`);
   console.log(`revisions ${n('SELECT COUNT(*) AS n FROM revisions')}`);
@@ -200,7 +202,7 @@ function status() {
 function reset() {
   loadEnvFile('dev');
   const config = loadConfig(process.env, { mode: 'dev' });
-  if (config.mode !== 'dev' || !config.dataDir.startsWith(CLOUD_DIR)) {
+  if (!config.dataDir.startsWith(CLOUD_DIR)) {
     throw new Error(`reset only deletes dev data inside ${CLOUD_DIR}`);
   }
   fs.rmSync(config.dataDir, { recursive: true, force: true });
@@ -211,9 +213,10 @@ const [command = 'serve', ...args] = process.argv.slice(2);
 const commands = {
   dev: () => serve('dev'),
   serve: () => serve(process.env.PHOENIX_CLOUD_MODE ?? 'production'),
+  import: () => importFiles(args),
+  'set-password': () => setPassword(args),
   'make-admin': () => makeAdmin(args),
   invite: () => invite(args),
-  seed: () => seed(args),
   gc,
   status,
   reset,

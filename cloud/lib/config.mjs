@@ -80,13 +80,29 @@ export function loadConfig(env = process.env, overrides = {}) {
     // X-Forwarded-For entry; in dev nothing forwards.
     trustProxy: env.PHOENIX_CLOUD_TRUST_PROXY ? env.PHOENIX_CLOUD_TRUST_PROXY === '1' : mode === 'production',
     providers,
-    // A dev-only sign-in that takes any handle. Never on in production.
-    devLogin: mode === 'dev',
+    // Phoenix itself, run with no window to make new documents and to
+    // convert uploads (FLA, SWF, SVG, EPS, AI) into .phx with a thumbnail.
+    phoenix: findPhoenix(env.PHOENIX_CLOUD_PHOENIX),
     maxUploadBytes: envInt(env, 'PHOENIX_CLOUD_MAX_UPLOAD_MB', 1024) * 1024 * 1024,
     maxJsonBytes: 256 * 1024,
     sessionDays: 30,
     loginStateMinutes: 10,
   };
+}
+
+/** PHOENIX_CLOUD_PHOENIX, or a build in this repository; null when there is none. */
+function findPhoenix(given) {
+  if (given) {
+    return fs.existsSync(given) ? path.resolve(given) : null;
+  }
+  const name = process.platform === 'win32' ? 'Phoenix.exe' : 'Phoenix';
+  for (const config of ['Release', 'RelWithDebInfo', '.']) {
+    const candidate = path.join(REPO_DIR, 'build', config, name);
+    if (fs.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+  return null;
 }
 
 /** Whether a web editor build is there to serve. */

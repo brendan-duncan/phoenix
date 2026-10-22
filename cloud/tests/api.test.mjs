@@ -16,7 +16,7 @@ before(async () => {
   bob = server.client();
   carol = server.client();
   anon = server.client();
-  await alice.signIn('alice');
+  await alice.signIn('alice', { admin: true });
   await bob.signIn('bob');
   await carol.signIn('carol');
 });
@@ -24,9 +24,36 @@ before(async () => {
 after(() => server.close());
 
 describe('sessions', () => {
-  it('makes the first dev user an admin', () => {
-    assert.equal(alice.user.isAdmin, true);
+  it('starts with the admin @phoenix, password "animate"', async () => {
+    const c = server.client();
+    const me = await c.signInWith('phoenix', 'animate');
+    assert.equal(me.isAdmin, true);
+    assert.equal(me.passwordIsDefault, true);
     assert.equal(bob.user.isAdmin, false);
+  });
+
+  it('refuses a wrong password, and slows down guessing', async () => {
+    const c = server.client();
+    assert.equal(await c.fails('POST', '/api/auth/login', 401, { json: { login: 'bob', password: 'nope' } }), 'bad_login');
+    assert.equal(await c.fails('POST', '/api/auth/login', 401, { json: { login: 'nobody', password: 'nope' } }), 'bad_login');
+    for (let i = 0; i < 9; i++) {
+      await c.request('POST', '/api/auth/login', { json: { login: 'guessme', password: `x${i}` } });
+    }
+    assert.equal(await c.fails('POST', '/api/auth/login', 429, { json: { login: 'guessme', password: 'y' } }), 'slow_down');
+    server.app.attempts.failures.clear();
+  });
+
+  it('changes a password, which signs out other sessions', async () => {
+    const one = server.client();
+    const two = server.client();
+    await one.signIn('gina');
+    await two.signIn('gina');
+    assert.equal(await one.fails('PATCH', '/api/me/password', 403, { json: { current: 'wrong', password: 'new-password-1' } }), 'bad_login');
+    assert.equal(await one.fails('PATCH', '/api/me/password', 400, { json: { current: 'password-123', password: 'short' } }), 'bad_request');
+    await one.patch('/api/me/password', { current: 'password-123', password: 'new-password-1' });
+    assert.equal((await two.get('/api/me')).user, null);
+    assert.ok((await one.get('/api/me')).user);
+    await server.client().signInWith('gina', 'new-password-1');
   });
 
   it('needs the CSRF token and our own origin for changes', async () => {
@@ -123,10 +150,10 @@ describe('documents', () => {
     assert.equal(await bob.fails('POST', `/api/documents/${doc.id}/shares`, 403, { json: { kind: 'user', who: 'carol', role: 'viewer' } }), 'forbidden');
   });
 
-  it('tells the sharer when the person is not a member yet', async () => {
+  it('tells the sharer when the person has no account', async () => {
     const res = await alice.request('POST', `/api/documents/${doc.id}/shares`, { json: { kind: 'user', who: 'stranger@example.com', role: 'viewer' } });
     assert.equal(res.status, 404);
-    assert.match((await res.json()).message, /invite them/);
+    assert.match((await res.json()).message, /register/);
   });
 
   it('lets a viewer leave a share', async () => {

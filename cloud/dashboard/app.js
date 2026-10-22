@@ -2,8 +2,8 @@
 // themselves into <main> from files.js and pages.js.
 
 import { get, post, setCsrf, setLink } from './api.js';
-import { renderDocument, renderListing, uploadFiles } from './files.js';
-import { newGroupDialog, renderAccount, renderAdmin, renderGroupPage, renderInvite, renderSignin } from './pages.js';
+import { newDocumentDialog, renderDocument, renderListing, UPLOAD_TYPES, uploadFiles } from './files.js';
+import { newGroupDialog, renderAccount, renderAdmin, renderConfirm, renderGroupPage, renderInvite, renderRegister, renderSignin } from './pages.js';
 import { avatar, clear, closeMenu, h, icon, popup, promptDialog, showError, toast } from './ui.js';
 
 export const state = {
@@ -76,7 +76,7 @@ function buildShell() {
     }
   });
   const groups = h('div', { class: 'nav' }, me.groups.map((g) => navLink(`/groups/${g.id}`, 'users', g.name, `group:${g.id}`)));
-  const fileInput = h('input', { type: 'file', accept: '.phx,.fla', multiple: true, class: 'hidden' });
+  const fileInput = h('input', { type: 'file', accept: UPLOAD_TYPES, multiple: true, class: 'hidden' });
   fileInput.addEventListener('change', () => {
     uploadFiles([...fileInput.files]);
     fileInput.value = '';
@@ -85,7 +85,8 @@ function buildShell() {
     type: 'button',
     class: 'btn primary wide new',
     onclick: (e) => popup(e.currentTarget, [
-      { label: 'Upload .phx files', icon: 'upload', onclick: () => fileInput.click() },
+      { label: 'New document', icon: 'file', onclick: () => newDocumentDialog() },
+      { label: 'Upload files', icon: 'upload', onclick: () => fileInput.click() },
       { label: 'New folder', icon: 'folder', onclick: () => newFolder() },
       '-',
       { label: 'New group', icon: 'users', onclick: () => newGroupDialog() },
@@ -200,13 +201,15 @@ async function route() {
   // A share link's token rides along on the document page only.
   setLink(path.startsWith('/d/') ? params.get('link') : null);
 
-  if (path === '/signin' || path.startsWith('/invite/')) {
+  const outside = { '/signin': renderSignin, '/register': renderRegister };
+  if (outside[path] || path.startsWith('/invite/') || path.startsWith('/confirm/')) {
     shell = null;
-    if (state.me.user && path === '/signin') {
+    if (state.me.user && (path === '/signin' || path === '/register')) {
       navigate(params.get('return') || '/', { replace: true });
       return;
     }
-    clear(root, path === '/signin' ? renderSignin(params) : renderInvite(decodeURIComponent(path.slice('/invite/'.length))));
+    const token = decodeURIComponent(path.slice(path.indexOf('/', 1) + 1));
+    clear(root, outside[path] ? outside[path](params) : (path.startsWith('/invite/') ? renderInvite(token) : renderConfirm(token)));
     return;
   }
   if (!state.me.user) {
@@ -233,11 +236,12 @@ async function route() {
   place.drop = false;
   const id = ++renderId;
   const target = h('div', { class: 'page' });
-  if (state.me.settings.banner) {
-    clear(main, h('div', { class: 'banner' }, state.me.settings.banner), target);
-  } else {
-    clear(main, target);
-  }
+  clear(main,
+    state.me.user.passwordIsDefault
+      ? h('div', { class: 'banner' }, 'You are using the password this server started with. ', h('a', { class: 'link', href: '/account#password' }, 'Choose your own password'), '.')
+      : null,
+    state.me.settings.banner ? h('div', { class: 'banner' }, state.me.settings.banner) : null,
+    target);
   try {
     await page.render(target);
   } catch (err) {

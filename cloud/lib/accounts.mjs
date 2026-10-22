@@ -1,12 +1,17 @@
-// People: users and their linked sign-ins, sessions, and beta invites.
+// People: users and their passwords and linked sign-ins, sessions,
+// registration and its settings, email tokens, and invites.
 
 import { HttpError, parseCookies, serializeCookie } from './http.mjs';
 import { hashToken, newId, newToken, sameSecret } from './ids.mjs';
+import { hashPassword } from './passwords.mjs';
 
 const MINUTE = 60 * 1000;
-const DAY = 24 * 60 * MINUTE;
+const HOUR = 60 * MINUTE;
+const DAY = 24 * HOUR;
 // A session's last-seen time is written at most this often.
 const TOUCH_INTERVAL = 5 * MINUTE;
+
+export const DEFAULT_ADMIN = { handle: 'phoenix', name: 'Phoenix', password: 'animate' };
 
 /** What anyone may see of a user. */
 export function publicUser(u) {
@@ -15,13 +20,30 @@ export function publicUser(u) {
 
 /** What a user sees of themself. */
 export function selfUser(u) {
-  return { ...publicUser(u), email: u.email, bio: u.bio, isAdmin: Boolean(u.is_admin), createdAt: u.created_at };
+  return {
+    ...publicUser(u),
+    email: u.email,
+    bio: u.bio,
+    isAdmin: Boolean(u.is_admin),
+    createdAt: u.created_at,
+    hasPassword: Boolean(u.password_hash),
+    passwordIsDefault: Boolean(u.password_is_default),
+  };
 }
 
 const HANDLE_RE = /^[a-z0-9][a-z0-9_-]{1,29}$/i;
+const EMAIL_RE = /^[^@\s]{1,64}@[^@\s]{1,190}\.[^@\s]{1,40}$/;
 
 export function validHandle(handle) {
   return typeof handle === 'string' && HANDLE_RE.test(handle);
+}
+
+export function validEmail(email) {
+  return typeof email === 'string' && EMAIL_RE.test(email);
+}
+
+export function handleTaken(store, handle, exceptUserId = null) {
+  return Boolean(store.get('SELECT 1 FROM users WHERE handle = ? AND id IS NOT ?', handle, exceptUserId) || store.get('SELECT 1 FROM groups WHERE handle = ?', handle));
 }
 
 /** A free handle made from `base` (a name or an email's local part). */
@@ -32,38 +54,75 @@ export function makeHandle(store, base) {
   }
   for (let n = 0; n < 1000; n++) {
     const handle = n === 0 ? stem : `${stem}${n + 1}`;
-    if (!store.get('SELECT 1 FROM users WHERE handle = ?', handle) && !store.get('SELECT 1 FROM groups WHERE handle = ?', handle)) {
+    if (!handleTaken(store, handle)) {
       return handle;
     }
   }
   return `${stem}${newId().slice(0, 6).toLowerCase()}`;
 }
 
-export function createUser(store, { name, email = null, avatarUrl = '', handle = null, isAdmin = false }) {
-  const user = {
-    id: newId(),
-    handle: handle ?? makeHandle(store, email ? email.split('@')[0] : name),
-    name: String(name || handle || 'New user').slice(0, 80),
-    email,
-    avatar_url: avatarUrl,
-    is_admin: isAdmin ? 1 : 0,
-    created_at: Date.now(),
-  };
-  store.run('INSERT INTO users (id, handle, name, email, avatar_url, is_admin, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
-    user.id, user.handle, user.name, user.email, user.avatar_url, user.is_admin, user.created_at);
-  store.audit(user.id, 'user.create', 'user', user.id, { handle: user.handle, admin: isAdmin });
-  return store.get('SELECT * FROM users WHERE id = ?', user.id);
+export function createUser(store, { name, email = null, avatarUrl = '', handle = null, isAdmin = false, status = 'active', passwordHash = null, passwordIsDefault = false, emailVerified = false }) {
+  const id = newId();
+  const finalHandle = handle ?? makeHandle(store, email ? email.split('@')[0] : name);
+  store.run(`INSERT INTO users (id, handle, name, email, avatar_url, is_admin, status, password_hash, password_is_default, email_verified, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  id, finalHandle, String(name || finalHandle).slice(0, 80), email, avatarUrl, isAdmin, status, passwordHash, passwordIsDefault, emailVerified, Date.now());
+  store.audit(id, 'user.create', 'user', id, { handle: finalHandle, admin: isAdmin, status });
+  return store.get('SELECT * FROM users WHERE id = ?', id);
 }
 
+/** An active user by handle or email (for sharing and adding to groups). */
 export function findUser(store, handleOrEmail) {
+  const user = findAccount(store, handleOrEmail);
+  return user?.status === 'active' ? user : null;
+}
+
+/** Any account, whatever its status, by handle or email. */
+export function findAccount(store, handleOrEmail) {
   const key = String(handleOrEmail ?? '').trim().replace(/^@/, '');
   if (!key) {
     return null;
   }
   return key.includes('@')
-    ? store.get("SELECT * FROM users WHERE email = ? AND status = 'active'", key)
-    : store.get("SELECT * FROM users WHERE handle = ? AND status = 'active'", key);
+    ? store.get('SELECT * FROM users WHERE email = ?', key) ?? null
+    : store.get('SELECT * FROM users WHERE handle = ?', key) ?? null;
 }
+
+/**
+ * On a server with no accounts at all, the admin account @phoenix with the
+ * password "animate", to be changed after signing in.
+ */
+export async function ensureDefaultAdmin(store) {
+  if (store.get('SELECT 1 FROM users LIMIT 1')) {
+    return null;
+  }
+  const user = createUser(store, {
+    name: DEFAULT_ADMIN.name,
+    handle: DEFAULT_ADMIN.handle,
+    isAdmin: true,
+    passwordHash: await hashPassword(DEFAULT_ADMIN.password),
+    passwordIsDefault: true,
+  });
+  return user;
+}
+
+/** What a newly registered account starts as, under the current settings. */
+export function newAccountStatus(settings, { invited = false, emailVerified = false } = {}) {
+  if (invited || settings.newAccounts === 'open') {
+    return 'active';
+  }
+  if (settings.newAccounts === 'email') {
+    return emailVerified ? 'active' : 'pending_email';
+  }
+  return 'pending_admin';
+}
+
+/** Why an account that is not active can't sign in, for people. */
+export const STATUS_MESSAGES = {
+  pending_email: 'Confirm your email address first: follow the link in the email we sent.',
+  pending_admin: 'Your account is waiting for an admin to unlock it.',
+  suspended: 'This account is suspended.',
+};
 
 // ── Sessions ──────────────────────────────────────────────────────────────
 
@@ -120,6 +179,11 @@ export class Sessions {
     res.setHeader('Set-Cookie', serializeCookie(this.cookieName, '', { maxAge: 0, secure: this.config.secureCookies }));
   }
 
+  /** Signs a user out everywhere but `keep` (after a password change). */
+  endOthers(userId, keep = null) {
+    this.store.run('DELETE FROM sessions WHERE user_id = ? AND id_hash IS NOT ?', userId, keep?.id_hash ?? null);
+  }
+
   /** A user's sessions; `id` is a prefix of the stored hash, enough to revoke one. */
   list(userId, current) {
     return this.store.all('SELECT * FROM sessions WHERE user_id = ? AND expires_at > ? ORDER BY last_seen_at DESC', userId, Date.now())
@@ -137,7 +201,39 @@ export class Sessions {
     const now = Date.now();
     this.store.run('DELETE FROM sessions WHERE expires_at < ?', now);
     this.store.run('DELETE FROM login_states WHERE created_at < ?', now - this.config.loginStateMinutes * MINUTE);
+    this.store.run('DELETE FROM email_tokens WHERE expires_at < ?', now);
   }
+}
+
+// ── Email tokens ──────────────────────────────────────────────────────────
+
+/** A one-use token sent by email (`purpose`: 'confirm'). */
+export function makeEmailToken(store, userId, purpose, hours = 48) {
+  const token = newToken();
+  const now = Date.now();
+  store.run('INSERT INTO email_tokens (token_hash, user_id, purpose, created_at, expires_at) VALUES (?, ?, ?, ?, ?)',
+    hashToken(token), userId, purpose, now, now + hours * HOUR);
+  return token;
+}
+
+/** Uses up a token; the user id it was for, or null. */
+export function takeEmailToken(store, token, purpose) {
+  const row = token ? store.get('SELECT * FROM email_tokens WHERE token_hash = ?', hashToken(token)) : null;
+  if (!row || row.purpose !== purpose || row.used_at || row.expires_at < Date.now()) {
+    return null;
+  }
+  store.run('UPDATE email_tokens SET used_at = ? WHERE token_hash = ?', Date.now(), row.token_hash);
+  return row.user_id;
+}
+
+/** Sends the email that confirms `user`'s address. */
+export function sendConfirmation(store, mailer, config, user) {
+  const token = makeEmailToken(store, user.id, 'confirm');
+  mailer.send({
+    to: user.email,
+    subject: 'Confirm your Phoenix Cloud account',
+    text: `Hello ${user.name},\n\nConfirm your email address to start using Phoenix Cloud:\n${config.publicUrl}/confirm/${token}\n\nThe link works for 48 hours. If you did not make this account, ignore this email.`,
+  });
 }
 
 // ── Invites ───────────────────────────────────────────────────────────────
@@ -164,6 +260,14 @@ export function findInvite(store, token) {
   return invite;
 }
 
+export function claimInvite(store, invite, userId) {
+  store.run('UPDATE invites SET claimed_by = ?, claimed_at = ? WHERE id = ?', userId, Date.now(), invite.id);
+  if (invite.make_admin) {
+    store.run('UPDATE users SET is_admin = 1 WHERE id = ?', userId);
+  }
+  store.audit(userId, 'invite.claim', 'invite', invite.id, {});
+}
+
 export function inviteView(i) {
   const now = Date.now();
   let status = 'pending';
@@ -177,7 +281,7 @@ export function inviteView(i) {
   return { id: i.id, email: i.email, note: i.note, makeAdmin: Boolean(i.make_admin), createdAt: i.created_at, expiresAt: i.expires_at, claimedBy: i.claimed_by, claimedAt: i.claimed_at, status };
 }
 
-// ── Signing in ────────────────────────────────────────────────────────────
+// ── Signing in with a provider ────────────────────────────────────────────
 
 /** A sign-in that can't go ahead; `code` picks the message on the sign-in page. */
 export class LoginRefused extends Error {
@@ -189,7 +293,8 @@ export class LoginRefused extends Error {
 
 /**
  * The user a provider's sign-in belongs to, creating or linking one as the
- * settings allow.
+ * settings allow. A new account that has to wait for an admin is made, and
+ * the sign-in refused until it is unlocked.
  * @param {{ subject: string, email: string|null, emailVerified: boolean, name: string, avatarUrl: string }} profile
  * @param {{ invite?: string|null, linkUserId?: string|null }} state
  */
@@ -204,7 +309,7 @@ export function resolveLogin(store, settings, providerId, profile, state) {
         throw new LoginRefused('identity_taken');
       }
       if (user.status !== 'active') {
-        throw new LoginRefused('suspended');
+        throw new LoginRefused(user.status);
       }
       store.run('UPDATE identities SET last_used_at = ?, email = ? WHERE provider = ? AND subject = ?', now, email, providerId, profile.subject);
       if (!user.avatar_url && profile.avatarUrl) {
@@ -240,19 +345,22 @@ export function resolveLogin(store, settings, providerId, profile, state) {
       if (invite.email && (!email || invite.email.toLowerCase() !== email.toLowerCase())) {
         throw new LoginRefused('invite_email');
       }
-    } else if (settings.signupPolicy === 'closed') {
-      throw new LoginRefused('closed');
-    } else if (settings.signupPolicy !== 'open') {
-      throw new LoginRefused('beta');
     }
-
-    const user = createUser(store, { name: profile.name, email, avatarUrl: profile.avatarUrl, isAdmin: Boolean(invite?.make_admin) });
+    // A provider's verified email counts as confirmed; without one, an
+    // email-confirmed server has nothing to confirm, so an admin decides.
+    let status = newAccountStatus(settings, { invited: Boolean(invite), emailVerified: Boolean(email) });
+    if (status === 'pending_email') {
+      status = 'pending_admin';
+    }
+    const user = createUser(store, { name: profile.name, email, avatarUrl: profile.avatarUrl, status, emailVerified: Boolean(email) });
     linkIdentity(store, user.id, providerId, profile, email, now);
     if (invite) {
-      store.run('UPDATE invites SET claimed_by = ?, claimed_at = ? WHERE id = ?', user.id, now, invite.id);
-      store.audit(user.id, 'invite.claim', 'invite', invite.id, {});
+      claimInvite(store, invite, user.id);
     }
-    return user;
+    if (status !== 'active') {
+      return { pending: status };
+    }
+    return store.get('SELECT * FROM users WHERE id = ?', user.id);
   });
 }
 

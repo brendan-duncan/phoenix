@@ -210,12 +210,34 @@ CREATE TABLE settings (
   value TEXT NOT NULL
 );
 `,
+  // Passwords and registration. A user's status is 'active', 'pending_email'
+  // (waiting to confirm their address), 'pending_admin' (waiting for an
+  // admin to unlock the account) or 'suspended'.
+  `
+ALTER TABLE users ADD COLUMN password_hash TEXT;
+ALTER TABLE users ADD COLUMN password_is_default INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE users ADD COLUMN email_verified INTEGER NOT NULL DEFAULT 0;
+
+CREATE TABLE email_tokens (
+  token_hash TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  purpose TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  expires_at INTEGER NOT NULL,
+  used_at INTEGER
+);
+CREATE INDEX email_tokens_user ON email_tokens (user_id);
+DELETE FROM settings WHERE key = 'signupPolicy';
+`,
 ];
 
 /** Settings an admin changes at runtime; stored as JSON in `settings`. */
 export const SETTING_DEFAULTS = {
-  // 'invite_only' (the closed beta), 'open' or 'closed'.
-  signupPolicy: 'invite_only',
+  // What a new account is when someone registers: 'open' (ready to use),
+  // 'email' (locked until they confirm their email address) or 'admin'
+  // (locked until an admin unlocks it). Someone with an invite is let in
+  // straight away.
+  newAccounts: 'admin',
   // While on, public, showcase and unlisted documents are visible to signed-in
   // members only, and every page asks search engines not to index it.
   beta: true,

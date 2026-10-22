@@ -95,10 +95,14 @@ describe('OpenID Connect sign-in', () => {
     assert.deepEqual(me.providers, [{ id: 'mock', name: 'Mock' }]);
   });
 
-  it('turns away someone without an invite during the beta', async () => {
+  it('makes a new account wait for an admin, as new accounts do by default', async () => {
     const c = server.client();
-    assert.equal(await signIn(c, { sub: 'stranger', email: 's@example.com' }), '/signin?error=beta');
+    assert.equal(await signIn(c, { sub: 'stranger', email: 's@example.com' }), '/signin?error=pending_admin');
     assert.equal((await c.get('/api/me')).user, null);
+    const waiting = server.store.get("SELECT status FROM users WHERE email = 's@example.com'");
+    assert.equal(waiting.status, 'pending_admin');
+    // Still waiting the next time.
+    assert.equal(await signIn(c, { sub: 'stranger', email: 's@example.com' }), '/signin?error=pending_admin');
   });
 
   it('lets an invited person in, once', async () => {
@@ -130,7 +134,7 @@ describe('OpenID Connect sign-in', () => {
   });
 
   it('refuses a token with the wrong nonce, audience or signature', async () => {
-    server.store.saveSettings({ signupPolicy: 'open' });
+    server.store.saveSettings({ newAccounts: 'open' });
     try {
       const c = server.client();
       assert.match(await signIn(c, { sub: 'n1' }, '', (claims) => ({ ...claims, nonce: 'other' })), /error=failed/);
@@ -138,7 +142,7 @@ describe('OpenID Connect sign-in', () => {
       assert.match(await signIn(c, { sub: 'n3' }, '', (claims) => ({ ...claims, exp: 1000 })), /error=failed/);
       assert.equal(await signIn(c, { sub: 'n4', email: 'n4@example.com' }), '/');
     } finally {
-      server.store.saveSettings({ signupPolicy: 'invite_only' });
+      server.store.saveSettings({ newAccounts: 'admin' });
     }
   });
 

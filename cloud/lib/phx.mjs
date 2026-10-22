@@ -31,6 +31,7 @@ export function typeName(type) {
   return [...b].map((c) => (c >= 32 && c < 127 ? String.fromCharCode(c) : '?')).join('');
 }
 
+const DOCU = fourcc('DOCU');
 const INDX = fourcc('INDX');
 const META = fourcc('META');
 const THMB = fourcc('THMB');
@@ -286,6 +287,22 @@ export function decodeMetadata(content) {
   return out;
 }
 
+/** DOCU's stage size and frame rate (Document fields 1 to 3, with their defaults). */
+export function decodeStage(content) {
+  const out = { width: 550, height: 400, fps: 24 };
+  const wire = new Wire(content);
+  for (let f = wire.next(); f; f = wire.next()) {
+    if (f.field === 1 && f.type === 0) {
+      out.width = f.value;
+    } else if (f.field === 2 && f.type === 0) {
+      out.height = f.value;
+    } else if (f.field === 3 && f.type === 1) {
+      out.fps = Math.round(f.value.readDoubleLE(0) * 100) / 100;
+    }
+  }
+  return out;
+}
+
 /**
  * Splits a container for storage: each chunk's stored bytes with their hash,
  * and the manifest that rebuilds the file from them. Also pulls out the
@@ -299,6 +316,8 @@ export function splitContainer(buf) {
     manifest.flags = container.flags;
   }
   let metadata = {};
+  const stage = {};
+  let sawDocument = false;
   let thumbnail = null;
   for (const chunk of container.chunks) {
     const body = storedBytes(buf, chunk);
@@ -312,7 +331,14 @@ export function splitContainer(buf) {
       entry.y = chunk.symbolName;
     }
     manifest.chunks.push(entry);
-    if (chunk.type === META) {
+    if (chunk.type === DOCU && !sawDocument) {
+      sawDocument = true;
+      try {
+        Object.assign(stage, decodeStage(chunkContent(body, chunk)));
+      } catch {
+        // The size stays unknown; the document is still stored.
+      }
+    } else if (chunk.type === META) {
       try {
         metadata = decodeMetadata(chunkContent(body, chunk));
       } catch {
@@ -322,7 +348,7 @@ export function splitContainer(buf) {
       thumbnail = hash;
     }
   }
-  return { manifest, parts, metadata, thumbnail, size: buf.length };
+  return { manifest, parts, metadata: { ...metadata, ...stage }, thumbnail, size: buf.length };
 }
 
 /** Every distinct chunk hash a manifest uses. */
@@ -410,4 +436,20 @@ export async function buildContainer(manifest, bodyOf) {
   header.writeBigUInt64LE(BigInt(indexOffset), 16);
   header.writeUInt32LE(crc32(header.subarray(0, 24)), 24);
   return pieces;
+}
+
+/**
+ * The container `buf` with `png` as its thumbnail (THMB), replacing any it
+ * had, placed before META as Phoenix writes it.
+ */
+export async function withThumbnail(buf, png) {
+  const { manifest, parts } = splitContainer(buf);
+  const bodies = new Map(parts.map((p) => [p.hash, p.body]));
+  const hash = sha256(png);
+  bodies.set(hash, png);
+  const chunks = manifest.chunks.filter((c) => c.t !== 'THMB');
+  const thumb = { t: 'THMB', f: 0, n: png.length, s: png.length, c: crc32(png), h: hash };
+  const meta = chunks.findIndex((c) => c.t === 'META');
+  chunks.splice(meta < 0 ? chunks.length : meta, 0, thumb);
+  return Buffer.concat(await buildContainer({ ...manifest, chunks }, (h) => bodies.get(h)));
 }

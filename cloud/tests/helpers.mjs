@@ -6,19 +6,33 @@ import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import zlib from 'node:zlib';
+import { createUser, findAccount } from '../lib/accounts.mjs';
 import { createApp } from '../lib/app.mjs';
 import { BlobStore } from '../lib/blobs.mjs';
 import { loadConfig } from '../lib/config.mjs';
 import { buildContainer } from '../lib/phx.mjs';
 import { sha256 } from '../lib/ids.mjs';
+import { hashPassword } from '../lib/passwords.mjs';
 import { Store } from '../lib/store.mjs';
 
-export async function startServer({ env = {} } = {}) {
+export const PASSWORD = 'password-123';
+
+/**
+ * A server on a temp folder. Without `phoenix`, it has no Phoenix to convert
+ * with (most tests); with it, the build in this repository when there is one.
+ */
+export async function startServer({ env = {}, phoenix = false } = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'phoenix-cloud-'));
-  const config = loadConfig({ PHOENIX_CLOUD_DATA: dir, PHOENIX_CLOUD_EDITOR: path.join(dir, 'no-editor'), ...env }, { mode: 'dev' });
+  const config = loadConfig({
+    PHOENIX_CLOUD_DATA: dir,
+    PHOENIX_CLOUD_EDITOR: path.join(dir, 'no-editor'),
+    ...(phoenix ? {} : { PHOENIX_CLOUD_PHOENIX: path.join(dir, 'no-phoenix') }),
+    ...env,
+  }, { mode: 'dev' });
   const store = new Store(path.join(dir, 'cloud.db'));
   const blobs = new BlobStore(path.join(dir, 'blobs'));
   const app = createApp({ config, store, blobs });
+  await app.ready;
   const server = http.createServer(app.handle);
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   const base = `http://127.0.0.1:${server.address().port}`;
@@ -30,7 +44,7 @@ export async function startServer({ env = {} } = {}) {
     blobs,
     app,
     dir,
-    client: () => new Client(base),
+    client: () => new Client(base, store),
     async close() {
       await new Promise((resolve) => server.close(resolve));
       store.close();
@@ -40,8 +54,9 @@ export async function startServer({ env = {} } = {}) {
 }
 
 export class Client {
-  constructor(base) {
+  constructor(base, store = null) {
     this.base = base;
+    this.store = store;
     this.cookie = '';
     this.csrf = null;
     this.link = null;
@@ -93,8 +108,19 @@ export class Client {
     return text ? JSON.parse(text).error : null;
   }
 
-  async signIn(handle) {
-    await this.ok('POST', '/api/auth/dev', { json: { handle } });
+  /** Signs in as `handle`, making the account (active, password PASSWORD) if there is none. */
+  async signIn(handle, { admin = false } = {}) {
+    if (!findAccount(this.store, handle)) {
+      createUser(this.store, { name: handle.charAt(0).toUpperCase() + handle.slice(1), handle, email: `${handle}@example.com`, isAdmin: admin, passwordHash: await hashPassword(PASSWORD) });
+    }
+    await this.signInWith(handle, PASSWORD);
+    return this.user;
+  }
+
+  async signInWith(login, password) {
+    this.cookie = '';
+    this.csrf = null;
+    await this.ok('POST', '/api/auth/login', { json: { login, password } });
     const me = await this.ok('GET', '/api/me');
     this.csrf = me.csrf;
     this.user = me.user;

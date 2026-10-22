@@ -42,6 +42,14 @@ function download(url) {
   a.remove();
 }
 
+/** The editor's address for a document (to play it, with `play`); null when it can't open there. */
+function editorUrl(doc, play = false) {
+  if (!state.me.editor || !doc.revision || !doc.canDownload) {
+    return null;
+  }
+  return `/editor/?doc=${encodeURIComponent(doc.id)}${play ? '&play=1' : ''}`;
+}
+
 function thumbnail(doc, cls = 'placeholder') {
   if (!doc.thumbnailUrl) {
     return icon('file', cls);
@@ -53,12 +61,20 @@ function thumbnail(doc, cls = 'placeholder') {
 
 // ── Uploads ───────────────────────────────────────────────────────────────
 
+/** What can be uploaded: Phoenix documents, and what Phoenix on the server turns into one. */
+export const UPLOAD_TYPES = '.phx,.fla,.swf,.svg,.eps,.ai';
+
 export async function uploadFiles(files) {
   const target = place.editable ? place : { groupId: null, folderId: null };
   let made = 0;
   for (const file of files) {
-    if (/\.fla$/i.test(file.name)) {
-      toast(`${file.name}: open .fla files in Phoenix and save them as .phx to upload them.`, { error: true, ms: 7000 });
+    const ext = /\.([a-z0-9]+)$/i.exec(file.name)?.[1]?.toLowerCase();
+    if (!UPLOAD_TYPES.split(',').includes(`.${ext}`)) {
+      toast(`${file.name}: Phoenix Cloud takes ${UPLOAD_TYPES.split(',').join(' ')} files.`, { error: true, ms: 7000 });
+      continue;
+    }
+    if (ext !== 'phx' && !state.me.converter) {
+      toast(`${file.name}: this server has no Phoenix to convert .${ext} files with.`, { error: true, ms: 7000 });
       continue;
     }
     const note = toast(`Uploading ${file.name}…`, { ms: 0 });
@@ -71,7 +87,8 @@ export async function uploadFiles(files) {
     }
     try {
       await send('POST', `/api/documents/upload?${query}`, file, (p) => {
-        note.textContent = `Uploading ${file.name}… ${Math.round(p * 100)}%`;
+        note.textContent = p < 1 ? `Uploading ${file.name}… ${Math.round(p * 100)}%`
+          : (ext === 'phx' ? `Storing ${file.name}…` : `Converting ${file.name} with Phoenix…`);
       });
       made++;
     } catch (err) {
@@ -245,7 +262,9 @@ function docMenu(doc, { view, onDone = rerender }) {
   }
   const editor = atLeast(doc.role, 'editor');
   return [
-    { label: 'Open', icon: 'file', onclick: () => navigate(`/d/${doc.id}`) },
+    editorUrl(doc) ? { label: editor ? 'Edit' : 'Open in the editor', icon: 'edit', onclick: () => { location.href = editorUrl(doc); } } : null,
+    editorUrl(doc) ? { label: 'Play', icon: 'play', onclick: () => { location.href = editorUrl(doc, true); } } : null,
+    { label: 'Details', icon: 'file', onclick: () => navigate(`/d/${doc.id}`) },
     doc.canDownload && doc.revision ? { label: 'Download', icon: 'download', onclick: () => download(`/api/documents/${doc.id}/file`) } : null,
     editor ? { label: 'Share…', icon: 'share', onclick: run(() => shareDialog(doc)) } : null,
     '-',
@@ -401,7 +420,10 @@ function card(doc, view, movable) {
   const more = h('button', { type: 'button', class: 'btn ghost icon-only', 'aria-label': 'More', title: 'More' }, icon('more'));
   const star = view === 'trash' ? null : h('button', { type: 'button', class: `star${doc.favorite ? ' on' : ''}`, 'aria-label': doc.favorite ? 'Remove from favorites' : 'Add to favorites', title: 'Favorite' }, icon('star'));
   const el = h('div', { class: 'card', tabindex: 0, role: 'link', 'aria-label': doc.name, draggable: movable ? 'true' : null },
-    h('div', { class: 'thumb' }, thumbnail(doc), badge(doc, view)),
+    h('div', { class: 'thumb' }, thumbnail(doc), badge(doc, view),
+      view !== 'trash' && editorUrl(doc) ? h('div', { class: 'card-actions' },
+        h('a', { class: 'btn primary', href: editorUrl(doc) }, icon('edit'), atLeast(doc.role, 'editor') ? 'Edit' : 'Open'),
+        h('a', { class: 'btn', href: editorUrl(doc, true) }, icon('play'), 'Play')) : null),
     star,
     h('div', { class: 'info' }, h('div', { class: 'text' }, h('div', { class: 'title' }, doc.name), h('div', { class: 'meta' }, meta(doc))), more));
   const open = () => (view === 'trash' ? null : navigate(`/d/${doc.id}`));
@@ -569,9 +591,10 @@ export async function renderListing(target, { view, folder, q, title, groupId, r
     h('button', { type: 'button', class: `btn ghost icon-only${state.view === 'grid' ? ' active' : ''}`, 'aria-label': 'Grid', title: 'Grid', onclick: () => setView('grid') }, icon('grid')),
     h('button', { type: 'button', class: `btn ghost icon-only${state.view === 'list' ? ' active' : ''}`, 'aria-label': 'List', title: 'List', onclick: () => setView('list') }, icon('list')));
 
-  const fileInput = h('input', { type: 'file', accept: '.phx,.fla', multiple: true, class: 'hidden' });
+  const fileInput = h('input', { type: 'file', accept: UPLOAD_TYPES, multiple: true, class: 'hidden' });
   fileInput.addEventListener('change', () => uploadFiles([...fileInput.files]));
   const actions = spaced && data.canEdit ? [
+    state.me.converter ? h('button', { type: 'button', class: 'btn primary', onclick: () => newDocumentDialog() }, icon('plus'), 'New document') : null,
     h('button', {
       type: 'button', class: 'btn', onclick: async () => {
         const name = await promptDialog({ title: 'New folder', label: 'Name', value: 'New folder', submit: 'Create' });
@@ -694,7 +717,9 @@ export async function renderDocument(target, id) {
 
   const v = VISIBILITY[doc.visibility];
   const actions = h('div', { class: 'actions' },
-    doc.canDownload && doc.revision ? h('button', { type: 'button', class: 'btn primary', onclick: () => download(`/api/documents/${doc.id}/file`) }, icon('download'), 'Download') : null,
+    editorUrl(doc) ? h('a', { class: 'btn primary', href: editorUrl(doc) }, icon('edit'), editor ? 'Edit' : 'Open in the editor') : null,
+    editorUrl(doc) ? h('a', { class: 'btn', href: editorUrl(doc, true) }, icon('play'), 'Play') : null,
+    doc.canDownload && doc.revision ? h('button', { type: 'button', class: 'btn', onclick: () => download(`/api/documents/${doc.id}/file`) }, icon('download'), 'Download') : null,
     editor ? h('button', { type: 'button', class: 'btn', onclick: () => shareDialog(doc) }, icon('share'), 'Share') : null,
     doc.allowDuplicate || editor ? h('button', { type: 'button', class: 'btn', onclick: () => duplicate(doc).catch(showError) }, icon('copy'), 'Make a copy') : null,
     h('button', {
@@ -737,5 +762,59 @@ export async function renderDocument(target, id) {
       h('div', { class: 'stack' }, details, versions)));
   if (location.hash === '#versions') {
     versions.scrollIntoView();
+  }
+}
+
+// ── New documents ─────────────────────────────────────────────────────────
+
+const STAGE_SIZES = [
+  ['1920x1080', 'HD 1920 × 1080'],
+  ['1280x720', 'HD 1280 × 720'],
+  ['3840x2160', '4K 3840 × 2160'],
+  ['1080x1080', 'Square 1080 × 1080'],
+  ['1080x1920', 'Portrait 1080 × 1920'],
+  ['550x400', 'Classic 550 × 400'],
+  ['custom', 'Another size'],
+];
+
+/** Asks for a name, stage size, frame rate and background; makes the document and opens it in the editor. */
+export async function newDocumentDialog() {
+  if (!state.me.converter) {
+    showError(new Error('This server has no Phoenix to make new documents with.'));
+    return;
+  }
+  const target = place.editable ? { groupId: place.groupId, folderId: place.folderId } : { groupId: null, folderId: null };
+  const size = h('select', { name: 'size' }, STAGE_SIZES.map(([v, l]) => h('option', { value: v }, l)));
+  const width = h('input', { type: 'number', name: 'width', min: 1, max: 8192, value: 1920 });
+  const height = h('input', { type: 'number', name: 'height', min: 1, max: 8192, value: 1080 });
+  const custom = h('div', { class: 'row hidden' }, h('label', { class: 'field grow' }, h('span', {}, 'Width'), width), h('label', { class: 'field grow' }, h('span', {}, 'Height'), height));
+  size.addEventListener('change', () => {
+    custom.classList.toggle('hidden', size.value !== 'custom');
+    if (size.value !== 'custom') {
+      [width.value, height.value] = size.value.split('x');
+    }
+  });
+  const made = await formDialog({
+    title: 'New document',
+    submit: 'Create and edit',
+    fields: [
+      h('label', { class: 'field' }, h('span', {}, 'Name'), h('input', { type: 'text', name: 'name', value: 'Untitled', required: true, maxlength: 120, autofocus: true })),
+      h('label', { class: 'field' }, h('span', {}, 'Stage'), size),
+      custom,
+      h('div', { class: 'row' },
+        h('label', { class: 'field grow' }, h('span', {}, 'Frame rate'), h('select', { name: 'fps' }, [24, 25, 30, 12, 15, 48, 50, 60].map((f) => h('option', { value: f }, `${f} fps`)))),
+        h('label', { class: 'field' }, h('span', {}, 'Background'), h('input', { type: 'color', name: 'background', value: '#ffffff' }))),
+    ],
+    onSubmit: (data) => post('/api/documents', {
+      name: data.name, width: Number(width.value), height: Number(height.value), fps: Number(data.fps), background: data.background, ...target,
+    }),
+  });
+  if (!made?.document) {
+    return;
+  }
+  if (state.me.editor) {
+    location.href = editorUrl(made.document);
+  } else {
+    navigate(`/d/${made.document.id}`);
   }
 }

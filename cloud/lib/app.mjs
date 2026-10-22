@@ -3,13 +3,17 @@
 // same in dev and production; in production Apache only adds TLS and proxies.
 
 import path from 'node:path';
-import { Sessions } from './accounts.mjs';
+import fsp from 'node:fs/promises';
+import { ensureDefaultAdmin, Sessions } from './accounts.mjs';
 import { registerAdmin } from './api/admin.mjs';
 import { registerAuth } from './api/auth.mjs';
 import { registerDocuments } from './api/documents.mjs';
 import { registerGroups } from './api/groups.mjs';
 import { CLOUD_DIR, editorAvailable } from './config.mjs';
+import { Converter } from './convert.mjs';
 import { HttpError, notFound, readBody, readJson, Router, sendJson, serveStatic } from './http.mjs';
+import { Attempts } from './limits.mjs';
+import { Mailer } from './mail.mjs';
 import { Jwks } from './oauth.mjs';
 
 const DASHBOARD_DIR = path.join(CLOUD_DIR, 'dashboard');
@@ -72,7 +76,23 @@ class Context {
 
 export function createApp({ config, store, blobs }) {
   const router = new Router();
-  const app = { config, store, blobs, router, sessions: new Sessions(store, config), jwks: new Jwks() };
+  const app = {
+    config,
+    store,
+    blobs,
+    router,
+    sessions: new Sessions(store, config),
+    jwks: new Jwks(),
+    converter: new Converter(config),
+    mailer: new Mailer(config),
+    attempts: new Attempts(),
+  };
+  // A server with no accounts gets the admin @phoenix (password "animate").
+  app.ready = ensureDefaultAdmin(store).then((made) => {
+    if (made) {
+      console.log('[cloud] made the admin account @phoenix with the password "animate"; change it after signing in');
+    }
+  });
   registerAuth(router, app);
   registerDocuments(router, app);
   registerGroups(router, app);
@@ -201,6 +221,22 @@ async function serveEditor(app, req, res, relative) {
     'Cross-Origin-Resource-Policy': 'same-origin',
     'Cache-Control': 'no-cache',
   };
+  if (!relative || relative === 'index.html') {
+    // The editor's page, with the script that opens and saves cloud
+    // documents (it hands Phoenix its file as the page's host).
+    let page;
+    try {
+      page = await fsp.readFile(path.join(app.config.editorDir, 'index.html'), 'utf8');
+    } catch {
+      page = null;
+    }
+    if (page !== null) {
+      const body = page.replace('</head>', '<script src="/ui/editor-host.js"></script>\n</head>');
+      res.writeHead(200, { ...headers, 'Content-Type': 'text/html; charset=utf-8', 'Content-Length': Buffer.byteLength(body) });
+      res.end(req.method === 'HEAD' ? undefined : body);
+      return;
+    }
+  }
   if (await serveStatic(req, res, app.config.editorDir, relative || 'index.html', headers)) {
     return;
   }
