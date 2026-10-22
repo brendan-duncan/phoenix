@@ -1,7 +1,7 @@
 // File views: the listings (Recents, My Files, a group's files, ...), cards
 // and their menus, uploads, moving, the share dialog and the document page.
 
-import { del, get, patch, post, put, send } from './api.js';
+import { del, get, patch, post, put, send, withLink } from './api.js';
 import { navigate, place, rerender, setView, state } from './app.js';
 import {
   avatar, bytes, clear, confirmDialog, copyText, dateTime, dialog, formDialog, h, icon, person, popup, promptDialog, showError, timeAgo, toast,
@@ -36,7 +36,7 @@ function ownerName(doc) {
 }
 
 function download(url) {
-  const a = h('a', { href: url, download: '' });
+  const a = h('a', { href: withLink(url), download: '' });
   document.body.append(a);
   a.click();
   a.remove();
@@ -44,7 +44,7 @@ function download(url) {
 
 /** The editor's address for a document (to play it, with `play`); null when it can't open there. */
 function editorUrl(doc) {
-  if (!state.me.editor || !doc.revision || !doc.canDownload) {
+  if (!state.me.editor || !doc.revision || !doc.canOpen) {
     return null;
   }
   return `/editor/?doc=${encodeURIComponent(doc.id)}`;
@@ -385,12 +385,12 @@ function docMenu(doc, { view, onDone = rerender }) {
     editorUrl(doc) ? { label: editor ? 'Edit' : 'Open in the editor', icon: 'edit', onclick: () => { location.href = editorUrl(doc); } } : null,
     playUrl(doc) ? { label: 'Play', icon: 'play', onclick: () => navigate(playUrl(doc)) } : null,
     { label: 'Details', icon: 'file', onclick: () => navigate(`/d/${doc.id}`) },
-    doc.canDownload && doc.revision ? { label: 'Download', icon: 'download', onclick: () => download(`/api/documents/${doc.id}/file`) } : null,
+    doc.canDownload && doc.revision ? { label: 'Download', icon: 'download', onclick: () => download(`/api/documents/${doc.id}/download`) } : null,
     editor ? { label: 'Share…', icon: 'share', onclick: run(() => shareDialog(doc)) } : null,
     '-',
     editor ? { label: 'Rename…', icon: 'edit', onclick: run(() => rename(doc)) } : null,
     editor && (isMine(doc) || doc.owner.kind === 'group') ? { label: 'Move…', icon: 'move', onclick: run(() => move(doc)) } : null,
-    doc.allowDuplicate || editor ? { label: 'Make a copy', icon: 'copy', onclick: run(() => duplicate(doc)) } : null,
+    (doc.allowDuplicate || editor) && doc.canDownload ? { label: 'Make a copy', icon: 'copy', onclick: run(() => duplicate(doc)) } : null,
     { label: doc.favorite ? 'Remove from favorites' : 'Add to favorites', icon: 'star', onclick: run(async () => { await toggleFavorite(doc); onDone(); }) },
     { label: 'Version history', icon: 'history', onclick: () => navigate(`/d/${doc.id}#versions`) },
     view === 'shared' ? '-' : null,
@@ -434,21 +434,38 @@ export function shareDialog(doc) {
         groupPick.classList.toggle('hidden', kind.value !== 'group');
       });
       let role = 'viewer';
-      const addForm = h('form', { class: 'row' }, kind, who, groupPick, roleSelect(role, (r) => { role = r; }), h('button', { type: 'submit', class: 'btn primary' }, 'Share'));
+      // Downloading goes with editing unless turned off, and with viewing only when turned on.
+      const canDownload = h('input', { type: 'checkbox', checked: false });
+      const addForm = h('form', { class: 'row wrap' }, kind, who, groupPick,
+        roleSelect(role, (r) => {
+          role = r;
+          canDownload.checked = r === 'editor';
+        }),
+        h('label', { class: 'check', title: 'Whether they can download a copy of it' }, canDownload, 'Can download'),
+        h('button', { type: 'submit', class: 'btn primary' }, 'Share'));
       addForm.addEventListener('submit', (e) => {
         e.preventDefault();
-        act(() => post(`/api/documents/${doc.id}/shares`, { kind: kind.value, who: kind.value === 'group' ? groupPick.value : who.value.trim(), role }))();
+        act(() => post(`/api/documents/${doc.id}/shares`, {
+          kind: kind.value, who: kind.value === 'group' ? groupPick.value : who.value.trim(), role, canDownload: canDownload.checked,
+        }))();
       });
+      // Whether a share can download: a switch for the owner, words for anyone else.
+      const downloadSwitch = (s, path) => (manage
+        ? h('label', { class: 'check small', title: 'Whether they can download a copy of it' },
+          h('input', { type: 'checkbox', checked: s.canDownload, onchange: act((e) => patch(path, { canDownload: e.target.checked })) }), 'Download')
+        : h('span', { class: 'muted small' }, s.canDownload ? 'Can download' : ''));
 
       const entries = [
         h('div', { class: 'entry' }, shares.owner.kind === 'group'
           ? h('div', { class: 'person' }, h('span', { class: 'avatar' }, icon('users')), h('div', { class: 'who' }, h('div', {}, shares.owner.name), h('div', { class: 'muted small' }, 'Group that owns it')))
           : person(shares.owner), h('span', { class: 'muted small' }, 'Owner')),
         ...shares.users.map((s) => h('div', { class: 'entry' }, person(s.user),
+          downloadSwitch(s, `/api/documents/${doc.id}/shares/user/${s.user.id}`),
           manage ? roleSelect(s.role, act((r) => patch(`/api/documents/${doc.id}/shares/user/${s.user.id}`, { role: r }))) : h('span', { class: 'muted small' }, ROLE_LABELS[s.role]),
           manage ? h('button', { type: 'button', class: 'btn ghost icon-only', 'aria-label': 'Remove', title: 'Remove', onclick: act(() => del(`/api/documents/${doc.id}/shares/user/${s.user.id}`)) }, icon('x')) : null)),
         ...shares.groups.map((s) => h('div', { class: 'entry' },
           h('div', { class: 'person' }, h('span', { class: 'avatar' }, icon('users')), h('div', { class: 'who' }, h('div', {}, s.group?.name ?? 'A group'), h('div', { class: 'muted small' }, s.group ? `@${s.group.handle}` : ''))),
+          downloadSwitch(s, `/api/documents/${doc.id}/shares/group/${s.group.id}`),
           manage ? roleSelect(s.role, act((r) => patch(`/api/documents/${doc.id}/shares/group/${s.group.id}`, { role: r }))) : h('span', { class: 'muted small' }, ROLE_LABELS[s.role]),
           manage ? h('button', { type: 'button', class: 'btn ghost icon-only', 'aria-label': 'Remove', title: 'Remove', onclick: act(() => del(`/api/documents/${doc.id}/shares/group/${s.group.id}`)) }, icon('x')) : null)),
       ];
@@ -503,8 +520,8 @@ export function shareDialog(doc) {
         h('div', { class: 'row' }, icon(VISIBILITY[shares.visibility].icon), visibility),
         help,
         state.me.settings.beta && shares.visibility !== 'private' ? h('div', { class: 'muted small' }, 'During the beta, only signed-in members can see it.') : null,
-        flag('allowDownload', 'Viewers can download it and open it in the editor'),
-        flag('allowDuplicate', 'Viewers can make their own copy'),
+        flag('allowDownload', 'People with a link, or who find it public, can download it'),
+        flag('allowDuplicate', 'Viewers who can download it can make their own copy'),
         links,
         h('div', { class: 'buttons' }, h('button', { type: 'button', class: 'btn primary', onclick: () => close(true) }, 'Done')));
     };
@@ -584,6 +601,7 @@ function showSelectionBar() {
     rerender();
   };
   const owned = docs.filter((d) => d.role === 'owner');
+  const downloadable = docs.filter((d) => d.canDownload && d.revision);
   const movable = docs.filter((d) => atLeast(d.role, 'editor') && (isMine(d) || d.owner.kind === 'group'));
   const bar = h('div', { class: 'selection-bar', role: 'toolbar' },
     h('strong', {}, `${docs.length} selected`),
@@ -606,6 +624,14 @@ function showSelectionBar() {
       },
     }, icon('move'), 'Move…') : null,
     h('button', { type: 'button', class: 'btn', onclick: () => all((d) => put(`/api/favorites/document/${d.id}`), 'Added to favorites') }, icon('star'), 'Favorite'),
+    downloadable.length ? h('button', {
+      type: 'button', class: 'btn', title: downloadable.length < docs.length ? `${docs.length - downloadable.length} of them you may not download` : '',
+      onclick: () => {
+        // One is its own file; several come in one ZIP.
+        download(downloadable.length === 1 ? `/api/documents/${downloadable[0].id}/download`
+          : `/api/download?ids=${downloadable.map((d) => d.id).join(',')}`);
+      },
+    }, icon('download'), downloadable.length < docs.length ? `Download ${downloadable.length}` : 'Download') : null,
     owned.length === docs.length ? h('button', {
       type: 'button', class: 'btn danger', onclick: async () => {
         if (await confirmDialog({ title: `Move ${docs.length} documents to the trash?`, message: 'You can bring them back from the trash.', confirm: 'Move to trash', danger: true })) {
@@ -978,7 +1004,7 @@ function revisionRow(doc, r) {
   const editor = atLeast(doc.role, 'editor');
   const actions = [];
   if (doc.canDownload) {
-    actions.push({ label: 'Download this version', icon: 'download', onclick: () => download(`/api/documents/${doc.id}/file?rev=${r.number}`) });
+    actions.push({ label: 'Download this version', icon: 'download', onclick: () => download(`/api/documents/${doc.id}/download?rev=${r.number}`) });
   }
   if (editor) {
     actions.push({
@@ -1050,9 +1076,9 @@ export async function renderDocument(target, id) {
   const actions = h('div', { class: 'actions' },
     editorUrl(doc) ? h('a', { class: 'btn primary', href: editorUrl(doc) }, icon('edit'), editor ? 'Edit' : 'Open in the editor') : null,
     playUrl(doc) ? h('a', { class: 'btn', href: playUrl(doc) }, icon('play'), 'Play') : null,
-    doc.canDownload && doc.revision ? h('button', { type: 'button', class: 'btn', onclick: () => download(`/api/documents/${doc.id}/file`) }, icon('download'), 'Download') : null,
+    doc.canDownload && doc.revision ? h('button', { type: 'button', class: 'btn', onclick: () => download(`/api/documents/${doc.id}/download`) }, icon('download'), 'Download') : null,
     editor ? h('button', { type: 'button', class: 'btn', onclick: () => shareDialog(doc) }, icon('share'), 'Share') : null,
-    doc.allowDuplicate || editor ? h('button', { type: 'button', class: 'btn', onclick: () => duplicate(doc).catch(showError) }, icon('copy'), 'Make a copy') : null,
+    (doc.allowDuplicate || editor) && doc.canDownload ? h('button', { type: 'button', class: 'btn', onclick: () => duplicate(doc).catch(showError) }, icon('copy'), 'Make a copy') : null,
     h('button', {
       type: 'button', class: 'btn', onclick: async (e) => {
         const btn = e.currentTarget;

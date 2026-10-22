@@ -396,6 +396,9 @@ export function resolveLogin(store, settings, providerId, profile, state) {
       throw new LoginRefused('email_in_use');
     }
 
+    if (!settings.registration && !state.invite) {
+      throw new LoginRefused('registration_closed');
+    }
     let invite = null;
     if (state.invite) {
       invite = findInvite(store, state.invite);

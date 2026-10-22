@@ -8,6 +8,11 @@ export function setCsrf(token) {
   csrf = token;
 }
 
+/** `path` with the page's share link, for addresses the browser fetches itself. */
+export function withLink(path) {
+  return link ? `${path}${path.includes('?') ? '&' : '?'}link=${encodeURIComponent(link)}` : path;
+}
+
 export function setLink(token) {
   link = token;
 }

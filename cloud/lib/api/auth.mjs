@@ -8,7 +8,7 @@ import {
 } from '../accounts.mjs';
 import { editorAvailable } from '../config.mjs';
 import { fontName, listFonts } from '../fonts.mjs';
-import { badRequest, HttpError, notFound, redirect, serveStatic } from '../http.mjs';
+import { badRequest, HttpError, lockedError, notFound, redirect, serveStatic } from '../http.mjs';
 import { clientAddress } from '../limits.mjs';
 import { adminIds, notificationsView, notify, unreadCount } from '../notify.mjs';
 import { finishLogin, startLogin, takeLoginState } from '../oauth.mjs';
@@ -46,6 +46,7 @@ function maskEmail(email) {
 }
 
 const MAX_REQUEST_MESSAGE = 1000;
+const REGISTRATION_CLOSED = 'New accounts are closed for now. Someone with an account can ask an admin for an invite for you.';
 
 /** Marks a handler that may be called by someone not signed in. */
 function anonymous(handler) {
@@ -62,7 +63,14 @@ export function registerAuth(router, app) {
       user: ctx.user ? selfUser(ctx.user) : null,
       csrf: ctx.session?.csrf ?? null,
       groups: ctx.user ? myGroups(store, ctx.user.id) : [],
-      settings: { beta: settings.beta, newAccounts: settings.newAccounts, banner: settings.banner },
+      settings: {
+        beta: settings.beta,
+        newAccounts: settings.newAccounts,
+        registration: settings.registration,
+        banner: settings.banner,
+        locked: settings.locked,
+        lockMessage: settings.lockMessage,
+      },
       providers: Object.values(config.providers).map((p) => ({ id: p.id, name: p.name })),
       editor: editorAvailable(config),
       unread: ctx.user ? unreadCount(store, ctx.user.id) : 0,
@@ -92,6 +100,9 @@ export function registerAuth(router, app) {
     attempts.clear(tries);
     if (user.status !== 'active') {
       throw new HttpError(403, user.status, STATUS_MESSAGES[user.status] ?? 'This account cannot sign in.');
+    }
+    if (ctx.settings.locked && !user.is_admin) {
+      throw lockedError(ctx.settings);
     }
     if (ctx.session) {
       sessions.destroy(ctx.res, ctx.session);
@@ -123,6 +134,9 @@ export function registerAuth(router, app) {
     const problem = passwordProblem(body.password);
     if (problem) {
       throw badRequest(problem);
+    }
+    if (!ctx.settings.registration && !body.invite) {
+      throw new HttpError(403, 'registration_closed', REGISTRATION_CLOSED);
     }
     let invite = null;
     if (body.invite) {
@@ -436,6 +450,10 @@ export function registerAuth(router, app) {
     }
     if (user.pending) {
       fail(user.pending);
+      return;
+    }
+    if (ctx.settings.locked && !user.is_admin && !state.link_user_id) {
+      fail('locked');
       return;
     }
     if (!state.link_user_id) {

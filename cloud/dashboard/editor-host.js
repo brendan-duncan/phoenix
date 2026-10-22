@@ -57,6 +57,7 @@
     #cloudbar .primary { background: #ff7a2f; border-color: #ff7a2f; color: #1b0d04; font-weight: 600; }
     #screen { position: absolute; top: 34px; left: 0; right: 0; bottom: 0; width: auto !important; height: auto !important; }
     #loading { top: 34px !important; }
+    #loading.cover { z-index: 15; background: #2d2d2d; }
     #loading img.poster { width: min(560px, 80vw); height: auto; max-height: 50vh; object-fit: contain; border-radius: 10px;
       box-shadow: 0 8px 30px rgba(0,0,0,.4); }
     .cloud-overlay { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; background: rgba(0,0,0,.55);
@@ -175,6 +176,30 @@
     });
   }
 
+  /**
+   * Playing: Phoenix's window shows the editor for a moment before the movie
+   * fills it, so the loading picture stays over it until Phoenix says the
+   * movie is showing (or a while has passed).
+   */
+  function coverUntilPlaying(config) {
+    const shown = config.qt.onLoaded;
+    config.qt.onLoaded = () => {
+      shown?.();
+      const loading = document.getElementById('loading');
+      if (!loading) {
+        return;
+      }
+      loading.hidden = false;
+      loading.classList.add('cover');
+      state.uncover = () => {
+        loading.hidden = true;
+        loading.classList.remove('cover');
+        state.uncover = null;
+      };
+      setTimeout(() => state.uncover?.(), 20000);
+    };
+  }
+
   /** While the document loads: its picture and name. */
   function showPoster(doc) {
     const loading = document.getElementById('loading');
@@ -215,6 +240,7 @@
     }
     const doc = info.json.document;
     state.name = doc.name;
+    state.canDownload = doc.canDownload;
     state.role = doc.role;
     state.revision = doc.revision;
     document.title = `${doc.name} · Phoenix`;
@@ -223,7 +249,7 @@
     if (!doc.revision) {
       throw new Error('this document has nothing saved in it yet');
     }
-    if (!doc.canDownload) {
+    if (!doc.canOpen) {
       // Only played: the player page shows it without opening it.
       location.replace(`/play/${encodeURIComponent(state.id)}`);
       await new Promise(() => {});
@@ -265,7 +291,12 @@
     state.path = `/cloud/${doc.name.replace(/[\\/:*?"<>|\u0000-\u001f]+/g, '_').slice(0, 100) || 'Untitled'}.phx`;
     // --hosted: the document is this page's, so Phoenix leaves out New,
     // Open, Save As and the like.
-    config.arguments = [state.path, '--hosted', ...(state.play ? ['--play'] : []), ...(state.tutorial && !state.play ? ['--tutorial', state.tutorial] : [])];
+    config.arguments = [state.path, '--hosted', ...(state.play ? ['--play'] : []), ...(state.tutorial && !state.play ? ['--tutorial', state.tutorial] : []),
+      // An editor who may not keep a copy: no Download a Copy.
+      ...(doc.canDownload ? [] : ['--no-download'])];
+    if (state.play) {
+      coverUntilPlaying(config);
+    }
     if (fonts.length) {
       config.qt.environment = { ...(config.qt.environment ?? {}), PHOENIX_FONTS_DIR: '/fonts' };
     }
@@ -311,7 +342,7 @@
     if ((holder?.name ?? null) !== state.lockedBy) {
       state.lockedBy = holder?.name ?? null;
       if (state.lockedBy) {
-        setStatus(`${state.lockedBy} is editing it now: your saves go to a copy`, 'bad');
+        setStatus(`${state.lockedBy} is editing it now: ${state.canDownload ? 'your saves go to a copy' : 'you cannot save until they finish'}`, 'bad');
       } else if (!state.saving && !state.unsent) {
         setStatus(`Version ${state.revision} · you can save here now`, 'good');
       }
@@ -326,6 +357,11 @@
   });
 
   // ── Saves and drafts ─────────────────────────────────────────────────────
+
+  /** "Save a copy", for people who may keep a copy of the document. */
+  function copyOffer(bytes) {
+    return state.canDownload ? [el('button', { class: 'primary', onclick: () => saveCopy(bytes) }, 'Save a copy')] : [];
+  }
 
   async function saveCopy(bytes) {
     setStatus('Saving a copy…');
@@ -367,7 +403,7 @@
         const why = res.status === 409 ? 'Someone else saved it since you opened it.'
           : res.status === 423 ? (json?.message ?? 'Someone else is editing it.')
             : 'You can view this document but not save over it.';
-        setStatus(`Not saved: ${why}`, 'bad', [el('button', { class: 'primary', onclick: () => saveCopy(bytes) }, 'Save a copy')]);
+        setStatus(`Not saved: ${why}`, 'bad', copyOffer(bytes));
       } else {
         state.unsent = bytes;
         const why = res.status === 401 ? 'you are signed out; sign in in another tab' : (json?.message ?? `the server answered ${res.status}`);
@@ -393,7 +429,7 @@
     // A save while someone else holds the lock goes to a copy at once.
     if (state.lockedBy) {
       state.unsent = bytes;
-      setStatus(`Not saved: ${state.lockedBy} is editing it now.`, 'bad', [el('button', { class: 'primary', onclick: () => saveCopy(bytes) }, 'Save a copy')]);
+      setStatus(`Not saved: ${state.lockedBy} is editing it now.`, 'bad', copyOffer(bytes));
       return;
     }
     // Saves one at a time; a save made while one is going waits, and only
@@ -502,6 +538,8 @@
       pickLibrary();
     } else if (name === 'close') {
       close();
+    } else if (name === 'playing') {
+      state.uncover?.();
     }
   }
 

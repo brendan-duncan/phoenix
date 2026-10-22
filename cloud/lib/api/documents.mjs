@@ -1,7 +1,7 @@
 // Documents, their revisions and files, folders, sharing, favorites and recents.
 
 import fsp from 'node:fs/promises';
-import { atLeast, documentRole, groupRole, mayReadSource, SHARE_ROLES, spaceRole, VISIBILITIES } from '../access.mjs';
+import { atLeast, documentRole, groupRole, mayDownload, mayOpen, SHARE_ROLES, spaceRole, VISIBILITIES } from '../access.mjs';
 import { findUser, publicUser } from '../accounts.mjs';
 import { editorAvailable } from '../config.mjs';
 import { UPLOAD_KINDS } from '../convert.mjs';
@@ -9,9 +9,12 @@ import { badRequest, forbidden, HttpError, notFound } from '../http.mjs';
 import { hashToken, newId, newToken } from '../ids.mjs';
 import { notify } from '../notify.mjs';
 import { bundleUrl, ensureBundle, refreshPreview } from '../renders.mjs';
-import { copyRevision, deleteDraft, draftOf, quotaBytes, revisionFile, saveDraft, saveRevision, sendFile, usageBytes } from '../storage.mjs';
+import { copyRevision, deleteDraft, draftOf, fileBytes, quotaBytes, revisionFile, saveDraft, saveRevision, sendFile, usageBytes } from '../storage.mjs';
+import { writeZip, ZIP_LIMIT, zipSize } from '../zip.mjs';
 
 const LIST_LIMIT = 500;
+// Documents in one ZIP download.
+const MAX_DOWNLOAD = 200;
 // An edit lock lasts this long unless the editor keeps it.
 const LOCK_MS = 90 * 1000;
 
@@ -127,7 +130,8 @@ class Viewer {
       trashedAt: doc.trashed_at,
       forkedFrom: doc.forked_from,
       role,
-      canDownload: mayReadSource(doc, role),
+      canOpen: mayOpen(this.ctx.store, this.ctx.user, doc, role, this.ctx.linkToken),
+      canDownload: mayDownload(this.ctx.store, this.ctx.user, doc, role, this.ctx.linkToken),
       favorite: this.favorites.has(doc.id),
     };
   }
@@ -277,8 +281,8 @@ function sharesView(ctx, doc, role) {
     allowDownload: Boolean(doc.allow_download),
     allowDuplicate: Boolean(doc.allow_duplicate),
     owner: doc.owner_kind === 'user' ? { kind: 'user', ...viewer.user(doc.owner_id) } : { kind: 'group', ...viewer.group(doc.owner_id) },
-    users: rows.filter((s) => s.principal_kind === 'user').map((s) => ({ user: viewer.user(s.principal_id), role: s.role, grantedAt: s.granted_at })),
-    groups: rows.filter((s) => s.principal_kind === 'group').map((s) => ({ group: viewer.group(s.principal_id), role: s.role, grantedAt: s.granted_at })),
+    users: rows.filter((s) => s.principal_kind === 'user').map((s) => ({ user: viewer.user(s.principal_id), role: s.role, canDownload: Boolean(s.can_download), grantedAt: s.granted_at })),
+    groups: rows.filter((s) => s.principal_kind === 'group').map((s) => ({ group: viewer.group(s.principal_id), role: s.role, canDownload: Boolean(s.can_download), grantedAt: s.granted_at })),
     links: role === 'owner'
       ? ctx.store.all('SELECT * FROM share_links WHERE document_id = ? AND revoked_at IS NULL ORDER BY created_at', doc.id)
         .map((l) => ({ id: l.id, role: l.role, createdAt: l.created_at, expiresAt: l.expires_at, createdBy: viewer.user(l.created_by) }))
@@ -475,6 +479,10 @@ export function registerDocuments(router, app) {
     if (!atLeast(role, 'editor') && !doc.allow_duplicate) {
       throw forbidden('Its owner does not allow copies.');
     }
+    // A copy of one's own is as good as a download.
+    if (!mayDownload(ctx.store, ctx.user, doc, role, ctx.linkToken)) {
+      throw forbidden('You do not have permission to download this document, so you cannot copy it.');
+    }
     const body = await ctx.json();
     const space = targetSpace(ctx, { groupId: body.groupId, folderId: body.folderId });
     const copy = createDocument(ctx, space, cleanName(body.name, `${doc.name} copy`));
@@ -499,11 +507,78 @@ export function registerDocuments(router, app) {
     return { ok: true };
   });
 
+  // The file for the web editor: editors, and anyone who may download it.
   router.get('/api/documents/:id/file', async (ctx) => {
     const { doc, role } = access(ctx, ctx.params.id);
-    if (!mayReadSource(doc, role)) {
-      throw forbidden('Its owner does not allow downloads.');
+    if (!mayOpen(ctx.store, ctx.user, doc, role, ctx.linkToken)) {
+      throw forbidden('You cannot open this document in the editor.');
     }
+    return sendRevision(ctx, doc);
+  });
+
+  // A copy to keep: only for people who may download it.
+  router.get('/api/documents/:id/download', async (ctx) => {
+    const { doc, role } = access(ctx, ctx.params.id);
+    if (!mayDownload(ctx.store, ctx.user, doc, role, ctx.linkToken)) {
+      throw forbidden('You do not have permission to download this document.');
+    }
+    ctx.store.audit(ctx.user?.id ?? null, 'document.download', 'document', doc.id, {});
+    return sendRevision(ctx, doc);
+  });
+
+  // Several documents in one ZIP (?ids=a,b,c), each at its latest version.
+  router.get('/api/download', async (ctx) => {
+    const user = ctx.requireUser();
+    const ids = [...new Set(String(ctx.query('ids') ?? '').split(',').filter(Boolean))];
+    if (!ids.length || ids.length > MAX_DOWNLOAD) {
+      throw badRequest(`Choose from 1 to ${MAX_DOWNLOAD} documents.`);
+    }
+    const taken = new Set();
+    const entries = [];
+    for (const id of ids) {
+      const { doc, role } = access(ctx, id);
+      if (!mayDownload(ctx.store, user, doc, role, null)) {
+        throw forbidden(`You do not have permission to download “${doc.name}”.`);
+      }
+      if (!doc.revision) {
+        continue;
+      }
+      const file = revisionFile(ctx.store, doc, doc.revision);
+      // Names are unique in the ZIP: "Walk.phx", "Walk (2).phx".
+      const base = doc.name.replace(/["\\/:*?<>|\u0000-\u001f]+/g, '_') || 'Untitled';
+      let name = `${base}.phx`;
+      for (let n = 2; taken.has(name.toLowerCase()); n++) {
+        name = `${base} (${n}).phx`;
+      }
+      taken.add(name.toLowerCase());
+      entries.push({ name, size: file.size, modifiedAt: doc.modified_at, bytes: () => fileBytes(ctx.blobs, file) });
+    }
+    if (!entries.length) {
+      throw notFound('Those documents have nothing saved yet.');
+    }
+    const size = zipSize(entries);
+    if (size > ZIP_LIMIT) {
+      throw new HttpError(413, 'too_large', 'That is more than 4 GB; download fewer at a time.');
+    }
+    for (const id of ids) {
+      ctx.store.audit(user.id, 'document.download', 'document', id, { zip: true });
+    }
+    ctx.res.writeHead(200, {
+      'Content-Type': 'application/zip',
+      'Content-Length': size,
+      'Content-Disposition': 'attachment; filename="Phoenix documents.zip"',
+      'Cache-Control': 'private, no-store',
+    });
+    if (ctx.req.method === 'HEAD') {
+      ctx.res.end();
+      return undefined;
+    }
+    await writeZip(entries, ctx.res);
+    return undefined;
+  });
+
+  /** Sends `doc`'s file at ?rev= (else its latest version). */
+  async function sendRevision(ctx, doc) {
     const number = ctx.query('rev') ? Number(ctx.query('rev')) : doc.revision;
     if (!Number.isInteger(number) || number < 1) {
       throw notFound('This document has nothing saved yet.');
@@ -524,7 +599,7 @@ export function registerDocuments(router, app) {
     // Rebuilt as it is sent, a stored chunk at a time.
     await sendFile(ctx.blobs, file, ctx.res);
     return undefined;
-  });
+  }
 
   // The body is the whole .phx, saved to a file as it arrives. ?base= is the
   // revision it was opened at.
@@ -581,7 +656,7 @@ export function registerDocuments(router, app) {
     if (!doc.revision) {
       throw notFound('This document has nothing saved yet.');
     }
-    if (mayReadSource(doc, role) && editorAvailable(ctx.config) && ctx.query('as') !== 'bundle') {
+    if (mayOpen(ctx.store, ctx.user, doc, role, ctx.linkToken) && editorAvailable(ctx.config) && ctx.query('as') !== 'bundle') {
       return { mode: 'editor', url: `/editor/?doc=${doc.id}&play=1` };
     }
     await ensureBundle(app, doc);
@@ -615,7 +690,7 @@ export function registerDocuments(router, app) {
 
   router.put('/api/documents/:id/draft', async (ctx) => {
     const { doc, role } = access(ctx, ctx.params.id);
-    if (!mayReadSource(doc, role)) {
+    if (!mayOpen(ctx.store, ctx.user, doc, role, ctx.linkToken)) {
       throw forbidden('You cannot open this document in the editor.');
     }
     const { file } = await ctx.upload('phx');
@@ -728,10 +803,13 @@ export function registerDocuments(router, app) {
       kind = 'user';
       principalId = user.id;
     }
-    store.run(`INSERT INTO shares (document_id, principal_kind, principal_id, role, granted_by, granted_at) VALUES (?, ?, ?, ?, ?, ?)
-               ON CONFLICT (document_id, principal_kind, principal_id) DO UPDATE SET role = excluded.role, granted_by = excluded.granted_by, granted_at = excluded.granted_at`,
-    doc.id, kind, principalId, r, ctx.user.id, Date.now());
-    store.audit(ctx.user.id, 'share.set', 'document', doc.id, { kind, principalId, role: r });
+    // Editors can download unless the owner says otherwise; viewers only when they say so.
+    const download = body.canDownload === undefined ? r === 'editor' : Boolean(body.canDownload);
+    store.run(`INSERT INTO shares (document_id, principal_kind, principal_id, role, can_download, granted_by, granted_at) VALUES (?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT (document_id, principal_kind, principal_id) DO UPDATE SET role = excluded.role, can_download = excluded.can_download,
+                 granted_by = excluded.granted_by, granted_at = excluded.granted_at`,
+    doc.id, kind, principalId, r, download ? 1 : 0, ctx.user.id, Date.now());
+    store.audit(ctx.user.id, 'share.set', 'document', doc.id, { kind, principalId, role: r, canDownload: download });
     const told = kind === 'user' ? [principalId] : store.all('SELECT user_id FROM group_members WHERE group_id = ?', principalId).map((m) => m.user_id);
     notify(app, told, { kind: 'share', text: `${ctx.user.name} shared “${doc.name}” with you`, link: `/d/${doc.id}`, actorId: ctx.user.id });
     return sharesView(ctx, doc, role);
@@ -740,12 +818,16 @@ export function registerDocuments(router, app) {
   router.patch('/api/documents/:id/shares/:kind/:principal', async (ctx) => {
     const { doc, role } = access(ctx, ctx.params.id, 'owner');
     const body = await ctx.json();
-    const r = shareRole(body.role);
-    const { changes } = ctx.store.run('UPDATE shares SET role = ? WHERE document_id = ? AND principal_kind = ? AND principal_id = ?', r, doc.id, ctx.params.kind, ctx.params.principal);
-    if (!changes) {
+    const share = ctx.store.get('SELECT * FROM shares WHERE document_id = ? AND principal_kind = ? AND principal_id = ?', doc.id, ctx.params.kind, ctx.params.principal);
+    if (!share) {
       throw notFound('No such share.');
     }
-    ctx.store.audit(ctx.user.id, 'share.set', 'document', doc.id, { kind: ctx.params.kind, principalId: ctx.params.principal, role: r });
+    // Either or both: its role, whether it can download.
+    const r = body.role === undefined ? share.role : shareRole(body.role);
+    const download = body.canDownload === undefined ? Boolean(share.can_download) : Boolean(body.canDownload);
+    ctx.store.run('UPDATE shares SET role = ?, can_download = ? WHERE document_id = ? AND principal_kind = ? AND principal_id = ?',
+      r, download ? 1 : 0, doc.id, ctx.params.kind, ctx.params.principal);
+    ctx.store.audit(ctx.user.id, 'share.set', 'document', doc.id, { kind: ctx.params.kind, principalId: ctx.params.principal, role: r, canDownload: download });
     return sharesView(ctx, doc, role);
   });
 

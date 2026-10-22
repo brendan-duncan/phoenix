@@ -11,7 +11,7 @@ import { registerDocuments } from './api/documents.mjs';
 import { registerGroups } from './api/groups.mjs';
 import { CLOUD_DIR, editorAvailable } from './config.mjs';
 import { Converter } from './convert.mjs';
-import { HttpError, notFound, readBody, readJson, Router, saveBody, sendJson, serveStatic } from './http.mjs';
+import { HttpError, lockedError, notFound, readBody, readJson, Router, saveBody, sendJson, serveStatic } from './http.mjs';
 import { newId } from './ids.mjs';
 import { Attempts, Budget } from './limits.mjs';
 import { Mailer } from './mail.mjs';
@@ -21,6 +21,9 @@ import { Jwks } from './oauth.mjs';
 
 const DASHBOARD_DIR = path.join(CLOUD_DIR, 'dashboard');
 const SAFE_METHODS = new Set(['GET', 'HEAD']);
+// What anyone may still reach while the site is locked: who they are, and
+// signing in and out (sign-in itself lets only admins through).
+const OPEN_WHILE_LOCKED = /^\/api\/(me|auth\/(login|logout|start\/[^/]+|callback\/[^/]+))$/;
 
 /** One request's view of the app: who is asking, and helpers for handlers. */
 class Context {
@@ -216,6 +219,11 @@ async function handleApi(app, req, res, url) {
   }
   const auth = app.sessions.fromRequest(req);
   const ctx = new Context(app, req, res, url, match.params, auth);
+  // Locked (maintenance): only admins use the site; anyone can see that it
+  // is locked, and admins can sign in.
+  if (ctx.settings.locked && !ctx.user?.is_admin && !OPEN_WHILE_LOCKED.test(url.pathname)) {
+    throw lockedError(ctx.settings);
+  }
   if (!SAFE_METHODS.has(req.method)) {
     // Changes come only from our own pages: the Origin must be ours, and a
     // signed-in request must carry its session's CSRF token.
@@ -286,6 +294,12 @@ async function handlePlay(app, req, res) {
   res.setHeader('X-Robots-Tag', 'noindex, nofollow');
   if (!SAFE_METHODS.has(req.method)) {
     res.writeHead(405).end();
+    return;
+  }
+  // Locked: no bundles either, whatever passes are out there.
+  if (app.store.settings.locked) {
+    res.writeHead(503, { 'Content-Type': 'text/plain; charset=utf-8' });
+    res.end('Phoenix Cloud is closed for maintenance for a while.\n');
     return;
   }
   const match = /^\/b\/([A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)\/(.+)$/.exec(new URL(req.url, app.config.playUrl).pathname);

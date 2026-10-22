@@ -4,7 +4,7 @@
 import { get, post, setCsrf, setLink } from './api.js';
 import { newDocumentDialog, renderDocument, renderListing, UPLOAD_TYPES, uploadFiles } from './files.js';
 import {
-  newGroupDialog, renderAccount, renderAdmin, renderConfirm, renderForgot, renderGroupPage, renderInvite, renderPlayer, renderRegister, renderReset, renderSignin,
+  newGroupDialog, renderAccount, renderAdmin, renderConfirm, renderForgot, renderGroupPage, renderInvite, renderLocked, renderPlayer, renderRegister, renderReset, renderSignin,
 } from './pages.js';
 import { avatar, clear, closeMenu, h, icon, popup, promptDialog, showError, timeAgo, toast } from './ui.js';
 
@@ -277,6 +277,12 @@ async function route() {
     navigate(`/signin?return=${encodeURIComponent(back)}`, { replace: true });
     return;
   }
+  if (state.me.settings.locked && !state.me.user.isAdmin) {
+    shell = null;
+    place.drop = false;
+    clear(root, renderLocked(signOut));
+    return;
+  }
   const player = /^\/play\/([^/]+)$/.exec(path);
   if (player) {
     shell = null;
@@ -308,6 +314,9 @@ async function route() {
   clear(main,
     state.me.user.passwordIsDefault
       ? h('div', { class: 'banner' }, 'You are using the password this server started with. ', h('a', { class: 'link', href: '/account#password' }, 'Choose your own password'), '.')
+      : null,
+    state.me.settings.locked
+      ? h('div', { class: 'banner warn' }, 'Phoenix Cloud is locked: only admins can use it. ', h('a', { class: 'link', href: '/admin/settings' }, 'Unlock it'), '.')
       : null,
     state.me.settings.banner ? h('div', { class: 'banner' }, state.me.settings.banner) : null,
     target);

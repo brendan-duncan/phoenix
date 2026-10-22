@@ -210,6 +210,7 @@ label.check { display: flex; align-items: center; gap: 8px; cursor: pointer; }
 main { overflow-y: auto; padding: 24px 28px 60px; position: relative; }
 
 .banner { margin: -8px 0 18px; padding: 10px 14px; border-radius: var(--radius); background: var(--accent-soft); color: var(--accent-text); }
+.banner.warn { background: var(--danger-soft); color: var(--danger); }
 
 .page-head { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; flex-wrap: wrap; }
 .page-head h1 { font-size: 22px; margin: 0; font-weight: 700; }

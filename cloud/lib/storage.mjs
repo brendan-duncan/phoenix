@@ -270,20 +270,23 @@ export function revisionFile(store, doc, number) {
 
 /** Writes a laid-out file to `out` (a response), a blob at a time. */
 export async function sendFile(blobs, file, out) {
-  for (const part of file.parts) {
-    if (Buffer.isBuffer(part)) {
-      if (!out.write(part)) {
-        await once(out, 'drain');
-      }
-    } else {
-      for await (const piece of blobs.stream(part.hash)) {
-        if (!out.write(piece)) {
-          await once(out, 'drain');
-        }
-      }
+  for await (const piece of fileBytes(blobs, file)) {
+    if (!out.write(piece)) {
+      await once(out, 'drain');
     }
   }
   out.end();
+}
+
+/** A revision file's bytes in order, a stored chunk at a time. */
+export async function* fileBytes(blobs, file) {
+  for (const part of file.parts) {
+    if (Buffer.isBuffer(part)) {
+      yield part;
+    } else {
+      yield* blobs.stream(part.hash);
+    }
+  }
 }
 
 /**

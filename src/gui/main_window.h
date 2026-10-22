@@ -196,6 +196,10 @@ public:
     /// (Phoenix <file> --play): nothing asks about it first, such as the
     /// Missing Fonts dialog.
     static void setPlayOnly();
+    /// In a page that keeps the document, the person may edit it but not
+    /// keep a copy (Phoenix <file> --hosted --no-download): no Download a
+    /// Copy or Export FLA for Other Apps.
+    static void setNoDownload();
     /// Runs lesson \a id on the document open (once it has opened), rather
     /// than on one of its own: the page made it from the lesson's start.
     void startTutorialOnDocument(const QString& id, int tries = 100);

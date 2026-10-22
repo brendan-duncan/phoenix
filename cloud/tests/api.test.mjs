@@ -167,10 +167,12 @@ describe('documents', () => {
 
   it('respects the download and duplicate switches', async () => {
     await alice.post(`/api/documents/${doc.id}/shares`, { kind: 'user', who: 'carol', role: 'viewer' });
-    await alice.patch(`/api/documents/${doc.id}`, { allowDownload: false, allowDuplicate: false });
+    await alice.patch(`/api/documents/${doc.id}`, { allowDuplicate: false });
     assert.equal(await carol.fails('GET', `/api/documents/${doc.id}/file`, 403), 'forbidden');
     assert.equal(await carol.fails('POST', `/api/documents/${doc.id}/duplicate`, 403, { json: {} }), 'forbidden');
-    await alice.patch(`/api/documents/${doc.id}`, { allowDownload: true, allowDuplicate: true });
+    // The share's own switch lets her download; the document's, copy.
+    await alice.patch(`/api/documents/${doc.id}/shares/user/${carol.user.id}`, { canDownload: true });
+    await alice.patch(`/api/documents/${doc.id}`, { allowDuplicate: true });
     const { document: copy } = await carol.post(`/api/documents/${doc.id}/duplicate`);
     assert.equal(copy.owner.id, carol.user.id);
     assert.equal(copy.forkedFrom, doc.id);

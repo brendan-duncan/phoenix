@@ -45,8 +45,10 @@ function validateSettings(input) {
         throw badRequest(`New accounts are one of ${NEW_ACCOUNTS.join(', ')}.`);
       }
       out[key] = value;
-    } else if (key === 'beta') {
+    } else if (key === 'beta' || key === 'registration' || key === 'locked') {
       out[key] = Boolean(value);
+    } else if (key === 'lockMessage') {
+      out[key] = String(value ?? '').slice(0, 500);
     } else if (key === 'defaultQuotaMB') {
       const n = Number(value);
       if (!Number.isInteger(n) || n < 1 || n > 1000000) {

@@ -95,10 +95,13 @@ From the environment (or `cloud/dev.env`):
 | `PHOENIX_CLOUD_CONVERSIONS_PER_HOUR` | `30`; documents Phoenix makes for one person (admins: no limit) |
 | `PHOENIX_CLOUD_<PROVIDER>_ID`, `_SECRET` | Google and GitHub sign-in |
 
-Admins change the rest while it runs (Admin > Settings): what a new account
-is (`admin`: locked until an admin unlocks it; `email`: locked until its
-address is confirmed; `open`), the beta switch, the default storage quota
-and a banner.
+Admins change the rest while it runs (Admin > Settings): whether people
+can register at all (off, only invites and accounts an admin makes let
+anyone new in), what a new account is (`admin`: locked until an admin
+unlocks it; `email`: locked until its address is confirmed; `open`), the
+beta switch, the default storage quota, a banner, and a lock for
+maintenance: while locked, only admins can sign in or use the API, the
+play origin serves nothing, and everyone else sees the lock message.
 
 ## Accounts
 
@@ -270,6 +273,16 @@ default role for its members; shares to them or their groups; a share
 link; and viewer for public, showcase and unlisted documents. While the
 beta switch is on, links and visibility work only for people who are
 signed in. `lib/access.mjs` is the only place this is decided.
+
+**Downloads.** Downloading (keeping a copy: `/download`, a ZIP of several
+from `/api/download?ids=`, Make a copy, the editor's Download a Copy and
+Save a copy) is a permission of its own. The owner and the members of the
+owning group may; a share to a person or a group may when its Can
+download switch is on (on by default for editors); anyone who sees it by
+a link or because it is public may when the document allows downloads.
+Editors without it still open the document in the web editor
+(`/file`), which then leaves out Download a Copy and Export FLA for Other
+Apps (`--no-download`).
 
 **Groups.** The creator is the first admin; a group can have many admins,
 and its last admin can neither leave nor be demoted. Members get the

@@ -290,6 +290,8 @@ bool s_skipStartScreen = false;
 bool s_hosted = false;
 // The window opens its file only to play it (setPlayOnly).
 bool s_playOnly = false;
+// The person may not keep a copy of the hosted document (setNoDownload).
+bool s_noDownload = false;
 
 /// Leaves \a action out when a host page keeps the document: opening,
 /// making and saving elsewhere are the page's to do.
@@ -1947,6 +1949,11 @@ void MainWindow::setHosted()
 void MainWindow::setPlayOnly()
 {
     s_playOnly = true;
+}
+
+void MainWindow::setNoDownload()
+{
+    s_noDownload = true;
 }
 
 void MainWindow::startTutorialOnDocument(const QString& id, int tries)
@@ -7206,7 +7213,7 @@ void MainWindow::setupMenus()
     fileMenu->addAction(saveAsAction);
     // In a page that keeps the document, Save goes to the page; a copy of
     // one's own is a download.
-    if (s_hosted)
+    if (s_hosted && !s_noDownload)
     {
         QAction* downloadAction = fileMenu->addAction("&Download a Copy");
         downloadAction->setStatusTip("Keep a copy of the document as it is now in the browser's downloads");
@@ -7299,6 +7306,12 @@ void MainWindow::setupMenus()
     exportBakedAction->setStatusTip("Save a copy with every behavior baked into keyframes, for apps that open FLA files but not Phoenix's own motion");
     connect(exportBakedAction, &QAction::triggered, this, &MainWindow::exportBakedDocument);
     exportMenu->addAction(exportBakedAction);
+    // A copy of the document, as Download a Copy is.
+    if (s_noDownload)
+    {
+        exportBakedAction->setVisible(false);
+        exportBakedAction->setEnabled(false);
+    }
     QAction* renderDataAction = new QAction("Render from &Data...", this);
     web_page::desktopOnly(renderDataAction);
     renderDataAction->setStatusTip("Render the movie once for each row of a CSV file, its template fields filled from the row");
@@ -16242,6 +16255,9 @@ void MainWindow::testMovie()
     modal::open(window);
     if (_testMovieFills)
         window->showMaximized();
+    // The page covers the editor until the movie is showing.
+    if (s_playOnly)
+        QTimer::singleShot(100, this, []() { web_page::tellHost("playing"); });
 }
 
 void MainWindow::playMovie(int tries)

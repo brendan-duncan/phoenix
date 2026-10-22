@@ -9,6 +9,7 @@ import {
 } from './ui.js';
 
 const LOGIN_ERRORS = {
+  registration_closed: 'New accounts are closed for now. Someone with an account can ask an admin for an invite for you.',
   invite_invalid: 'That invite has been used, has run out or was turned off.',
   invite_email: 'That invite is for another email address. Sign in with the account it was sent to.',
   email_in_use: 'Someone already signs in with that email. Sign in the way you did before, then link this one from your account page.',
@@ -29,6 +30,17 @@ const NEW_ACCOUNT_NOTES = {
 
 function logo() {
   return h('img', { class: 'logo', src: '/ui/logo.png', alt: '' });
+}
+
+function lockText(me) {
+  return me.settings.lockMessage || 'Phoenix Cloud is closed for maintenance for a while. Try again later.';
+}
+
+/** What people who are not admins see while the site is locked. */
+export function renderLocked(signOut) {
+  return card(logo(), h('h1', {}, 'Phoenix Cloud is closed for now'),
+    h('p', { class: 'muted' }, lockText(state.me)),
+    h('button', { type: 'button', class: 'btn wide', onclick: signOut }, 'Sign out'));
 }
 
 function card(...children) {
@@ -67,7 +79,9 @@ export function renderSignin(params) {
   const password = h('input', { type: 'password', name: 'password', autocomplete: 'current-password', required: true });
   const box = messageBox();
   if (error) {
-    say(box, LOGIN_ERRORS[error] ?? LOGIN_ERRORS.failed);
+    say(box, error === 'locked' ? lockText(me) : (LOGIN_ERRORS[error] ?? LOGIN_ERRORS.failed));
+  } else if (me.settings.locked) {
+    say(box, `${lockText(me)} Only admins can sign in until then.`, 'note');
   }
   const resend = h('button', {
     type: 'button', class: 'btn ghost hidden', onclick: async () => {
@@ -99,7 +113,9 @@ export function renderSignin(params) {
     resend,
     form,
     providerButtons(me.providers, query),
-    h('p', { class: 'small' }, 'New here? ', h('a', { class: 'link', href: `/register${returnTo !== '/' ? `?return=${encodeURIComponent(returnTo)}` : ''}` }, 'Create an account')),
+    me.settings.registration && !me.settings.locked
+      ? h('p', { class: 'small' }, 'New here? ', h('a', { class: 'link', href: `/register${returnTo !== '/' ? `?return=${encodeURIComponent(returnTo)}` : ''}` }, 'Create an account'))
+      : null,
     h('p', { class: 'small' }, h('a', { class: 'link', href: '/forgot' }, 'Forgot your password?')));
 }
 
@@ -159,6 +175,11 @@ export function nameChecker(input, hint, onChange = () => {}, { current = null }
 export function renderRegister(params) {
   const me = state.me;
   const invite = params.get('invite');
+  if ((!me.settings.registration && !invite) || me.settings.locked) {
+    return card(logo(), h('h1', {}, 'New accounts are closed'),
+      h('p', { class: 'muted' }, me.settings.locked ? lockText(me) : 'Phoenix Cloud is not taking new accounts for now. Someone with an account can ask an admin for an invite for you.'),
+      h('a', { class: 'btn wide', href: '/signin' }, 'Sign in'));
+  }
   const name = h('input', { type: 'text', name: 'name', autocomplete: 'username', required: true, maxlength: 30, autofocus: true });
   const email = h('input', { type: 'email', name: 'email', autocomplete: 'email', required: true });
   const password = h('input', { type: 'password', name: 'password', autocomplete: 'new-password', required: true, minlength: 8 });
@@ -312,7 +333,7 @@ export function renderPlayer(id) {
   get(`/api/documents/${encodeURIComponent(id)}`).then(({ document: doc }) => {
     document.title = `${doc.name} · Phoenix Cloud`;
     title.textContent = doc.name;
-    if (doc.canDownload && state.me.editor) {
+    if (doc.canOpen && state.me.editor) {
       edit.href = `/editor/?doc=${encodeURIComponent(doc.id)}`;
       edit.classList.remove('hidden');
     }
@@ -827,10 +848,14 @@ async function adminSettings() {
     h('input', { type: 'radio', name: 'newAccounts', value, checked: settings.newAccounts === value }),
     h('div', {}, h('div', { class: 'choice-title' }, title), h('div', { class: 'muted small' }, text)));
   const beta = h('input', { type: 'checkbox', checked: settings.beta });
+  const registration = h('input', { type: 'checkbox', checked: settings.registration });
+  const locked = h('input', { type: 'checkbox', checked: settings.locked });
+  const lockMessage = h('textarea', { rows: 2, maxlength: 500, placeholder: 'Phoenix Cloud is closed for maintenance for a while. Try again later.' }, settings.lockMessage);
   const quota = h('input', { type: 'number', min: 1, value: settings.defaultQuotaMB });
   const banner = h('input', { type: 'text', value: settings.banner, maxlength: 300, placeholder: 'A message at the top of every page' });
   const form = h('form', { class: 'panel stack cards-form' },
     h('h2', {}, 'New accounts'),
+    h('label', { class: 'check' }, registration, 'People can register (off: only invites and accounts you make)'),
     h('p', { class: 'muted small flush' }, 'What an account is when someone registers. People with an invite link, and accounts an admin makes, are ready at once.'),
     choice('admin', 'Locked until an admin unlocks it', 'You see new accounts under Accounts and unlock the ones you want.'),
     choice('email', 'Locked until they confirm their email address', 'They get a link by email. (There is no mail server yet: the emails wait under Email.)'),
@@ -839,12 +864,23 @@ async function adminSettings() {
     h('label', { class: 'check' }, beta, 'Public and link-shared documents only for people who are signed in; ask search engines not to index'),
     h('label', { class: 'field' }, h('span', {}, 'Storage for each account and group, in MB'), quota),
     h('label', { class: 'field' }, h('span', {}, 'Banner'), banner),
+    h('h2', {}, 'Lock the site'),
+    h('label', { class: 'check' }, locked, 'Locked: only admins can sign in and use it (for maintenance, say); everyone else sees the message below'),
+    h('label', { class: 'field' }, h('span', {}, 'Message while locked'), lockMessage),
     h('div', {}, h('button', { type: 'submit', class: 'btn primary' }, 'Save')));
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     try {
       const newAccounts = form.querySelector('input[name="newAccounts"]:checked')?.value ?? 'admin';
-      await patch('/api/admin/settings', { newAccounts, beta: beta.checked, defaultQuotaMB: Number(quota.value), banner: banner.value });
+      if (locked.checked && !settings.locked && !(await confirmDialog({
+        title: 'Lock Phoenix Cloud?', message: 'Everyone but admins is signed out of using it until you unlock it here.', confirm: 'Lock it', danger: true,
+      }))) {
+        return;
+      }
+      await patch('/api/admin/settings', {
+        newAccounts, registration: registration.checked, beta: beta.checked, defaultQuotaMB: Number(quota.value), banner: banner.value,
+        locked: locked.checked, lockMessage: lockMessage.value.trim(),
+      });
       await reloadShell();
       toast('Saved.');
     } catch (err) {

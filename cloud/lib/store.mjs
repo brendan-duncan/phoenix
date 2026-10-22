@@ -278,6 +278,13 @@ ALTER TABLE users ADD COLUMN avatar_blob TEXT;
 ALTER TABLE documents ADD COLUMN preview TEXT;
 ALTER TABLE documents ADD COLUMN preview_revision INTEGER NOT NULL DEFAULT 0;
 `,
+  // v5: whether a share lets its people download the document. Shares made
+  // before could download when the document allowed it, or as editors.
+  `
+ALTER TABLE shares ADD COLUMN can_download INTEGER NOT NULL DEFAULT 0;
+UPDATE shares SET can_download = 1
+  WHERE role = 'editor' OR document_id IN (SELECT id FROM documents WHERE allow_download = 1);
+`,
 ];
 
 /** Settings an admin changes at runtime; stored as JSON in `settings`. */
@@ -287,6 +294,13 @@ export const SETTING_DEFAULTS = {
   // (locked until an admin unlocks it). Someone with an invite is let in
   // straight away.
   newAccounts: 'admin',
+  // Whether people can register at all. Off, only an invite (or an admin
+  // making the account) lets someone new in.
+  registration: true,
+  // While on, only admins can sign in or use the site (maintenance, say);
+  // everyone else sees lockMessage.
+  locked: false,
+  lockMessage: '',
   // While on, public, showcase and unlisted documents are visible to signed-in
   // members only, and every page asks search engines not to index it.
   beta: true,

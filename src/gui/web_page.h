@@ -48,7 +48,7 @@ bool isTouchTablet();
 /// server sets) that \a event happened: "playerClosed" (Test Movie closed
 /// when Phoenix only plays), "pickLibrary" (a library from the page's own
 /// documents is wanted), "close" (File > Back to Phoenix Cloud: the page
-/// is to close the editor). Nothing happens on the desktop, or in a page
+/// is to close the editor), "playing" (with --play, the movie is showing). Nothing happens on the desktop, or in a page
 /// with no host.
 inline void tellHost(const char* event)
 {

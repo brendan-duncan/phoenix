@@ -160,7 +160,9 @@ A page can run Phoenix on documents it keeps itself, as Phoenix Cloud does
   open; `--hosted` to leave out New, Open, Save As, New from Template, Save
   as Template, Close, the Start Screen and Tutorials, and the tab's close
   button and menu, the page keeping the one document; `--play` to play it
-  in Test Movie filling the window; `--tutorial <lesson>` to run a lesson
+  in Test Movie filling the window; `--no-download` to leave out Download a
+  Copy and Export FLA for Other Apps for someone who may edit it but not
+  keep a copy; `--tutorial <lesson>` to run a lesson
   on the file, which the page made from the lesson's start) and add
   `config.preRun` functions that write files with `instance.FS.writeFile`.
   `status` is the loading message's element. A throw stops the start, with
@@ -187,7 +189,9 @@ A page can run Phoenix on documents it keeps itself, as Phoenix Cloud does
   system, its path in `/cloud/libraries/next.txt`, and calls
   `instance._phoenix_open_library()` to open it as an external library;
   `"close"` when File > Back to Phoenix Cloud (shown with `--hosted`) is
-  chosen, for the page to close the editor (asking about unsaved changes).
+  chosen, for the page to close the editor (asking about unsaved changes);
+  `"playing"` with `--play` once the movie is showing (Phoenix Cloud keeps
+  its loading picture over the editor until then).
 - `PHOENIX_FONTS_DIR` (in `config.qt.environment`) names a folder of fonts
   Phoenix loads at startup, such as a library the page wrote there.
 

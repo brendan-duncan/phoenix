@@ -451,6 +451,9 @@ int main(int argc, char *argv[])
     const bool hosted = launch.removeAll("--hosted") > 0;
     if (hosted)
         MainWindow::setHosted();
+    // --no-download: the page lets the person edit it but not keep a copy.
+    if (launch.removeAll("--no-download") > 0)
+        MainWindow::setNoDownload();
     QString initialFile = launch.size() > 1 ? launch.at(1) : QString();
 
     // Phoenix script.jsfl (or script.py): a Phoenix already running runs

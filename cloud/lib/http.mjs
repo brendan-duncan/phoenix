@@ -19,6 +19,11 @@ export class HttpError extends Error {
   }
 }
 
+/** The answer while an admin has locked the site (Admin > Settings). */
+export function lockedError(settings) {
+  return new HttpError(503, 'locked', settings.lockMessage || 'Phoenix Cloud is closed for maintenance for a while. Try again later.');
+}
+
 export const badRequest = (message) => new HttpError(400, 'bad_request', message);
 export const notFound = (message = 'Not found.') => new HttpError(404, 'not_found', message);
 export const forbidden = (message = 'You do not have access to that.') => new HttpError(403, 'forbidden', message);
