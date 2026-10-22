@@ -559,6 +559,18 @@ export function registerDocuments(router) {
 
   // ── Folders ─────────────────────────────────────────────────────────────
 
+  // Every folder in a space (yours, or ?group='s), for choosing where to move things.
+  router.get('/api/folders', (ctx) => {
+    const user = ctx.requireUser();
+    const groupId = ctx.query('group');
+    const ownerKind = groupId ? 'group' : 'user';
+    const ownerId = groupId ?? user.id;
+    if (spaceRole(ctx.store, user, ownerKind, ownerId) === 'none') {
+      throw notFound('No such group, or you are not in it.');
+    }
+    return { folders: ctx.store.all('SELECT * FROM folders WHERE owner_kind = ? AND owner_id = ? ORDER BY name COLLATE NOCASE', ownerKind, ownerId).map(folderView) };
+  });
+
   router.post('/api/folders', async (ctx) => {
     const body = await ctx.json();
     const space = targetSpace(ctx, { groupId: body.groupId, folderId: body.parentId });

@@ -217,6 +217,9 @@ describe('folders', () => {
     const { document: d } = await bob.upload('In inner', await makePhx({ document: 'inner' }), `&folderId=${inner.id}`);
     const listing = await bob.get(`/api/documents?view=files&folder=${inner.id}`);
     assert.deepEqual(listing.path.map((f) => f.name), ['Outer', 'Inner']);
+    const { folders } = await bob.get('/api/folders');
+    assert.deepEqual(folders.map((f) => f.name).sort(), ['Inner', 'Outer']);
+    assert.equal(await carol.fails('GET', '/api/folders?group=nope', 404), 'not_found');
     assert.deepEqual(listing.documents.map((x) => x.id), [d.id]);
     assert.equal(await bob.fails('PATCH', `/api/folders/${outer.id}`, 400, { json: { parentId: inner.id } }), 'bad_request');
     assert.equal(await carol.fails('PATCH', `/api/folders/${outer.id}`, 404, { json: { name: 'mine' } }), 'not_found');
