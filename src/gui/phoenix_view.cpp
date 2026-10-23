@@ -4515,6 +4515,21 @@ fla::Transform PhoenixView::shownTransformOf(const fla::Element* element)
     return fla::applyMotion(element->transform, element->transformationPoint, here.start, here.now);
 }
 
+QTransform PhoenixView::layerPlacementOf(const fla::Element* element)
+{
+    const fla::Frame* frame = owningFrame(element);
+    const fla::Layer* layer = frame ? dynamic_cast<const fla::Layer*>(frame->parent) : nullptr;
+    if (!layer)
+        return QTransform();
+    return parentTransform(layer, frame, fla::LoopType::PlayOnce, 0);
+}
+
+QTransform PhoenixView::elementToDocumentOf(const fla::Element* element)
+{
+    const fla::Transform t = shownTransformOf(element);
+    return QTransform(t.m11, t.m12, t.m21, t.m22, t.tx, t.ty) * layerPlacementOf(element);
+}
+
 fla::Transform PhoenixView::storedTransformFor(const fla::Element* element, const fla::Transform& shown)
 {
     MotionHere here;

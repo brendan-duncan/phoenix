@@ -49,8 +49,7 @@ bool MagicWandTool::mousePress(PhoenixView& view, QMouseEvent* event, const QPoi
         if (!*it || (*it)->elementType() != fla::Element::Type::Shape)
             continue;
         fla::Shape* candidate = static_cast<fla::Shape*>(*it);
-        const fla::Transform& t = candidate->transform;
-        const QTransform toDocument(t.m11, t.m12, t.m21, t.m22, t.tx, t.ty);
+        const QTransform toDocument = view.elementToDocumentOf(candidate);
         bool invertible = false;
         const QPointF at = toDocument.inverted(&invertible).map(documentPos);
         if (!invertible)

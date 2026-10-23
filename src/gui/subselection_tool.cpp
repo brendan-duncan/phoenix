@@ -55,14 +55,12 @@ fla::Shape* SubselectionTool::editedShape() const
 
 QTransform SubselectionTool::shapeToDocument(PhoenixView& view) const
 {
-    (void)view;
-
     const fla::Shape* shape = editedShape();
     if (!shape)
         return QTransform();
-
-    const fla::Transform& t = shape->transform;
-    return QTransform(t.m11, t.m12, t.m21, t.m22, t.tx, t.ty);
+    // Through the layer's placement too (a peg, a parent layer), so the
+    // anchors sit on the shape where it is drawn.
+    return view.elementToDocumentOf(shape);
 }
 
 bool SubselectionTool::isSelected(const AnchorRef& ref) const

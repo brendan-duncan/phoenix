@@ -499,6 +499,16 @@ public:
     fla::Transform drawnTransformOf(const fla::Element* element);
     fla::Transform shownTransformOf(const fla::Element* element);
 
+    /// Where  element's layer is placed by the layers it is parented to
+    /// (a peg, a parent layer), and by the camera: the identity for a layer
+    /// placed by nothing.
+    QTransform layerPlacementOf(const fla::Element* element);
+    /// Maps  element's own coordinates to the document's: its shown
+    /// transform, then its layer's placement. A tool that edits a shape's
+    /// points in the shape's space draws and picks them through this, so
+    /// they sit on the shape as it is drawn.
+    QTransform elementToDocumentOf(const fla::Element* element);
+
     /// The element's bounds where it shows now, in document space.
     QRectF shownBoundsOf(const fla::Element* element) { return shownElementBounds(element); }
     /// A symbol's art's bounds in its own space.

@@ -4,6 +4,7 @@ What changed in each release of Phoenix, newest first.
 
 ## Unreleased
 
+- On a layer moved by a peg or a parent layer, the Subselection tool's anchors and handles sit on the shape where it is drawn, and the Pen, Pencil and Magic Wand pick up its paths and fills there too
 - Stepping or scrubbing to another keyframe keeps the selection: it moves to the same instance, bitmap or drawing on that keyframe, so the Properties panel and the stage stay on what you were editing
 - Brush and eraser strokes keep up with the pen on the CPU stage, the web editor's without WebGPU included: the stroke under way is painted as it grows rather than from its start at every move, and the stage under it is drawn once for the stroke
 

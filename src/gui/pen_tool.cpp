@@ -195,8 +195,7 @@ EdgeBender::Probe PenTool::probeSelection(PhoenixView& view, const QPointF& docu
 
     HitResult hit;
     hit.element = element;
-    const fla::Transform& t = element->transform;
-    hit.elementToDocument = QTransform(t.m11, t.m12, t.m21, t.m22, t.tx, t.ty);
+    hit.elementToDocument = view.elementToDocumentOf(element);
     return EdgeBender::probe(view, hit, documentPos);
 }
 
@@ -219,8 +218,7 @@ PenTool::ResumePoint PenTool::resumePointAt(PhoenixView& view, const QPointF& do
     double bestDistance = 0.0;
     for (fla::Shape* shape : shapes)
     {
-    const fla::Transform& t = shape->transform;
-    const QTransform toDocument(t.m11, t.m12, t.m21, t.m22, t.tx, t.ty);
+    const QTransform toDocument = view.elementToDocumentOf(shape);
     // In a shape not selected, only a loose end counts: in merge drawing
     // the edges meet one another at every corner, and those ends are not
     // where a line stops.
@@ -284,8 +282,7 @@ bool PenTool::joinAt(PhoenixView& view, const ResumePoint& target)
     if (!target.valid || _resuming || _path.anchors.empty() || target.pathIndex >= target.edge->paths.size())
         return false;
     // The other path, on the stage, starting from the end clicked.
-    const fla::Transform& t = target.shape->transform;
-    const QTransform toDocument(t.m11, t.m12, t.m21, t.m22, t.tx, t.ty);
+    const QTransform toDocument = view.elementToDocumentOf(target.shape);
     const fla::EditablePath before = fla::EditablePath::fromPath(*target.edge->paths[target.pathIndex]);
     fla::EditablePath other = mapped(before, toDocument);
     if (!target.atStart)
@@ -315,8 +312,7 @@ bool PenTool::joinAt(PhoenixView& view, const ResumePoint& target)
 
 void PenTool::beginResume(PhoenixView& view, const ResumePoint& point)
 {
-    const fla::Transform& t = point.shape->transform;
-    _resumeToDocument = QTransform(t.m11, t.m12, t.m21, t.m22, t.tx, t.ty);
+    _resumeToDocument = view.elementToDocumentOf(point.shape);
     _resumeBefore = fla::EditablePath::fromPath(*point.edge->paths[point.pathIndex]);
 
     // The pen works in document space and always adds at the end, so the

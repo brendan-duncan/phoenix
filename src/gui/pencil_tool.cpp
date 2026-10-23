@@ -261,8 +261,9 @@ void PencilTool::finish(PhoenixView& view)
         // at: the old path, turned round if that was its first anchor, then
         // the stroke, joined at a corner since the two were drawn apart.
         bool invertible = false;
-        const fla::Transform& t = _extendShape->transform;
-        const QTransform toDocument(t.m11, t.m12, t.m21, t.m22, t.tx, t.ty);
+        const QTransform toDocument = view.elementToDocumentOf(_extendShape);
+        const fla::Transform t(toDocument.m11(), toDocument.m12(), toDocument.m21(), toDocument.m22(),
+            toDocument.dx(), toDocument.dy());
         const QTransform toShape = toDocument.inverted(&invertible);
         if (invertible)
         {
