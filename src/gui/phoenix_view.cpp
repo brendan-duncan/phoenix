@@ -1054,23 +1054,51 @@ void PhoenixView::paintEvent(QPaintEvent *event)
     // A value check: the stage is drawn into a picture first and turned
     // gray, then the tools' handles go over it in their own colors. A stage
     // drawn at fewer pixels than the screen has (the web editor's
-    // ?stagescale=) takes the same way, scaled up.
+    // ?stagescale=) takes the same way, scaled up. So does a stage a tool
+    // holds still: while a brush stroke is under way nothing on the stage
+    // moves, so it is drawn once and kept for the stroke, and each move
+    // draws only the tool's overlay over the kept picture.
     const qreal stageRatio = stagePixelRatio();
-    if ((_grayscale || stageRatio < devicePixelRatioF()) && !_grayPass)
+    const bool held = !_grayPass && _flaDocument && _flaDocument->document && _activeTool &&
+        _activeTool->holdsStageStill();
+    if (!held && _heldValid)
+    {
+        _heldValid = false;
+        _heldImage = QImage();
+    }
+    if ((_grayscale || stageRatio < devicePixelRatioF() || held) && !_grayPass)
     {
         const qreal ratio = stageRatio;
-        QImage gray(size() * ratio, QImage::Format_ARGB32_Premultiplied);
-        if (!gray.isNull())
+        const StaticKey key = held ? stageKey() : StaticKey();
+        QImage local;
+        QImage& image = held ? _heldImage : local;
+        const bool kept = held && _heldValid && _heldKey == key && _heldGray == _grayscale &&
+            image.size() == size() * ratio;
+        if (!kept)
         {
-            gray.setDevicePixelRatio(ratio);
-            _grayPass = &gray;
-            paintEvent(event);
-            _grayPass = nullptr;
-            if (_grayscale)
-                fla::stageview::grayscale(reinterpret_cast<uint32_t*>(gray.bits()),
-                    static_cast<size_t>(gray.width()) * static_cast<size_t>(gray.height()));
+            _heldValid = false;
+            image = QImage(size() * ratio, QImage::Format_ARGB32_Premultiplied);
+        }
+        if (!image.isNull())
+        {
+            if (!kept)
+            {
+                image.setDevicePixelRatio(ratio);
+                _grayPass = &image;
+                paintEvent(event);
+                _grayPass = nullptr;
+                if (_grayscale)
+                    fla::stageview::grayscale(reinterpret_cast<uint32_t*>(image.bits()),
+                        static_cast<size_t>(image.width()) * static_cast<size_t>(image.height()));
+                if (held)
+                {
+                    _heldKey = key;
+                    _heldGray = _grayscale;
+                    _heldValid = true;
+                }
+            }
             QPainter painter(this);
-            painter.drawImage(0, 0, gray);
+            painter.drawImage(0, 0, image);
             if (_flaDocument && _flaDocument->document)
             {
                 painter.setRenderHint(QPainter::Antialiasing, true);
@@ -1230,18 +1258,7 @@ void PhoenixView::paintView(QPainter& painter)
 
         if (split)
         {
-            StaticKey key;
-            key.zoom = _zoom;
-            key.panX = _panX;
-            key.panY = _panY;
-            key.size = size();
-            key.frame = _player ? _player->currentFrame() : -1;
-            key.revision = _revision;
-            key.scopeDepth = _scope.size();
-            key.grid = _showGrid;
-            key.rotation = _rotation;
-            key.pivot = _rotationPivot;
-            key.mirrored = _mirrored;
+            StaticKey key = stageKey();
             key.moving = moving;
 
             if (!_staticValid || !(_staticKey == key))
@@ -2756,6 +2773,23 @@ void PhoenixView::drawShiftTrace(QPainter& painter)
         painter.drawEllipse(at, 4.0, 4.0);
     }
     painter.restore();
+}
+
+PhoenixView::StaticKey PhoenixView::stageKey() const
+{
+    StaticKey key;
+    key.zoom = _zoom;
+    key.panX = _panX;
+    key.panY = _panY;
+    key.size = size();
+    key.frame = _player ? _player->currentFrame() : -1;
+    key.revision = _revision;
+    key.scopeDepth = _scope.size();
+    key.grid = _showGrid;
+    key.rotation = _rotation;
+    key.pivot = _rotationPivot;
+    key.mirrored = _mirrored;
+    return key;
 }
 
 std::vector<const fla::Element*> PhoenixView::movingElements() const

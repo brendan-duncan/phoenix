@@ -151,6 +151,12 @@ public:
     /// shapes. The subselection tool shows anchors instead.
     virtual bool showsFillHighlight() const { return true; }
 
+    /// Whether the tool is in the middle of a drag that leaves the stage as
+    /// it is until the drag ends, a brush stroke say, with only the tool's
+    /// overlay moving. The view then draws the stage once and keeps it for
+    /// the drag, rather than drawing everything again with each move.
+    virtual bool holdsStageStill() const { return false; }
+
     /// Called when the tool stops being the active one, so it can abandon any
     /// gesture in progress.
     virtual void deactivate(PhoenixView& view) { (void)view; }

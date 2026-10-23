@@ -7,8 +7,11 @@
 #include "../edit/brush_texture.h"
 #include "../edit/region_split.h"
 
+#include <QImage>
 #include <QPainterPath>
 #include <QPointF>
+#include <QRect>
+#include <QTransform>
 
 #include <memory>
 #include <vector>
@@ -34,6 +37,63 @@ fla::Shape* brushOutlineShape(const std::vector<fla::Point>& points, double widt
 /// with no overlaps, which a finished stroke needs; a preview can fill them
 /// as they are.
 QPainterPath sweptOutline(const std::vector<fla::BrushDab>& dabs, double zoom, bool resolve);
+
+/// A stroke under way, drawn as it grows. Filling the whole sweep again
+/// with each move costs as much as the stroke is long (in the web editor
+/// a long stroke's thousands of hulls took most of every paint), so on
+/// the CPU the dabs that will not change any more are painted once into
+/// an image the size of the view, and a paint adds only the tail of the
+/// stroke, which still moves with the pen. A dab counts as settled once
+/// two paints in a row build it the same; should a settled dab change
+/// after all (a taper reaching back, a long stroke resampled) the image
+/// starts over. On the GPU the whole sweep is drawn as it is, which is
+/// cheap there.
+class SweepPreview
+{
+public:
+    /// The next paint starts the stroke over, and the image goes.
+    void reset();
+
+    /// Fills the sweep of \a dabs, and its \a copies, with the painter's
+    /// brush, as drawing the swept outline with drawWithCopies would.
+    /// Dabs within \a reach of the pen (settleReach) are never kept, so a
+    /// pen pausing does not keep what will change when it goes on.
+    void paint(QPainter& painter, const std::vector<fla::BrushDab>& dabs, double zoom,
+        const std::vector<QTransform>& copies, double reach);
+
+private:
+    /// Makes the image fit the painter, the copies and the color, starting
+    /// over when any changed; false when the painter cannot use one.
+    bool prepare(QPainter& painter, const std::vector<QTransform>& copies, const QColor& color);
+    /// The image pixels a fill of \a path, and its copies, can touch.
+    QRect area(const QPainterPath& path) const;
+    /// Fills \a path, and its copies, into the image.
+    void fill(const QPainterPath& path);
+    /// Puts back what the last paint's tail was drawn over.
+    void restoreTail();
+
+    QImage _image;
+    QTransform _transform;
+    QSize _pixels;
+    qreal _ratio = 1.0;
+    QRgb _color = 0;
+    std::vector<QTransform> _copies;
+    /// The dabs painted into the image for good.
+    std::vector<fla::BrushDab> _baked;
+    /// The dabs of the last paint, to tell which have settled.
+    std::vector<fla::BrushDab> _previous;
+    /// The image pixels painted so far.
+    QRect _painted;
+    /// Where the last tail went, and the pixels under it.
+    QRect _tailRect;
+    QImage _tailSaved;
+};
+
+/// How far behind the pen a stroke's dabs can still change as it goes on,
+/// in document units at \a zoom: the smoothing windows reach back some
+/// screen pixels, and an end taper as far as it is long. Infinite for a
+/// taper in percent, which stretches with the stroke, so nothing settles.
+double settleReach(const fla::BrushSettings& settings, double zoom);
 
 /// The brushes: paint a fill along the drag. The stroke is a shape with a
 /// fill and no outline, and merges like any other drawing, so passes of one
@@ -92,6 +152,8 @@ public:
 
     bool showsSelectionBounds() const override { return false; }
 
+    bool holdsStageStill() const override { return _drawing; }
+
     void deactivate(PhoenixView& view) override;
 
 private:
@@ -133,6 +195,7 @@ private:
     const fla::DrawingStyle& _style;
 
     std::vector<fla::BrushSample> _samples;
+    SweepPreview _preview;
     /// With shift held, the stroke keeps to one direction: 1 across, 2 down.
     int _axis = 0;
     /// The ruler guide the stroke began on: 1 a vertical one at _guideAt,
@@ -181,6 +244,8 @@ public:
 
     void paintOverlay(PhoenixView& view, QPainter& painter, double scale) override;
 
+    bool holdsStageStill() const override { return _erasing; }
+
     void deactivate(PhoenixView& view) override;
 
 private:
@@ -196,6 +261,7 @@ private:
     std::vector<fla::Point> _points;
     /// The pass as the pen gave it, with pressure and tilt.
     std::vector<fla::BrushSample> _samples;
+    SweepPreview _preview;
     bool _pen = false;
     void takeSamples(PhoenixView& view, QMouseEvent* event, const QPointF& documentPos);
     /// The eraser's nib, its own or the Nib Brush's.

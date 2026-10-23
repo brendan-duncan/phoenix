@@ -1311,6 +1311,15 @@ private:
     QImage _aboveImage;
     StaticKey _staticKey;
     bool _staticValid = false;
+    /// The view as drawn, without moving elements: what the caches are
+    /// keyed on.
+    StaticKey stageKey() const;
+    /// The stage kept while a tool holds it still (Tool::holdsStageStill):
+    /// drawn once, with the tool's overlay going over it at each move.
+    QImage _heldImage;
+    StaticKey _heldKey;
+    bool _heldValid = false;
+    bool _heldGray = false;
 
     /// The top-level elements a gesture is moving: the selection's, and any
     /// drawing still floating.

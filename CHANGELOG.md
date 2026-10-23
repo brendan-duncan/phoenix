@@ -2,6 +2,10 @@
 
 What changed in each release of Phoenix, newest first.
 
+## Unreleased
+
+- Brush and eraser strokes keep up with the pen on the CPU stage, the web editor's without WebGPU included: the stroke under way is painted as it grows rather than from its start at every move, and the stage under it is drawn once for the stroke
+
 ## 0.23.2
 
 - Drop a PHX, FLA, XFL or SWF file on the web editor to open it, on the window or the Welcome screen; on the desktop, SWF files and drops on the Welcome screen open too

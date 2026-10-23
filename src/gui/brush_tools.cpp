@@ -28,11 +28,14 @@
 
 #include <QKeyEvent>
 #include <QMouseEvent>
+#include <QPaintEngine>
 #include <QPainterPathStroker>
 #include <QPolygonF>
 
 #include <algorithm>
 #include <cmath>
+#include <cstring>
+#include <limits>
 #include <memory>
 #include <functional>
 
@@ -478,6 +481,228 @@ QPainterPath sweptOutline(const std::vector<fla::BrushDab>& dabs, double zoom, b
     return resolve ? path.simplified() : path;
 }
 
+// --------------------------------------------------------- sweep preview
+
+namespace {
+
+/// Whether two dabs sweep the same area. The tip's shape is shared by
+/// every dab of one build and made afresh for the next, so it is compared
+/// by its points when the pointers differ.
+bool sameDab(const fla::BrushDab& a, const fla::BrushDab& b)
+{
+    if (a.x != b.x || a.y != b.y || a.width != b.width || a.height != b.height || a.angle != b.angle ||
+        a.rectangular != b.rectangular)
+        return false;
+    if (a.shape == b.shape)
+        return true;
+    if (!a.shape || !b.shape || a.shape->size() != b.shape->size())
+        return false;
+    for (size_t i = 0; i < a.shape->size(); ++i)
+    {
+        if ((*a.shape)[i].x != (*b.shape)[i].x || (*a.shape)[i].y != (*b.shape)[i].y)
+            return false;
+    }
+    return true;
+}
+
+/// How many dabs from the start two builds of a stroke agree on.
+size_t samePrefix(const std::vector<fla::BrushDab>& a, const std::vector<fla::BrushDab>& b)
+{
+    const size_t most = std::min(a.size(), b.size());
+    size_t n = 0;
+    while (n < most && sameDab(a[n], b[n]))
+        ++n;
+    return n;
+}
+
+/// The device pixels a painter's device measures: a widget's logical size
+/// at its ratio, an image's pixels as they are.
+QSize devicePixels(const QPaintDevice* device, qreal ratio)
+{
+    if (device->devType() == QInternal::Image || device->devType() == QInternal::Pixmap)
+        return QSize(device->width(), device->height());
+    return QSize(static_cast<int>(std::ceil(device->width() * ratio)),
+        static_cast<int>(std::ceil(device->height() * ratio)));
+}
+
+/// How many of \a dabs lie at least \a reach behind the last, along the
+/// line through their centers.
+size_t dabsBehind(const std::vector<fla::BrushDab>& dabs, double reach)
+{
+    double back = 0.0;
+    for (size_t i = dabs.size(); i > 1; --i)
+    {
+        back += std::hypot(dabs[i - 1].x - dabs[i - 2].x, dabs[i - 1].y - dabs[i - 2].y);
+        if (back >= reach)
+            return i - 1;
+    }
+    return 0;
+}
+
+} // namespace
+
+double settleReach(const fla::BrushSettings& settings, double zoom)
+{
+    const double pixel = 1.0 / std::max(zoom, 1.0e-6);
+    const bool percent = settings.taperUnits == fla::BrushSettings::TaperUnits::Percent;
+    if (percent && (settings.taperStart > 0.0 || settings.taperEnd > 0.0))
+        return std::numeric_limits<double>::infinity();
+    // The smoothing of the line, its pressure and its speed reaches back
+    // up to about 24 screen pixels, the heading two more.
+    double reach = 40.0 * pixel;
+    if (!percent)
+        reach += std::max(0.0, settings.taperEnd);
+    return reach;
+}
+
+void SweepPreview::reset()
+{
+    _image = QImage();
+    _tailSaved = QImage();
+    _baked.clear();
+    _previous.clear();
+    _painted = QRect();
+    _tailRect = QRect();
+    _pixels = QSize();
+}
+
+bool SweepPreview::prepare(QPainter& painter, const std::vector<QTransform>& copies, const QColor& color)
+{
+    const QPaintEngine* engine = painter.paintEngine();
+    if (!engine || engine->type() != QPaintEngine::Raster || !painter.device())
+        return false;
+    const qreal ratio = painter.device()->devicePixelRatioF();
+    const QSize pixels = devicePixels(painter.device(), ratio);
+    // From the painter's coordinates to device pixels (the combined
+    // transform carries the device pixel ratio); the image is kept in
+    // device pixels with no ratio of its own, so this maps straight into it.
+    const QTransform transform = painter.combinedTransform();
+    if (pixels.isEmpty())
+        return false;
+    const bool same = !_image.isNull() && pixels == _pixels && ratio == _ratio && transform == _transform &&
+        copies == _copies && color.rgb() == _color;
+    if (same)
+        return true;
+    if (_image.isNull() || _image.size() != pixels)
+    {
+        _image = QImage(pixels, QImage::Format_ARGB32_Premultiplied);
+        if (_image.isNull())
+            return false;
+    }
+    _image.setDevicePixelRatio(1.0);
+    _image.fill(Qt::transparent);
+    _tailSaved = QImage();
+    _baked.clear();
+    _previous.clear();
+    _painted = QRect();
+    _tailRect = QRect();
+    _pixels = pixels;
+    _ratio = ratio;
+    _transform = transform;
+    _copies = copies;
+    _color = color.rgb();
+    return true;
+}
+
+QRect SweepPreview::area(const QPainterPath& path) const
+{
+    const QRectF bounds = path.boundingRect();
+    QRectF pixels = _transform.mapRect(bounds);
+    for (const QTransform& copy : _copies)
+        pixels |= _transform.mapRect(copy.mapRect(bounds));
+    // Antialiasing reaches a pixel past the outline.
+    return pixels.toAlignedRect().adjusted(-2, -2, 2, 2) & _image.rect();
+}
+
+void SweepPreview::fill(const QPainterPath& path)
+{
+    QPainter painter(&_image);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    painter.setWorldTransform(_transform);
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(QColor(_color));
+    drawaids::drawWithCopies(painter, path, _copies);
+}
+
+void SweepPreview::restoreTail()
+{
+    if (_tailRect.isEmpty() || _tailSaved.isNull())
+    {
+        _tailRect = QRect();
+        return;
+    }
+    const size_t bytes = static_cast<size_t>(_tailRect.width()) * 4;
+    for (int y = 0; y < _tailRect.height(); ++y)
+    {
+        std::memcpy(_image.scanLine(_tailRect.y() + y) + static_cast<size_t>(_tailRect.x()) * 4,
+            _tailSaved.constScanLine(y), bytes);
+    }
+    _tailRect = QRect();
+}
+
+void SweepPreview::paint(QPainter& painter, const std::vector<fla::BrushDab>& dabs, double zoom,
+    const std::vector<QTransform>& copies, double reach)
+{
+    const QColor color = painter.brush().color();
+    if (dabs.size() < 2 || !std::isfinite(reach) || painter.brush().style() != Qt::SolidPattern ||
+        !prepare(painter, copies, color))
+    {
+        drawaids::drawWithCopies(painter, sweptOutline(dabs, zoom, false), copies);
+        return;
+    }
+
+    restoreTail();
+    // The dabs kept must still be the stroke's; when one behind the pen has
+    // changed, the image starts over.
+    if (samePrefix(_baked, dabs) < _baked.size())
+    {
+        _image.fill(Qt::transparent);
+        _baked.clear();
+        _painted = QRect();
+    }
+    // What has settled: the dabs this build and the last agree on, out of
+    // the pen's reach, and never the one under the pen.
+    const size_t settled = std::min({samePrefix(_previous, dabs), dabsBehind(dabs, reach), dabs.size() - 1});
+    if (settled > _baked.size() && settled >= 2)
+    {
+        // The hulls from the last dab in the image on to the last settled.
+        const size_t from = _baked.empty() ? 0 : _baked.size() - 1;
+        const std::vector<fla::BrushDab> part(dabs.begin() + static_cast<long long>(from),
+            dabs.begin() + static_cast<long long>(settled));
+        const QPainterPath path = sweptOutline(part, zoom, false);
+        _painted |= area(path);
+        fill(path);
+        _baked.assign(dabs.begin(), dabs.begin() + static_cast<long long>(settled));
+    }
+    _previous = dabs;
+
+    // The tail, from the last dab in the image to the pen, for this paint
+    // only: what it covers is kept to put back next time.
+    const size_t from = _baked.empty() ? 0 : _baked.size() - 1;
+    const std::vector<fla::BrushDab> tail(dabs.begin() + static_cast<long long>(from), dabs.end());
+    const QPainterPath path = sweptOutline(tail, zoom, false);
+    _tailRect = area(path);
+    if (!_tailRect.isEmpty())
+    {
+        _tailSaved = _image.copy(_tailRect);
+        _painted |= _tailRect;
+        fill(path);
+    }
+
+    if (_painted.isEmpty())
+        return;
+    // The painted pixels back onto the device, pixel for pixel: the target
+    // is in the painter's logical pixels, the source in the image's.
+    painter.save();
+    painter.setWorldTransform(QTransform());
+    painter.setOpacity(painter.opacity() * color.alphaF());
+    painter.setRenderHint(QPainter::SmoothPixmapTransform, false);
+    const QRectF target(_painted.x() / _ratio, _painted.y() / _ratio, _painted.width() / _ratio,
+        _painted.height() / _ratio);
+    painter.drawImage(target, _image, QRectF(_painted));
+    painter.restore();
+}
+
 // ---------------------------------------------------------------- brush
 
 QString BrushTool::name() const
@@ -581,6 +806,7 @@ bool BrushTool::mousePress(PhoenixView& view, QMouseEvent* event, const QPointF&
 
     _drawing = true;
     _samples.clear();
+    _preview.reset();
     _axis = 0;
     // Snap to Guides: a stroke begun on a ruler guide keeps to it.
     _guideAxis = 0;
@@ -656,12 +882,14 @@ bool BrushTool::keyPress(PhoenixView& view, QKeyEvent* event)
 
     _drawing = false;
     _samples.clear();
+    _preview.reset();
     view.update();
     return true;
 }
 
 void BrushTool::finish(PhoenixView& view)
 {
+    _preview.reset();
     fla::Frame* frame = view.activeFrame();
     if (!frame || _samples.empty())
     {
@@ -1154,8 +1382,8 @@ void BrushTool::paintOverlay(PhoenixView& view, QPainter& painter, double scale)
         painter.setBrush(QColor(_style.fillColor[0], _style.fillColor[1],
             _style.fillColor[2], _style.fillColor[3]));
         const std::vector<fla::BrushSample> samples = drawaids::snapped(view, _samples);
-        drawaids::drawWithCopies(painter, sweptOutline(fla::BrushStroke::dabs(samples, brush, zoom, false), zoom, false),
-            drawaids::copiesInScope(view));
+        _preview.paint(painter, fla::BrushStroke::dabs(samples, brush, zoom, false), zoom,
+            drawaids::copiesInScope(view), settleReach(brush, zoom));
         paintTrail(view, painter, samples, brush.stabilizer, scale);
     }
 
@@ -1185,6 +1413,7 @@ void BrushTool::deactivate(PhoenixView& view)
 {
     _drawing = false;
     _samples.clear();
+    _preview.reset();
     _hoverValid = false;
     _insideShape = nullptr;
     _insideFace = -1;
@@ -1228,6 +1457,7 @@ bool EraserTool::mousePress(PhoenixView& view, QMouseEvent* event, const QPointF
     _erasing = true;
     _points.clear();
     _samples.clear();
+    _preview.reset();
     _pen = view.penDown();
     _points.push_back(fla::Point(documentPos.x(), documentPos.y()));
     takeSamples(view, event, documentPos);
@@ -1302,12 +1532,14 @@ bool EraserTool::keyPress(PhoenixView& view, QKeyEvent* event)
 
     _erasing = false;
     _points.clear();
+    _preview.reset();
     view.update();
     return true;
 }
 
 void EraserTool::finish(PhoenixView& view)
 {
+    _preview.reset();
     fla::Frame* frame = view.activeFrame();
     if (!frame || _points.empty())
     {
@@ -1455,8 +1687,8 @@ void EraserTool::paintOverlay(PhoenixView& view, QPainter& painter, double scale
         painter.setBrush(QColor(255, 255, 255, 200));
         const double zoom = std::max(view.zoom(), 1.0e-6);
         const std::vector<fla::BrushSample> samples = drawaids::snapped(view, _samples);
-        drawaids::drawWithCopies(painter, sweptOutline(fla::BrushStroke::dabs(samples, eraser, zoom, false), zoom, false),
-            drawaids::copiesInScope(view));
+        _preview.paint(painter, fla::BrushStroke::dabs(samples, eraser, zoom, false), zoom,
+            drawaids::copiesInScope(view), settleReach(eraser, zoom));
         paintTrail(view, painter, samples, eraser.stabilizer, scale);
     }
 
@@ -1483,6 +1715,7 @@ void EraserTool::deactivate(PhoenixView& view)
 {
     _erasing = false;
     _points.clear();
+    _preview.reset();
     _hoverValid = false;
     _insideShape = nullptr;
     _insideFace = -1;
