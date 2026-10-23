@@ -108,6 +108,17 @@ export function loadConfig(env = process.env, overrides = {}) {
     convertMaxExpandedBytes: envInt(env, 'PHOENIX_CLOUD_CONVERT_MAX_EXPANDED_MB', 2048) * 1024 * 1024,
     convertMaxMemoryMB: envInt(env, 'PHOENIX_CLOUD_CONVERT_MAX_MEMORY_MB', 2048),
     conversionsPerHour: envInt(env, 'PHOENIX_CLOUD_CONVERSIONS_PER_HOUR', 30),
+    // Email: sent through an SMTP service (Amazon SES, say) when a host is
+    // set; otherwise only written to the outbox (lib/mail.mjs).
+    smtp: env.PHOENIX_CLOUD_SMTP_HOST ? {
+      host: env.PHOENIX_CLOUD_SMTP_HOST,
+      port: envInt(env, 'PHOENIX_CLOUD_SMTP_PORT', env.PHOENIX_CLOUD_SMTP_TLS === 'tls' ? 465 : 587),
+      user: env.PHOENIX_CLOUD_SMTP_USER ?? '',
+      password: env.PHOENIX_CLOUD_SMTP_PASSWORD ?? '',
+      tls: ['starttls', 'tls', 'none'].includes(env.PHOENIX_CLOUD_SMTP_TLS) ? env.PHOENIX_CLOUD_SMTP_TLS : 'starttls',
+    } : null,
+    mailFrom: env.PHOENIX_CLOUD_MAIL_FROM || `Phoenix Cloud <no-reply@${new URL(publicUrl).hostname.replace(/^cloud\./, '')}>`,
+    mailReplyTo: env.PHOENIX_CLOUD_MAIL_REPLY_TO || null,
     maxJsonBytes: 256 * 1024,
     sessionDays: 30,
     loginStateMinutes: 10,

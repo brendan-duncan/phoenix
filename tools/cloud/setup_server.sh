@@ -113,6 +113,13 @@ HOME=$DATA/home
 # PHOENIX_CLOUD_GOOGLE_SECRET=
 # PHOENIX_CLOUD_GITHUB_ID=
 # PHOENIX_CLOUD_GITHUB_SECRET=
+# Email through Amazon SES (its SMTP settings; the domain verified there):
+# PHOENIX_CLOUD_SMTP_HOST=email-smtp.us-west-2.amazonaws.com
+# PHOENIX_CLOUD_SMTP_PORT=587
+# PHOENIX_CLOUD_SMTP_USER=
+# PHOENIX_CLOUD_SMTP_PASSWORD=
+# PHOENIX_CLOUD_MAIL_FROM=Phoenix Cloud <no-reply@phoenixanimate.com>
+# PHOENIX_CLOUD_MAIL_REPLY_TO=
 EOF
   umask 022
   chown root:phoenix-cloud "$ENV_FILE"

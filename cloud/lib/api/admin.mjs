@@ -335,10 +335,27 @@ export function registerAdmin(router, app) {
     return { fonts: listFonts(ctx.config.fontsDir) };
   });
 
-  // What the server would have emailed (there is no mail server yet).
+  // The latest emails, how each went, and where mail goes.
   router.get('/api/admin/outbox', (ctx) => {
     ctx.requireAdmin();
-    return { messages: app.mailer.recent() };
+    return { messages: app.mailer.recent(), mail: app.mailer.describe() };
+  });
+
+  // Sends a test email ({ to }, else the admin's own address) and waits to say how it went.
+  router.post('/api/admin/email/test', async (ctx) => {
+    const admin = ctx.requireAdmin();
+    const body = await ctx.json();
+    const to = String(body.to ?? admin.email ?? '').trim();
+    if (!validEmail(to)) {
+      throw badRequest('Give an email address to send the test to.');
+    }
+    const result = await app.mailer.send({
+      to,
+      subject: 'Phoenix Cloud test email',
+      text: `This is a test from Phoenix Cloud, sent by ${admin.name} from Admin > Email.\n\nIf it reached your inbox (not junk), email is set up.\n\n${ctx.config.publicUrl}/`,
+    });
+    ctx.store.audit(admin.id, 'email.test', 'user', admin.id, { to, status: result.status });
+    return result;
   });
 
   router.get('/api/admin/stats', (ctx) => {

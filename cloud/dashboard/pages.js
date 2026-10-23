@@ -1020,11 +1020,38 @@ async function adminFonts() {
 }
 
 async function adminEmail() {
-  const { messages } = await get('/api/admin/outbox');
+  const { messages, mail } = await get('/api/admin/outbox');
+  const to = h('input', { type: 'email', value: state.me.user.email ?? '', placeholder: 'Send it to', 'aria-label': 'Send the test to', required: true });
+  const result = h('div', { class: 'small' });
+  const test = h('form', { class: 'row' }, to, h('button', { type: 'submit', class: 'btn' }, 'Send a test email'));
+  test.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const button = test.querySelector('button');
+    button.disabled = true;
+    clear(result, 'Sending…');
+    result.className = 'small muted';
+    try {
+      const sent = await post('/api/admin/email/test', { to: to.value.trim() });
+      result.className = `small ${sent.status === 'failed' ? 'status-bad' : sent.status === 'sent' ? 'status-ok' : 'muted'}`;
+      clear(result, sent.status === 'sent' ? `Sent: ${sent.detail}. Check that it reached the inbox, not junk.` : sent.detail);
+    } catch (err) {
+      result.className = 'small status-bad';
+      clear(result, err.message);
+    } finally {
+      button.disabled = false;
+    }
+  });
+  const statusClass = (s) => (s.startsWith('sent') ? 'status-ok' : s.startsWith('failed') ? 'status-bad' : 'muted');
   return [
-    h('p', { class: 'muted' }, 'There is no mail server yet, so emails are kept here (and in the outbox folder of the server\'s data) instead of being sent.'),
+    h('div', { class: 'panel stack cards-form' },
+      h('h2', {}, 'Where mail goes'),
+      mail.sending
+        ? h('p', { class: 'flush' }, `Sent through ${mail.host} as ${mail.from}${mail.replyTo ? `, replies to ${mail.replyTo}` : ''}.`)
+        : h('p', { class: 'flush muted' }, 'No mail service is set up, so emails are only kept here (and in the outbox folder of the server\'s data). Set PHOENIX_CLOUD_SMTP_HOST, _USER and _PASSWORD (Amazon SES\'s SMTP settings) and PHOENIX_CLOUD_MAIL_FROM in the server\'s settings to send them.'),
+      test, result),
     messages.length ? messages.map((m) => h('div', { class: 'panel stack mail' },
       h('div', { class: 'row' }, h('strong', {}, m.subject), h('div', { class: 'grow' }), h('span', { class: 'muted small' }, `to ${m.to}`)),
+      m.status ? h('div', { class: `small ${statusClass(m.status)}` }, m.status) : null,
       h('pre', { class: 'mail-text' }, m.text))) : h('div', { class: 'empty' }, icon('file'), h('h2', {}, 'No emails yet')),
   ];
 }

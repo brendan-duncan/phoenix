@@ -1,24 +1,69 @@
-// Outgoing email. There is no mail server yet: each message is written to
-// the data folder's outbox (and, in dev, printed), where the admin page
-// lists the latest. Sending through SMTP comes with the remote server.
+// Outgoing email. Each message is written to the data folder's outbox
+// (and, in dev, printed), where Admin > Email lists the latest with how
+// each went; with an SMTP service set up (PHOENIX_CLOUD_SMTP_HOST, Amazon
+// SES say) it is also sent, in the background, trying again a couple of
+// times when the service says to try later.
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { buildMessage, sendMail } from './smtp.mjs';
+
+// Waits before trying again after a failure the service calls temporary.
+const RETRY_MS = [60 * 1000, 10 * 60 * 1000];
 
 export class Mailer {
   constructor(config) {
     this.dir = path.join(config.dataDir, 'outbox');
     this.echo = config.mode === 'dev';
+    this.smtp = config.smtp;
+    this.from = config.mailFrom;
+    this.replyTo = config.mailReplyTo;
+    // Sent one at a time, in order.
+    this.queue = Promise.resolve();
   }
 
+  /** Where mail goes: { sending, host, from, replyTo }. */
+  describe() {
+    return { sending: Boolean(this.smtp), host: this.smtp?.host ?? null, from: this.from, replyTo: this.replyTo };
+  }
+
+  /**
+   * Writes { to, subject, text } to the outbox and, with SMTP set up, sends
+   * it. Returns a promise of how the sending went ({ status, detail }),
+   * which callers may ignore: it never rejects.
+   */
   send({ to, subject, text }) {
     fs.mkdirSync(this.dir, { recursive: true });
     const stamp = new Date().toISOString().replace(/[:.]/g, '-');
     const file = path.join(this.dir, `${stamp}-${String(to).replace(/[^a-z0-9@._-]/gi, '_')}.txt`);
-    fs.writeFileSync(file, `To: ${to}\nSubject: ${subject}\n\n${text}\n`);
+    const write = (status) => fs.writeFileSync(file, `To: ${to}\nSubject: ${subject}\nStatus: ${status}\n\n${text}\n`);
+    write(this.smtp ? 'sending' : 'outbox only (no mail service set up)');
     if (this.echo) {
       console.log(`[cloud] mail to ${to}: ${subject}\n${text}`);
     }
+    if (!this.smtp) {
+      return Promise.resolve({ status: 'outbox', detail: 'No mail service is set up, so it is only in the outbox.' });
+    }
+    const message = buildMessage({ from: this.from, to, replyTo: this.replyTo, subject, text });
+    const attempt = async (tries) => {
+      try {
+        const { reply } = await sendMail(this.smtp, { from: this.from, to, message });
+        write(`sent (${reply})`);
+        return { status: 'sent', detail: reply };
+      } catch (err) {
+        if (err.temporary && tries < RETRY_MS.length) {
+          write(`waiting to try again: ${err.message}`);
+          await new Promise((resolve) => setTimeout(resolve, RETRY_MS[tries]).unref?.());
+          return attempt(tries + 1);
+        }
+        write(`failed: ${err.message}`);
+        console.error(`[cloud] mail to ${to} failed: ${err.message}`);
+        return { status: 'failed', detail: err.message };
+      }
+    };
+    const result = this.queue.then(() => attempt(0));
+    this.queue = result.catch(() => {});
+    return result;
   }
 
   /** The latest messages, newest first. */
@@ -30,7 +75,7 @@ export class Mailer {
       const text = fs.readFileSync(path.join(this.dir, name), 'utf8');
       const [head, ...body] = text.split('\n\n');
       const field = (key) => head.split('\n').find((l) => l.startsWith(`${key}: `))?.slice(key.length + 2) ?? '';
-      return { file: name, to: field('To'), subject: field('Subject'), text: body.join('\n\n').trim() };
+      return { file: name, to: field('To'), subject: field('Subject'), status: field('Status'), text: body.join('\n\n').trim() };
     });
   }
 }

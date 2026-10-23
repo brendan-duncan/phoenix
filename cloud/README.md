@@ -94,6 +94,10 @@ From the environment (or `cloud/dev.env`):
 | `PHOENIX_CLOUD_CONVERT_MAX_MEMORY_MB` | `2048`; Phoenix's memory for one job |
 | `PHOENIX_CLOUD_CONVERSIONS_PER_HOUR` | `30`; documents Phoenix makes for one person (admins: no limit) |
 | `PHOENIX_CLOUD_<PROVIDER>_ID`, `_SECRET` | Google and GitHub sign-in |
+| `PHOENIX_CLOUD_SMTP_HOST`, `_PORT`, `_USER`, `_PASSWORD` | the mail service (none: emails stay in the outbox); port 587 |
+| `PHOENIX_CLOUD_SMTP_TLS` | `starttls`; `tls` (port 465); `none` only for a relay on the same machine |
+| `PHOENIX_CLOUD_MAIL_FROM` | `Phoenix Cloud <no-reply@...>` on the service's domain |
+| `PHOENIX_CLOUD_MAIL_REPLY_TO` | where replies go; none by default |
 
 Admins change the rest while it runs (Admin > Settings): whether people
 can register at all (off, only invites and accounts an admin makes let
@@ -139,9 +143,12 @@ play origin serves nothing, and everyone else sees the lock message.
   a request message (who they are, to show they are a real person), which
   Admin > Accounts shows beside Unlock. An invite link (Admin > Invites)
   lets its holder in at once, with no message.
-- Email: there is no mail server yet. Confirmation emails are written to
-  the data folder's `outbox/`, listed under Admin > Email, and printed by
-  `dev`.
+- Email (`lib/mail.mjs`, `lib/smtp.mjs`): every email is written to the
+  data folder's `outbox/` and listed under Admin > Email with how it went
+  (and printed by `dev`). With `PHOENIX_CLOUD_SMTP_HOST` set it is also sent
+  through that SMTP service (Amazon SES: STARTTLS on port 587, AUTH with
+  its SMTP user), in the background, trying twice more when the service
+  says to try later. Admin > Email sends a test email.
 - Admin > Accounts unlocks waiting accounts, makes accounts (ready at
   once), sets plans and passwords, suspends, makes admins, sets storage
   quotas and deletes accounts with what they own (groups they own go to
