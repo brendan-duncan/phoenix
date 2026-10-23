@@ -1,7 +1,9 @@
-// The Artist layout (View > Artist Layout): the stage with a strip of the
-// drawing tools down its left and, under it, the timeline beneath a row of
-// frame buttons; every other panel and bar is put away, and comes back as
-// it was. Animation is three ideas here: New Frame draws the next drawing
+// The Artist layout (View > Mode > Artist): the stage with a strip of the
+// drawing tools down its left, and two buttons at its foot that open the
+// timeline (under a row of frame buttons) and Properties as drawers over
+// the stage, closed by a press anywhere else; every other panel and bar is
+// put away, and comes back as it was. Animation is three ideas here: New
+// Frame draws the next drawing
 // (Duplicate keeps this one to work from), Longer and Shorter hold it, and
 // moving something at a later frame keys that frame by itself, tweening the
 // span before it, so a drawing dragged at frame 12 slides there from frame
@@ -15,6 +17,7 @@
 #include "phoenix_view.h"
 #include "player.h"
 #include "simple_workspace.h"
+#include "stage_drawers.h"
 #include "theme.h"
 #include "timeline_view.h"
 #include "timelines_panel.h"
@@ -54,7 +57,8 @@ namespace {
 
 constexpr int kButtonSize = 44;
 
-enum class ArtistIcon { Undo, Redo, Back, Play, Stop, Forward, Loop, Onion, NewFrame, Duplicate, Longer, Shorter, NewLayer };
+enum class ArtistIcon { Undo, Redo, Back, Play, Stop, Forward, Loop, Onion, NewFrame, Duplicate, Longer, Shorter, NewLayer,
+    Timeline, Properties };
 
 /// The layout's own pictures, in the theme's text color.
 QIcon artistIcon(ArtistIcon kind)
@@ -172,6 +176,27 @@ QIcon artistIcon(ArtistIcon kind)
         painter.drawLine(QPointF(58, 32), QPointF(42, 32));
         painter.drawLine(QPointF(48, 24), QPointF(42, 32));
         painter.drawLine(QPointF(48, 40), QPointF(42, 32));
+        break;
+    case ArtistIcon::Timeline:
+        // A layer's frames, a keyframe dot in the first and a span after it.
+        painter.drawRect(QRectF(8, 20, 48, 24));
+        for (double x : {20.0, 32.0, 44.0})
+            painter.drawLine(QPointF(x, 20), QPointF(x, 44));
+        painter.setBrush(ink);
+        painter.drawEllipse(QPointF(14, 32), 3.5, 3.5);
+        painter.setBrush(Qt::NoBrush);
+        painter.drawLine(QPointF(24, 54), QPointF(56, 54));
+        break;
+    case ArtistIcon::Properties:
+        // Sliders.
+        for (int row = 0; row < 3; ++row)
+        {
+            const double y = 16 + row * 16;
+            painter.drawLine(QPointF(12, y), QPointF(52, y));
+            painter.setBrush(ink);
+            painter.drawEllipse(QPointF(row == 1 ? 40 : 24, y), 5.5, 5.5);
+            painter.setBrush(Qt::NoBrush);
+        }
         break;
     case ArtistIcon::NewLayer:
         painter.drawRect(QRectF(10, 30, 32, 22));
@@ -352,7 +377,8 @@ void MainWindow::setArtistLayout(bool on)
             _breadcrumbRow->hide();
         statusBar()->hide();
         // The timeline moves under the frame row, with rows and frames
-        // large enough for a finger.
+        // large enough for a finger; the drawers then take that and
+        // Properties, closed until their buttons open them.
         _timelineDock->setWidget(nullptr);
         static_cast<QVBoxLayout*>(_artistDock->widget()->layout())->addWidget(_timelineView);
         _timelineView->show();
@@ -360,9 +386,9 @@ void MainWindow::setArtistLayout(bool on)
         _timelineView->setLayersWidth(220);
         for (QToolBar* bar : _artistBars)
             bar->show();
-        _artistDock->show();
-        resizeDocks({_artistDock}, {std::max(220, height() / 4)}, Qt::Vertical);
+        _artistDrawers->setActive(true);
         _artistStage->setEnabled(true);
+        _phoenixView->setForgivingStage(true);
         // A tool the strip has, the brush unless one is in hand.
         bool inStrip = false;
         for (const QAction* action : _artistBars.first()->actions())
@@ -376,9 +402,11 @@ void MainWindow::setArtistLayout(bool on)
         _artistLayout = false;
         artistEndMove();
         _artistStage->setEnabled(false);
+        _phoenixView->setForgivingStage(false);
         for (QToolBar* bar : _artistBars)
             bar->hide();
-        _artistDock->hide();
+        // The panels back in their docks before the docks come back.
+        _artistDrawers->setActive(false);
         _timelineView->setPhoneView(false);
         static_cast<QVBoxLayout*>(_artistDock->widget()->layout())->removeWidget(_timelineView);
         _timelineDock->setWidget(_timelineView);
@@ -390,6 +418,13 @@ void MainWindow::setArtistLayout(bool on)
     }
     if (_artistLayoutAction && _artistLayoutAction->isChecked() != on)
         _artistLayoutAction->setChecked(on);
+#ifdef PHOENIX_WEB
+    const bool phone = _phoneLayout;
+#else
+    const bool phone = false;
+#endif
+    if (QAction* classic = findChild<QAction*>("viewClassicMode"); classic && !on && !phone)
+        classic->setChecked(true);
 }
 
 void MainWindow::buildArtistBars()
@@ -447,8 +482,8 @@ void MainWindow::buildArtistBars()
     for (QToolButton* button : tools->findChildren<QToolButton*>())
         button->setMinimumSize(kButtonSize, kButtonSize);
 
-    // The frame row and the timeline, in a panel of their own under the
-    // stage with no title bar.
+    // The frame row and the timeline, in a panel of their own, which a
+    // drawer shows over the foot of the stage.
     _artistDock = new QDockWidget("Animation", this);
     _artistDock->setObjectName("artistDock");
     _artistDock->setTitleBarWidget(new QWidget(_artistDock));
@@ -582,6 +617,30 @@ void MainWindow::buildArtistBars()
 
     _artistStage = new ArtistStage(
         _phoenixView, [this](const QPoint& at) { artistBeginMove(at); }, [this]() { artistEndMove(); });
+
+    // At the foot of the tool strip, the buttons that open the timeline
+    // and Properties as drawers over the stage.
+    QWidget* space = new QWidget(tools);
+    space->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
+    tools->addWidget(space);
+    tools->addSeparator();
+    _artistDrawers = new StageDrawers(this, _phoenixView);
+    const auto drawerButton = [this, tools](const char* objectName, ArtistIcon icon, const char* tip) {
+        QToolButton* button = new QToolButton(tools);
+        button->setObjectName(objectName);
+        button->setCheckable(true);
+        button->setIcon(artistIcon(icon));
+        button->setIconSize(tools->iconSize());
+        button->setToolTip(tip);
+        button->setMinimumSize(kButtonSize, kButtonSize);
+        tools->addWidget(button);
+        return button;
+    };
+    _artistDrawers->add(_artistDock, Qt::BottomEdge,
+        drawerButton("artistTimelineButton", ArtistIcon::Timeline, "Timeline: the frames and layers, with New Frame, holds and Motion"),
+        300);
+    _artistDrawers->add(findChild<QDockWidget*>("propertiesDock"), Qt::RightEdge,
+        drawerButton("artistPropertiesButton", ArtistIcon::Properties, "Properties of the tool or what is selected"), 400);
 }
 
 namespace {

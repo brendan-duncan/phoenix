@@ -157,6 +157,11 @@ public:
     /// the drag, rather than drawing everything again with each move.
     virtual bool holdsStageStill() const { return false; }
 
+    /// Whether the tool puts new art on the stage (brushes, pencils, shapes,
+    /// text, the paint bucket), so a forgiving stage can give it a frame to
+    /// draw on past the end of its layer.
+    virtual bool drawsOnStage() const { return false; }
+
     /// Called when the tool stops being the active one, so it can abandon any
     /// gesture in progress.
     virtual void deactivate(PhoenixView& view) { (void)view; }

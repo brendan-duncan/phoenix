@@ -7,7 +7,7 @@
 // side, and the other panels one at a time as a sheet over the bottom of
 // the stage. A press held still on the stage opens the pop-up palette, and
 // a turned stage has a button to set it straight. Phones get it the first
-// time; the menu switches it, and the choice is kept. Compiled only into
+// time; View > Mode switches it, and the choice is kept. Compiled only into
 // the web build (CMakeLists.txt).
 
 #include "main_window.h"
@@ -16,6 +16,7 @@
 #include "timeline_view.h"
 #include "timelines_panel.h"
 #include "player.h"
+#include "stage_drawers.h"
 #include "theme.h"
 #include "web_page.h"
 
@@ -165,201 +166,7 @@ QIcon phoneIcon(PhoneIcon kind)
     return QIcon(pixmap);
 }
 
-/// A panel over the stage along its bottom or right edge. It is a window of
-/// its own: on a page the stage's canvas covers anything the main window
-/// draws over it.
-class PhoneDrawer : public QWidget
-{
-public:
-    PhoneDrawer(QWidget* window, Qt::Edge edge)
-        : QWidget(window, Qt::Tool | Qt::FramelessWindowHint)
-        , _edge(edge)
-    {
-        setAttribute(Qt::WA_ShowWithoutActivating);
-        setAutoFillBackground(true);
-        QVBoxLayout* layout = new QVBoxLayout(this);
-        layout->setContentsMargins(0, 0, 0, 0);
-    }
-
-    /// Over \a stage, in screen coordinates: a little under half of it at
-    /// the bottom, most of it at the side.
-    void place(const QRect& stage)
-    {
-        if (_edge == Qt::BottomEdge)
-        {
-            const int height = std::min(stage.height(), std::max(200, stage.height() * 9 / 20));
-            setGeometry(stage.left(), stage.bottom() + 1 - height, stage.width(), height);
-        }
-        else
-        {
-            const int width = std::min(stage.width(), std::clamp(stage.width() * 17 / 20, 240, 340));
-            setGeometry(stage.right() + 1 - width, stage.top(), width, stage.height());
-        }
-    }
-
-private:
-    Qt::Edge _edge;
-};
-
 } // namespace
-
-/// The phone layout's drawers: each takes its dock's panel while the
-/// layout is on and gives it back after. A drawer's bar opens and closes
-/// it; a press anywhere else in the main window closes it, and one on the
-/// stage does nothing more, so closing a drawer never draws.
-class PhoneDrawers : public QObject
-{
-public:
-    PhoneDrawers(QWidget* window, QWidget* stage)
-        : QObject(window)
-        , _window(window)
-        , _stage(stage)
-    {
-    }
-
-    void add(QDockWidget* dock, Qt::Edge edge, QToolButton* bar)
-    {
-        if (!dock)
-            return;
-        const size_t index = _drawers.size();
-        _drawers.push_back({dock, nullptr, new PhoneDrawer(_window, edge), bar});
-        connect(bar, &QToolButton::clicked, this, [this, index]() { setOpen(index, !_drawers[index].drawer->isVisible()); });
-    }
-
-    void setActive(bool on)
-    {
-        if (on == _active)
-            return;
-        _active = on;
-        for (Drawer& each : _drawers)
-        {
-            if (on)
-            {
-                each.panel = each.dock ? each.dock->widget() : nullptr;
-                if (!each.panel)
-                    continue;
-                each.dock->setWidget(nullptr);
-                each.drawer->layout()->addWidget(each.panel);
-                each.panel->show();
-            }
-            else
-            {
-                each.drawer->hide();
-                each.bar->setChecked(false);
-                if (each.panel && each.dock)
-                    each.dock->setWidget(each.panel);
-                each.panel = nullptr;
-            }
-        }
-        _swallowing = false;
-        if (on)
-            qApp->installEventFilter(this);
-        else
-            qApp->removeEventFilter(this);
-    }
-
-    void setOpen(size_t index, bool open)
-    {
-        for (size_t i = 0; i < _drawers.size(); ++i)
-        {
-            PhoneDrawer* drawer = _drawers[i].drawer;
-            if (i == index && open && _drawers[i].panel)
-            {
-                drawer->place(stageOnScreen());
-                drawer->show();
-                drawer->raise();
-            }
-            else
-                drawer->hide();
-            _drawers[i].bar->setChecked(drawer->isVisible());
-        }
-    }
-
-    void closeAll() { setOpen(_drawers.size(), false); }
-
-    /// Called when the stage moves or changes size, after the drawers.
-    std::function<void()> stageMoved;
-
-protected:
-    bool eventFilter(QObject* watched, QEvent* event) override
-    {
-        switch (event->type())
-        {
-        case QEvent::Resize:
-        case QEvent::Move:
-            if (watched == _stage || watched == _window)
-            {
-                for (const Drawer& each : _drawers)
-                    if (each.drawer->isVisible())
-                        each.drawer->place(stageOnScreen());
-                // The window's own comes before it has laid the stage out.
-                if (stageMoved && watched == _stage)
-                    stageMoved();
-            }
-            break;
-        case QEvent::MouseButtonPress:
-        case QEvent::MouseButtonDblClick:
-        {
-            // A press can come as a double click alone (soon after a tap).
-            if (_swallowing && event->type() == QEvent::MouseButtonDblClick)
-            {
-                if (watched == _stage)
-                    return true;
-                break;
-            }
-            // The first widget a press is offered to is the one pressed.
-            QWidget* pressed = qobject_cast<QWidget*>(watched);
-            const Drawer* open = nullptr;
-            for (const Drawer& each : _drawers)
-                if (each.drawer->isVisible())
-                    open = &each;
-            // In the drawer, a menu or a dialog: it stays.
-            if (!pressed || !open || pressed->window() != _window)
-                break;
-            // Its bar closes it as a button.
-            if (pressed == open->bar || open->bar->isAncestorOf(pressed))
-                break;
-            closeAll();
-            if (pressed == _stage || _stage->isAncestorOf(pressed))
-            {
-                _swallowing = true;
-                return true;
-            }
-            break;
-        }
-        case QEvent::MouseMove:
-        case QEvent::MouseButtonRelease:
-            if (_swallowing && watched == _stage)
-            {
-                if (event->type() == QEvent::MouseButtonRelease)
-                    _swallowing = false;
-                return true;
-            }
-            break;
-        default:
-            break;
-        }
-        return QObject::eventFilter(watched, event);
-    }
-
-private:
-    struct Drawer
-    {
-        QPointer<QDockWidget> dock;
-        QPointer<QWidget> panel;
-        PhoneDrawer* drawer;
-        QToolButton* bar;
-    };
-
-    QRect stageOnScreen() const { return QRect(_stage->mapToGlobal(QPoint(0, 0)), _stage->size()); }
-
-    QWidget* _window;
-    QWidget* _stage;
-    std::vector<Drawer> _drawers;
-    bool _active = false;
-    /// A press on the stage closed a drawer: the rest of it goes nowhere.
-    bool _swallowing = false;
-};
 
 /// A press held still on the stage, which the phone layout gives the pop-up
 /// palette as a right-click would. The press is held back until it moves,
@@ -511,6 +318,7 @@ void MainWindow::setPhoneLayout(bool on)
             bar->show();
         _phoneDrawers->setActive(true);
         _stageHold->setEnabled(true);
+        _phoenixView->setForgivingStage(true);
         // The stage's least size is wider than a phone; kept, it pushes the
         // side bar and the ends of the rows off the screen. The page fits
         // the window to it again once that comes down (web_page.cpp).
@@ -529,6 +337,7 @@ void MainWindow::setPhoneLayout(bool on)
         // The panels back in their docks before the docks come back.
         _phoneDrawers->setActive(false);
         _stageHold->setEnabled(false);
+        _phoenixView->setForgivingStage(false);
         _phoenixView->setMinimumSize(400, 300);
         _timelineView->setPhoneView(false);
         _phoneStraighten->hide();
@@ -540,6 +349,8 @@ void MainWindow::setPhoneLayout(bool on)
     }
     if (_phoneLayoutAction && _phoneLayoutAction->isChecked() != on)
         _phoneLayoutAction->setChecked(on);
+    if (QAction* classic = findChild<QAction*>("viewClassicMode"); classic && !on && !_artistLayout)
+        classic->setChecked(true);
 }
 
 void MainWindow::buildPhoneBar()
@@ -713,7 +524,7 @@ void MainWindow::buildPhoneBar()
     for (QWidget* cell : swatchCells)
         cell->setFixedSize(cellWidth, kButtonSize);
 
-    _phoneDrawers = new PhoneDrawers(this, _phoenixView);
+    _phoneDrawers = new StageDrawers(this, _phoenixView);
 
     // The timeline's bar, over the rows, naming the layer drawn on.
     addToolBarBreak(Qt::BottomToolBarArea);

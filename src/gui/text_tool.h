@@ -43,6 +43,7 @@ public:
     ~TextTool() override;
 
     QString name() const override { return "Text"; }
+    bool drawsOnStage() const override { return true; }
 
     QCursor cursor() const override { return Qt::IBeamCursor; }
 

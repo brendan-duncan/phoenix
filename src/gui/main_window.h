@@ -1224,7 +1224,7 @@ private:
     /// The timeline and Properties as drawers over the stage, a long press
     /// on the stage for the pop-up palette, and the button over the stage
     /// that sets it straight once turned.
-    class PhoneDrawers* _phoneDrawers = nullptr;
+    class StageDrawers* _phoneDrawers = nullptr;
     class StageHold* _stageHold = nullptr;
     QWidget* _phoneStraighten = nullptr;
     void placePhoneStraighten();
@@ -1253,6 +1253,7 @@ private:
     class QComboBox* _artistEase = nullptr;
     QWidget* _artistEaseBox = nullptr;
     class ArtistStage* _artistStage = nullptr;
+    class StageDrawers* _artistDrawers = nullptr;
     struct ArtistMove;
     std::shared_ptr<ArtistMove> _artistMove;
     /// False when the docks' arrangement could not be used.

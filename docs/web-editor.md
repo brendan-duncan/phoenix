@@ -259,7 +259,7 @@ the stage alone, two rows of large buttons along the bottom (the common
 tools, the stroke and fill swatches, undo and redo; step, play, the frame, Loop Playback, Onion Skin,
 a slider through the frames and a menu), and a bar over them for the timeline and one down the right
 for Properties. Each bar opens its panel as a drawer over the stage
-(`PhoneDrawers`): the timeline from the bottom, in its phone view (taller
+(`StageDrawers`, `stage_drawers.h`, shared with the Artist layout): the timeline from the bottom, in its phone view (taller
 rows, wider frames, a narrow layers list and a header without the
 buttons the bar below has), and Properties from the side. A press
 anywhere else in the window closes the drawer, and one on the stage goes
@@ -282,7 +282,7 @@ The stage's least size is lowered while the layout is on, so a phone's
 width holds the side bar and the rows; the page fits the main window to
 it again once its least size comes down (`MainWindowsFillPage` also
 watches layout requests), and the stage is fitted to the view once it
-has. View > Phone Layout switches the layout on any screen, and the
+has. View > Mode > Phone switches the layout on any screen, and the
 choice is kept. A phone starts on a new document rather than the start
 screen. While the layout is on, the window saves the panels as they were
 before it, so they come back as they were.

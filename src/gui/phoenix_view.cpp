@@ -9830,9 +9830,35 @@ void PhoenixView::mousePressEvent(QMouseEvent *event)
         !(_activeTool && _activeTool->usesControlKey());
     _gestureTool = ctrlIsArrow ? _modifierTool : _activeTool;
 
+    // A drawing tool past the end of its layer, on a forgiving stage: a
+    // blank keyframe at the frame shown first, so the drawing has a frame.
+    const bool left = event->button() == Qt::LeftButton;
+    if (_forgivingStage && left && !forcePan && _gestureTool && _gestureTool->drawsOnStage() && _commandStack &&
+        _player && !activeFrame())
+    {
+        fla::Layer* layer = const_cast<fla::Layer*>(activeLayer());
+        const int shown = _player->currentFrame();
+        if (layer && !fla::timeline::spanAt(*layer, shown))
+        {
+            _commandStack->push(fla::CommandPtr(new fla::EditFramesCommand({layer}, "New Frame",
+                [layer, shown](std::vector<fla::Frame*>&) { fla::timeline::insertKeyframe(*layer, shown, true); })));
+            _commandStack->breakMergeChain();
+            clearCaches();
+        }
+    }
+
     if (!forcePan && _gestureTool &&
         _gestureTool->mousePress(*this, event, mapToDocument(event->position())))
     {
+        return;
+    }
+
+    // A press the tool declines marquees on a forgiving stage, as the arrow
+    // would, rather than panning.
+    if (_forgivingStage && left && !forcePan && _modifierTool && _gestureTool != _modifierTool &&
+        _modifierTool->mousePress(*this, event, mapToDocument(event->position())))
+    {
+        _gestureTool = _modifierTool;
         return;
     }
 
@@ -10840,7 +10866,7 @@ void PhoenixView::selectionChanged()
     _committingMerge = false;
 }
 
-fla::Frame* PhoenixView::activeFrame()
+const fla::Layer* PhoenixView::activeLayer() const
 {
     if (!_flaDocument || !_flaDocument->document)
         return nullptr;
@@ -10882,10 +10908,14 @@ fla::Frame* PhoenixView::activeFrame()
             break;
     }
 
-    const fla::Layer* layer = chosen ? chosen : fallback;
+    return chosen ? chosen : fallback;
+}
+
+fla::Frame* PhoenixView::activeFrame()
+{
+    const fla::Layer* layer = activeLayer();
     if (!layer)
         return nullptr;
-
     const LayerFrame state = resolveLayerFrame(layer, fla::LoopType::PlayOnce, 0);
     return const_cast<fla::Frame*>(state.frame);
 }

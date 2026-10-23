@@ -595,6 +595,13 @@ public:
     /// something can be moved without putting the drawing tool down.
     void setModifierTool(Tool* tool) { _modifierTool = tool; }
 
+    /// The Phone and Artist layouts' stage: a left press a tool declines
+    /// marquees with the arrow rather than panning (the hand tool, the
+    /// middle button and space still pan), and a drawing tool pressed past
+    /// the end of its layer gets a blank keyframe at the frame shown first.
+    void setForgivingStage(bool on) { _forgivingStage = on; }
+    bool forgivingStage() const { return _forgivingStage; }
+
     /// The command stack edits go through. Borrowed, and needed because the
     /// view itself commits a waiting merge when the selection moves on.
     void setCommandStack(fla::CommandStack* commandStack) { _commandStack = commandStack; }
@@ -663,6 +670,10 @@ public:
     /// The frame a new object would be drawn into: the currently showing frame
     /// of the layer being edited. Null when there is nowhere to draw.
     fla::Frame* activeFrame();
+
+    /// The layer activeFrame() draws on, whether or not it has a frame at
+    /// the frame shown; null when nothing can be drawn on.
+    const fla::Layer* activeLayer() const;
 
     /// How much the camera enlarges art drawn on \a frame's layer: 1 with
     /// no camera, or with the camera view off.
@@ -1432,6 +1443,7 @@ private:
 
     /// Borrowed. Used for a gesture started with ctrl held.
     Tool* _modifierTool = nullptr;
+    bool _forgivingStage = false;
 
     double _pressure = 1.0;
     double _rotation = 0.0;

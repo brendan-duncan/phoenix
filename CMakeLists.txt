@@ -288,6 +288,7 @@ set(HEADERS
     src/gui/reference_board_view.h
     src/gui/stage_gestures.h
     src/gui/canvas_only.h
+    src/gui/stage_drawers.h
     src/gui/app_identity.h
     src/gui/tutorial_lesson.h
     src/gui/tutorial_runner.h
@@ -588,6 +589,7 @@ set(SOURCES
     src/gui/hint_bubble.cpp
     src/gui/main_window_friendly.cpp
     src/gui/main_window_artist.cpp
+    src/gui/stage_drawers.cpp
     src/gui/starter_templates.cpp
     src/gui/video_import.cpp
     src/gui/swatches_panel.cpp

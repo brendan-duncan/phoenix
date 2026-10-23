@@ -135,6 +135,7 @@ public:
     {}
 
     QString name() const override;
+    bool drawsOnStage() const override { return true; }
 
     Kind kind() const { return _kind; }
 
@@ -231,6 +232,7 @@ public:
     {}
 
     QString name() const override { return "Eraser"; }
+    bool drawsOnStage() const override { return true; }
 
     QCursor cursor() const override;
 

@@ -18,6 +18,7 @@
 #include <QPainterPath>
 #include <QStatusBar>
 #include <QTimer>
+#include <QActionGroup>
 
 #include <cmath>
 
@@ -109,30 +110,58 @@ void MainWindow::createViewExtras(QMenu* viewMenu, QAction* after, StageControls
 
     _canvasOnly = new CanvasOnly(this, {_breadcrumbRow}, layoutVersion);
     put(_canvasOnly->action());
-    // The Artist layout (main_window_artist.cpp); the choice is kept.
-    _artistLayoutAction = new QAction("&Artist Layout", this);
+
+    // View > Mode, at the top of the menu: the regular interface, the phone
+    // layout (the web editor, main_window_phone.cpp) and the Artist layout
+    // (main_window_artist.cpp). The choice is kept for the next start.
+    QMenu* modeMenu = new QMenu("&Mode", viewMenu);
+    modeMenu->menuAction()->setObjectName("viewMode");
+    QActionGroup* modes = new QActionGroup(modeMenu);
+    modes->setExclusive(true);
+    QAction* classic = modeMenu->addAction("&Classic");
+    classic->setObjectName("viewClassicMode");
+    classic->setCheckable(true);
+    classic->setChecked(true);
+    classic->setStatusTip("The regular interface: the panels of the workspace in use");
+    modes->addAction(classic);
+    connect(classic, &QAction::triggered, this, [this]() {
+        QSettings().setValue("workspace/artist", false);
+        setArtistLayout(false);
+#ifdef PHOENIX_WEB
+        QSettings().setValue("web/phoneLayout", false);
+        setPhoneLayout(false);
+#endif
+    });
+#ifdef PHOENIX_WEB
+    _phoneLayoutAction = modeMenu->addAction("&Phone");
+    _phoneLayoutAction->setObjectName("viewPhoneLayout");
+    _phoneLayoutAction->setCheckable(true);
+    _phoneLayoutAction->setStatusTip("The stage, a row of large buttons and the panels one at a time, for a phone");
+    modes->addAction(_phoneLayoutAction);
+    connect(_phoneLayoutAction, &QAction::triggered, this, [this]() {
+        QSettings().setValue("workspace/artist", false);
+        setArtistLayout(false);
+        QSettings().setValue("web/phoneLayout", true);
+        setPhoneLayout(true);
+    });
+#endif
+    _artistLayoutAction = modeMenu->addAction("&Artist");
     _artistLayoutAction->setObjectName("viewArtistLayout");
     _artistLayoutAction->setCheckable(true);
     _artistLayoutAction->setStatusTip(
         "The stage, the drawing tools and the timeline alone, with animation as new frames, holds and moves");
-    connect(_artistLayoutAction, &QAction::triggered, this, [this](bool on) {
-        QSettings().setValue("workspace/artist", on);
-        setArtistLayout(on);
-    });
-    put(_artistLayoutAction);
+    modes->addAction(_artistLayoutAction);
+    connect(_artistLayoutAction, &QAction::triggered, this, [this]() {
 #ifdef PHOENIX_WEB
-    // The web editor's layout for a phone (main_window_phone.cpp); the choice
-    // is kept for the next visit.
-    _phoneLayoutAction = new QAction("&Phone Layout", this);
-    _phoneLayoutAction->setObjectName("viewPhoneLayout");
-    _phoneLayoutAction->setCheckable(true);
-    _phoneLayoutAction->setStatusTip("The stage, a row of large buttons and the panels one at a time, for a phone");
-    connect(_phoneLayoutAction, &QAction::triggered, this, [this](bool on) {
-        QSettings().setValue("web/phoneLayout", on);
-        setPhoneLayout(on);
-    });
-    put(_phoneLayoutAction);
+        QSettings().setValue("web/phoneLayout", false);
+        setPhoneLayout(false);
 #endif
+        QSettings().setValue("workspace/artist", true);
+        setArtistLayout(true);
+    });
+    QAction* top = viewMenu->actions().value(0);
+    viewMenu->insertMenu(top, modeMenu);
+    viewMenu->insertSeparator(top);
 
     // The reference board: pictures to draw from, around the stage.
     _referenceBoard = std::make_unique<ReferenceBoardView>(

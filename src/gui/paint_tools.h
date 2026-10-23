@@ -34,6 +34,7 @@ public:
     ~PaintBucketTool() override;
 
     QString name() const override { return "Paint Bucket"; }
+    bool drawsOnStage() const override { return true; }
 
     /// Where Fill Across asks for the frames selected in the timeline:
     /// false when there are none.
@@ -122,6 +123,7 @@ public:
     {}
 
     QString name() const override { return "Ink Bottle"; }
+    bool drawsOnStage() const override { return true; }
 
     QCursor cursor() const override;
 

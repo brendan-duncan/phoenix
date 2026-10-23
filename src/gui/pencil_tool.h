@@ -42,6 +42,7 @@ public:
     {}
 
     QString name() const override { return _name; }
+    bool drawsOnStage() const override { return true; }
 
     QCursor cursor() const override { return Qt::CrossCursor; }
 

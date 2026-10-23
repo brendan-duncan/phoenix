@@ -43,6 +43,7 @@ public:
     {}
 
     QString name() const override { return "Pen"; }
+    bool drawsOnStage() const override { return true; }
 
     bool wantsEnter() const override { return _active; }
 

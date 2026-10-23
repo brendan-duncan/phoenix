@@ -405,14 +405,19 @@ MainWindow (QMainWindow)
   (`main_window_view.cpp`, `main_window_share.cpp`, `main_window_inbetween.cpp`, ...).
   `updateEditState()` runs on every history change. It prunes the selection, refreshes the panels,
   sets the Undo/Redo text, and updates the title.
-- **The Artist layout** (`main_window_artist.cpp`, View > Artist Layout) is a mode of the window
+- **The Artist layout** (`main_window_artist.cpp`, View > Mode > Artist) is a mode of the window
   rather than a workspace: it saves the panels as they are, hides every dock and bar, and shows a
-  tool strip and a bottom panel of its own (a frame row over the `TimelineView`, borrowed from its
-  dock in its phone view), then puts the saved layout back. Its edits (New Frame after the current
+  tool strip of its own whose last two buttons open the timeline (a frame row over the
+  `TimelineView`, borrowed from its dock in its phone view) and Properties as `StageDrawers`
+  ([stage_drawers.h](../src/gui/stage_drawers.h), shared with the phone layout: frameless tool
+  windows over the stage that a press elsewhere closes), then puts the saved layout back. Its edits (New Frame after the current
   span, holds, named eases, and keying a frame for a move with a classic tween on the span before)
   are Qt-free in [artist_edit.h](../src/edit/artist_edit.h). A press on the stage with the arrow or
   transform tool at a frame inside a span keys it first, inside a macro; a release that moved
   nothing discards the macro (`CommandStack::discardLast`) so a click leaves no keyframe behind.
+  Artist and Phone modes also set `PhoenixView::setForgivingStage`: a left press a tool declines goes
+  to the arrow's marquee rather than panning, and a drawing tool (`Tool::drawsOnStage`) pressed past
+  the end of its layer gets a blank keyframe at the shown frame before it draws.
 - **Document tabs.** Only one document is "shown" at a time (`_flaDocument`/`_editContext`). The
   others sit in `DocumentTab`s, and their histories are swapped in and out with
   `CommandStack::swapHistory`.
