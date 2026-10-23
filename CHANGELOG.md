@@ -2,6 +2,10 @@
 
 What changed in each release of Phoenix, newest first.
 
+## Unreleased
+
+- Artist Layout (View menu): the stage with a strip of the drawing tools, and the timeline under a row of frame buttons, everything else put away. New Frame and Duplicate add the next drawing after this one, Longer and Shorter hold it, and dragging a drawing at a later frame keys that frame by itself and slides the drawing there from the frame before, turning it into a symbol named after its layer when it needs one; Motion picks the slide's ease, or Jump. The choice is kept, and Window > Workspaces leaves it
+
 ## 0.23.3
 
 - On a layer moved by a peg or a parent layer, the Subselection tool's anchors and handles sit on the shape where it is drawn, and the Pen, Pencil and Magic Wand pick up its paths and fills there too

@@ -109,6 +109,17 @@ void MainWindow::createViewExtras(QMenu* viewMenu, QAction* after, StageControls
 
     _canvasOnly = new CanvasOnly(this, {_breadcrumbRow}, layoutVersion);
     put(_canvasOnly->action());
+    // The Artist layout (main_window_artist.cpp); the choice is kept.
+    _artistLayoutAction = new QAction("&Artist Layout", this);
+    _artistLayoutAction->setObjectName("viewArtistLayout");
+    _artistLayoutAction->setCheckable(true);
+    _artistLayoutAction->setStatusTip(
+        "The stage, the drawing tools and the timeline alone, with animation as new frames, holds and moves");
+    connect(_artistLayoutAction, &QAction::triggered, this, [this](bool on) {
+        QSettings().setValue("workspace/artist", on);
+        setArtistLayout(on);
+    });
+    put(_artistLayoutAction);
 #ifdef PHOENIX_WEB
     // The web editor's layout for a phone (main_window_phone.cpp); the choice
     // is kept for the next visit.

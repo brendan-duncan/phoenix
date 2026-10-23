@@ -129,6 +129,7 @@ set(PHOENIX_CORE_SOURCES
     edit/audio_analysis.cpp
     edit/other_apps.cpp
     edit/timeline_edit.cpp
+    edit/artist_edit.cpp
     edit/trace_bitmap.cpp
     edit/paper_cleanup.cpp
     edit/transform_blend.cpp

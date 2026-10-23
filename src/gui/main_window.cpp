@@ -480,6 +480,9 @@ MainWindow::MainWindow(const QString& initialFile, QWidget* parent, bool startup
     // Every dock exists now: the layout as made is the default, and the
     // one kept from last time comes back.
     restoreLayout();
+    // The Artist layout comes back when it was on, once the window is up.
+    if (!_secondary && startup && QSettings().value("workspace/artist", false).toBool())
+        QTimer::singleShot(0, this, [this]() { setArtistLayout(true); });
 #ifdef PHOENIX_WEB
     // A phone gets the phone layout once the window is up, with a document
     // to draw on; a tablet starts in the Simple workspace, until another is
@@ -11255,6 +11258,11 @@ void MainWindow::applyBuiltInWorkspace(const QString& name)
 
 void MainWindow::useWorkspace(const QString& name)
 {
+    if (_artistLayout)
+    {
+        QSettings().setValue("workspace/artist", false);
+        setArtistLayout(false);
+    }
     const QByteArray saved = QSettings().value(workspaceKey(name)).toByteArray();
     const QJsonObject workspace = QJsonDocument::fromJson(saved).object();
     if (!workspace.isEmpty())
@@ -14460,6 +14468,11 @@ void MainWindow::refreshStyleSwatches()
         _phoneFill->setBrush(fill);
     }
 #endif
+    if (_artistStroke)
+    {
+        _artistStroke->setBrush(stroke);
+        _artistFill->setBrush(fill);
+    }
 }
 
 void MainWindow::selectAll()

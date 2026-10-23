@@ -77,6 +77,7 @@ set(TEST_SOURCES
     test_stroke_width.cpp
     test_swatches.cpp
     test_friendly.cpp
+    test_artist_edit.cpp
     test_starter_templates.cpp
     test_find_replace.cpp
     test_audio_decode.cpp

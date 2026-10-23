@@ -426,6 +426,7 @@ set(HEADERS
     src/edit/frame_commands.h
     src/edit/layer_commands.h
     src/edit/timeline_edit.h
+    src/edit/artist_edit.h
     src/edit/library_commands.h
     src/edit/find_replace.h
     src/edit/library_media.h
@@ -586,6 +587,7 @@ set(SOURCES
     src/gui/swatch_popup.cpp
     src/gui/hint_bubble.cpp
     src/gui/main_window_friendly.cpp
+    src/gui/main_window_artist.cpp
     src/gui/starter_templates.cpp
     src/gui/video_import.cpp
     src/gui/swatches_panel.cpp

@@ -99,6 +99,12 @@ public:
     void setPhoneLayout(bool on);
     bool phoneLayout() const { return _phoneLayout; }
 #endif
+    /// The Artist layout (main_window_artist.cpp): the stage, a strip of
+    /// the drawing tools, and the timeline under a row of frame buttons,
+    /// with animation as three ideas: draw the next frame, hold it, and
+    /// move something to a later frame.
+    void setArtistLayout(bool on);
+    bool artistLayout() const { return _artistLayout; }
 
     /// Every window people work in, the one Phoenix started with first.
     static QList<MainWindow*> windows();
@@ -1229,6 +1235,26 @@ private:
     /// the page's size.
     bool _phoneFitPending = false;
 #endif
+    // The Artist layout (main_window_artist.cpp).
+    void buildArtistBars();
+    void artistNewFrame(bool copy);
+    void artistHold(int frames);
+    void artistSetEase(const QString& ease);
+    void refreshArtistContext();
+    void artistBeginMove(const QPoint& viewPos);
+    void artistEndMove();
+    bool _artistLayout = false;
+    QJsonObject _artistSavedWorkspace;
+    QList<class QToolBar*> _artistBars;
+    QDockWidget* _artistDock = nullptr;
+    QAction* _artistLayoutAction = nullptr;
+    class ColorSwatch* _artistStroke = nullptr;
+    class ColorSwatch* _artistFill = nullptr;
+    class QComboBox* _artistEase = nullptr;
+    QWidget* _artistEaseBox = nullptr;
+    class ArtistStage* _artistStage = nullptr;
+    struct ArtistMove;
+    std::shared_ptr<ArtistMove> _artistMove;
     /// False when the docks' arrangement could not be used.
     bool applyWorkspace(const QJsonObject& workspace);
     void applyBuiltInWorkspace(const QString& name);
