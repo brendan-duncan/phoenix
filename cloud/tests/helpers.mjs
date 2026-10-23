@@ -66,9 +66,23 @@ export class Client {
   constructor(base, store = null) {
     this.base = base;
     this.store = store;
-    this.cookie = '';
+    // Cookies by name, as a browser keeps them (the session's, the browser's own).
+    this.cookies = new Map();
     this.csrf = null;
     this.link = null;
+  }
+
+  get cookie() {
+    return [...this.cookies].map(([name, value]) => `${name}=${value}`).join('; ');
+  }
+
+  /** Forgets the session, keeping the browser (as signing out does). */
+  forgetSession() {
+    for (const name of [...this.cookies.keys()]) {
+      if (name.includes('session')) {
+        this.cookies.delete(name);
+      }
+    }
   }
 
   async request(method, route, { json, body, headers = {}, redirect = 'manual' } = {}) {
@@ -88,10 +102,16 @@ export class Client {
       payload = JSON.stringify(json);
     }
     const res = await fetch(this.base + route, { method, headers: h, body: payload, redirect });
-    const set = res.headers.get('set-cookie');
-    if (set) {
+    for (const set of res.headers.getSetCookie()) {
       const [pair] = set.split(';');
-      this.cookie = pair.endsWith('=') ? '' : pair;
+      const eq = pair.indexOf('=');
+      const name = pair.slice(0, eq);
+      const value = pair.slice(eq + 1);
+      if (value) {
+        this.cookies.set(name, value);
+      } else {
+        this.cookies.delete(name);
+      }
     }
     return res;
   }
@@ -127,7 +147,7 @@ export class Client {
   }
 
   async signInWith(login, password) {
-    this.cookie = '';
+    this.forgetSession();
     this.csrf = null;
     await this.ok('POST', '/api/auth/login', { json: { login, password } });
     const me = await this.ok('GET', '/api/me');

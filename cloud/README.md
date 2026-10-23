@@ -155,6 +155,22 @@ play origin serves nothing, and everyone else sees the lock message.
   admin's own message to someone (Email… on their page, replies to the
   admin); and notifications each person chose to get by email, including,
   for admins, someone asking for an account.
+- Two-step sign-in (`lib/totp.mjs`, `lib/twostep.mjs`; Account > Two-step
+  sign-in): a code from an authenticator app (added by QR code) after the
+  password, or after a sign-in provider or a password-reset link; ten
+  recovery codes, each used once. Admins need it on to use their admin
+  powers (Admin > Settings; in production, or with
+  `PHOENIX_CLOUD_TWO_STEP_IN_DEV=1`), and can turn it off for someone who
+  lost their phone. Turning it on or off is told by email.
+- A sign-in from a browser an account has not used before is told, in the
+  dashboard and by email (`lib/devices.mjs`: each browser keeps a cookie of
+  its own; the first sign-in is not news).
+- Phoenix opens uploaded files in a bubblewrap sandbox on Linux
+  (`lib/sandbox.mjs`, `PHOENIX_CLOUD_SANDBOX`): no network, the system and
+  Phoenix read-only, only the job's folder writable, none of the service's
+  data or settings. `server.mjs check` says whether it is on.
+- HTTPS is insisted on (HSTS); only the cloud's own pages may frame the
+  editor, and only its player the play origin.
 - Against bots and floods: without an invite, at most 3 new accounts an
   hour come from one address and 30 an hour on the whole site
   (`PHOENIX_CLOUD_SIGNUPS_PER_ADDRESS_PER_HOUR`, `_SIGNUPS_PER_HOUR`), by

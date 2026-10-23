@@ -20,6 +20,7 @@ export const KINDS = {
   message: { label: 'Someone sends you a direct message', inApp: true, email: false },
   chat: { label: 'New messages in your groups\' chats', inApp: false, email: false },
   unlocked: { label: 'Your account is ready', inApp: true, email: true, always: true },
+  signin: { label: 'Your account is signed in to from a new browser', inApp: true, email: true, always: true },
   moderation: { label: 'Moderators flag or remove one of your documents', inApp: true, email: true, always: true },
   waiting: { label: 'Someone asks for an account (it waits for an admin)', inApp: true, email: true, admins: true, emailEveryMs: 60 * 60 * 1000 },
   report: { label: 'A message or document is reported', inApp: true, email: true, admins: true, emailEveryMs: 30 * 60 * 1000 },

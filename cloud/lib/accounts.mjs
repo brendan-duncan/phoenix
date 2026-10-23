@@ -1,7 +1,7 @@
 // People: users and their passwords and linked sign-ins, sessions,
 // registration and its settings, email tokens, and invites.
 
-import { HttpError, parseCookies, serializeCookie } from './http.mjs';
+import { addCookie, HttpError, parseCookies, serializeCookie } from './http.mjs';
 import { hashToken, newId, newToken, sameSecret } from './ids.mjs';
 import { hashPassword } from './passwords.mjs';
 
@@ -30,6 +30,7 @@ export function selfUser(u) {
     hasPassword: Boolean(u.password_hash),
     passwordIsDefault: Boolean(u.password_is_default),
     plan: u.plan,
+    twoStep: Boolean(u.totp_secret),
   };
 }
 
@@ -203,7 +204,7 @@ export class Sessions {
     this.store.run('INSERT INTO sessions (id_hash, user_id, csrf, created_at, last_seen_at, expires_at, user_agent) VALUES (?, ?, ?, ?, ?, ?, ?)',
       hashToken(token), user.id, newToken(), now, now, expires, String(req.headers['user-agent'] ?? '').slice(0, 200));
     this.store.run('UPDATE users SET last_seen_at = ? WHERE id = ?', now, user.id);
-    res.setHeader('Set-Cookie', serializeCookie(this.cookieName, token, { maxAge: this.config.sessionDays * 86400, secure: this.config.secureCookies }));
+    addCookie(res, serializeCookie(this.cookieName, token, { maxAge: this.config.sessionDays * 86400, secure: this.config.secureCookies }));
   }
 
   /** The request's { session, user }, or null. Extends a session in use. */
@@ -238,7 +239,7 @@ export class Sessions {
     if (session) {
       this.store.run('DELETE FROM sessions WHERE id_hash = ?', session.id_hash);
     }
-    res.setHeader('Set-Cookie', serializeCookie(this.cookieName, '', { maxAge: 0, secure: this.config.secureCookies }));
+    addCookie(res, serializeCookie(this.cookieName, '', { maxAge: 0, secure: this.config.secureCookies }));
   }
 
   /** Signs a user out everywhere but `keep` (after a password change). */

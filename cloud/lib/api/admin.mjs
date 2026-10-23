@@ -11,6 +11,7 @@ import { badRequest, forbidden, HttpError, notFound } from '../http.mjs';
 import { notify } from '../notify.mjs';
 import { hashPassword, passwordProblem } from '../passwords.mjs';
 import { deleteAccount } from '../ownership.mjs';
+import { turnOff } from '../twostep.mjs';
 import { effectivePlan, PLANS, validPlan } from '../plans.mjs';
 import { SETTING_DEFAULTS } from '../store.mjs';
 import { usageBytes } from '../storage.mjs';
@@ -58,7 +59,7 @@ function validateSettings(input) {
         throw badRequest(`New accounts start on one of the plans offered: ${offeredPlans().join(', ')}.`);
       }
       out[key] = value;
-    } else if (key === 'beta' || key === 'registration' || key === 'locked') {
+    } else if (key === 'beta' || key === 'registration' || key === 'locked' || key === 'adminsNeedTwoStep') {
       out[key] = Boolean(value);
     } else if (key === 'lockMessage') {
       out[key] = String(value ?? '').slice(0, 500);
@@ -95,7 +96,7 @@ export function registerAdmin(router, app) {
     }
     const { store } = ctx;
     return {
-      user: { ...adminUser(store, user), bio: user.bio, emailVerified: Boolean(user.email_verified), hasAvatar: Boolean(user.avatar_blob || user.avatar_url) },
+      user: { ...adminUser(store, user), bio: user.bio, twoStep: Boolean(user.totp_secret), emailVerified: Boolean(user.email_verified), hasAvatar: Boolean(user.avatar_blob || user.avatar_url) },
       groups: store.all(
         `SELECT g.id, g.name, g.handle, m.role, g.owner_id = ? AS owner FROM group_members m JOIN groups g ON g.id = m.group_id
          WHERE m.user_id = ? ORDER BY g.name COLLATE NOCASE`, user.id, user.id)
@@ -187,6 +188,20 @@ export function registerAdmin(router, app) {
         notify(app, [user.id], {
           kind: 'unlocked', text: 'Your account is ready. Welcome to Phoenix Cloud!', link: '/', actorId: me.id,
           email: { subject: 'Your Phoenix Cloud account is ready', text: 'An admin has unlocked your account. Sign in here:' },
+        });
+      }
+    }
+    // Lost their phone and their recovery codes: two-step sign-in off, and
+    // every session ended, for them to sign in with the password and turn it on again.
+    if (body.resetTwoStep) {
+      turnOff(store, user.id);
+      store.run('DELETE FROM sessions WHERE user_id = ?', user.id);
+      store.audit(me.id, 'user.two_step_reset', 'user', user.id);
+      if (user.email) {
+        app.mailer.send({
+          to: user.email,
+          subject: 'Two-step sign-in was turned off for your Phoenix Cloud account',
+          text: `Hello ${user.name},\n\nAn admin turned off two-step sign-in for your account, as asked. Sign in with your password and turn it on again (Account > Two-step sign-in).\n\nIf you did not ask for this, change your password now.\n\n${ctx.config.publicUrl}/account`,
         });
       }
     }

@@ -24,7 +24,7 @@ const DASHBOARD_DIR = path.join(CLOUD_DIR, 'dashboard');
 const SAFE_METHODS = new Set(['GET', 'HEAD']);
 // What anyone may still reach while the site is locked: who they are, and
 // signing in and out (sign-in itself lets only admins through).
-const OPEN_WHILE_LOCKED = /^\/api\/(me|auth\/(login|logout|start\/[^/]+|callback\/[^/]+))$/;
+const OPEN_WHILE_LOCKED = /^\/api\/(me|auth\/(login|two-step|logout|start\/[^/]+|callback\/[^/]+))$/;
 
 /** One request's view of the app: who is asking, and helpers for handlers. */
 class Context {
@@ -39,6 +39,13 @@ class Context {
     this.params = params;
     this.session = auth?.session ?? null;
     this.user = auth?.user ?? null;
+    // An admin who has not turned on two-step sign-in (while the setting
+    // asks it of admins) has no admin powers until they do. In production;
+    // in dev only when PHOENIX_CLOUD_TWO_STEP_IN_DEV says so (tests).
+    this.adminNeedsTwoStep = Boolean(this.user?.is_admin && !this.user.totp_secret && app.config.twoStepForAdmins && app.store.settings.adminsNeedTwoStep);
+    if (this.adminNeedsTwoStep) {
+      this.user = { ...this.user, is_admin: 0 };
+    }
     this.status = 200;
     this.settingsCache = null;
     this.temps = [];
@@ -66,6 +73,9 @@ class Context {
   }
 
   requireAdmin() {
+    if (this.adminNeedsTwoStep) {
+      throw new HttpError(403, 'two_step_needed', 'Turn on two-step sign-in (Account > Two-step sign-in) to use the admin tools.');
+    }
     const user = this.requireUser();
     if (!user.is_admin) {
       throw new HttpError(403, 'forbidden', 'Only admins can do that.');
@@ -135,9 +145,15 @@ export function createApp({ config, store, blobs }) {
   return app;
 }
 
+// Over HTTPS, browsers are told to come back only over HTTPS for a year.
+const HSTS = 'max-age=31536000; includeSubDomains';
+
 function commonHeaders(app, res) {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Referrer-Policy', 'same-origin');
+  if (app.config.secureCookies) {
+    res.setHeader('Strict-Transport-Security', HSTS);
+  }
   if (app.store.settings.beta) {
     res.setHeader('X-Robots-Tag', 'noindex, nofollow');
   }
@@ -228,7 +244,7 @@ async function handleApi(app, req, res, url) {
   const ctx = new Context(app, req, res, url, match.params, auth);
   // Locked (maintenance): only admins use the site; anyone can see that it
   // is locked, and admins can sign in.
-  if (ctx.settings.locked && !ctx.user?.is_admin && !OPEN_WHILE_LOCKED.test(url.pathname)) {
+  if (ctx.settings.locked && !ctx.user?.is_admin && !ctx.adminNeedsTwoStep && !OPEN_WHILE_LOCKED.test(url.pathname)) {
     throw lockedError(ctx.settings);
   }
   if (!SAFE_METHODS.has(req.method)) {
@@ -261,6 +277,9 @@ async function serveEditor(app, req, res, relative) {
     'Cross-Origin-Opener-Policy': 'same-origin',
     'Cross-Origin-Embedder-Policy': 'require-corp',
     'Cross-Origin-Resource-Policy': 'same-origin',
+    // Only the cloud's own pages may show the editor in a frame.
+    'Content-Security-Policy': "frame-ancestors 'self'",
+    'X-Frame-Options': 'SAMEORIGIN',
     'Cache-Control': 'no-cache',
   };
   if (!relative || relative === 'index.html') {
@@ -299,6 +318,11 @@ async function serveEditor(app, req, res, relative) {
 async function handlePlay(app, req, res) {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Robots-Tag', 'noindex, nofollow');
+  if (app.config.playUrl.startsWith('https:')) {
+    res.setHeader('Strict-Transport-Security', HSTS);
+  }
+  // A bundle shows only in the cloud's player page.
+  res.setHeader('Content-Security-Policy', `frame-ancestors ${new URL(app.config.publicUrl).origin}`);
   if (!SAFE_METHODS.has(req.method)) {
     res.writeHead(405).end();
     return;

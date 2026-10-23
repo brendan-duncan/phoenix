@@ -398,6 +398,30 @@ CREATE TABLE document_reports (
   outcome TEXT
 );
 `,
+  // v9: two-step sign-in (lib/twostep.mjs), and the browsers each account
+  // has signed in from, to tell people of a new one (lib/devices.mjs).
+  `
+ALTER TABLE users ADD COLUMN totp_secret TEXT;
+ALTER TABLE users ADD COLUMN totp_pending TEXT;
+ALTER TABLE users ADD COLUMN totp_last_step INTEGER NOT NULL DEFAULT 0;
+
+CREATE TABLE recovery_codes (
+  user_id TEXT NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  code_hash TEXT NOT NULL,
+  used_at INTEGER,
+  PRIMARY KEY (user_id, code_hash)
+) WITHOUT ROWID;
+
+CREATE TABLE known_devices (
+  user_id TEXT NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  device_hash TEXT NOT NULL,
+  user_agent TEXT NOT NULL DEFAULT '',
+  address TEXT NOT NULL DEFAULT '',
+  first_seen INTEGER NOT NULL,
+  last_seen INTEGER NOT NULL,
+  PRIMARY KEY (user_id, device_hash)
+) WITHOUT ROWID;
+`,
 ];
 
 /** Settings an admin changes at runtime; stored as JSON in `settings`. */
@@ -420,6 +444,8 @@ export const SETTING_DEFAULTS = {
   defaultQuotaMB: 2048,
   // The plan a new account starts on (lib/plans.mjs).
   defaultPlan: 'beta',
+  // Admins use their admin powers only once they have two-step sign-in on.
+  adminsNeedTwoStep: true,
   banner: '',
 };
 

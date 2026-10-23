@@ -73,9 +73,41 @@ function say(box, text, kind = 'error') {
   clear(box, text);
 }
 
+/** The second step of signing in: a code from the authenticator app, or a recovery code. */
+function twoStepCard(ticket, returnTo) {
+  const code = h('input', { type: 'text', name: 'code', inputmode: 'numeric', autocomplete: 'one-time-code', required: true, autofocus: true, maxlength: 20 });
+  const box = messageBox();
+  const form = h('form', { class: 'stack' },
+    field('Code from your authenticator app', code),
+    h('button', { type: 'submit', class: 'btn primary wide' }, 'Sign in'),
+    h('p', { class: 'small muted flush' }, 'Lost your phone? Type one of your recovery codes instead.'));
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    try {
+      const done = await post('/api/auth/two-step', { ticket, code: code.value.trim() });
+      await refreshMe();
+      if (done.recoveryCodesLeft !== null && done.recoveryCodesLeft !== undefined) {
+        toast(`${done.recoveryCodesLeft} recovery code${done.recoveryCodesLeft === 1 ? '' : 's'} left. Make new ones on your Account page.`, { ms: 8000 });
+      }
+      navigate(done.returnTo && done.returnTo !== '/' ? done.returnTo : returnTo, { replace: true });
+    } catch (err) {
+      say(box, err.message);
+      code.value = '';
+      if (err.code === 'ticket') {
+        setTimeout(() => navigate('/signin', { replace: true }), 2500);
+      }
+    }
+  });
+  return card(logo(), h('h1', {}, 'Two-step sign-in'), box, form);
+}
+
 export function renderSignin(params) {
   const me = state.me;
   const returnTo = params.get('return') || '/';
+  // Back from a sign-in provider, with two-step sign-in to finish.
+  if (params.get('two_step')) {
+    return twoStepCard(params.get('two_step'), returnTo);
+  }
   const error = params.get('error');
   const login = h('input', { type: 'text', name: 'login', autocomplete: 'username', required: true, autofocus: true });
   const password = h('input', { type: 'password', name: 'password', autocomplete: 'current-password', required: true });
@@ -98,7 +130,11 @@ export function renderSignin(params) {
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     try {
-      await post('/api/auth/login', { login: login.value.trim(), password: password.value });
+      const result = await post('/api/auth/login', { login: login.value.trim(), password: password.value });
+      if (result.twoStep) {
+        form.closest('.center').replaceWith(twoStepCard(result.ticket, returnTo));
+        return;
+      }
       await refreshMe();
       navigate(returnTo, { replace: true });
     } catch (err) {
@@ -307,7 +343,12 @@ export function renderReset(token) {
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     try {
-      await post('/api/auth/reset', { token, password: password.value });
+      const result = await post('/api/auth/reset', { token, password: password.value });
+      if (result.twoStep) {
+        toast('Password changed. Now the code from your authenticator app.');
+        navigate(`/signin?two_step=${encodeURIComponent(result.ticket)}`, { replace: true });
+        return;
+      }
       await refreshMe();
       navigate('/', { replace: true });
     } catch (err) {
@@ -546,16 +587,137 @@ export async function renderAccount(target) {
     h('h2', {}, 'Notifications'),
     h('p', { class: 'muted small flush' }, 'Choose what Phoenix Cloud tells you about, here and by email.'),
     h('div', {}, h('a', { class: 'btn', href: '/notifications#settings' }, icon('bell'), 'Notification settings')));
+  const twoStep = twoStepPanel();
   const messaging = await messagingPanel();
   if (!target.isConnected) {
     return;
   }
   clear(target, h('div', { class: 'page-head' }, h('h1', {}, 'Account')),
-    h('div', { class: 'stack' }, profile, planPanel, notices, messaging, passwordForm, signins, sessionList, leaving));
+    h('div', { class: 'stack' }, profile, planPanel, passwordForm, twoStep, notices, messaging, signins, sessionList, leaving));
+  if (location.hash === '#two-step') {
+    twoStep.scrollIntoView();
+  }
   if (location.hash === '#password') {
     passwordForm.scrollIntoView();
     (me.hasPassword ? current : fresh).focus();
   }
+}
+
+/** Loads the QR code maker (dashboard/vendor/qrcode.js, MIT) when it is first needed. */
+function qrLibrary() {
+  if (window.qrcode) {
+    return Promise.resolve(window.qrcode);
+  }
+  return new Promise((resolve, reject) => {
+    const script = h('script', { src: '/ui/vendor/qrcode.js' });
+    script.addEventListener('load', () => resolve(window.qrcode));
+    script.addEventListener('error', () => reject(new Error('The QR code could not be made; type the key into the app instead.')));
+    document.head.append(script);
+  });
+}
+
+/** Shows recovery codes once, to copy or download. */
+function recoveryCodesDialog(codes) {
+  const text = `Phoenix Cloud recovery codes for ${state.me.user.name}\nEach works once, in place of a code from the app.\n\n${codes.join('\n')}\n`;
+  return formDialog({
+    title: 'Your recovery codes',
+    submit: 'I have kept them',
+    note: 'Keep these somewhere safe, apart from your phone (a password manager, or printed). Each signs you in once if you lose your phone. They are not shown again.',
+    fields: [
+      h('pre', { class: 'codes' }, codes.join('\n')),
+      h('div', { class: 'row' },
+        h('button', { type: 'button', class: 'btn', onclick: () => copyText(codes.join('\n')) }, icon('copy'), 'Copy'),
+        h('button', {
+          type: 'button', class: 'btn', onclick: () => {
+            const a = h('a', { href: URL.createObjectURL(new Blob([text], { type: 'text/plain' })), download: 'phoenix-cloud-recovery-codes.txt' });
+            document.body.append(a);
+            a.click();
+            a.remove();
+          },
+        }, icon('download'), 'Download')),
+    ],
+    onSubmit: () => true,
+  });
+}
+
+/** Asks for a code (from the app, or a recovery code) to do `what`. */
+function askCode(title, submit, danger = false) {
+  return formDialog({
+    title,
+    submit,
+    danger,
+    fields: h('label', { class: 'field' }, h('span', {}, 'A code from your authenticator app (or a recovery code)'),
+      h('input', { type: 'text', name: 'code', inputmode: 'numeric', autocomplete: 'one-time-code', required: true, autofocus: true, maxlength: 20 })),
+    onSubmit: (data) => data,
+  });
+}
+
+/** Turns two-step sign-in on: the QR code (and its key), then a code from the app. */
+async function setUpTwoStep() {
+  const { secret, uri } = await post('/api/me/two-step/start');
+  const picture = h('div', { class: 'qr' }, h('div', { class: 'muted small' }, 'Making the QR code…'));
+  qrLibrary().then((qrcode) => {
+    const qr = qrcode(0, 'M');
+    qr.addData(uri);
+    qr.make();
+    clear(picture, h('img', { src: qr.createDataURL(5, 2), alt: 'QR code for your authenticator app' }));
+  }).catch((err) => clear(picture, h('div', { class: 'status-bad small' }, err.message)));
+  const done = await formDialog({
+    title: 'Turn on two-step sign-in',
+    submit: 'Turn on',
+    fields: [
+      h('p', { class: 'flush' }, '1. In an authenticator app (Google Authenticator, Microsoft Authenticator, 1Password, Authy…), add an account by scanning this code:'),
+      picture,
+      h('p', { class: 'small muted flush' }, 'Or type this key into the app: ', h('code', { class: 'secret' }, secret.replace(/(.{4})/g, '$1 ').trim())),
+      h('label', { class: 'field' }, h('span', {}, '2. Then type the 6-digit code the app shows'),
+        h('input', { type: 'text', name: 'code', inputmode: 'numeric', autocomplete: 'one-time-code', required: true, maxlength: 6, pattern: '[0-9 ]{6,7}' })),
+    ],
+    onSubmit: (data) => post('/api/me/two-step/enable', { code: data.code.replace(/\s/g, '') }),
+  });
+  if (done?.recoveryCodes) {
+    await recoveryCodesDialog(done.recoveryCodes);
+    await reloadShell();
+    toast('Two-step sign-in is on.');
+  }
+}
+
+function twoStepPanel() {
+  const ts = state.me.twoStep ?? { on: false, recoveryCodesLeft: 0 };
+  const run = (fn) => async () => {
+    try {
+      await fn();
+    } catch (err) {
+      showError(err);
+    }
+  };
+  return h('div', { class: 'panel stack cards-form', id: 'two-step' },
+    h('h2', {}, 'Two-step sign-in'),
+    state.me.adminNeedsTwoStep ? h('div', { class: 'status-bad small' }, 'You are an admin: turn this on to use the admin tools.') : null,
+    ts.on
+      ? [h('p', { class: 'flush' }, h('span', { class: 'status-ok' }, 'On. '), `Signing in asks for a code from your authenticator app. ${ts.recoveryCodesLeft} recovery code${ts.recoveryCodesLeft === 1 ? '' : 's'} left.`),
+        h('div', { class: 'row wrap' },
+          h('button', {
+            type: 'button', class: 'btn', onclick: run(async () => {
+              const given = await askCode('New recovery codes', 'Make new codes');
+              if (given) {
+                const { recoveryCodes } = await post('/api/me/two-step/recovery-codes', { code: given.code });
+                await recoveryCodesDialog(recoveryCodes);
+                rerender();
+              }
+            }),
+          }, 'New recovery codes…'),
+          h('button', {
+            type: 'button', class: 'btn danger', onclick: run(async () => {
+              const given = await askCode('Turn off two-step sign-in?', 'Turn off', true);
+              if (given) {
+                await del('/api/me/two-step', { code: given.code });
+                await reloadShell();
+                toast('Two-step sign-in is off.');
+              }
+            }),
+          }, 'Turn off…'))]
+      : [h('p', { class: 'muted small flush' }, 'Off. With it on, signing in also asks for a code from an app on your phone, so a stolen password is not enough.'),
+        h('div', {}, h('button', { type: 'button', class: 'btn primary', onclick: run(setUpTwoStep) }, icon('lock'), 'Turn on…'))]);
 }
 
 /**
@@ -984,6 +1146,7 @@ async function adminSettings() {
     h('div', {}, h('div', { class: 'choice-title' }, title), h('div', { class: 'muted small' }, text)));
   const beta = h('input', { type: 'checkbox', checked: settings.beta });
   const registration = h('input', { type: 'checkbox', checked: settings.registration });
+  const adminsNeedTwoStep = h('input', { type: 'checkbox', checked: settings.adminsNeedTwoStep });
   const locked = h('input', { type: 'checkbox', checked: settings.locked });
   const lockMessage = h('textarea', { rows: 2, maxlength: 500, placeholder: 'Phoenix Cloud is closed for maintenance for a while. Try again later.' }, settings.lockMessage);
   const quota = h('input', { type: 'number', min: 1, value: settings.defaultQuotaMB });
@@ -1000,6 +1163,8 @@ async function adminSettings() {
     h('label', { class: 'check' }, beta, 'Public and link-shared documents only for people who are signed in; ask search engines not to index'),
     h('label', { class: 'field' }, h('span', {}, 'Storage for each account and group, in MB'), quota),
     h('label', { class: 'field' }, h('span', {}, 'Banner'), banner),
+    h('h2', {}, 'Admins'),
+    h('label', { class: 'check' }, adminsNeedTwoStep, 'Admins need two-step sign-in on to use the admin tools'),
     h('h2', {}, 'Lock the site'),
     h('label', { class: 'check' }, locked, 'Locked: only admins can sign in and use it (for maintenance, say); everyone else sees the message below'),
     h('label', { class: 'field' }, h('span', {}, 'Message while locked'), lockMessage),
@@ -1015,7 +1180,7 @@ async function adminSettings() {
       }
       await patch('/api/admin/settings', {
         newAccounts, registration: registration.checked, defaultPlan: defaultPlan.value, beta: beta.checked, defaultQuotaMB: Number(quota.value), banner: banner.value,
-        locked: locked.checked, lockMessage: lockMessage.value.trim(),
+        locked: locked.checked, lockMessage: lockMessage.value.trim(), adminsNeedTwoStep: adminsNeedTwoStep.checked,
       });
       await reloadShell();
       toast('Saved.');
@@ -1149,11 +1314,21 @@ export async function renderAdminUser(target, id) {
           h('dt', {}, 'Storage'), h('dd', {}, `${bytes(u.bytes)}${u.quotaMB !== null ? ` of ${u.quotaMB} MB` : ''}`),
           h('dt', {}, 'Documents'), h('dd', {}, `${u.documents} (${counts.trashed} in the trash, ${counts.public} not private, ${counts.moderated} moderated)`),
           h('dt', {}, 'Messages'), h('dd', {}, `${counts.messages} sent · ${counts.reportsAgainst} report${counts.reportsAgainst === 1 ? '' : 's'} about them`),
-          h('dt', {}, 'About'), h('dd', {}, u.bio || h('span', { class: 'muted' }, 'nothing'))),
+          h('dt', {}, 'About'), h('dd', {}, u.bio || h('span', { class: 'muted' }, 'nothing')),
+          h('dt', {}, 'Two-step'), h('dd', {}, u.twoStep ? 'on' : 'off')),
         u.requestMessage ? h('blockquote', { class: 'request' }, u.requestMessage) : null,
         h('div', { class: 'row wrap' }, accountButtons(u, me),
           u.hasAvatar ? button('Clear picture', change(() => patch(`/api/admin/users/${u.id}`, { clearAvatar: true }))) : null,
-          u.bio ? button('Clear about', change(() => patch(`/api/admin/users/${u.id}`, { clearBio: true }))) : null)),
+          u.bio ? button('Clear about', change(() => patch(`/api/admin/users/${u.id}`, { clearBio: true }))) : null,
+          u.twoStep && u.id !== me.id ? button('Turn off two-step…', async () => {
+            if (await confirmDialog({
+              title: `Turn off two-step sign-in for ${u.name}?`,
+              message: 'For someone who lost their phone and their recovery codes. They are signed out everywhere and emailed; they sign in with their password and turn it on again. Be sure it is really them asking.',
+              confirm: 'Turn off', danger: true,
+            })) {
+              await change(() => patch(`/api/admin/users/${u.id}`, { resetTwoStep: true }))();
+            }
+          }) : null)),
       h('div', { class: 'panel stack' },
         h('h2', {}, 'Groups'),
         groups.length ? groups.map((g) => h('div', { class: 'row' }, h('a', { class: 'grow', href: `/groups/${g.id}` }, g.name),

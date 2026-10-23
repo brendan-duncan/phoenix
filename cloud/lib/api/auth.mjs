@@ -12,7 +12,10 @@ import { badRequest, HttpError, lockedError, notFound, redirect, serveStatic } f
 import { clientAddress } from '../limits.mjs';
 import { adminIds, KINDS, notificationsView, notify, preferences, savePreferences, unreadCount } from '../notify.mjs';
 import { finishLogin, startLogin, takeLoginState } from '../oauth.mjs';
+import { noteSignIn } from '../devices.mjs';
 import { unreadMessages } from '../messages.mjs';
+import { checkSecondStep, hasTwoStep, recoveryCodesLeft, replaceRecoveryCodes, turnOff, TwoStepTickets } from '../twostep.mjs';
+import { checkCode, newSecret, otpauthUri } from '../totp.mjs';
 import { deleteAccount, deletionChoices } from '../ownership.mjs';
 import { effectivePlan, managingTeam, PLANS } from '../plans.mjs';
 import { hashPassword, passwordProblem, verifyPassword } from '../passwords.mjs';
@@ -63,6 +66,32 @@ function planView({ plan, team, managed }) {
 
 export function registerAuth(router, app) {
   const { config, store, sessions, mailer, attempts } = app;
+  const tickets = new TwoStepTickets();
+  /**
+   * Signs `user` in: a session now, or with two-step sign-in on, a ticket
+   * for the code (the session comes with it).
+   */
+  const signIn = (ctx, user, how, returnTo = '/') => {
+    if (hasTwoStep(user)) {
+      return { twoStep: true, ticket: tickets.make(user.id, returnTo) };
+    }
+    if (ctx.session) {
+      sessions.destroy(ctx.res, ctx.session);
+    }
+    sessions.create(ctx.res, user, ctx.req);
+    noteSignIn(app, ctx.req, ctx.res, user, how);
+    return { user: selfUser(user) };
+  };
+  // A security change to an account, told by email (whatever their notification choices).
+  const tellOfChange = (user, subject, what) => {
+    if (user.email) {
+      mailer.send({
+        to: user.email,
+        subject,
+        text: `Hello ${user.name},\n\n${what}\n\nIf you did not do this, change your password now.\n\n${config.publicUrl}/account`,
+      });
+    }
+  };
   // New accounts without an invite: so many an hour from one address, and
   // on the whole site, so a bot can't fill the admins' list or spend email.
   const signupsBusy = (address) => (!app.signupsByAddress.has(address)
@@ -94,6 +123,9 @@ export function registerAuth(router, app) {
       unread: ctx.user ? unreadCount(store, ctx.user.id) : 0,
       unreadMessages: ctx.user ? unreadMessages(store, ctx.user) : 0,
       plan: ctx.user ? planView(effectivePlan(store, ctx.user)) : null,
+      twoStep: ctx.user ? { on: hasTwoStep(ctx.user), recoveryCodesLeft: hasTwoStep(ctx.user) ? recoveryCodesLeft(store, ctx.user.id) : 0 } : null,
+      // An admin whose admin powers wait for two-step sign-in.
+      adminNeedsTwoStep: ctx.adminNeedsTwoStep,
       converter: app.converter.available,
       playUrl: config.playUrl,
     };
@@ -124,11 +156,42 @@ export function registerAuth(router, app) {
     if (ctx.settings.locked && !user.is_admin) {
       throw lockedError(ctx.settings);
     }
+    return signIn(ctx, user, 'password');
+  }));
+
+  // The second step: { ticket, code } (from the authenticator app, or a recovery code).
+  router.post('/api/auth/two-step', anonymous(async (ctx) => {
+    const body = await ctx.json();
+    const ticket = tickets.peek(body.ticket);
+    if (!ticket) {
+      throw new HttpError(400, 'ticket', 'That took too long, or too many codes were wrong. Sign in again.');
+    }
+    const user = store.get("SELECT * FROM users WHERE id = ? AND status = 'active'", ticket.userId);
+    if (!user || !hasTwoStep(user)) {
+      tickets.use(body.ticket);
+      throw new HttpError(400, 'ticket', 'Sign in again.');
+    }
+    if (attempts.blocked(`two-step:${user.id}`)) {
+      throw new HttpError(429, 'slow_down', 'Too many wrong codes. Wait a few minutes and try again.');
+    }
+    const how = checkSecondStep(store, user, body.code);
+    if (!how) {
+      attempts.fail(`two-step:${user.id}`);
+      tickets.miss(body.ticket);
+      throw new HttpError(401, 'bad_code', 'That code is not right. Codes change every 30 seconds; check the time on your phone.');
+    }
+    attempts.clear(`two-step:${user.id}`);
+    tickets.use(body.ticket);
     if (ctx.session) {
       sessions.destroy(ctx.res, ctx.session);
     }
     sessions.create(ctx.res, user, ctx.req);
-    return { user: selfUser(user) };
+    noteSignIn(app, ctx.req, ctx.res, user, 'password');
+    const left = how === 'recovery' ? recoveryCodesLeft(store, user.id) : null;
+    if (how === 'recovery') {
+      store.audit(user.id, 'user.recovery_code', 'user', user.id, { left });
+    }
+    return { user: selfUser(user), returnTo: ticket.returnTo, recoveryCodesLeft: left };
   }));
 
   // Whether a name can be registered (or taken by the signed-in person), as it is typed.
@@ -207,6 +270,7 @@ export function registerAuth(router, app) {
     }
     if (status === 'active') {
       sessions.create(ctx.res, user, ctx.req);
+      noteSignIn(app, ctx.req, ctx.res, user, 'password');
     }
     ctx.status = 201;
     return { status, message: STATUS_MESSAGES[status] ?? null };
@@ -220,11 +284,14 @@ export function registerAuth(router, app) {
       throw new HttpError(400, 'token', 'That link has been used or has run out. Sign in to have a new one sent.');
     }
     store.run('UPDATE users SET email_verified = 1 WHERE id = ?', userId);
-    store.run("UPDATE users SET status = 'active' WHERE id = ? AND status = 'pending_email'", userId);
+    const { changes: opened } = store.run("UPDATE users SET status = 'active' WHERE id = ? AND status = 'pending_email'", userId);
     const user = store.get('SELECT * FROM users WHERE id = ?', userId);
     store.audit(userId, 'user.confirm_email', 'user', userId);
-    if (user.status === 'active') {
+    // Only a new account is signed in by its link: a changed address's link
+    // confirms it, and never stands in for signing in (or two-step).
+    if (opened && user.status === 'active') {
       sessions.create(ctx.res, user, ctx.req);
+      noteSignIn(app, ctx.req, ctx.res, user, 'password');
     }
     return { status: user.status, message: STATUS_MESSAGES[user.status] ?? null };
   }));
@@ -299,8 +366,8 @@ export function registerAuth(router, app) {
     store.run('UPDATE users SET password_hash = ?, password_is_default = 0 WHERE id = ?', await hashPassword(body.password), user.id);
     store.run('DELETE FROM sessions WHERE user_id = ?', user.id);
     store.audit(user.id, 'user.password_reset_by_email', 'user', user.id);
-    sessions.create(ctx.res, user, ctx.req);
-    return { ok: true };
+    // An email link alone never gets past two-step sign-in.
+    return { ok: true, ...signIn(ctx, store.get('SELECT * FROM users WHERE id = ?', user.id), 'reset') };
   }));
 
   // A profile picture: PNG, JPEG, WebP or GIF, up to 2 MB.
@@ -419,6 +486,74 @@ export function registerAuth(router, app) {
     store.run('UPDATE users SET password_hash = ?, password_is_default = 0 WHERE id = ?', await hashPassword(body.password), user.id);
     sessions.endOthers(user.id, ctx.session);
     store.audit(user.id, 'user.password', 'user', user.id);
+    return { ok: true };
+  });
+
+  // ── Two-step sign-in ────────────────────────────────────────────────────
+
+  // A new secret for the authenticator app (kept until a code from it proves it was added).
+  router.post('/api/me/two-step/start', (ctx) => {
+    const user = ctx.requireUser();
+    if (hasTwoStep(user)) {
+      throw new HttpError(409, 'on', 'Two-step sign-in is on already.');
+    }
+    const secret = newSecret();
+    store.run('UPDATE users SET totp_pending = ? WHERE id = ?', secret, user.id);
+    return { secret, uri: otpauthUri({ issuer: 'Phoenix Cloud', account: user.email || user.name, secret }) };
+  });
+
+  // { code } from the app: two-step sign-in is on; ten recovery codes, shown once.
+  router.post('/api/me/two-step/enable', async (ctx) => {
+    const user = ctx.requireUser();
+    const body = await ctx.json();
+    if (!user.totp_pending) {
+      throw badRequest('Start again: there is no new secret waiting.');
+    }
+    if (attempts.blocked(`two-step:${user.id}`)) {
+      throw new HttpError(429, 'slow_down', 'Too many wrong codes. Wait a few minutes and try again.');
+    }
+    const step = checkCode(user.totp_pending, body.code);
+    if (step === null) {
+      attempts.fail(`two-step:${user.id}`);
+      throw new HttpError(400, 'bad_code', 'That code is not right. Check that the app added the account, and the time on your phone.');
+    }
+    store.run('UPDATE users SET totp_secret = totp_pending, totp_pending = NULL, totp_last_step = ? WHERE id = ?', step, user.id);
+    const recoveryCodes = replaceRecoveryCodes(store, user.id);
+    store.audit(user.id, 'user.two_step_on', 'user', user.id);
+    tellOfChange(user, 'Two-step sign-in is on for your Phoenix Cloud account',
+      'Two-step sign-in is now on: signing in asks for a code from your authenticator app as well as your password.');
+    return { recoveryCodes };
+  });
+
+  // { code } (from the app, or a recovery code): ten new recovery codes; the old ones stop working.
+  router.post('/api/me/two-step/recovery-codes', async (ctx) => {
+    const user = ctx.requireUser();
+    const body = await ctx.json();
+    if (!hasTwoStep(user)) {
+      throw badRequest('Two-step sign-in is off.');
+    }
+    if (attempts.blocked(`two-step:${user.id}`) || !checkSecondStep(store, user, body.code)) {
+      attempts.fail(`two-step:${user.id}`);
+      throw new HttpError(400, 'bad_code', 'That code is not right.');
+    }
+    store.audit(user.id, 'user.recovery_codes', 'user', user.id);
+    return { recoveryCodes: replaceRecoveryCodes(store, user.id) };
+  });
+
+  // { code }: two-step sign-in off.
+  router.delete('/api/me/two-step', async (ctx) => {
+    const user = ctx.requireUser();
+    const body = await ctx.json();
+    if (!hasTwoStep(user)) {
+      return { ok: true };
+    }
+    if (attempts.blocked(`two-step:${user.id}`) || !checkSecondStep(store, user, body.code)) {
+      attempts.fail(`two-step:${user.id}`);
+      throw new HttpError(400, 'bad_code', 'That code is not right.');
+    }
+    turnOff(store, user.id);
+    store.audit(user.id, 'user.two_step_off', 'user', user.id);
+    tellOfChange(user, 'Two-step sign-in is off for your Phoenix Cloud account', 'Two-step sign-in was turned off: signing in asks only for your password now.');
     return { ok: true };
   });
 
@@ -591,7 +726,11 @@ export function registerAuth(router, app) {
       return;
     }
     if (!state.link_user_id) {
-      sessions.create(ctx.res, user, ctx.req);
+      const done = signIn(ctx, user, 'provider', safeReturnPath(state.return_to));
+      if (done.twoStep) {
+        redirect(ctx.res, `/signin?two_step=${encodeURIComponent(done.ticket)}`);
+        return;
+      }
     }
     redirect(ctx.res, safeReturnPath(state.return_to));
   });

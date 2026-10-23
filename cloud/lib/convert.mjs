@@ -17,6 +17,7 @@ import { promisify } from 'node:util';
 import { HttpError } from './http.mjs';
 import { newId } from './ids.mjs';
 import { bodyOffset, describe, FileSource, isPhx, isThumbnail, PhxError, readContainer } from './phx.mjs';
+import { findBwrap, phoenixFolders, plainEnv, sandboxArgs, sandboxMode } from './sandbox.mjs';
 
 const execFile = promisify(execFileCallback);
 
@@ -98,6 +99,11 @@ export class Converter {
     this.maxExpandedBytes = config.convertMaxExpandedBytes;
     this.queue = Promise.resolve();
     this.waiting = 0;
+    // Run in a sandbox on Linux (lib/sandbox.mjs), seeing Phoenix's folders and the fonts.
+    this.sandbox = this.exe ? sandboxMode(config.sandbox) : 'none';
+    this.sandboxReadOnly = this.exe
+      ? [...phoenixFolders(this.exe, config.sandboxBind), this.fontsDir].filter((p) => p && fs.existsSync(p))
+      : [];
   }
 
   get available() {
@@ -131,13 +137,14 @@ export class Converter {
   }
 
   /**
-   * Runs Phoenix with `args`: { code, output, outOfMemory }. A watchdog
-   * stops it when it uses more memory than one job may.
+   * Runs Phoenix with `args` in the job's folder `dir`: { code, output,
+   * outOfMemory }. Files it reads from elsewhere are `inputs` (and any
+   * existing file named in `args`). A watchdog stops it when it uses more
+   * memory than one job may.
    */
-  run(dir, args) {
+  run(dir, args, inputs = []) {
     return new Promise((resolve) => {
       const env = {
-        ...process.env,
         QT_QPA_PLATFORM: 'offscreen',
         PHOENIX_SETTINGS_DIR: path.join(dir, 'settings'),
         PHOENIX_NATIVE_EXTENSIONS: 'off',
@@ -148,7 +155,17 @@ export class Converter {
         TMP: dir,
         TMPDIR: dir,
       };
-      const child = spawn(this.exe, args, { cwd: dir, env, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
+      let child;
+      if (this.sandbox === 'bwrap') {
+        const named = args.filter((a) => path.isAbsolute(a) && !a.startsWith(dir + path.sep) && a !== dir && fs.existsSync(a));
+        const bwrapArgs = sandboxArgs({
+          exe: this.exe, args, dir, readOnly: this.sandboxReadOnly, inputs: [...new Set([...inputs, ...named])],
+          env: { ...env, HOME: path.join(dir, 'settings'), PATH: '/usr/bin:/bin', LANG: 'C.UTF-8' },
+        });
+        child = spawn(findBwrap(), bwrapArgs, { cwd: dir, env: {}, stdio: ['ignore', 'pipe', 'pipe'] });
+      } else {
+        child = spawn(this.exe, args, { cwd: dir, env: { ...plainEnv(), ...env }, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
+      }
       let output = '';
       let outOfMemory = false;
       const keep = (d) => {
@@ -203,7 +220,7 @@ export class Converter {
   async runScript(dir, job) {
     const file = path.join(dir, 'job.jsfl');
     await fsp.writeFile(file, script(job));
-    const { code, output, outOfMemory } = await this.run(dir, ['run-script', file, '--timeout', '170', '--no-native-extensions']);
+    const { code, output, outOfMemory } = await this.run(dir, ['run-script', file, '--timeout', '170', '--no-native-extensions'], [job.input].filter(Boolean));
     if (outOfMemory) {
       throw this.memoryError();
     }
@@ -487,11 +504,38 @@ export async function swfContents(file) {
 }
 
 /** A process's memory in MB (its resident set); 0 when it can't be read. */
+/**
+ * The memory of `pid` and everything it started (in a sandbox, Phoenix is a
+ * child of bubblewrap's), from /proc.
+ */
+async function treeMemoryMB(pid, depth = 0) {
+  let kb = 0;
+  try {
+    kb = Number(/VmRSS:\s+(\d+)/.exec(await fsp.readFile(`/proc/${pid}/status`, 'utf8'))?.[1] ?? 0);
+  } catch {
+    return 0;
+  }
+  if (depth < 6) {
+    let children = [];
+    try {
+      for (const task of await fsp.readdir(`/proc/${pid}/task`)) {
+        const listed = await fsp.readFile(`/proc/${pid}/task/${task}/children`, 'utf8').catch(() => '');
+        children.push(...listed.split(/\s+/).filter(Boolean));
+      }
+    } catch {
+      children = [];
+    }
+    for (const child of children) {
+      kb += (await treeMemoryMB(child, depth + 1)) * 1024;
+    }
+  }
+  return kb / 1024;
+}
+
 async function memoryMB(pid) {
   try {
     if (process.platform === 'linux') {
-      const status = await fsp.readFile(`/proc/${pid}/status`, 'utf8');
-      return Number(/VmRSS:\s+(\d+)/.exec(status)?.[1] ?? 0) / 1024;
+      return await treeMemoryMB(pid);
     }
     if (process.platform === 'win32') {
       const { stdout } = await execFile('tasklist', ['/FI', `PID eq ${pid}`, '/FO', 'CSV', '/NH'], { windowsHide: true });

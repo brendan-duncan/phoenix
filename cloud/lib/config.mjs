@@ -100,6 +100,11 @@ export function loadConfig(env = process.env, overrides = {}) {
     // Phoenix itself, run with no window to make new documents and to
     // convert uploads (FLA, SWF, SVG, EPS, AI) into .phx with a thumbnail.
     phoenix: findPhoenix(env.PHOENIX_CLOUD_PHOENIX),
+    // Whether the adminsNeedTwoStep setting applies: always in production.
+    twoStepForAdmins: mode === 'production' || env.PHOENIX_CLOUD_TWO_STEP_IN_DEV === '1',
+    // Phoenix's sandbox for files people upload (lib/sandbox.mjs).
+    sandbox: env.PHOENIX_CLOUD_SANDBOX ?? 'auto',
+    sandboxBind: env.PHOENIX_CLOUD_SANDBOX_BIND ?? '',
     maxUploadBytes: envInt(env, 'PHOENIX_CLOUD_MAX_UPLOAD_MB', 1024) * 1024 * 1024,
     // Limits on Phoenix converting: what it takes in (as uploaded, and as
     // its archive or movie unpacks), the memory it may use for one job, and

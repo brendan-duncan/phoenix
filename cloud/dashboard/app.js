@@ -345,6 +345,9 @@ async function route() {
     state.me.user.passwordIsDefault
       ? h('div', { class: 'banner' }, 'You are using the password this server started with. ', h('a', { class: 'link', href: '/account#password' }, 'Choose your own password'), '.')
       : null,
+    state.me.adminNeedsTwoStep
+      ? h('div', { class: 'banner warn' }, 'You are an admin: turn on two-step sign-in to use the admin tools. ', h('a', { class: 'link', href: '/account#two-step' }, 'Turn it on'), '.')
+      : null,
     state.me.settings.locked
       ? h('div', { class: 'banner warn' }, 'Phoenix Cloud is locked: only admins can use it. ', h('a', { class: 'link', href: '/admin/settings' }, 'Unlock it'), '.')
       : null,

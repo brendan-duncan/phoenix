@@ -242,6 +242,8 @@ async function check() {
   say(true, 'fonts', `${fonts.length} in ${config.fontsDir}${fonts.length ? '' : ' (run: fonts)'}`);
   if (config.phoenix) {
     const converter = new Converter(config);
+    say(converter.sandbox === 'bwrap' || process.platform !== 'linux', 'sandbox',
+      converter.sandbox === 'bwrap' ? `bubblewrap, seeing ${converter.sandboxReadOnly.join(', ')}` : 'none (install bubblewrap: apt install bubblewrap)');
     const started = Date.now();
     try {
       const made = await converter.newDocument({ width: 320, height: 240, fps: 24, background: '#ffffff' });

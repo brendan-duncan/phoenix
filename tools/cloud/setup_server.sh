@@ -56,6 +56,8 @@ say "Packages"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -q
 apt-get install -y -q curl ca-certificates gnupg tar gzip
+# The sandbox Phoenix opens uploaded files in (cloud/lib/sandbox.mjs).
+apt-get install -y -q bubblewrap
 # What Phoenix's AppImage needs from the system to run with no window.
 # Names differ between releases (Ubuntu 24.04 adds t64), so each is tried.
 for p in libgl1 libegl1 libopengl0 libfontconfig1 libfreetype6 libxkbcommon0 libglib2.0-0 libdbus-1-3 libnss3 libasound2; do

@@ -186,6 +186,12 @@ export function parseCookies(header) {
   return out;
 }
 
+/** Adds a Set-Cookie to `res`, beside any already there. */
+export function addCookie(res, cookie) {
+  const before = res.getHeader('Set-Cookie');
+  res.setHeader('Set-Cookie', before ? [...(Array.isArray(before) ? before : [before]), cookie] : cookie);
+}
+
 export function serializeCookie(name, value, { maxAge, secure, httpOnly = true, sameSite = 'Lax', path: cookiePath = '/' } = {}) {
   let cookie = `${name}=${value}; Path=${cookiePath}; SameSite=${sameSite}`;
   if (maxAge !== undefined) {

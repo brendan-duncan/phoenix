@@ -63,7 +63,7 @@ export const get = (path) => api('GET', path);
 export const post = (path, body = {}) => api('POST', path, body);
 export const patch = (path, body = {}) => api('PATCH', path, body);
 export const put = (path, body) => api('PUT', path, body);
-export const del = (path) => api('DELETE', path);
+export const del = (path, body) => api('DELETE', path, body);
 
 /** Sends a file as the body, reporting progress (0 to 1). */
 export function send(method, path, file, onProgress = () => {}) {
