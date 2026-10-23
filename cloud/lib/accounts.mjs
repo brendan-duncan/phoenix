@@ -418,6 +418,9 @@ export function resolveLogin(store, settings, providerId, profile, state) {
     if (!settings.registration && !state.invite) {
       throw new LoginRefused('registration_closed');
     }
+    if (!state.invite && state.mayCreate && !state.mayCreate()) {
+      throw new LoginRefused('busy');
+    }
     let invite = null;
     if (state.invite) {
       invite = findInvite(store, state.invite);
@@ -435,6 +438,9 @@ export function resolveLogin(store, settings, providerId, profile, state) {
       status = 'pending_admin';
     }
     const user = createUser(store, { name: freeName(store, profile.name || (email ?? '').split('@')[0]), email, avatarUrl: profile.avatarUrl, status, emailVerified: Boolean(email) });
+    if (!invite) {
+      state.created?.();
+    }
     linkIdentity(store, user.id, providerId, profile, email, now);
     if (invite) {
       claimInvite(store, invite, user.id);

@@ -10,6 +10,7 @@ import {
 } from './ui.js';
 
 const LOGIN_ERRORS = {
+  busy: 'Phoenix Cloud is taking a lot of new accounts right now. Try again in an hour.',
   registration_closed: 'New accounts are closed for now. Someone with an account can ask an admin for an invite for you.',
   invite_invalid: 'That invite has been used, has run out or was turned off.',
   invite_email: 'That invite is for another email address. Sign in with the account it was sent to.',
@@ -185,6 +186,7 @@ export function renderRegister(params) {
   const email = h('input', { type: 'email', name: 'email', autocomplete: 'email', required: true });
   const password = h('input', { type: 'password', name: 'password', autocomplete: 'new-password', required: true, minlength: 8 });
   const again = h('input', { type: 'password', name: 'again', autocomplete: 'new-password', required: true, minlength: 8 });
+  const website = h('input', { type: 'text', name: 'website', tabindex: '-1', autocomplete: 'off' });
   const nameHint = h('div', { class: 'hint' });
   const passwordHint = h('div', { class: 'hint' });
   const box = messageBox();
@@ -228,6 +230,8 @@ export function renderRegister(params) {
     asking ? h('div', { class: 'note' }, 'Phoenix Cloud is in closed beta: an admin turns on each new account by hand. Introduce yourself in a line or two, so we can tell you are a real person.') : null,
     asking ? h('label', { class: 'field' }, h('span', {}, 'Request message'), message) : null,
     note && !asking ? h('p', { class: 'small muted' }, note) : null,
+    // Out of sight and out of the tab order: only a bot fills it in.
+    h('label', { class: 'trap', 'aria-hidden': 'true' }, 'Website', website),
     submit);
   const holder = h('div', { class: 'stack' }, box, form);
   form.addEventListener('submit', async (e) => {
@@ -237,7 +241,7 @@ export function renderRegister(params) {
     }
     submit.disabled = true;
     try {
-      const made = await post('/api/auth/register', { name: name.value, email: email.value.trim(), password: password.value, message: message?.value.trim(), invite });
+      const made = await post('/api/auth/register', { name: name.value, email: email.value.trim(), password: password.value, message: message?.value.trim(), invite, website: website.value });
       if (made.status === 'active') {
         await refreshMe();
         navigate(params.get('return') || '/', { replace: true });

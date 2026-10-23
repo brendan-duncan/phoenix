@@ -47,6 +47,11 @@ export class Budget {
     this.uses = new Map();
   }
 
+  /** Whether `key` has a use left, without taking it. */
+  has(key, now = Date.now()) {
+    return (this.uses.get(key) ?? []).filter((t) => now - t < this.windowMs).length < this.max;
+  }
+
   /** Takes one use for `key`; false when its budget is spent. */
   take(key, now = Date.now()) {
     const recent = (this.uses.get(key) ?? []).filter((t) => now - t < this.windowMs);

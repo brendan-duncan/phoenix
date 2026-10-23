@@ -9,7 +9,9 @@ import { publicUser } from './accounts.mjs';
 
 /**
  * The kinds, with what they are told by default. `always` kinds can't be
- * turned off; `admins` kinds only reach admins.
+ * turned off; `admins` kinds only reach admins. A kind with `emailEveryMs`
+ * is emailed to each person at most that often (each still shows in the
+ * dashboard), so a burst of requests or reports is one email, not many.
  */
 export const KINDS = {
   share: { label: 'A document is shared with you', inApp: true, email: false },
@@ -19,8 +21,8 @@ export const KINDS = {
   chat: { label: 'New messages in your groups\' chats', inApp: false, email: false },
   unlocked: { label: 'Your account is ready', inApp: true, email: true, always: true },
   moderation: { label: 'Moderators flag or remove one of your documents', inApp: true, email: true, always: true },
-  waiting: { label: 'Someone asks for an account (it waits for an admin)', inApp: true, email: true, admins: true },
-  report: { label: 'A message or document is reported', inApp: true, email: true, admins: true },
+  waiting: { label: 'Someone asks for an account (it waits for an admin)', inApp: true, email: true, admins: true, emailEveryMs: 60 * 60 * 1000 },
+  report: { label: 'A message or document is reported', inApp: true, email: true, admins: true, emailEveryMs: 30 * 60 * 1000 },
 };
 
 /** `user`'s choices for every kind they can get: { kind: { inApp, email } }. */
@@ -89,8 +91,18 @@ export function notify(app, userIds, { kind, text, link = '', actorId = null, em
       store.run('INSERT INTO notifications (user_id, kind, text, link, actor_id, created_at) VALUES (?, ?, ?, ?, ?, ?)',
         userId, kind, text, link, actorId, now);
     }
-    if (wants.email && user.email) {
-      const mail = email ?? { subject: text, text };
+    const every = KINDS[kind]?.emailEveryMs;
+    const lastKey = `${userId}:${kind}`;
+    const recently = every && app.lastEmailed && (app.lastEmailed.get(lastKey) ?? 0) > now - every;
+    if (wants.email && user.email && !recently) {
+      if (every && app.lastEmailed) {
+        if (app.lastEmailed.size > 10000) {
+          app.lastEmailed.clear();
+        }
+        app.lastEmailed.set(lastKey, now);
+      }
+      const later = every ? `\n\nMore of these over the next ${Math.round(every / 60000)} minutes show in Phoenix Cloud without another email.` : '';
+      const mail = email ?? { subject: text, text: `${text}${later}` };
       mailer.send({
         to: user.email,
         subject: mail.subject,

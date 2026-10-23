@@ -119,6 +119,14 @@ export function loadConfig(env = process.env, overrides = {}) {
     } : null,
     mailFrom: env.PHOENIX_CLOUD_MAIL_FROM || `Phoenix Cloud <no-reply@${new URL(publicUrl).hostname.replace(/^cloud\./, '')}>`,
     mailReplyTo: env.PHOENIX_CLOUD_MAIL_REPLY_TO || null,
+    // Emails a mail service is given an hour: in all, and to any one address
+    // (past them, mail waits in the outbox, marked held), so a bot can't
+    // spend the service's quota or flood someone's inbox.
+    mailPerHour: envInt(env, 'PHOENIX_CLOUD_MAIL_PER_HOUR', 100),
+    mailPerAddressPerHour: envInt(env, 'PHOENIX_CLOUD_MAIL_PER_ADDRESS_PER_HOUR', 5),
+    // New accounts an hour: from one address, and on the whole site.
+    signupsPerAddressPerHour: envInt(env, 'PHOENIX_CLOUD_SIGNUPS_PER_ADDRESS_PER_HOUR', 3),
+    signupsPerHour: envInt(env, 'PHOENIX_CLOUD_SIGNUPS_PER_HOUR', 30),
     maxJsonBytes: 256 * 1024,
     sessionDays: 30,
     loginStateMinutes: 10,

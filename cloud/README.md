@@ -155,6 +155,16 @@ play origin serves nothing, and everyone else sees the lock message.
   admin's own message to someone (Email… on their page, replies to the
   admin); and notifications each person chose to get by email, including,
   for admins, someone asking for an account.
+- Against bots and floods: without an invite, at most 3 new accounts an
+  hour come from one address and 30 an hour on the whole site
+  (`PHOENIX_CLOUD_SIGNUPS_PER_ADDRESS_PER_HOUR`, `_SIGNUPS_PER_HOUR`), by
+  the register page or a sign-in provider; the register page has a hidden
+  field only bots fill in, which gets a normal answer and makes nothing.
+  At most 100 emails an hour go to the mail service, and 5 to any one
+  address (`PHOENIX_CLOUD_MAIL_PER_HOUR`, `_MAIL_PER_ADDRESS_PER_HOUR`);
+  past them mail is held in the outbox. Admins are emailed about account
+  requests at most once an hour, and about reports every half hour; each
+  still shows in the dashboard.
 - Admin > Accounts unlocks waiting accounts, makes accounts (ready at
   once), sets plans and passwords, suspends, makes admins, sets storage
   quotas and deletes accounts with what they own (groups they own go to

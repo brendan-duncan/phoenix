@@ -63,6 +63,15 @@ function planView({ plan, team, managed }) {
 
 export function registerAuth(router, app) {
   const { config, store, sessions, mailer, attempts } = app;
+  // New accounts without an invite: so many an hour from one address, and
+  // on the whole site, so a bot can't fill the admins' list or spend email.
+  const signupsBusy = (address) => (!app.signupsByAddress.has(address)
+    ? 'Too many new accounts from here. Try again in an hour.'
+    : !app.signups.has('all') ? 'Phoenix Cloud is taking a lot of new accounts right now. Try again in an hour.' : null);
+  const takeSignup = (address) => {
+    app.signupsByAddress.take(address);
+    app.signups.take('all');
+  };
   const lastAdmin = (user) => Boolean(user.is_admin) &&
     store.get("SELECT COUNT(*) AS n FROM users WHERE is_admin = 1 AND status = 'active'").n <= 1;
 
@@ -134,8 +143,19 @@ export function registerAuth(router, app) {
   router.post('/api/auth/register', anonymous(async (ctx) => {
     const body = await ctx.json();
     const address = clientAddress(ctx.req, config.trustProxy);
-    if (attempts.blocked(`register:${address}`)) {
-      throw new HttpError(429, 'slow_down', 'Too many new accounts from here. Try again later.');
+    // A field people never see, which form-filling bots do fill: answered as
+    // if it worked, with nothing made and no email sent.
+    if (String(body.website ?? '').trim()) {
+      const status = newAccountStatus(ctx.settings, {});
+      store.audit(null, 'register.honeypot', 'address', address);
+      ctx.status = 201;
+      return { status, message: STATUS_MESSAGES[status] ?? null };
+    }
+    if (!body.invite) {
+      const busy = signupsBusy(address);
+      if (busy) {
+        throw new HttpError(429, 'slow_down', busy);
+      }
     }
     const name = requireName(store, body.name);
     const email = String(body.email ?? '').trim();
@@ -162,7 +182,6 @@ export function registerAuth(router, app) {
     if (store.get('SELECT 1 FROM users WHERE email = ?', email)) {
       throw new HttpError(409, 'email_taken', 'There is already an account with that email address. Sign in instead.');
     }
-    attempts.fail(`register:${address}`);
     const status = newAccountStatus(ctx.settings, { invited: Boolean(invite) });
     // An account an admin has to unlock comes with a word about who is asking.
     const requestMessage = String(body.message ?? '').trim().slice(0, MAX_REQUEST_MESSAGE);
@@ -170,6 +189,9 @@ export function registerAuth(router, app) {
       throw badRequest('Say a little about yourself, so the admin knows who is asking.');
     }
     const passwordHash = await hashPassword(body.password);
+    if (!invite) {
+      takeSignup(address);
+    }
     const user = store.transaction(() => {
       const made = createUser(store, { name, email, status, passwordHash, requestMessage: status === 'pending_admin' ? requestMessage : '' });
       if (invite) {
@@ -540,7 +562,14 @@ export function registerAuth(router, app) {
     }
     let user;
     try {
-      user = resolveLogin(store, ctx.settings, provider.id, profile, { invite: state.invite, linkUserId: state.link_user_id });
+      const address = clientAddress(ctx.req, config.trustProxy);
+      user = resolveLogin(store, ctx.settings, provider.id, profile, {
+        invite: state.invite,
+        linkUserId: state.link_user_id,
+        // A new account through a provider counts as a sign-up too.
+        mayCreate: () => !signupsBusy(address),
+        created: () => takeSignup(address),
+      });
     } catch (err) {
       if (err instanceof LoginRefused) {
         fail(err.code);

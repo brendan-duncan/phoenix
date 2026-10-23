@@ -620,3 +620,6 @@ input.rename { width: 100%; height: 26px; font-weight: 600; }
 @media (max-width: 760px) {
   .admin-user { grid-template-columns: 1fr; }
 }
+
+/* A form field for bots only (registering): off the page, not just hidden. */
+.trap { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }

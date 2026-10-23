@@ -2,11 +2,15 @@
 // (and, in dev, printed), where Admin > Email lists the latest with how
 // each went; with an SMTP service set up (PHOENIX_CLOUD_SMTP_HOST, Amazon
 // SES say) it is also sent, in the background, trying again a couple of
-// times when the service says to try later.
+// times when the service says to try later. Past an hourly number of emails
+// in all, or to one address, mail is held in the outbox and not sent.
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { Budget } from './limits.mjs';
 import { buildMessage, sendMail } from './smtp.mjs';
+
+const HOUR = 60 * 60 * 1000;
 
 // Waits before trying again after a failure the service calls temporary.
 const RETRY_MS = [60 * 1000, 10 * 60 * 1000];
@@ -18,13 +22,16 @@ export class Mailer {
     this.smtp = config.smtp;
     this.from = config.mailFrom;
     this.replyTo = config.mailReplyTo;
+    this.perHour = config.mailPerHour ?? 100;
+    this.allMail = new Budget(this.perHour, HOUR);
+    this.perAddress = new Budget(config.mailPerAddressPerHour ?? 5, HOUR);
     // Sent one at a time, in order.
     this.queue = Promise.resolve();
   }
 
-  /** Where mail goes: { sending, host, from, replyTo }. */
+  /** Where mail goes: { sending, host, from, replyTo, perHour }. */
   describe() {
-    return { sending: Boolean(this.smtp), host: this.smtp?.host ?? null, from: this.from, replyTo: this.replyTo };
+    return { sending: Boolean(this.smtp), host: this.smtp?.host ?? null, from: this.from, replyTo: this.replyTo, perHour: this.perHour };
   }
 
   /**
@@ -44,6 +51,16 @@ export class Mailer {
     }
     if (!this.smtp) {
       return Promise.resolve({ status: 'outbox', detail: 'No mail service is set up, so it is only in the outbox.' });
+    }
+    // Over a budget: held (in the outbox), not sent. The address is checked
+    // first, so a flood to one inbox doesn't spend the site's budget.
+    const address = String(to).trim().toLowerCase();
+    const held = !this.perAddress.take(address) ? 'too many emails to this address in the last hour'
+      : !this.allMail.take('all') ? `the limit of ${this.perHour} emails an hour was reached` : null;
+    if (held) {
+      write(`held, not sent: ${held}`);
+      console.error(`[cloud] mail to ${to} held: ${held}`);
+      return Promise.resolve({ status: 'held', detail: `Not sent: ${held}. It is in the outbox.` });
     }
     const message = buildMessage({ from: this.from, to, replyTo: replyTo || this.replyTo, subject, text });
     const attempt = async (tries) => {

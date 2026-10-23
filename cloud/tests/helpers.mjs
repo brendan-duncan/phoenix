@@ -27,6 +27,11 @@ export async function startServer({ env = {}, phoenix = false } = {}) {
     PHOENIX_CLOUD_DATA: dir,
     PHOENIX_CLOUD_EDITOR: path.join(dir, 'no-editor'),
     ...(phoenix ? {} : { PHOENIX_CLOUD_PHOENIX: path.join(dir, 'no-phoenix') }),
+    // Tests make many accounts and emails from one address; the limits get
+    // tests of their own (tests/limits.test.mjs).
+    PHOENIX_CLOUD_SIGNUPS_PER_ADDRESS_PER_HOUR: '1000',
+    PHOENIX_CLOUD_SIGNUPS_PER_HOUR: '1000',
+    PHOENIX_CLOUD_MAIL_PER_ADDRESS_PER_HOUR: '1000',
     ...env,
   }, { mode: 'dev' });
   const store = new Store(path.join(dir, 'cloud.db'));

@@ -3,8 +3,12 @@
 // and Admin > Email's test email.
 
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import net from 'node:net';
+import os from 'node:os';
+import path from 'node:path';
 import { after, before, describe, it } from 'node:test';
+import { Mailer } from '../lib/mail.mjs';
 import { buildMessage, sendMail } from '../lib/smtp.mjs';
 import { startServer } from './helpers.mjs';
 
@@ -92,6 +96,29 @@ describe('SMTP', () => {
   });
 });
 
+describe('hourly email budgets', () => {
+  it('hold mail past so many to one address, and so many in all', async () => {
+    const smtp = await fakeSmtp();
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'phoenix-mail-'));
+    const mailer = new Mailer({
+      dataDir: dir, mode: 'production', mailFrom: 'no-reply@phoenixanimate.com', mailPerHour: 3, mailPerAddressPerHour: 2,
+      smtp: { host: '127.0.0.1', port: smtp.port, user: 'ses-user', password: 'ses-secret', tls: 'none' },
+    });
+    const send = (to) => mailer.send({ to, subject: 'Hi', text: 'Hello' });
+    assert.equal((await send('a@example.com')).status, 'sent');
+    assert.equal((await send('a@example.com')).status, 'sent');
+    const third = await send('a@example.com');
+    assert.equal(third.status, 'held');
+    assert.match(third.detail, /too many emails to this address/);
+    assert.equal((await send('b@example.com')).status, 'sent');
+    assert.match((await send('c@example.com')).detail, /limit of 3 emails an hour/);
+    assert.equal(smtp.received.length, 3);
+    assert.ok(mailer.recent().some((m) => m.status.startsWith('held')));
+    await smtp.close();
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+});
+
 describe('Admin > Email', () => {
   let smtp;
   let server;
@@ -117,7 +144,7 @@ describe('Admin > Email', () => {
 
   it('sends a test email and says how it went', async () => {
     const { mail } = await admin.get('/api/admin/outbox');
-    assert.deepEqual(mail, { sending: true, host: '127.0.0.1', from: 'Phoenix Cloud <no-reply@phoenixanimate.com>', replyTo: 'me@example.com' });
+    assert.deepEqual(mail, { sending: true, host: '127.0.0.1', from: 'Phoenix Cloud <no-reply@phoenixanimate.com>', replyTo: 'me@example.com', perHour: 100 });
     const result = await admin.post('/api/admin/email/test', { to: 'ann@example.com' });
     assert.deepEqual(result, { status: 'sent', detail: 'Ok 0101-queued' });
     assert.match(smtp.received.at(-1).data, /^Subject: Phoenix Cloud test email$/m);
@@ -155,6 +182,11 @@ describe('Admin > Email', () => {
     await admin.patch('/api/admin/settings', { newAccounts: 'admin' });
     await server.client().ok('POST', '/api/auth/register', { json: { name: 'eli', email: 'eli@example.com', password: 'a long password', message: 'I animate.' } });
     assert.match((await mailTo('admin@example.com', /asked for an account/)).text, /\/admin/);
+    // Another within the hour is in the dashboard, not another email.
+    await server.client().ok('POST', '/api/auth/register', { json: { name: 'fay', email: 'fay@example.com', password: 'a long password', message: 'Me too.' } });
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    assert.equal(smtp.received.filter((m) => m.commands.includes('RCPT TO:<admin@example.com>') && /asked for an account/.test(m.data)).length, 1);
+    assert.equal((await admin.get('/api/notifications')).notifications.filter((n) => n.kind === 'waiting').length, 2);
   });
 
   it('emails invites made for an address', async () => {

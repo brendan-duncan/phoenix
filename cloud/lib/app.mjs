@@ -117,6 +117,11 @@ export function createApp({ config, store, blobs }) {
     attempts: new Attempts(),
     // Documents made or converted by Phoenix, per person per hour.
     conversions: new Budget(config.conversionsPerHour, 60 * 60 * 1000),
+    // New accounts an hour, from one address and on the whole site (lib/api/auth.mjs).
+    signupsByAddress: new Budget(config.signupsPerAddressPerHour, 60 * 60 * 1000),
+    signups: new Budget(config.signupsPerHour, 60 * 60 * 1000),
+    // When each person was last emailed each kind of notification (notify.mjs).
+    lastEmailed: new Map(),
   };
   // A server with no accounts gets the admin @phoenix.
   app.ready = ensureDefaultAdmin(store, config);
