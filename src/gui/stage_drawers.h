@@ -53,6 +53,11 @@ public:
 
     /// Called when the stage moves or changes size, after the drawers.
     std::function<void()> stageMoved;
+    /// Called after a drawer opens or closes, or the drawers go on or off.
+    std::function<void()> changed;
+
+    /// The open drawer at \a edge, in screen coordinates; empty when none is.
+    QRect openDrawer(Qt::Edge edge) const;
 
 protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
@@ -64,6 +69,7 @@ private:
         QPointer<QWidget> panel;
         StageDrawer* drawer;
         QToolButton* button;
+        Qt::Edge edge;
     };
 
     QRect stageOnScreen() const;

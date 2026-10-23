@@ -55,7 +55,7 @@ void StageDrawers::add(QDockWidget* dock, Qt::Edge edge, QToolButton* button, in
     // Named after its button, for a check that draws it.
     if (!button->objectName().isEmpty())
         drawer->setObjectName(button->objectName() + "Drawer");
-    _drawers.push_back({dock, nullptr, drawer, button});
+    _drawers.push_back({dock, nullptr, drawer, button, edge});
     connect(button, &QToolButton::clicked, this, [this, index]() {
         setOpen(index, !_drawers[index].drawer->isVisible());
     });
@@ -91,6 +91,8 @@ void StageDrawers::setActive(bool on)
         qApp->installEventFilter(this);
     else
         qApp->removeEventFilter(this);
+    if (changed)
+        changed();
 }
 
 void StageDrawers::setOpen(size_t index, bool open)
@@ -108,6 +110,16 @@ void StageDrawers::setOpen(size_t index, bool open)
             drawer->hide();
         _drawers[i].button->setChecked(drawer->isVisible());
     }
+    if (changed)
+        changed();
+}
+
+QRect StageDrawers::openDrawer(Qt::Edge edge) const
+{
+    for (const Drawer& each : _drawers)
+        if (each.edge == edge && each.drawer->isVisible())
+            return each.drawer->geometry();
+    return QRect();
 }
 
 QRect StageDrawers::stageOnScreen() const

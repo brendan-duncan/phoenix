@@ -407,8 +407,10 @@ MainWindow (QMainWindow)
   sets the Undo/Redo text, and updates the title.
 - **The Artist layout** (`main_window_artist.cpp`, View > Mode > Artist) is a mode of the window
   rather than a workspace: it saves the panels as they are, hides every dock and bar, and shows a
-  tool strip of its own whose last two buttons open the timeline (a frame row over the
-  `TimelineView`, borrowed from its dock in its phone view) and Properties as `StageDrawers`
+  tool strip of its own whose last button opens the timeline (a frame row over the
+  `TimelineView`, borrowed from its dock in its phone view), and a round button floating at the
+  stage's right edge (a frameless tool window, placed again as the stage moves) that opens
+  Properties; both are `StageDrawers`
   ([stage_drawers.h](../src/gui/stage_drawers.h), shared with the phone layout: frameless tool
   windows over the stage that a press elsewhere closes), then puts the saved layout back. Its edits (New Frame after the current
   span, holds, named eases, and keying a frame for a move with a classic tween on the span before)

@@ -1,8 +1,10 @@
 // The Artist layout (View > Mode > Artist): the stage with a strip of the
-// drawing tools down its left, and two buttons at its foot that open the
-// timeline (under a row of frame buttons) and Properties as drawers over
-// the stage, closed by a press anywhere else; every other panel and bar is
-// put away, and comes back as it was. Animation is three ideas here: New
+// drawing tools down its left, a button at its foot that opens the timeline
+// (under a row of frame buttons) as a drawer over the foot of the stage,
+// and a round button floating at the stage's right edge that opens
+// Properties as a drawer there, each closed by a press anywhere else; every
+// other panel and bar is put away, and comes back as it was. Animation is
+// three ideas here: New
 // Frame draws the next drawing
 // (Duplicate keeps this one to work from), Longer and Shorter hold it, and
 // moving something at a later frame keys that frame by itself, tweening the
@@ -56,6 +58,8 @@
 namespace {
 
 constexpr int kButtonSize = 44;
+/// The round button floating over the stage.
+constexpr int kFloatSize = 48;
 
 enum class ArtistIcon { Undo, Redo, Back, Play, Stop, Forward, Loop, Onion, NewFrame, Duplicate, Longer, Shorter, NewLayer,
     Timeline, Properties };
@@ -387,6 +391,7 @@ void MainWindow::setArtistLayout(bool on)
         for (QToolBar* bar : _artistBars)
             bar->show();
         _artistDrawers->setActive(true);
+        placeArtistProperties();
         _artistStage->setEnabled(true);
         _phoenixView->setForgivingStage(true);
         // A tool the strip has, the brush unless one is in hand.
@@ -407,6 +412,7 @@ void MainWindow::setArtistLayout(bool on)
             bar->hide();
         // The panels back in their docks before the docks come back.
         _artistDrawers->setActive(false);
+        _artistProperties->hide();
         _timelineView->setPhoneView(false);
         static_cast<QVBoxLayout*>(_artistDock->widget()->layout())->removeWidget(_timelineView);
         _timelineDock->setWidget(_timelineView);
@@ -618,29 +624,64 @@ void MainWindow::buildArtistBars()
     _artistStage = new ArtistStage(
         _phoenixView, [this](const QPoint& at) { artistBeginMove(at); }, [this]() { artistEndMove(); });
 
-    // At the foot of the tool strip, the buttons that open the timeline
-    // and Properties as drawers over the stage.
+    // At the foot of the tool strip, the button that opens the timeline as
+    // a drawer over the foot of the stage.
     QWidget* space = new QWidget(tools);
     space->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
     tools->addWidget(space);
     tools->addSeparator();
     _artistDrawers = new StageDrawers(this, _phoenixView);
-    const auto drawerButton = [this, tools](const char* objectName, ArtistIcon icon, const char* tip) {
-        QToolButton* button = new QToolButton(tools);
-        button->setObjectName(objectName);
-        button->setCheckable(true);
-        button->setIcon(artistIcon(icon));
-        button->setIconSize(tools->iconSize());
-        button->setToolTip(tip);
-        button->setMinimumSize(kButtonSize, kButtonSize);
-        tools->addWidget(button);
-        return button;
-    };
-    _artistDrawers->add(_artistDock, Qt::BottomEdge,
-        drawerButton("artistTimelineButton", ArtistIcon::Timeline, "Timeline: the frames and layers, with New Frame, holds and Motion"),
-        300);
-    _artistDrawers->add(findChild<QDockWidget*>("propertiesDock"), Qt::RightEdge,
-        drawerButton("artistPropertiesButton", ArtistIcon::Properties, "Properties of the tool or what is selected"), 400);
+    QToolButton* timeline = new QToolButton(tools);
+    timeline->setObjectName("artistTimelineButton");
+    timeline->setCheckable(true);
+    timeline->setIcon(artistIcon(ArtistIcon::Timeline));
+    timeline->setIconSize(tools->iconSize());
+    timeline->setToolTip("Timeline: the frames and layers, with New Frame, holds and Motion");
+    timeline->setMinimumSize(kButtonSize, kButtonSize);
+    tools->addWidget(timeline);
+    _artistDrawers->add(_artistDock, Qt::BottomEdge, timeline, 300);
+
+    // Properties opens from a round button floating at the stage's right
+    // edge, where its drawer comes from; the button moves out of the
+    // drawer's way while it is open. A window of its own, so it shows over
+    // the stage's canvas.
+    QToolButton* properties = new QToolButton(this);
+    properties->setWindowFlags(Qt::Tool | Qt::FramelessWindowHint);
+    properties->setAttribute(Qt::WA_ShowWithoutActivating);
+    properties->setAttribute(Qt::WA_TranslucentBackground);
+    properties->setObjectName("artistPropertiesButton");
+    properties->setCheckable(true);
+    properties->setIcon(artistIcon(ArtistIcon::Properties));
+    properties->setIconSize(QSize(kFloatSize - 20, kFloatSize - 20));
+    properties->setFixedSize(kFloatSize, kFloatSize);
+    properties->setToolTip("Properties of the tool or what is selected");
+    properties->setStyleSheet(QString("QToolButton { border-radius: %1px; border: 1px solid palette(mid);"
+                                      " background: palette(button); }"
+                                      "QToolButton:hover { background: palette(midlight); }"
+                                      "QToolButton:checked { background: palette(highlight); }")
+                                  .arg(kFloatSize / 2));
+    _artistProperties = properties;
+    _artistDrawers->add(findChild<QDockWidget*>("propertiesDock"), Qt::RightEdge, properties, 400);
+    _artistDrawers->stageMoved = [this]() { placeArtistProperties(); };
+    _artistDrawers->changed = [this]() { placeArtistProperties(); };
+}
+
+void MainWindow::placeArtistProperties()
+{
+    if (!_artistProperties)
+        return;
+    if (!_artistLayout || !_phoenixView->isVisible())
+    {
+        _artistProperties->hide();
+        return;
+    }
+    // Halfway down the stage's right edge, or just left of the open drawer.
+    const QRect stage(_phoenixView->mapToGlobal(QPoint(0, 0)), _phoenixView->size());
+    const QRect drawer = _artistDrawers->openDrawer(Qt::RightEdge);
+    const int right = drawer.isEmpty() ? stage.right() : drawer.left() - 1;
+    _artistProperties->move(right - kFloatSize - 14, stage.center().y() - kFloatSize / 2);
+    _artistProperties->show();
+    _artistProperties->raise();
 }
 
 namespace {

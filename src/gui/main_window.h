@@ -1254,6 +1254,8 @@ private:
     QWidget* _artistEaseBox = nullptr;
     class ArtistStage* _artistStage = nullptr;
     class StageDrawers* _artistDrawers = nullptr;
+    class QToolButton* _artistProperties = nullptr;
+    void placeArtistProperties();
     struct ArtistMove;
     std::shared_ptr<ArtistMove> _artistMove;
     /// False when the docks' arrangement could not be used.
