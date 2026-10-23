@@ -29,10 +29,11 @@ export class Mailer {
 
   /**
    * Writes { to, subject, text } to the outbox and, with SMTP set up, sends
-   * it. Returns a promise of how the sending went ({ status, detail }),
-   * which callers may ignore: it never rejects.
+   * it; `replyTo` overrides where replies go (PHOENIX_CLOUD_MAIL_REPLY_TO).
+   * Returns a promise of how the sending went ({ status, detail }), which
+   * callers may ignore: it never rejects.
    */
-  send({ to, subject, text }) {
+  send({ to, subject, text, replyTo = null }) {
     fs.mkdirSync(this.dir, { recursive: true });
     const stamp = new Date().toISOString().replace(/[:.]/g, '-');
     const file = path.join(this.dir, `${stamp}-${String(to).replace(/[^a-z0-9@._-]/gi, '_')}.txt`);
@@ -44,7 +45,7 @@ export class Mailer {
     if (!this.smtp) {
       return Promise.resolve({ status: 'outbox', detail: 'No mail service is set up, so it is only in the outbox.' });
     }
-    const message = buildMessage({ from: this.from, to, replyTo: this.replyTo, subject, text });
+    const message = buildMessage({ from: this.from, to, replyTo: replyTo || this.replyTo, subject, text });
     const attempt = async (tries) => {
       try {
         const { reply } = await sendMail(this.smtp, { from: this.from, to, message });

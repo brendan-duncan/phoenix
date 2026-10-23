@@ -444,7 +444,21 @@ export async function renderAccount(target) {
     pictureRow(me),
     h('label', { class: 'field' }, h('span', {}, 'Name'), name, nameHint,
       h('span', { class: 'muted small' }, 'What others see, and what you sign in with.')),
-    h('label', { class: 'field' }, h('span', {}, 'Email'), email),
+    h('label', { class: 'field' }, h('span', {}, 'Email'), email,
+      me.email ? (me.emailVerified
+        ? h('span', { class: 'muted small' }, 'Confirmed.')
+        : h('span', { class: 'small' }, h('span', { class: 'status-bad' }, 'Not confirmed yet. '),
+          h('a', {
+            class: 'link', href: '#', onclick: async (e) => {
+              e.preventDefault();
+              try {
+                await post('/api/me/confirm-email');
+                toast(`A confirmation link is on its way to ${me.email}.`);
+              } catch (err) {
+                showError(err);
+              }
+            },
+          }, 'Send the link again'))) : null),
     h('label', { class: 'field' }, h('span', {}, 'About you'), bio),
     h('div', {}, save));
   profile.addEventListener('submit', async (e) => {
@@ -913,21 +927,30 @@ async function adminInvites() {
   const note = h('input', { type: 'text', placeholder: 'Note, e.g. who it is for', 'aria-label': 'Note', maxlength: 200 });
   const days = h('select', { 'aria-label': 'Lasts' }, [['14', '2 weeks'], ['7', '1 week'], ['30', '30 days'], ['0', 'No limit']].map(([v, l]) => h('option', { value: v }, l)));
   const admin = h('input', { type: 'checkbox' });
+  const send = h('input', { type: 'checkbox', checked: true });
+  const sendRow = h('label', { class: 'check hidden' }, send, 'Email it to them (with the note)');
+  email.addEventListener('input', () => sendRow.classList.toggle('hidden', !email.value.trim()));
   const form = h('form', { class: 'panel stack cards-form' },
     h('h2', {}, 'Invite someone'),
     h('p', { class: 'muted small flush' }, 'Someone who registers from an invite link can sign in straight away, whatever the setting for new accounts.'),
     email, note,
     h('div', { class: 'row' }, h('span', { class: 'muted small' }, 'Lasts'), days, h('label', { class: 'check' }, admin, 'Make them an admin')),
-    h('div', {}, h('button', { type: 'submit', class: 'btn primary' }, icon('link'), 'Make invite link')),
+    sendRow,
+    h('div', {}, h('button', { type: 'submit', class: 'btn primary' }, icon('link'), 'Make invite')),
     fresh);
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     try {
-      const made = await post('/api/admin/invites', { email: email.value.trim() || null, note: note.value, days: Number(days.value), makeAdmin: admin.checked });
+      const to = email.value.trim();
+      const made = await post('/api/admin/invites', { email: to || null, note: note.value, days: Number(days.value), makeAdmin: admin.checked, send: send.checked });
+      const emailed = made.emailed;
       clear(fresh,
+        emailed ? h('p', { class: `small ${emailed.status === 'failed' ? 'status-bad' : 'status-ok'}` },
+          emailed.status === 'sent' ? `Emailed to ${to}.` : emailed.status === 'failed' ? `The email to ${to} failed: ${emailed.detail} Send the link yourself.` : emailed.detail) : null,
         h('div', { class: 'copy-row' }, h('input', { type: 'text', value: made.url, readOnly: true, onfocus: (ev) => ev.target.select() }),
           h('button', { type: 'button', class: 'btn', onclick: () => copyText(made.url) }, icon('copy'), 'Copy')),
-        h('p', { class: 'muted small' }, 'Send this link yourself. It is shown only once and works for one person.'));
+        h('p', { class: 'muted small' }, `${emailed?.status === 'sent' ? 'The link, should you want it too.' : 'Send this link yourself.'} It is shown only once and works for one person.`));
+      sendRow.classList.add('hidden');
       email.value = '';
       note.value = '';
       form.parentNode.querySelector('.invite-table')?.replaceWith(inviteTable((await get('/api/admin/invites')).invites));
@@ -1072,6 +1095,31 @@ async function adminAudit() {
  * One account, for admins: who they are, their groups, and their documents,
  * which an admin opens passively (not a view, no lock, nothing saved).
  */
+/** An admin writes an email to `u`, with replies coming back to them. */
+async function emailPerson(u) {
+  const mine = state.me.user.email;
+  const result = await formDialog({
+    title: `Email ${u.name}`,
+    submit: 'Send',
+    note: `To ${u.email}, from Phoenix Cloud, signed with your name.`,
+    fields: [
+      h('label', { class: 'field' }, h('span', {}, 'Subject'), h('input', { type: 'text', name: 'subject', required: true, maxlength: 200, autofocus: true })),
+      h('label', { class: 'field' }, h('span', {}, 'Message'), h('textarea', { name: 'message', rows: 8, required: true, maxlength: 20000 })),
+      mine ? h('label', { class: 'check' }, h('input', { type: 'checkbox', name: 'replyToMe', checked: true }), `Replies come to ${mine}`) : null,
+    ],
+    onSubmit: async (data) => {
+      const sent = await post(`/api/admin/users/${u.id}/email`, { subject: data.subject, message: data.message, replyToMe: Boolean(data.replyToMe) });
+      if (sent.status === 'failed') {
+        throw new Error(`It was not sent: ${sent.detail}`);
+      }
+      return sent;
+    },
+  });
+  if (result) {
+    toast(result.status === 'sent' ? `Sent to ${u.email}.` : result.detail);
+  }
+}
+
 export async function renderAdminUser(target, id) {
   if (!state.me.user.isAdmin) {
     clear(target, h('div', { class: 'empty' }, icon('lock'), h('h2', {}, 'Admins only')));
@@ -1086,6 +1134,7 @@ export async function renderAdminUser(target, id) {
       h('h1', {}, u.name),
       h('div', { class: 'muted small' }, [`@${u.handle}`, u.email ?? 'no email', STATUS_LABELS[u.status] ?? u.status, `${u.effectivePlan.plan} plan`,
         u.isAdmin ? 'admin' : null].filter(Boolean).join(' · '))),
+    u.email ? h('button', { type: 'button', class: 'btn', onclick: () => emailPerson(u).catch(showError) }, icon('send'), 'Email…') : null,
     u.id !== me.id ? h('button', { type: 'button', class: 'btn', onclick: () => newMessageDialog(u.name).catch(showError) }, icon('chat'), 'Message') : null),
     h('div', { class: 'admin-user' },
       h('div', { class: 'panel stack' },

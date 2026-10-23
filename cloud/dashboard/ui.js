@@ -82,6 +82,7 @@ const ICONS = {
   move: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM10 13h6M13 10l3 3-3 3"/>',
   play: '<path d="M7 4l13 8-13 8z"/>',
   chat: '<path d="M4 5h16v11H9l-5 4z"/>',
+  send: '<path d="M3 11l18-8-8 18-2-8z"/>',
   bell: '<path d="M6 9a6 6 0 0 1 12 0c0 6 3 7 3 7H3s3-1 3-7M10 20a2 2 0 0 0 4 0"/>',
 };
 

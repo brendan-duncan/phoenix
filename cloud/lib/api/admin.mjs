@@ -5,7 +5,7 @@
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
-import { createInvite, createUser, inviteView, normalizeName, publicUser, renameUser, requireName, validEmail } from '../accounts.mjs';
+import { createInvite, createUser, inviteView, normalizeName, publicUser, renameUser, requireName, sendInvite, validEmail } from '../accounts.mjs';
 import { addFont, fontName, listFonts } from '../fonts.mjs';
 import { badRequest, forbidden, HttpError, notFound } from '../http.mjs';
 import { notify } from '../notify.mjs';
@@ -109,6 +109,32 @@ export function registerAdmin(router, app) {
           + store.get("SELECT COUNT(*) AS n FROM document_reports r JOIN documents d ON d.id = r.document_id WHERE d.owner_kind = 'user' AND d.owner_id = ?", user.id).n,
       },
     };
+  });
+
+  // An admin writes to someone: { subject, message, replyToMe }. Waits to say how it went.
+  router.post('/api/admin/users/:id/email', async (ctx) => {
+    const admin = ctx.requireAdmin();
+    const user = ctx.store.get('SELECT * FROM users WHERE id = ?', ctx.params.id);
+    if (!user) {
+      throw notFound('No such account.');
+    }
+    if (!user.email) {
+      throw badRequest(`${user.name} has no email address.`);
+    }
+    const body = await ctx.json();
+    const subject = String(body.subject ?? '').replace(/[\r\n]+/g, ' ').trim().slice(0, 200);
+    const message = String(body.message ?? '').trim().slice(0, 20000);
+    if (!subject || !message) {
+      throw badRequest('An email needs a subject and a message.');
+    }
+    const result = await app.mailer.send({
+      to: user.email,
+      subject,
+      text: `Hello ${user.name},\n\n${message}\n\n${admin.name}, Phoenix Cloud\n${ctx.config.publicUrl}/`,
+      replyTo: body.replyToMe !== false && admin.email ? admin.email : null,
+    });
+    ctx.store.audit(admin.id, 'user.email', 'user', user.id, { subject, status: result.status });
+    return result;
   });
 
   // An account an admin makes is ready to use: { name, email, password, isAdmin }.
@@ -257,9 +283,15 @@ export function registerAdmin(router, app) {
       throw badRequest('An invite lasts 1 to 365 days (0 for no limit).');
     }
     const { id, token } = createInvite(ctx.store, { email, note: body.note ?? '', makeAdmin: Boolean(body.makeAdmin), createdBy: me.id, days });
+    const url = `${ctx.config.publicUrl}/invite/${token}`;
+    // An invite for an address goes there by email, unless asked not to.
+    let emailed = null;
+    if (email && body.send !== false) {
+      emailed = await sendInvite(app.mailer, ctx.config, { email, url, note: String(body.note ?? '').slice(0, 200), from: me.name, days, replyTo: me.email });
+    }
     ctx.status = 201;
     // The link is shown once; only its hash is kept.
-    return { invite: inviteView(ctx.store.get('SELECT * FROM invites WHERE id = ?', id)), url: `${ctx.config.publicUrl}/invite/${token}` };
+    return { invite: inviteView(ctx.store.get('SELECT * FROM invites WHERE id = ?', id)), url, emailed };
   });
 
   router.delete('/api/admin/invites/:id', (ctx) => {

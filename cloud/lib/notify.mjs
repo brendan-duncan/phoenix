@@ -19,7 +19,7 @@ export const KINDS = {
   chat: { label: 'New messages in your groups\' chats', inApp: false, email: false },
   unlocked: { label: 'Your account is ready', inApp: true, email: true, always: true },
   moderation: { label: 'Moderators flag or remove one of your documents', inApp: true, email: true, always: true },
-  waiting: { label: 'An account is waiting to be unlocked', inApp: true, email: false, admins: true },
+  waiting: { label: 'Someone asks for an account (it waits for an admin)', inApp: true, email: true, admins: true },
   report: { label: 'A message or document is reported', inApp: true, email: true, admins: true },
 };
 

@@ -207,6 +207,24 @@ export function registerAuth(router, app) {
     return { status: user.status, message: STATUS_MESSAGES[user.status] ?? null };
   }));
 
+  // Another confirmation email for the signed-in person's own address.
+  router.post('/api/me/confirm-email', async (ctx) => {
+    const user = ctx.requireUser();
+    if (!user.email) {
+      throw badRequest('Add an email address first.');
+    }
+    if (user.email_verified) {
+      return { status: 'confirmed' };
+    }
+    const address = clientAddress(ctx.req, config.trustProxy);
+    if (attempts.blocked(`resend:${user.id}`) || attempts.blocked(`resend:${address}`)) {
+      throw new HttpError(429, 'slow_down', 'Too many emails asked for. Try again later.');
+    }
+    attempts.fail(`resend:${user.id}`);
+    sendConfirmation(store, mailer, config, user, { changed: true });
+    return { status: 'sent' };
+  });
+
   // Another confirmation email, for someone whose link ran out.
   router.post('/api/auth/resend', anonymous(async (ctx) => {
     const body = await ctx.json();
@@ -434,6 +452,8 @@ export function registerAuth(router, app) {
         throw new HttpError(409, 'email_taken', 'Another account has that email address.');
       }
       store.run('UPDATE users SET email = ?, email_verified = 0 WHERE id = ?', body.email, user.id);
+      // The new address is confirmed by a link sent to it.
+      sendConfirmation(store, mailer, config, store.get('SELECT * FROM users WHERE id = ?', user.id), { changed: true });
     }
     if (typeof body.bio === 'string') {
       store.run('UPDATE users SET bio = ? WHERE id = ?', body.bio.slice(0, 500), user.id);
@@ -529,6 +549,11 @@ export function registerAuth(router, app) {
       throw err;
     }
     if (user.pending) {
+      // A new account that waits for an admin: they are told, as when
+      // someone registers with a password.
+      if (user.pending === 'pending_admin' && user.created) {
+        notify(app, adminIds(store), { kind: 'waiting', text: `${user.created.name} asked for an account (with ${provider.name})`, link: '/admin', actorId: user.created.id });
+      }
       fail(user.pending);
       return;
     }

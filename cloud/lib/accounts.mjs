@@ -23,6 +23,7 @@ export function selfUser(u) {
   return {
     ...publicUser(u),
     email: u.email,
+    emailVerified: Boolean(u.email_verified),
     bio: u.bio,
     isAdmin: Boolean(u.is_admin),
     createdAt: u.created_at,
@@ -288,12 +289,29 @@ export function takeEmailToken(store, token, purpose) {
 }
 
 /** Sends the email that confirms `user`'s address. */
-export function sendConfirmation(store, mailer, config, user) {
+export function sendConfirmation(store, mailer, config, user, { changed = false } = {}) {
   const token = makeEmailToken(store, user.id, 'confirm');
-  mailer.send({
+  return mailer.send({
     to: user.email,
-    subject: 'Confirm your Phoenix Cloud account',
-    text: `Hello ${user.name},\n\nConfirm your email address to start using Phoenix Cloud:\n${config.publicUrl}/confirm/${token}\n\nThe link works for 48 hours. If you did not make this account, ignore this email.`,
+    subject: changed ? 'Confirm your new email address for Phoenix Cloud' : 'Confirm your Phoenix Cloud account',
+    text: changed
+      ? `Hello ${user.name},\n\nYou changed your Phoenix Cloud email address to this one. Confirm it here:\n${config.publicUrl}/confirm/${token}\n\nThe link works for 48 hours. If you did not change it, sign in and change your password.`
+      : `Hello ${user.name},\n\nConfirm your email address to start using Phoenix Cloud:\n${config.publicUrl}/confirm/${token}\n\nThe link works for 48 hours. If you did not make this account, ignore this email.`,
+  });
+}
+
+/** The email that carries an invite's link to the address it was made for. */
+export function sendInvite(mailer, config, { email, url, note = '', from = null, days = 14, replyTo = null }) {
+  return mailer.send({
+    to: email,
+    replyTo,
+    subject: `${from ? `${from} invited you` : 'You are invited'} to Phoenix Cloud`,
+    text: [
+      `Hello,\n\n${from ? `${from} invited you` : 'You are invited'} to Phoenix Cloud, where you keep, share and edit Phoenix animation documents in your browser.`,
+      note ? `\n"${note}"` : '',
+      `\nMake your account here:\n${url}`,
+      `\n${days ? `The link works for ${days} day${days === 1 ? '' : 's'}, and once.` : 'The link works once.'} If you were not expecting this, ignore this email.`,
+    ].join('\n'),
   });
 }
 
@@ -422,7 +440,7 @@ export function resolveLogin(store, settings, providerId, profile, state) {
       claimInvite(store, invite, user.id);
     }
     if (status !== 'active') {
-      return { pending: status };
+      return { pending: status, created: user };
     }
     return store.get('SELECT * FROM users WHERE id = ?', user.id);
   });

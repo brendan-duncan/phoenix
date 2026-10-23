@@ -148,7 +148,13 @@ play origin serves nothing, and everyone else sees the lock message.
   (and printed by `dev`). With `PHOENIX_CLOUD_SMTP_HOST` set it is also sent
   through that SMTP service (Amazon SES: STARTTLS on port 587, AUTH with
   its SMTP user), in the background, trying twice more when the service
-  says to try later. Admin > Email sends a test email.
+  says to try later. Admin > Email sends a test email. What goes by email:
+  the link confirming a new account's address (when new accounts wait for
+  that) and a changed address's; password resets; invites made for an
+  address (from Admin > Invites, or `server.mjs invite --email`); an
+  admin's own message to someone (Email… on their page, replies to the
+  admin); and notifications each person chose to get by email, including,
+  for admins, someone asking for an account.
 - Admin > Accounts unlocks waiting accounts, makes accounts (ready at
   once), sets plans and passwords, suspends, makes admins, sets storage
   quotas and deletes accounts with what they own (groups they own go to

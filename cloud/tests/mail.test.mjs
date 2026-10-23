@@ -125,4 +125,55 @@ describe('Admin > Email', () => {
     assert.equal(messages[0].status, 'sent (Ok 0101-queued)');
     assert.equal(await admin.fails('POST', '/api/admin/email/test', 400, { json: { to: 'not an address' } }), 'bad_request');
   });
+
+  /** The mail to `to` once it has arrived (sending runs in the background): its decoded body and headers. */
+  async function mailTo(to, subject) {
+    for (let i = 0; i < 100; i++) {
+      const found = smtp.received.find((m) => m.commands.includes(`RCPT TO:<${to}>`) && (!subject || subject.test(m.data)));
+      if (found) {
+        const [head, body] = found.data.split('\r\n\r\n');
+        return { head, text: Buffer.from(body.replace(/\r\n/g, ''), 'base64').toString('utf8') };
+      }
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    throw new Error(`No mail to ${to}`);
+  }
+
+  it('confirms a new account\'s address when the setting asks for it', async () => {
+    await admin.patch('/api/admin/settings', { newAccounts: 'email' });
+    const anon = server.client();
+    await anon.ok('POST', '/api/auth/register', { json: { name: 'dora', email: 'dora@example.com', password: 'a long password' } });
+    const { text } = await mailTo('dora@example.com', /^Subject: Confirm your Phoenix Cloud account$/m);
+    const token = /\/confirm\/([A-Za-z0-9_-]+)/.exec(text)[1];
+    assert.equal((await anon.post('/api/auth/confirm', { token })).status, 'active');
+  });
+
+  it('tells admins by email when someone asks for an account', async () => {
+    await admin.patch('/api/me', { email: 'admin@example.com' });
+    // A changed address gets a link to confirm it.
+    assert.match((await mailTo('admin@example.com', /new email address/)).text, /\/confirm\//);
+    await admin.patch('/api/admin/settings', { newAccounts: 'admin' });
+    await server.client().ok('POST', '/api/auth/register', { json: { name: 'eli', email: 'eli@example.com', password: 'a long password', message: 'I animate.' } });
+    assert.match((await mailTo('admin@example.com', /asked for an account/)).text, /\/admin/);
+  });
+
+  it('emails invites made for an address', async () => {
+    const made = await admin.post('/api/admin/invites', { email: 'finn@example.com', note: 'For the storyboard crew' });
+    assert.equal(made.emailed.status, 'sent');
+    const { head, text } = await mailTo('finn@example.com');
+    assert.match(head, /^Subject: phoenix invited you to Phoenix Cloud$/m);
+    assert.match(head, /^Reply-To: admin@example.com$/m);
+    assert.ok(text.includes(made.url) && text.includes('For the storyboard crew'));
+    assert.equal((await admin.post('/api/admin/invites', { email: 'gus@example.com', send: false })).emailed, null);
+  });
+
+  it('lets an admin write to someone', async () => {
+    const { user } = await admin.post('/api/admin/users', { name: 'hana', email: 'hana@example.com', password: 'a long password' });
+    const sent = await admin.post(`/api/admin/users/${user.id}/email`, { subject: 'Your storage', message: 'You are close to your quota.' });
+    assert.equal(sent.status, 'sent');
+    const { head, text } = await mailTo('hana@example.com', /^Subject: Your storage$/m);
+    assert.match(head, /^Reply-To: admin@example.com$/m);
+    assert.match(text, /^Hello hana,\r\n\r\nYou are close to your quota\./);
+    assert.equal(await admin.fails('POST', `/api/admin/users/${user.id}/email`, 400, { json: { subject: '', message: 'x' } }), 'bad_request');
+  });
 });

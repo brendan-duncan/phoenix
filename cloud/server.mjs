@@ -7,7 +7,7 @@
 //   node server.mjs import [--to HANDLE] FILE ...     add .phx/.fla/.swf/.svg/.eps/.ai files to an account
 //   node server.mjs set-password --handle H --password P
 //   node server.mjs make-admin --handle H             make an account an admin
-//   node server.mjs invite [--email E] [--note N] [--days D] [--admin]
+//   node server.mjs invite [--email E] [--note N] [--days D] [--admin] [--no-send]
 //   node server.mjs fonts                             download the starter font library
 //   node server.mjs gc                                delete stored chunks nothing uses
 //   node server.mjs status                            print totals
@@ -22,13 +22,14 @@
 import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
-import { createInvite, ensureDefaultAdmin, findAccount } from './lib/accounts.mjs';
+import { createInvite, ensureDefaultAdmin, findAccount, sendInvite } from './lib/accounts.mjs';
 import { createApp } from './lib/app.mjs';
 import { BlobStore } from './lib/blobs.mjs';
 import { CLOUD_DIR, editorAvailable, loadConfig } from './lib/config.mjs';
 import { Converter } from './lib/convert.mjs';
 import { installStarterFonts, listFonts } from './lib/fonts.mjs';
 import { newId } from './lib/ids.mjs';
+import { Mailer } from './lib/mail.mjs';
 import { hashPassword, passwordProblem } from './lib/passwords.mjs';
 import { Store } from './lib/store.mjs';
 import { collectGarbage, saveRevision } from './lib/storage.mjs';
@@ -182,13 +183,19 @@ async function makeAdmin(args) {
   console.log(`@${user.handle} is an admin.`);
 }
 
-function invite(args) {
+async function invite(args) {
   const { config, store } = open();
-  const days = option(args, '--days');
-  const { token } = createInvite(store, {
-    email: option(args, '--email') ?? null, note: option(args, '--note') ?? '', makeAdmin: args.includes('--admin'), days: days === undefined ? 14 : Number(days),
-  });
-  console.log(`${config.publicUrl}/invite/${token}`);
+  const days = option(args, '--days') === undefined ? 14 : Number(option(args, '--days'));
+  const email = option(args, '--email') ?? null;
+  const note = option(args, '--note') ?? '';
+  const { token } = createInvite(store, { email, note, makeAdmin: args.includes('--admin'), days });
+  const url = `${config.publicUrl}/invite/${token}`;
+  console.log(url);
+  // An invite for an address is emailed there (as Admin > Invites does), unless --no-send.
+  if (email && !args.includes('--no-send')) {
+    const { status, detail } = await sendInvite(new Mailer(config), config, { email, url, note, days });
+    console.log(`Email to ${email}: ${status}${status === 'sent' ? '' : ` (${detail})`}`);
+  }
 }
 
 async function fonts() {
