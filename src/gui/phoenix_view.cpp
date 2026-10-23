@@ -186,6 +186,85 @@ const fla::Layer* owningLayer(const fla::DOMElement* element)
     return nullptr;
 }
 
+/// The element that carries  selected on at  frame, on another
+/// keyframe of its layer, or null when nothing there does. A symbol instance
+/// carries on as the instance with its instance name, or else as one of the
+/// same symbol at the same place in the frame (or anywhere in it); a bitmap
+/// likewise by its bitmap; anything else as the element of the same kind at
+/// the same place, which is how a drawing redrawn keyframe by keyframe keeps
+/// its selection. Elements already in  taken are passed over, so two
+/// selected instances of one symbol do not both land on the same one.
+fla::Element* carriedOver(const fla::DOMElement* selected, int frame, const std::vector<fla::DOMElement*>& taken)
+{
+    const auto* element = dynamic_cast<const fla::Element*>(selected);
+    const fla::Frame* owner = owningFrame(selected);
+    const fla::Layer* layer = owningLayer(selected);
+    // Only an element placed on the frame itself; one inside a group has
+    // no place of its own in another keyframe.
+    if (!element || !owner || !layer || element->parent != owner)
+        return nullptr;
+    const fla::Frame* target = nullptr;
+    for (const fla::Frame* each : layer->frames)
+    {
+        if (each && frame >= each->index && frame < each->index + std::max(1, each->duration))
+        {
+            target = each;
+            break;
+        }
+    }
+    if (!target || target == owner)
+        return nullptr;
+
+    const auto free = [&taken](const fla::Element* candidate) {
+        return std::find(taken.begin(), taken.end(), candidate) == taken.end();
+    };
+    const auto& from = owner->elements;
+    const auto& to = target->elements;
+    const size_t place = std::find(from.begin(), from.end(), element) - from.begin();
+    const auto atPlace = [&](const auto& matches) -> fla::Element* {
+        if (place < to.size() && to[place] && to[place]->elementType() == element->elementType() &&
+            matches(*to[place]) && free(to[place]))
+            return to[place];
+        return nullptr;
+    };
+    const auto anywhere = [&](const auto& matches) -> fla::Element* {
+        for (fla::Element* candidate : to)
+            if (candidate && candidate->elementType() == element->elementType() && matches(*candidate) && free(candidate))
+                return candidate;
+        return nullptr;
+    };
+
+    if (element->elementType() == fla::Element::Type::SymbolInstance)
+    {
+        const auto& instance = static_cast<const fla::SymbolInstance&>(*element);
+        if (!instance.name.empty())
+        {
+            const auto named = [&instance](const fla::Element& other) {
+                return static_cast<const fla::SymbolInstance&>(other).name == instance.name;
+            };
+            if (fla::Element* found = anywhere(named))
+                return found;
+        }
+        const auto sameSymbol = [&instance](const fla::Element& other) {
+            return static_cast<const fla::SymbolInstance&>(other).libraryItemName == instance.libraryItemName;
+        };
+        if (fla::Element* found = atPlace(sameSymbol))
+            return found;
+        return anywhere(sameSymbol);
+    }
+    if (element->elementType() == fla::Element::Type::BitmapInstance)
+    {
+        const auto& bitmap = static_cast<const fla::BitmapInstance&>(*element);
+        const auto sameBitmap = [&bitmap](const fla::Element& other) {
+            return static_cast<const fla::BitmapInstance&>(other).libraryItemName == bitmap.libraryItemName;
+        };
+        if (fla::Element* found = atPlace(sameBitmap))
+            return found;
+        return anywhere(sameBitmap);
+    }
+    return atPlace([](const fla::Element&) { return true; });
+}
+
 /// The color a selected element is highlighted in. The default is the
 /// outline color of the layer the element sits on, so neighboring layers
 /// read differently and the highlight is the same color as the layer's
@@ -436,22 +515,32 @@ void PhoenixView::onPlayerFrameChanged(int frame)
     // snapping lines up with is gathered again.
     _snapBoundsValid = false;
 
-    // What was selected lives on the frame just left, so the selection
-    // goes with it; letting go also drops a drawing that
-    // was still floating into the artwork of its own frame. Within the
-    // keyframe it is on, playing or scrubbing keeps it, so its panels stay
-    // open on it.
-    const auto stillShown = [this, frame]() {
-        for (const fla::DOMElement* each : _selection->elements())
+    // What was selected lives on the keyframe just left. Within the span
+    // of that keyframe, playing or scrubbing keeps it, so its panels stay
+    // open on it. On another keyframe of its layer the selection moves to
+    // the element that carries on there (see carriedOver), so stepping
+    // through the keyframes of a tween or a drawing keeps it selected.
+    // What has no match there is let go; letting go also drops a drawing
+    // that was still floating into the artwork of its own frame.
+    if (_selection && !_selection->isEmpty() && !(_commandStack && _commandStack->isExecuting()))
+    {
+        std::vector<fla::DOMElement*> kept;
+        bool moved = false;
+        for (fla::DOMElement* each : _selection->elements())
         {
             const fla::Frame* owner = owningFrame(each);
-            if (!owner || frame < owner->index || frame >= owner->index + std::max(1, owner->duration))
-                return false;
+            if (owner && frame >= owner->index && frame < owner->index + std::max(1, owner->duration))
+            {
+                kept.push_back(each);
+                continue;
+            }
+            moved = true;
+            if (fla::Element* carried = carriedOver(each, frame, kept))
+                kept.push_back(carried);
         }
-        return true;
-    };
-    if (_selection && !_selection->isEmpty() && !(_commandStack && _commandStack->isExecuting()) && !stillShown())
-        _selection->clear();
+        if (moved)
+            _selection->select(kept);
+    }
     update();
 }
 

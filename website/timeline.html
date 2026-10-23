@@ -59,6 +59,8 @@
 
 <p><kbd>Alt</kbd>+<kbd>.</kbd> and <kbd>Alt</kbd>+<kbd>,</kbd> jump to the next and previous keyframe on the current layer. The keys work while the stage or the timeline has the focus, so <kbd>Enter</kbd> in a text box stays the text box's.</p>
 
+<p>Moving the playhead keeps what is selected. Within a keyframe's span the selection stays as it is; on another keyframe of the same layer it moves to the element that carries on there: the instance with the same instance name, or else the same symbol or bitmap in the same place, or for a drawing, the drawing in its place. So you can select an instance and step through the keyframes of its tween, with the Properties panel staying on it. What has no counterpart on the new keyframe is deselected.</p>
+
 <p>Below the header, the <strong>ruler</strong> numbers the frames, and the <strong>playhead</strong> marks the frame shown on the stage. Click or drag in the ruler to move the playhead. While onion skinning or loop playback is on, its markers in the ruler can be dragged too (see <a href="frames.html#onion-skinning">Onion skinning</a> and <a href="frames.html#looping-a-range">Looping a range</a>). Past the end of the timeline the grid is shaded darker.</p>
 
 <p>Each row of the frame grid belongs to the layer beside it. The cells show what is on each frame:</p>
