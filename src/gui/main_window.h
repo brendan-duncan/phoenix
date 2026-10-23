@@ -1256,6 +1256,9 @@ private:
     class StageDrawers* _artistDrawers = nullptr;
     class QToolButton* _artistProperties = nullptr;
     void placeArtistProperties();
+    class ArtistTimeStrip* _artistStrip = nullptr;
+    QAction* _artistStripAction = nullptr;
+    void placeArtistStrip();
     struct ArtistMove;
     std::shared_ptr<ArtistMove> _artistMove;
     /// False when the docks' arrangement could not be used.

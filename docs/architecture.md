@@ -410,7 +410,9 @@ MainWindow (QMainWindow)
   tool strip of its own whose last button opens the timeline (a frame row over the
   `TimelineView`, borrowed from its dock in its phone view), and a round button floating at the
   stage's right edge (a frameless tool window, placed again as the stage moves) that opens
-  Properties; both are `StageDrawers`
+  Properties; both are `StageDrawers`. While the timeline drawer is closed an `ArtistTimeStrip`
+  (another tool window) floats over the foot of the stage with the current layer's frames alone,
+  placed again with the Properties button as the stage or the drawers change
   ([stage_drawers.h](../src/gui/stage_drawers.h), shared with the phone layout: frameless tool
   windows over the stage that a press elsewhere closes), then puts the saved layout back. Its edits (New Frame after the current
   span, holds, named eases, and keying a frame for a move with a classic tween on the span before)

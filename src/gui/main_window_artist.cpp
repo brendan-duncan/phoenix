@@ -3,8 +3,11 @@
 // (under a row of frame buttons) as a drawer over the foot of the stage,
 // and a round button floating at the stage's right edge that opens
 // Properties as a drawer there, each closed by a press anywhere else; every
-// other panel and bar is put away, and comes back as it was. Animation is
-// three ideas here: New
+// other panel and bar is put away, and comes back as it was. While the
+// timeline is closed, a time strip floats over the foot of the stage: the
+// current layer's frames alone, to scrub, step, play and add a frame
+// without opening the timeline (a button on the frame row turns it off).
+// Animation is three ideas here: New
 // Frame draws the next drawing
 // (Duplicate keeps this one to work from), Longer and Shorter hold it, and
 // moving something at a later frame keys that frame by itself, tweening the
@@ -62,7 +65,7 @@ constexpr int kButtonSize = 44;
 constexpr int kFloatSize = 48;
 
 enum class ArtistIcon { Undo, Redo, Back, Play, Stop, Forward, Loop, Onion, NewFrame, Duplicate, Longer, Shorter, NewLayer,
-    Timeline, Properties };
+    Timeline, Properties, Strip };
 
 /// The layout's own pictures, in the theme's text color.
 QIcon artistIcon(ArtistIcon kind)
@@ -202,6 +205,14 @@ QIcon artistIcon(ArtistIcon kind)
             painter.setBrush(Qt::NoBrush);
         }
         break;
+    case ArtistIcon::Strip:
+        // One layer's frames with the playhead over them.
+        painter.drawRect(QRectF(8, 26, 48, 16));
+        painter.setBrush(ink);
+        painter.drawEllipse(QPointF(15, 34), 3.5, 3.5);
+        painter.setBrush(Qt::NoBrush);
+        painter.drawLine(QPointF(36, 14), QPointF(36, 50));
+        break;
     case ArtistIcon::NewLayer:
         painter.drawRect(QRectF(10, 30, 32, 22));
         painter.drawLine(QPointF(18, 30), QPointF(18, 22));
@@ -334,6 +345,211 @@ private:
     bool _on = false;
 };
 
+namespace {
+
+/// One layer's frames in a row: spans, keyframe dots, tween arrows and the
+/// playhead; a press or drag scrubs. When the layer is longer than the row,
+/// it scrolls to keep the playhead in view.
+class TimeCells : public QWidget
+{
+public:
+    static constexpr int kCellWidth = 14;
+    static constexpr int kCellRow = 22;
+    static constexpr int kNumberRow = 12;
+
+    TimeCells(Player* player, std::function<const fla::Layer*()> layer, QWidget* parent)
+        : QWidget(parent)
+        , _player(player)
+        , _layer(std::move(layer))
+    {
+        setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+        setFixedHeight(kCellRow + kNumberRow);
+        setCursor(Qt::PointingHandCursor);
+    }
+
+    /// The frames worth showing: the layer's, with room after its end.
+    int framesWanted() const
+    {
+        const fla::Layer* layer = _layer();
+        const int end = layer ? fla::timeline::layerEnd(*layer) : 0;
+        return std::max({24, end + 4, (_player ? _player->currentFrame() : 0) + 2});
+    }
+
+protected:
+    void paintEvent(QPaintEvent*) override
+    {
+        QPainter painter(this);
+        const QPalette pal = palette();
+        const int shown = std::max(1, width() / kCellWidth);
+        const int current = _player ? _player->currentFrame() : 0;
+        const int total = framesWanted();
+        _first = total > shown ? std::clamp(current - shown / 2, 0, total - shown) : 0;
+        const int top = kNumberRow;
+        painter.fillRect(QRect(0, top, width(), kCellRow), pal.color(QPalette::Base));
+        QFont small = font();
+        small.setPointSizeF(std::max(6.0, font().pointSizeF() - 2.0));
+        painter.setFont(small);
+        // A tick and a number every five frames.
+        for (int frame = _first; frame < _first + shown; ++frame)
+        {
+            if ((frame + 1) % 5 != 0 && frame != 0)
+                continue;
+            const int x = (frame - _first) * kCellWidth;
+            painter.setPen(pal.color(QPalette::Mid));
+            painter.drawLine(x, top, x, top + kCellRow);
+            painter.setPen(pal.color(QPalette::Text));
+            painter.drawText(QRect(x + 2, 0, kCellWidth * 4, kNumberRow), Qt::AlignLeft | Qt::AlignVCenter,
+                QString::number(frame + 1));
+        }
+        // The layer's spans: a dot at each keyframe (hollow when it holds
+        // nothing), an arrow along a tween.
+        const QColor ink = pal.color(QPalette::Text);
+        if (const fla::Layer* layer = _layer())
+        {
+            for (const fla::Frame* frame : layer->frames)
+            {
+                if (!frame)
+                    continue;
+                const int last = frame->index + std::max(frame->duration, 1) - 1;
+                if (last < _first || frame->index >= _first + shown)
+                    continue;
+                const int x0 = (std::max(frame->index, _first) - _first) * kCellWidth;
+                const int x1 = (std::min(last, _first + shown - 1) - _first + 1) * kCellWidth;
+                const bool tween = frame->tweenType != fla::TweenType::None;
+                // The fills the timeline's own grid uses: plain, tween, blank.
+                QColor fill = tween ? QColor(150, 130, 200) : (theme::isDark() ? QColor(120, 120, 120) : QColor(200, 200, 200));
+                if (frame->elements.empty() && !tween)
+                    fill = theme::isDark() ? QColor(64, 64, 64) : QColor(235, 235, 235);
+                painter.fillRect(QRect(x0, top + 2, std::max(1, x1 - x0 - 1), kCellRow - 4), fill);
+                painter.setPen(QPen(ink, 1));
+                if (tween && x1 - x0 > kCellWidth)
+                {
+                    const int y = top + kCellRow / 2;
+                    painter.drawLine(x0 + kCellWidth / 2 + 4, y, x1 - 4, y);
+                    painter.drawLine(x1 - 8, y - 3, x1 - 4, y);
+                    painter.drawLine(x1 - 8, y + 3, x1 - 4, y);
+                }
+                if (frame->index >= _first)
+                {
+                    painter.setRenderHint(QPainter::Antialiasing);
+                    painter.setBrush(frame->elements.empty() ? QBrush(Qt::NoBrush) : QBrush(ink));
+                    painter.drawEllipse(QPointF(x0 + kCellWidth / 2.0, top + kCellRow / 2.0), 3.0, 3.0);
+                    painter.setBrush(Qt::NoBrush);
+                    painter.setRenderHint(QPainter::Antialiasing, false);
+                }
+            }
+        }
+        if (current >= _first && current < _first + shown)
+        {
+            const int x = (current - _first) * kCellWidth;
+            painter.fillRect(QRect(x, 0, kCellWidth, height()), theme::withAlpha(pal.color(QPalette::Highlight), 70));
+            painter.fillRect(QRect(x + kCellWidth / 2 - 1, 0, 2, height()), pal.color(QPalette::Highlight));
+        }
+    }
+
+    void mousePressEvent(QMouseEvent* event) override
+    {
+        if (event->button() == Qt::LeftButton)
+            scrub(event->position().x());
+    }
+
+    void mouseMoveEvent(QMouseEvent* event) override
+    {
+        if (event->buttons() & Qt::LeftButton)
+            scrub(event->position().x());
+    }
+
+private:
+    void scrub(double x)
+    {
+        if (!_player)
+            return;
+        const int frame = std::max(0, _first + static_cast<int>(x) / kCellWidth);
+        if (frame != _player->currentFrame())
+            _player->setCurrentFrame(frame);
+    }
+
+    Player* _player;
+    std::function<const fla::Layer*()> _layer;
+    int _first = 0;
+};
+
+} // namespace
+
+/// The time strip floating over the foot of the stage while the timeline
+/// is closed: step, play and step buttons, the current layer's frames, the
+/// frame number and New Frame. A window of its own, over the stage's
+/// canvas.
+class ArtistTimeStrip : public QWidget
+{
+public:
+    struct Actions
+    {
+        std::function<void()> stepBack;
+        std::function<void()> playStop;
+        std::function<void()> stepForward;
+        std::function<void()> newFrame;
+    };
+
+    ArtistTimeStrip(QWidget* window, Player* player, std::function<const fla::Layer*()> layer, Actions actions)
+        : QWidget(window, Qt::Tool | Qt::FramelessWindowHint)
+        , _player(player)
+    {
+        setAttribute(Qt::WA_ShowWithoutActivating);
+        setAutoFillBackground(true);
+        setObjectName("artistTimeStrip");
+        QHBoxLayout* row = new QHBoxLayout(this);
+        row->setContentsMargins(6, 4, 8, 4);
+        row->setSpacing(2);
+        const auto button = [this, row](ArtistIcon icon, const char* tip, std::function<void()> go) {
+            QToolButton* made = new QToolButton(this);
+            made->setAutoRaise(true);
+            made->setIcon(artistIcon(icon));
+            made->setIconSize(QSize(18, 18));
+            made->setFixedSize(28, 28);
+            made->setToolTip(tip);
+            connect(made, &QToolButton::clicked, this, [go]() {
+                if (go)
+                    go();
+            });
+            row->addWidget(made);
+            return made;
+        };
+        button(ArtistIcon::Back, "Step Back", actions.stepBack);
+        _play = button(ArtistIcon::Play, "Play (Enter)", actions.playStop);
+        button(ArtistIcon::Forward, "Step Forward", actions.stepForward);
+        _cells = new TimeCells(player, std::move(layer), this);
+        row->addWidget(_cells, 1);
+        _frame = new QLabel(this);
+        _frame->setMinimumWidth(28);
+        _frame->setAlignment(Qt::AlignCenter);
+        row->addWidget(_frame);
+        button(ArtistIcon::NewFrame, "New Frame: a blank frame after this drawing, to draw the next one on", actions.newFrame);
+        refresh();
+    }
+
+    void setPlaying(bool playing)
+    {
+        _play->setIcon(artistIcon(playing ? ArtistIcon::Stop : ArtistIcon::Play));
+        _play->setToolTip(playing ? "Stop (Enter)" : "Play (Enter)");
+    }
+
+    void refresh()
+    {
+        _frame->setText(QString::number((_player ? _player->currentFrame() : 0) + 1));
+        _cells->update();
+    }
+
+    /// Wide enough for every frame worth showing.
+    int preferredWidth() const { return 14 + 4 * 30 + 30 + _cells->framesWanted() * TimeCells::kCellWidth; }
+
+private:
+    Player* _player;
+    QToolButton* _play = nullptr;
+    TimeCells* _cells = nullptr;
+    QLabel* _frame = nullptr;
+};
+
 /// A move under way at a frame the layout keyed for it: what was there,
 /// what the keyframe holds, and how it stood before the drag, to tell a
 /// move from a click.
@@ -392,6 +608,7 @@ void MainWindow::setArtistLayout(bool on)
             bar->show();
         _artistDrawers->setActive(true);
         placeArtistProperties();
+        placeArtistStrip();
         _artistStage->setEnabled(true);
         _phoenixView->setForgivingStage(true);
         // A tool the strip has, the brush unless one is in hand.
@@ -413,6 +630,7 @@ void MainWindow::setArtistLayout(bool on)
         // The panels back in their docks before the docks come back.
         _artistDrawers->setActive(false);
         _artistProperties->hide();
+        _artistStrip->hide();
         _timelineView->setPhoneView(false);
         static_cast<QVBoxLayout*>(_artistDock->widget()->layout())->removeWidget(_timelineView);
         _timelineDock->setWidget(_timelineView);
@@ -616,6 +834,16 @@ void MainWindow::buildArtistBars()
     QAction* newLayer = frames->addAction(artistIcon(ArtistIcon::NewLayer), "", this, [this]() { addLayer(false); });
     newLayer->setToolTip("New Layer");
     name(frames, newLayer, "artistNewLayer");
+    frames->addSeparator();
+    _artistStripAction = frames->addAction(artistIcon(ArtistIcon::Strip), "");
+    _artistStripAction->setToolTip("Time Strip: this layer's frames, small, over the stage while the timeline is closed");
+    _artistStripAction->setCheckable(true);
+    _artistStripAction->setChecked(QSettings().value("artist/timeStrip", true).toBool());
+    connect(_artistStripAction, &QAction::toggled, this, [this](bool on) {
+        QSettings().setValue("artist/timeStrip", on);
+        placeArtistStrip();
+    });
+    name(frames, _artistStripAction, "artistStripToggle");
 
     connect(_player, &Player::currentFrameChanged, this, [this]() { refreshArtistContext(); });
     connect(_timelineView, &TimelineView::currentLayerChanged, this, [this]() { refreshArtistContext(); });
@@ -662,8 +890,79 @@ void MainWindow::buildArtistBars()
                                   .arg(kFloatSize / 2));
     _artistProperties = properties;
     _artistDrawers->add(findChild<QDockWidget*>("propertiesDock"), Qt::RightEdge, properties, 400);
-    _artistDrawers->stageMoved = [this]() { placeArtistProperties(); };
-    _artistDrawers->changed = [this]() { placeArtistProperties(); };
+    _artistDrawers->stageMoved = [this]() {
+        placeArtistProperties();
+        placeArtistStrip();
+    };
+    _artistDrawers->changed = [this]() {
+        placeArtistProperties();
+        placeArtistStrip();
+    };
+
+    // The time strip, over the foot of the stage while the timeline is
+    // closed: the current layer as the timeline has it.
+    const auto shownLayer = [this]() -> const fla::Layer* {
+        fla::Timeline* timeline = nullptr;
+        int index = -1;
+        if (!_timelineView->currentLayer(timeline, index) || !timeline || index < 0 ||
+            index >= static_cast<int>(timeline->layers.size()))
+            return nullptr;
+        return timeline->layers[static_cast<size_t>(index)];
+    };
+    ArtistTimeStrip::Actions actions;
+    actions.stepBack = [timelines]() {
+        if (TimelinesPanel* panel = timelines())
+            panel->stepBack();
+    };
+    actions.playStop = [timelines]() {
+        if (TimelinesPanel* panel = timelines())
+            panel->playStop();
+    };
+    actions.stepForward = [timelines]() {
+        if (TimelinesPanel* panel = timelines())
+            panel->stepForward();
+    };
+    actions.newFrame = [this]() { artistNewFrame(false); };
+    _artistStrip = new ArtistTimeStrip(this, _player, shownLayer, actions);
+    connect(_player, &Player::playingChanged, _artistStrip, [this](bool playing) { _artistStrip->setPlaying(playing); });
+    connect(_player, &Player::currentFrameChanged, _artistStrip, [this]() { _artistStrip->refresh(); });
+    connect(_timelineView, &TimelineView::currentLayerChanged, _artistStrip, [this]() {
+        _artistStrip->refresh();
+        placeArtistStrip();
+    });
+    connect(this, &MainWindow::editStateChanged, _artistStrip, [this]() {
+        _artistStrip->refresh();
+        placeArtistStrip();
+    });
+}
+
+void MainWindow::placeArtistStrip()
+{
+    if (!_artistStrip)
+        return;
+    const bool wanted = _artistLayout && _phoenixView->isVisible() && _artistStripAction &&
+        _artistStripAction->isChecked() && _artistDrawers->openDrawer(Qt::BottomEdge).isEmpty();
+    if (!wanted)
+    {
+        _artistStrip->hide();
+        return;
+    }
+    // Centered over the foot of the stage, or of what the Properties drawer
+    // leaves of it; as wide as its frames want, within that.
+    const QRect stage(_phoenixView->mapToGlobal(QPoint(0, 0)), _phoenixView->size());
+    const QRect side = _artistDrawers->openDrawer(Qt::RightEdge);
+    const int right = side.isEmpty() ? stage.right() : side.left() - 1;
+    const int room = right - stage.left() - 2 * 16;
+    if (room < 220)
+    {
+        _artistStrip->hide();
+        return;
+    }
+    const int width = std::min(room, _artistStrip->preferredWidth());
+    const int height = _artistStrip->sizeHint().height();
+    _artistStrip->setGeometry(stage.left() + (right - stage.left() - width) / 2, stage.bottom() - 12 - height, width, height);
+    _artistStrip->show();
+    _artistStrip->raise();
 }
 
 void MainWindow::placeArtistProperties()
