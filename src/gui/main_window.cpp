@@ -480,19 +480,18 @@ MainWindow::MainWindow(const QString& initialFile, QWidget* parent, bool startup
     // Every dock exists now: the layout as made is the default, and the
     // one kept from last time comes back.
     restoreLayout();
-    // The Artist layout comes back when it was on, once the window is up.
-    if (!_secondary && startup && QSettings().value("workspace/artist", false).toBool())
-        QTimer::singleShot(0, this, [this]() { setArtistLayout(true); });
-#ifdef PHOENIX_WEB
-    // A phone gets the phone layout once the window is up, with a document
-    // to draw on; a tablet starts in the Simple workspace, until another is
-    // chosen.
-    if (!_secondary && startup && wantsPhoneLayout())
+    // The Artist layout comes back when it was on, once the window is up;
+    // a phone starts in it, on a new document to draw on. A tablet starts
+    // in the Simple workspace, until another is chosen.
+    if (!_secondary && startup && wantsArtistLayout())
         QTimer::singleShot(0, this, [this]() {
-            if (!_flaDocument)
+#ifdef PHOENIX_WEB
+            if (!_flaDocument && web_page::isPhoneSized())
                 createNewDocument(1280, 720, 24.0, Qt::white);
-            setPhoneLayout(true);
+#endif
+            setArtistLayout(true);
         });
+#ifdef PHOENIX_WEB
     else if (!_secondary && startup && web_page::isTouchTablet() && !QSettings().value("workspace/chosen", false).toBool())
         QTimer::singleShot(0, this, [this]() { useWorkspace("Simple"); });
 #endif
@@ -11157,12 +11156,10 @@ QJsonObject MainWindow::currentWorkspace() const
     QJsonObject workspace;
     workspace["phoenixWorkspace"] = 1;
     workspace["layoutVersion"] = kLayoutVersion;
-#ifdef PHOENIX_WEB
-    // In the phone layout, the panels as they will come back.
-    if (_phoneLayout)
-        return _phoneSavedWorkspace;
-#endif
-    // In Canvas Only, the panels as they will come back.
+    // In the Artist layout, or Canvas Only, the panels as they will come
+    // back.
+    if (_artistLayout)
+        return _artistSavedWorkspace;
     const QByteArray docks =
         _canvasOnly && _canvasOnly->isOn() ? _canvasOnly->savedState() : saveState(kLayoutVersion);
     workspace["docks"] = QString::fromLatin1(docks.toBase64());
@@ -14461,13 +14458,6 @@ void MainWindow::refreshStyleSwatches()
         _colorWell->setStroke(stroke);
         _colorWell->setFill(fill);
     }
-#ifdef PHOENIX_WEB
-    if (_phoneStroke)
-    {
-        _phoneStroke->setBrush(stroke);
-        _phoneFill->setBrush(fill);
-    }
-#endif
     if (_artistStroke)
     {
         _artistStroke->setBrush(stroke);
@@ -19146,14 +19136,12 @@ void MainWindow::saveSettings()
         _canvasOnly->leave();
     if (_layoutRestored)
     {
-#ifdef PHOENIX_WEB
-        // In the phone layout, the panels as they will come back.
-        if (_phoneLayout)
+        // In the Artist layout, the panels as they will come back.
+        if (_artistLayout)
         {
-            settings.setValue("window/state", QByteArray::fromBase64(_phoneSavedWorkspace["docks"].toString().toLatin1()));
+            settings.setValue("window/state", QByteArray::fromBase64(_artistSavedWorkspace["docks"].toString().toLatin1()));
             return;
         }
-#endif
         expandCollapsedPanels();
         settings.setValue("window/state", saveState(kLayoutVersion));
     }

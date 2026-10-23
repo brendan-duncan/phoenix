@@ -4,11 +4,14 @@
 #include <QPointer>
 #include <QRect>
 #include <QWidget>
+#include <QTimer>
 
 #include <functional>
+#include <memory>
 #include <vector>
 
 class QDockWidget;
+class QMouseEvent;
 class QToolButton;
 
 /// A panel over the stage along its bottom or right edge, for the Phone and
@@ -79,5 +82,31 @@ private:
     std::vector<Drawer> _drawers;
     bool _active = false;
     /// A press on the stage closed a drawer: the rest of it goes nowhere.
+    bool _swallowing = false;
+};
+
+/// A press held still on the stage, which a touch layout gives the pop-up
+/// palette as a right-click would. The press is held back until it moves,
+/// is let go or is held long enough, so a held one never starts a stroke;
+/// one that moves or is let go goes on to the stage as it was.
+class StageHold : public QObject
+{
+public:
+    StageHold(QWidget* stage, std::function<void(const QPoint& globalPos)> held);
+
+    void setEnabled(bool on);
+
+protected:
+    bool eventFilter(QObject* watched, QEvent* event) override;
+
+private:
+    void replay();
+
+    QWidget* _stage;
+    std::function<void(const QPoint&)> _held;
+    QTimer _timer;
+    std::unique_ptr<QMouseEvent> _press;
+    bool _on = false;
+    bool _replaying = false;
     bool _swallowing = false;
 };

@@ -413,13 +413,14 @@ MainWindow (QMainWindow)
   Properties; both are `StageDrawers`. While the timeline drawer is closed an `ArtistTimeStrip`
   (another tool window) floats over the foot of the stage with the current layer's frames alone,
   placed again with the Properties button as the stage or the drawers change
-  ([stage_drawers.h](../src/gui/stage_drawers.h), shared with the phone layout: frameless tool
-  windows over the stage that a press elsewhere closes), then puts the saved layout back. Its edits (New Frame after the current
+  ([stage_drawers.h](../src/gui/stage_drawers.h): frameless tool windows over the stage that a
+  press elsewhere closes), then puts the saved layout back. It is the web editor's layout for a
+  phone too ([web-editor.md](web-editor.md)). Its edits (New Frame after the current
   span, holds, named eases, and keying a frame for a move with a classic tween on the span before)
   are Qt-free in [artist_edit.h](../src/edit/artist_edit.h). A press on the stage with the arrow or
   transform tool at a frame inside a span keys it first, inside a macro; a release that moved
   nothing discards the macro (`CommandStack::discardLast`) so a click leaves no keyframe behind.
-  Artist and Phone modes also set `PhoenixView::setForgivingStage`: a left press a tool declines goes
+  Artist mode also sets `PhoenixView::setForgivingStage`: a left press a tool declines goes
   to the arrow's marquee rather than panning, and a drawing tool (`Tool::drawsOnStage`) pressed past
   the end of its layer gets a blank keyframe at the shown frame before it draws.
 - **Document tabs.** Only one document is "shown" at a time (`_flaDocument`/`_editContext`). The

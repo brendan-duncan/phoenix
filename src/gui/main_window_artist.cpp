@@ -7,6 +7,10 @@
 // timeline is closed, a time strip floats over the foot of the stage: the
 // current layer's frames alone, to scrub, step, play and add a frame
 // without opening the timeline (a button on the frame row turns it off).
+// It is the web editor's layout for a phone too: there the menu bar is put
+// away into a menu button at the foot of the strip, with the Color,
+// Swatches and Library panels as sheets, a press held on the stage opens
+// the pop-up palette, and a turned stage has a button to set it straight.
 // Animation is three ideas here: New
 // Frame draws the next drawing
 // (Duplicate keeps this one to work from), Longer and Shorter hold it, and
@@ -26,6 +30,9 @@
 #include "theme.h"
 #include "timeline_view.h"
 #include "timelines_panel.h"
+#ifdef PHOENIX_WEB
+#include "web_page.h"
+#endif
 
 #include "../data/document.h"
 #include "../data/symbol_list.h"
@@ -41,9 +48,12 @@
 #include <QEvent>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QMenu>
+#include <QMenuBar>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
+#include <QScreen>
 #include <QSettings>
 #include <QSlider>
 #include <QStatusBar>
@@ -65,7 +75,7 @@ constexpr int kButtonSize = 44;
 constexpr int kFloatSize = 48;
 
 enum class ArtistIcon { Undo, Redo, Back, Play, Stop, Forward, Loop, Onion, NewFrame, Duplicate, Longer, Shorter, NewLayer,
-    Timeline, Properties, Strip };
+    Timeline, Properties, Strip, Menu, Straighten };
 
 /// The layout's own pictures, in the theme's text color.
 QIcon artistIcon(ArtistIcon kind)
@@ -212,6 +222,20 @@ QIcon artistIcon(ArtistIcon kind)
         painter.drawEllipse(QPointF(15, 34), 3.5, 3.5);
         painter.setBrush(Qt::NoBrush);
         painter.drawLine(QPointF(36, 14), QPointF(36, 50));
+        break;
+    case ArtistIcon::Menu:
+        for (double y : {20.0, 32.0, 44.0})
+            painter.drawLine(QPointF(14, y), QPointF(50, y));
+        break;
+    case ArtistIcon::Straighten:
+        // A turned frame and the upright one it goes back to.
+        painter.save();
+        painter.setPen(QPen(theme::withAlpha(ink, 110), 4));
+        painter.translate(32, 32);
+        painter.rotate(-18);
+        painter.drawRect(QRectF(-16, -12, 32, 24));
+        painter.restore();
+        painter.drawRect(QRectF(16, 20, 32, 24));
         break;
     case ArtistIcon::NewLayer:
         painter.drawRect(QRectF(10, 30, 32, 22));
@@ -575,10 +599,6 @@ void MainWindow::setArtistLayout(bool on)
 {
     if (on == _artistLayout || _secondary)
         return;
-#ifdef PHOENIX_WEB
-    if (on && _phoneLayout)
-        return;
-#endif
     if (on)
     {
         if (_canvasOnly && _canvasOnly->isOn())
@@ -596,6 +616,22 @@ void MainWindow::setArtistLayout(bool on)
         if (_breadcrumbRow)
             _breadcrumbRow->hide();
         statusBar()->hide();
+        // On a phone the menu bar is too wide: its menus go in the strip's
+        // menu button, and the stage's least size comes down so the page
+        // holds the strip and the stage (web_page.cpp fits the window to it
+        // again once that comes down).
+#ifdef PHOENIX_WEB
+        _artistCompact = web_page::isPhoneSized();
+#endif
+        if (_artistCompact)
+        {
+            menuBar()->hide();
+            _phoenixView->setMinimumSize(100, 100);
+            _artistFitPending = true;
+            _phoenixView->zoomToFit();
+        }
+        if (_artistMenuAction)
+            _artistMenuAction->setVisible(_artistCompact);
         // The timeline moves under the frame row, with rows and frames
         // large enough for a finger; the drawers then take that and
         // Properties, closed until their buttons open them.
@@ -603,14 +639,22 @@ void MainWindow::setArtistLayout(bool on)
         static_cast<QVBoxLayout*>(_artistDock->widget()->layout())->addWidget(_timelineView);
         _timelineView->show();
         _timelineView->setPhoneView(true);
-        _timelineView->setLayersWidth(220);
+        _timelineView->setLayersWidth(_artistCompact ? 150 : 220);
         for (QToolBar* bar : _artistBars)
             bar->show();
         _artistDrawers->setActive(true);
         placeArtistProperties();
         placeArtistStrip();
+        placeArtistStraighten();
         _artistStage->setEnabled(true);
         _phoenixView->setForgivingStage(true);
+        // A finger has no right button: a press held on the stage opens the
+        // pop-up palette.
+        bool touch = false;
+#ifdef PHOENIX_WEB
+        touch = web_page::isPhoneSized() || web_page::isTouchTablet();
+#endif
+        _artistHold->setEnabled(touch);
         // A tool the strip has, the brush unless one is in hand.
         bool inStrip = false;
         for (const QAction* action : _artistBars.first()->actions())
@@ -631,6 +675,15 @@ void MainWindow::setArtistLayout(bool on)
         _artistDrawers->setActive(false);
         _artistProperties->hide();
         _artistStrip->hide();
+        _artistStraighten->hide();
+        _artistHold->setEnabled(false);
+        _artistSheet = nullptr;
+        if (_artistCompact)
+        {
+            _phoenixView->setMinimumSize(400, 300);
+            menuBar()->show();
+            _artistCompact = false;
+        }
         _timelineView->setPhoneView(false);
         static_cast<QVBoxLayout*>(_artistDock->widget()->layout())->removeWidget(_timelineView);
         _timelineDock->setWidget(_timelineView);
@@ -642,13 +695,24 @@ void MainWindow::setArtistLayout(bool on)
     }
     if (_artistLayoutAction && _artistLayoutAction->isChecked() != on)
         _artistLayoutAction->setChecked(on);
-#ifdef PHOENIX_WEB
-    const bool phone = _phoneLayout;
-#else
-    const bool phone = false;
-#endif
-    if (QAction* classic = findChild<QAction*>("viewClassicMode"); classic && !on && !phone)
+    if (QAction* classic = findChild<QAction*>("viewClassicMode"); classic && !on)
         classic->setChecked(true);
+}
+
+bool MainWindow::wantsArtistLayout()
+{
+    const QSettings settings;
+    if (settings.contains("workspace/artist"))
+        return settings.value("workspace/artist").toBool();
+#ifdef PHOENIX_WEB
+    // The phone layout's choice, from before it became this one; else a
+    // phone-sized touch screen.
+    if (settings.contains("web/phoneLayout"))
+        return settings.value("web/phoneLayout").toBool();
+    return web_page::isPhoneSized();
+#else
+    return false;
+#endif
 }
 
 void MainWindow::buildArtistBars()
@@ -869,6 +933,34 @@ void MainWindow::buildArtistBars()
     tools->addWidget(timeline);
     _artistDrawers->add(_artistDock, Qt::BottomEdge, timeline, 300);
 
+    // The strip's menu, shown while the menu bar is put away (a phone): the
+    // other panels one at a time as a sheet, the menu bar's menus, and the
+    // way back to Classic.
+    QToolButton* menuButton = new QToolButton(tools);
+    menuButton->setObjectName("artistMenuButton");
+    menuButton->setIcon(artistIcon(ArtistIcon::Menu));
+    menuButton->setIconSize(tools->iconSize());
+    menuButton->setToolTip("Menu");
+    menuButton->setMinimumSize(kButtonSize, kButtonSize);
+    menuButton->setPopupMode(QToolButton::InstantPopup);
+    QMenu* menu = new QMenu(menuButton);
+    for (const auto& [dockName, title] : std::initializer_list<std::pair<const char*, const char*>>{
+             {"colorDock", "Color"}, {"swatchesDock", "Swatches"}, {"libraryDock", "Library"}})
+        if (QDockWidget* dock = findChild<QDockWidget*>(dockName))
+            menu->addAction(title, this, [this, dock]() { showArtistSheet(dock); });
+    menu->addSeparator();
+    for (QAction* top : menuBar()->actions())
+        if (top->menu() && top->isVisible())
+            menu->addAction(top);
+    menu->addSeparator();
+    menu->addAction("Classic Mode", this, [this]() {
+        QSettings().setValue("workspace/artist", false);
+        setArtistLayout(false);
+    });
+    menuButton->setMenu(menu);
+    _artistMenuAction = tools->addWidget(menuButton);
+    _artistMenuAction->setVisible(_artistCompact);
+
     // Properties opens from a round button floating at the stage's right
     // edge, where its drawer comes from; the button moves out of the
     // drawer's way while it is open. A window of its own, so it shows over
@@ -893,6 +985,13 @@ void MainWindow::buildArtistBars()
     _artistDrawers->stageMoved = [this]() {
         placeArtistProperties();
         placeArtistStrip();
+        placeArtistStraighten();
+        // On a phone, fitted until the window has come down to the page.
+        if (!_artistFitPending)
+            return;
+        _phoenixView->zoomToFit();
+        if (QScreen* screen = this->screen(); screen && geometry() == screen->geometry())
+            _artistFitPending = false;
     };
     _artistDrawers->changed = [this]() {
         placeArtistProperties();
@@ -934,6 +1033,62 @@ void MainWindow::buildArtistBars()
         _artistStrip->refresh();
         placeArtistStrip();
     });
+
+    // A turned stage's way back, over its corner (a window, so it shows
+    // over the stage's canvas).
+    QToolButton* straighten = new QToolButton(this);
+    straighten->setWindowFlags(Qt::Tool | Qt::FramelessWindowHint);
+    straighten->setAttribute(Qt::WA_ShowWithoutActivating);
+    straighten->setObjectName("artistStraighten");
+    straighten->setIcon(artistIcon(ArtistIcon::Straighten));
+    straighten->setIconSize(QSize(kButtonSize - 12, kButtonSize - 12));
+    straighten->setFixedSize(kButtonSize, kButtonSize);
+    straighten->setToolTip("Reset Rotation");
+    connect(straighten, &QToolButton::clicked, this, [this]() { _phoenixView->setRotation(0.0); });
+    _artistStraighten = straighten;
+    connect(_phoenixView, &PhoenixView::rotationChanged, this, [this]() { placeArtistStraighten(); });
+
+    // A press held still on the stage opens the pop-up palette, as a
+    // right-click does with a mouse; on while the layout is, on a touch
+    // screen.
+    _artistHold = new StageHold(_phoenixView, [this](const QPoint& at) { showPopupPalette(at); });
+}
+
+void MainWindow::placeArtistStraighten()
+{
+    if (!_artistStraighten)
+        return;
+    if (!_artistLayout || !_phoenixView->isVisible() || _phoenixView->rotation() == 0.0)
+    {
+        _artistStraighten->hide();
+        return;
+    }
+    const QPoint corner = _phoenixView->mapToGlobal(QPoint(_phoenixView->width(), 0));
+    _artistStraighten->move(corner + QPoint(-_artistStraighten->width() - 8, 8));
+    _artistStraighten->show();
+    _artistStraighten->raise();
+}
+
+void MainWindow::showArtistSheet(QDockWidget* dock)
+{
+    // One sheet at a time: the one up goes; asked for again, it closes.
+    QDockWidget* previous = _artistSheet;
+    if (previous && previous != dock)
+        previous->hide();
+    if (previous == dock && dock->isVisible())
+    {
+        dock->hide();
+        _artistSheet = nullptr;
+        return;
+    }
+    if (dock->isFloating())
+        dock->setFloating(false);
+    removeDockWidget(dock);
+    addDockWidget(Qt::BottomDockWidgetArea, dock);
+    dock->show();
+    dock->raise();
+    resizeDocks({dock}, {std::max(160, height() * 2 / 5)}, Qt::Vertical);
+    _artistSheet = dock;
 }
 
 void MainWindow::placeArtistStrip()

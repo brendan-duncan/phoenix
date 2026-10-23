@@ -483,9 +483,9 @@ int main(int argc, char *argv[])
     app_identity::apply();
     theme::applySaved();
 #ifdef PHOENIX_WEB
-    // A phone starts on a new document in the phone layout: the start
+    // A phone starts on a new document in the Artist layout: the start
     // screen is wider than a phone.
-    if (MainWindow::wantsPhoneLayout())
+    if (web_page::isPhoneSized() && MainWindow::wantsArtistLayout())
         MainWindow::skipStartScreen();
 #endif
     releaseOwnConsole();

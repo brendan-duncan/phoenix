@@ -111,9 +111,9 @@ void MainWindow::createViewExtras(QMenu* viewMenu, QAction* after, StageControls
     _canvasOnly = new CanvasOnly(this, {_breadcrumbRow}, layoutVersion);
     put(_canvasOnly->action());
 
-    // View > Mode, at the top of the menu: the regular interface, the phone
-    // layout (the web editor, main_window_phone.cpp) and the Artist layout
-    // (main_window_artist.cpp). The choice is kept for the next start.
+    // View > Mode, at the top of the menu: the regular interface and the
+    // Artist layout (main_window_artist.cpp). The choice is kept for the
+    // next start.
     QMenu* modeMenu = new QMenu("&Mode", viewMenu);
     modeMenu->menuAction()->setObjectName("viewMode");
     QActionGroup* modes = new QActionGroup(modeMenu);
@@ -127,24 +127,7 @@ void MainWindow::createViewExtras(QMenu* viewMenu, QAction* after, StageControls
     connect(classic, &QAction::triggered, this, [this]() {
         QSettings().setValue("workspace/artist", false);
         setArtistLayout(false);
-#ifdef PHOENIX_WEB
-        QSettings().setValue("web/phoneLayout", false);
-        setPhoneLayout(false);
-#endif
     });
-#ifdef PHOENIX_WEB
-    _phoneLayoutAction = modeMenu->addAction("&Phone");
-    _phoneLayoutAction->setObjectName("viewPhoneLayout");
-    _phoneLayoutAction->setCheckable(true);
-    _phoneLayoutAction->setStatusTip("The stage, a row of large buttons and the panels one at a time, for a phone");
-    modes->addAction(_phoneLayoutAction);
-    connect(_phoneLayoutAction, &QAction::triggered, this, [this]() {
-        QSettings().setValue("workspace/artist", false);
-        setArtistLayout(false);
-        QSettings().setValue("web/phoneLayout", true);
-        setPhoneLayout(true);
-    });
-#endif
     _artistLayoutAction = modeMenu->addAction("&Artist");
     _artistLayoutAction->setObjectName("viewArtistLayout");
     _artistLayoutAction->setCheckable(true);
@@ -152,10 +135,6 @@ void MainWindow::createViewExtras(QMenu* viewMenu, QAction* after, StageControls
         "The stage, the drawing tools and the timeline alone, with animation as new frames, holds and moves");
     modes->addAction(_artistLayoutAction);
     connect(_artistLayoutAction, &QAction::triggered, this, [this]() {
-#ifdef PHOENIX_WEB
-        QSettings().setValue("web/phoneLayout", false);
-        setPhoneLayout(false);
-#endif
         QSettings().setValue("workspace/artist", true);
         setArtistLayout(true);
     });

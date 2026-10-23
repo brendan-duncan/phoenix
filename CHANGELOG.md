@@ -4,9 +4,10 @@ What changed in each release of Phoenix, newest first.
 
 ## Unreleased
 
-- View > Mode picks the interface: Classic (the regular one), Phone (in the web editor) or Artist. The choice is kept, and Window > Workspaces goes back to Classic
+- View > Mode picks the interface: Classic (the regular one) or Artist. The choice is kept, and Window > Workspaces goes back to Classic
 - Artist mode: the stage with a strip of the drawing tools, everything else put away; a button at the foot of the strip opens the timeline (under a row of frame buttons) as a drawer over the foot of the stage, and a round button at the stage's right edge opens Properties as one there; both close at a press anywhere else. While the timeline is closed, a time strip floats over the foot of the stage with this layer's frames alone, to scrub, step, play and add a frame; a button on the timeline's frame row turns it off. New Frame and Duplicate add the next drawing after this one, Longer and Shorter hold it, and dragging a drawing at a later frame keys that frame by itself and slides the drawing there from the frame before, turning it into a symbol named after its layer when it needs one; Motion picks the slide's ease, or Jump
-- In Artist and Phone modes, drawing past the end of a layer starts a new blank frame there instead of panning the stage, and a drag a tool cannot use selects with a marquee rather than panning; the Hand tool, the middle button and space still pan
+- The web editor's phone layout is now Artist mode: a phone starts in it on a new document, with the menu bar's menus and the Color, Swatches and Library panels in a menu button at the foot of the tool strip, a press held on the stage for the pop-up palette, and the button that sets a turned stage straight
+- In Artist mode, drawing past the end of a layer starts a new blank frame there instead of panning the stage, and a drag a tool cannot use selects with a marquee rather than panning; the Hand tool, the middle button and space still pan
 
 ## 0.23.3
 

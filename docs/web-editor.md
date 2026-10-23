@@ -254,38 +254,34 @@ size of its own, and Qt's default, 12, is larger than any desktop's.
 ### Phones and tablets
 
 A touch screen (the browser reports a coarse pointer) whose shorter side is
-under 600 points gets the phone layout (`src/gui/main_window_phone.cpp`):
-the stage alone, two rows of large buttons along the bottom (the common
-tools, the stroke and fill swatches, undo and redo; step, play, the frame, Loop Playback, Onion Skin,
-a slider through the frames and a menu), and a bar over them for the timeline and one down the right
-for Properties. Each bar opens its panel as a drawer over the stage
-(`StageDrawers`, `stage_drawers.h`, shared with the Artist layout): the timeline from the bottom, in its phone view (taller
-rows, wider frames, a narrow layers list and a header without the
-buttons the bar below has), and Properties from the side. A press
-anywhere else in the window closes the drawer, and one on the stage goes
-no further, so closing a drawer never draws. The drawers, and the button
-that sets a turned stage straight (shown over its corner only while it is
-turned), are windows of their own: the stage's WebGPU canvas covers
-anything the main window draws over it. The other panels (Color,
-Swatches, Library) come one at a time as a sheet over the bottom of the
-stage from the menu, which also holds the menu bar's menus, which the
-layout puts away, and Full Layout.
+under 600 points starts in the Artist layout (`src/gui/main_window_artist.cpp`,
+View > Mode > Artist, which the desktop has too), on a new document rather
+than the start screen: the stage with a strip of the drawing tools, the
+timeline and Properties as drawers over the stage (`StageDrawers`,
+`stage_drawers.h`), and a time strip of the current layer over the foot of
+the stage. On a phone the layout also puts the menu bar away, since it is
+too wide: a menu button at the foot of the strip holds the menu bar's
+menus, Color, Swatches and Library (each shown one at a time as a sheet
+over the bottom of the stage) and Classic Mode. The stage's least size is
+lowered while the layout is on, so a phone's width holds the strip and the
+stage; the page fits the main window to it again once its least size comes
+down (`MainWindowsFillPage` also watches layout requests), and the stage is
+fitted to the view once it has. The drawers and the floating buttons are
+windows of their own: the stage's WebGPU canvas covers anything the main
+window draws over it.
 
-A press held still on the stage for half a second opens the pop-up
-palette, as a right-click does on the desktop (`StageHold`): the press is
-held back until it moves, is let go or is held long enough, so a held one
-never starts a stroke, and a second finger makes it a gesture. Qt takes a
-press soon after a tap elsewhere for the second of a double click and
-sends the stage only the double click, which is held back the same way.
+On any touch screen, a press held still on the stage for half a second
+opens the pop-up palette, as a right-click does on the desktop
+(`StageHold`): the press is held back until it moves, is let go or is
+held long enough, so a held one never starts a stroke, and a second finger
+makes it a gesture. Qt takes a press soon after a tap elsewhere for the
+second of a double click and sends the stage only the double click, which
+is held back the same way. A turned stage shows a button over its corner
+that sets it straight.
 
-The stage's least size is lowered while the layout is on, so a phone's
-width holds the side bar and the rows; the page fits the main window to
-it again once its least size comes down (`MainWindowsFillPage` also
-watches layout requests), and the stage is fitted to the view once it
-has. View > Mode > Phone switches the layout on any screen, and the
-choice is kept. A phone starts on a new document rather than the start
-screen. While the layout is on, the window saves the panels as they were
-before it, so they come back as they were.
+The choice of layout is kept (`workspace/artist`; the old `web/phoneLayout`
+still counts). While the layout is on, the window saves the panels as they
+were before it, so they come back as they were.
 
 A larger touch screen (a tablet) starts in the Simple workspace, until
 another is chosen, with everything 1.2 times larger unless the theme sets

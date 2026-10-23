@@ -92,12 +92,6 @@ public:
     /// Whether a document in any window has changes not saved: the page
     /// asks before it is closed or reloaded.
     static bool hasUnsavedWork();
-    /// The phone layout (main_window_phone.cpp): the stage, a row of large
-    /// buttons and the panels one at a time. Whether it is wanted: as last
-    /// chosen, else on a phone-sized touch screen.
-    static bool wantsPhoneLayout();
-    void setPhoneLayout(bool on);
-    bool phoneLayout() const { return _phoneLayout; }
 #endif
     /// The Artist layout (main_window_artist.cpp): the stage, a strip of
     /// the drawing tools, and the timeline under a row of frame buttons,
@@ -105,6 +99,9 @@ public:
     /// move something to a later frame.
     void setArtistLayout(bool on);
     bool artistLayout() const { return _artistLayout; }
+    /// Whether the Artist layout is wanted at the start: as last chosen,
+    /// else on a phone-sized touch screen (the web editor).
+    static bool wantsArtistLayout();
 
     /// Every window people work in, the one Phoenix started with first.
     static QList<MainWindow*> windows();
@@ -1209,32 +1206,6 @@ private:
     /// A workspace: the docks' arrangement, the tools' layout and the
     /// timeline's layers width, as JSON (what Export writes).
     QJsonObject currentWorkspace() const;
-#ifdef PHOENIX_WEB
-    void buildPhoneBar();
-    /// Shows \a dock as the phone layout's sheet, closing the one up.
-    void showPhoneSheet(QDockWidget* dock);
-    bool _phoneLayout = false;
-    /// The panels as they were before the phone layout, as they come back.
-    QJsonObject _phoneSavedWorkspace;
-    /// Its rows: the tools, playing with the menu, the timeline's bar and
-    /// the Properties bar at the side.
-    QList<class QToolBar*> _phoneBars;
-    QPointer<QDockWidget> _phoneSheet;
-    QAction* _phoneLayoutAction = nullptr;
-    /// The timeline and Properties as drawers over the stage, a long press
-    /// on the stage for the pop-up palette, and the button over the stage
-    /// that sets it straight once turned.
-    class StageDrawers* _phoneDrawers = nullptr;
-    class StageHold* _stageHold = nullptr;
-    QWidget* _phoneStraighten = nullptr;
-    void placePhoneStraighten();
-    /// The stroke and fill swatches on the tools row.
-    class ColorSwatch* _phoneStroke = nullptr;
-    class ColorSwatch* _phoneFill = nullptr;
-    /// The stage is fitted to the view until the window has come down to
-    /// the page's size.
-    bool _phoneFitPending = false;
-#endif
     // The Artist layout (main_window_artist.cpp).
     void buildArtistBars();
     void artistNewFrame(bool copy);
@@ -1259,6 +1230,20 @@ private:
     class ArtistTimeStrip* _artistStrip = nullptr;
     QAction* _artistStripAction = nullptr;
     void placeArtistStrip();
+    /// A press held on the stage for the pop-up palette (touch screens), the
+    /// button over a turned stage that sets it straight, and, with the menu
+    /// bar put away (a phone), the strip's menu button: the other panels one
+    /// at a time as a sheet, and the menu bar's menus.
+    class StageHold* _artistHold = nullptr;
+    QWidget* _artistStraighten = nullptr;
+    void placeArtistStraighten();
+    QPointer<QDockWidget> _artistSheet;
+    void showArtistSheet(QDockWidget* dock);
+    QAction* _artistMenuAction = nullptr;
+    bool _artistCompact = false;
+    /// The stage is fitted to the view until the window has come down to
+    /// the page's size.
+    bool _artistFitPending = false;
     struct ArtistMove;
     std::shared_ptr<ArtistMove> _artistMove;
     /// False when the docks' arrangement could not be used.
