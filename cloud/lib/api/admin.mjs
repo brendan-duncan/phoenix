@@ -382,10 +382,27 @@ export function registerAdmin(router, app) {
     return { fonts: listFonts(ctx.config.fontsDir) };
   });
 
-  // The latest emails, how each went, and where mail goes.
+  // The latest emails (?q= in the address or subject, ?status=), how each went, and where mail goes.
   router.get('/api/admin/outbox', (ctx) => {
     ctx.requireAdmin();
-    return { messages: app.mailer.recent(), mail: app.mailer.describe() };
+    const limit = Math.min(Math.max(Number(ctx.query('limit')) || 50, 1), 500);
+    return { ...app.mailer.find({ q: ctx.query('q') ?? '', status: ctx.query('status') ?? '', limit }), mail: { ...app.mailer.describe(), keepDays: app.mailer.keepDays } };
+  });
+
+  // Deletes the emails that match (?q=, ?status=, as listed), or all of them.
+  router.delete('/api/admin/outbox', (ctx) => {
+    const admin = ctx.requireAdmin();
+    const deleted = app.mailer.removeAll({ q: ctx.query('q') ?? '', status: ctx.query('status') ?? '' });
+    ctx.store.audit(admin.id, 'email.delete', 'outbox', '', { deleted, q: ctx.query('q') ?? '', status: ctx.query('status') ?? '' });
+    return { deleted };
+  });
+
+  router.delete('/api/admin/outbox/:file', (ctx) => {
+    ctx.requireAdmin();
+    if (!app.mailer.remove(ctx.params.file)) {
+      throw notFound('No such email.');
+    }
+    return { ok: true };
   });
 
   // Sends a test email ({ to }, else the admin's own address) and waits to say how it went.

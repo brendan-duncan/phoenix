@@ -484,7 +484,11 @@ a.link, .link { color: var(--accent-text); text-decoration: underline; text-unde
 .choice:has(input:checked) { border-color: var(--accent); }
 .choice input { margin-top: 3px; }
 .choice-title { font-weight: 600; }
-.mail { margin-bottom: 12px; }
+.mail { margin-bottom: 0; padding: 10px 14px; }
+details.mail > summary { cursor: pointer; list-style: none; gap: 12px; }
+details.mail > summary::-webkit-details-marker { display: none; }
+details.mail[open] > summary { margin-bottom: 8px; }
+.mail-subject { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .mail-text { margin: 0; white-space: pre-wrap; font: 12px/1.5 ui-monospace, Consolas, monospace; color: var(--muted); }
 
 @media (max-width: 760px) {

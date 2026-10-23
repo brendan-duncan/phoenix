@@ -129,6 +129,8 @@ export function loadConfig(env = process.env, overrides = {}) {
     // spend the service's quota or flood someone's inbox.
     mailPerHour: envInt(env, 'PHOENIX_CLOUD_MAIL_PER_HOUR', 100),
     mailPerAddressPerHour: envInt(env, 'PHOENIX_CLOUD_MAIL_PER_ADDRESS_PER_HOUR', 5),
+    // Days the outbox keeps a copy of each email (0: until deleted).
+    mailKeepDays: envInt(env, 'PHOENIX_CLOUD_MAIL_KEEP_DAYS', 30),
     // New accounts an hour: from one address, and on the whole site.
     signupsPerAddressPerHour: envInt(env, 'PHOENIX_CLOUD_SIGNUPS_PER_ADDRESS_PER_HOUR', 3),
     signupsPerHour: envInt(env, 'PHOENIX_CLOUD_SIGNUPS_PER_HOUR', 30),

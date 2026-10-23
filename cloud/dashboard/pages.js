@@ -1212,7 +1212,7 @@ async function adminFonts() {
 }
 
 async function adminEmail() {
-  const { messages, mail } = await get('/api/admin/outbox');
+  const { mail } = await get('/api/admin/outbox?limit=1');
   const to = h('input', { type: 'email', value: state.me.user.email ?? '', placeholder: 'Send it to', 'aria-label': 'Send the test to', required: true });
   const result = h('div', { class: 'small' });
   const test = h('form', { class: 'row' }, to, h('button', { type: 'submit', class: 'btn' }, 'Send a test email'));
@@ -1233,7 +1233,6 @@ async function adminEmail() {
       button.disabled = false;
     }
   });
-  const statusClass = (s) => (s.startsWith('sent') ? 'status-ok' : s.startsWith('failed') ? 'status-bad' : 'muted');
   return [
     h('div', { class: 'panel stack cards-form' },
       h('h2', {}, 'Where mail goes'),
@@ -1241,11 +1240,76 @@ async function adminEmail() {
         ? h('p', { class: 'flush' }, `Sent through ${mail.host} as ${mail.from}${mail.replyTo ? `, replies to ${mail.replyTo}` : ''}.`)
         : h('p', { class: 'flush muted' }, 'No mail service is set up, so emails are only kept here (and in the outbox folder of the server\'s data). Set PHOENIX_CLOUD_SMTP_HOST, _USER and _PASSWORD (Amazon SES\'s SMTP settings) and PHOENIX_CLOUD_MAIL_FROM in the server\'s settings to send them.'),
       test, result),
-    messages.length ? messages.map((m) => h('div', { class: 'panel stack mail' },
-      h('div', { class: 'row' }, h('strong', {}, m.subject), h('div', { class: 'grow' }), h('span', { class: 'muted small' }, `to ${m.to}`)),
-      m.status ? h('div', { class: `small ${statusClass(m.status)}` }, m.status) : null,
-      h('pre', { class: 'mail-text' }, m.text))) : h('div', { class: 'empty' }, icon('file'), h('h2', {}, 'No emails yet')),
+    outboxList(mail),
   ];
+}
+
+const MAIL_FILTERS = [['', 'Every status'], ['sent', 'Sent'], ['failed', 'Failed'], ['held', 'Held (over a limit)'], ['waiting', 'Waiting to try again'], ['outbox', 'Outbox only']];
+
+/** The emails, found by address or subject and status, to read or delete. */
+function outboxList(mail) {
+  const search = h('input', { type: 'search', placeholder: 'Find by address or subject', 'aria-label': 'Find emails' });
+  const status = h('select', { 'aria-label': 'Status' }, MAIL_FILTERS.map(([v, l]) => h('option', { value: v }, l)));
+  const count = h('span', { class: 'muted small' });
+  const removeShown = h('button', { type: 'button', class: 'btn danger' }, icon('trash'), 'Delete shown');
+  const list = h('div', { class: 'stack' });
+  const statusClass = (kind) => (kind === 'sent' ? 'status-ok' : kind === 'failed' || kind === 'held' ? 'status-bad' : 'muted');
+  const query = () => new URLSearchParams({ q: search.value.trim(), status: status.value }).toString();
+  let total = 0;
+  const load = async () => {
+    const found = await get(`/api/admin/outbox?${query()}&limit=200`);
+    total = found.total;
+    clear(count, `${found.total === found.kept ? found.total : `${found.total} of ${found.kept}`} email${found.kept === 1 ? '' : 's'}${found.total > found.messages.length ? `, the latest ${found.messages.length} shown` : ''}`);
+    removeShown.disabled = !found.total;
+    clear(list, found.messages.length ? found.messages.map((m) => {
+      const row = h('details', { class: 'panel mail' },
+        h('summary', { class: 'row' },
+          h('strong', { class: 'grow mail-subject' }, m.subject),
+          h('span', { class: 'muted small' }, `to ${m.to}`),
+          h('span', { class: 'muted small' }, m.at ? timeAgo(m.at) : ''),
+          h('span', { class: `small ${statusClass(m.kind)}` }, m.kind),
+          h('button', {
+            type: 'button', class: 'btn ghost icon-only', 'aria-label': 'Delete', title: 'Delete', onclick: async (e) => {
+              e.preventDefault();
+              try {
+                await del(`/api/admin/outbox/${encodeURIComponent(m.file)}`);
+                row.remove();
+                total--;
+                clear(count, `${total} email${total === 1 ? '' : 's'}`);
+              } catch (err) {
+                showError(err);
+              }
+            },
+          }, icon('x'))),
+        h('div', { class: 'small muted' }, m.status),
+        h('pre', { class: 'mail-text' }, m.text));
+      return row;
+    }) : h('div', { class: 'empty' }, icon('file'), h('h2', {}, search.value || status.value ? 'No emails match' : 'No emails yet')));
+  };
+  let timer = null;
+  search.addEventListener('input', () => {
+    clearTimeout(timer);
+    timer = setTimeout(() => load().catch(showError), 250);
+  });
+  status.addEventListener('change', () => load().catch(showError));
+  removeShown.addEventListener('click', async () => {
+    const what = search.value.trim() || status.value ? 'the emails that match' : 'every email';
+    if (!(await confirmDialog({ title: `Delete ${total} email${total === 1 ? '' : 's'}?`, message: `This deletes ${what} from the outbox (not from anyone's inbox). Ones still being sent stay.`, confirm: 'Delete', danger: true }))) {
+      return;
+    }
+    try {
+      const { deleted } = await del(`/api/admin/outbox?${query()}`);
+      toast(`Deleted ${deleted}.`);
+      await load();
+    } catch (err) {
+      showError(err);
+    }
+  });
+  load().catch(showError);
+  return h('div', { class: 'stack' },
+    h('div', { class: 'row wrap admin-tools' }, search, status, h('div', { class: 'grow' }), count, removeShown),
+    mail.keepDays ? h('p', { class: 'muted small flush' }, `Each email is kept for ${mail.keepDays} days, then deleted (they hold sign-in and reset links).`) : null,
+    list);
 }
 
 async function adminAudit() {

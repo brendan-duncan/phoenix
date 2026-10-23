@@ -119,6 +119,31 @@ describe('hourly email budgets', () => {
   });
 });
 
+describe('the outbox', () => {
+  it('finds, deletes, and lets old emails go', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'phoenix-outbox-'));
+    const mailer = new Mailer({ dataDir: dir, mode: 'production', mailFrom: 'no-reply@phoenixanimate.com', mailKeepDays: 30 });
+    await mailer.send({ to: 'ann@example.com', subject: 'Confirm your account', text: 'x' });
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    await mailer.send({ to: 'bo@example.com', subject: 'A test', text: 'y' });
+    assert.deepEqual(mailer.find({ q: 'ANN' }).messages.map((m) => m.to), ['ann@example.com']);
+    assert.deepEqual(mailer.find({ status: 'outbox' }).total, 2);
+    assert.equal(mailer.find({ status: 'sent' }).total, 0);
+    const [latest] = mailer.find().messages;
+    assert.ok(Math.abs(latest.at - Date.now()) < 60000);
+    assert.equal(mailer.remove(latest.file), true);
+    assert.equal(mailer.remove('../../etc/passwd'), false);
+    // One from 40 days ago goes when the outbox is pruned.
+    const old = new Date(Date.now() - 40 * 24 * 3600 * 1000).toISOString().replace(/[:.]/g, '-');
+    fs.writeFileSync(path.join(dir, 'outbox', `${old}-old@example.com.txt`), 'To: old@example.com\nSubject: Old\nStatus: sent (ok)\n\nold\n');
+    assert.equal(mailer.find().total, 2);
+    assert.equal(mailer.prune(), 1);
+    assert.equal(mailer.removeAll({ q: 'confirm' }), 1);
+    assert.equal(mailer.find().total, 0);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+});
+
 describe('Admin > Email', () => {
   let smtp;
   let server;
@@ -144,13 +169,17 @@ describe('Admin > Email', () => {
 
   it('sends a test email and says how it went', async () => {
     const { mail } = await admin.get('/api/admin/outbox');
-    assert.deepEqual(mail, { sending: true, host: '127.0.0.1', from: 'Phoenix Cloud <no-reply@phoenixanimate.com>', replyTo: 'me@example.com', perHour: 100 });
+    assert.deepEqual(mail, { sending: true, host: '127.0.0.1', from: 'Phoenix Cloud <no-reply@phoenixanimate.com>', replyTo: 'me@example.com', perHour: 100, keepDays: 30 });
     const result = await admin.post('/api/admin/email/test', { to: 'ann@example.com' });
     assert.deepEqual(result, { status: 'sent', detail: 'Ok 0101-queued' });
     assert.match(smtp.received.at(-1).data, /^Subject: Phoenix Cloud test email$/m);
     const { messages } = await admin.get('/api/admin/outbox');
     assert.equal(messages[0].status, 'sent (Ok 0101-queued)');
     assert.equal(await admin.fails('POST', '/api/admin/email/test', 400, { json: { to: 'not an address' } }), 'bad_request');
+    // Found by address and status; deleted by the same.
+    assert.equal((await admin.get('/api/admin/outbox?q=ann@example&status=sent')).total, 1);
+    assert.equal((await admin.del('/api/admin/outbox?q=ann@example')).deleted, 1);
+    assert.equal((await admin.get('/api/admin/outbox?q=ann@example')).total, 0);
   });
 
   /** The mail to `to` once it has arrived (sending runs in the background): its decoded body and headers. */
