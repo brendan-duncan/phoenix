@@ -2,7 +2,7 @@
 
 What changed in each release of Phoenix, newest first.
 
-## Unreleased
+## 0.23.3
 
 - On a layer moved by a peg or a parent layer, the Subselection tool's anchors and handles sit on the shape where it is drawn, and the Pen, Pencil and Magic Wand pick up its paths and fills there too
 - Stepping or scrubbing to another keyframe keeps the selection: it moves to the same instance, bitmap or drawing on that keyframe, so the Properties panel and the stage stay on what you were editing
