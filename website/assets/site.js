@@ -3,7 +3,7 @@
 
 // The Phoenix release this guide describes. CMake warns when it falls
 // behind the project version, so update it with each release.
-const VERSION = "0.23.3";
+const VERSION = "0.24.0";
 
 const NAV = [
   { group: "Get started", pages: [
