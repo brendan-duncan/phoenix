@@ -2,7 +2,7 @@
 
 What changed in each release of Phoenix, newest first.
 
-## Unreleased
+## 0.24.1
 
 - The timeline's frame cells and ruler run across the whole panel, not just past the last frame in use, and every fifth frame is shaded at any frame width
 
