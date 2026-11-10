@@ -2,6 +2,11 @@
 
 What changed in each release of Phoenix, newest first.
 
+## Unreleased
+
+- Text set in a font's other faces draws in that face: Arial Black, Arial Narrow, Segoe UI Semibold and the like no longer fall back to the regular one
+- The Properties panel picks a font's style beside its family (Regular, Italic, Bold, Black, Narrow...), as the font names them, for text and for the Text tool
+
 ## 0.24.1
 
 - The timeline's frame cells and ruler run across the whole panel, not just past the last frame in use, and every fifth frame is shaded at any frame width

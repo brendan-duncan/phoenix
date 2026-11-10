@@ -80,6 +80,15 @@ void setFontSymbols(const QHash<QString, QString>& fonts);
 bool isInstalled(const QString& face);
 /// The family a face is drawn in.
 QString familyOf(const QString& face);
+/// The style of that family a face is drawn in, as the font names it
+/// ("Regular", "Black", "Narrow Bold").
+QString styleOf(const QString& face);
+/// The PostScript name an installed font gives one of its faces (Arial's
+/// Black is Arial-Black); empty when the font does not say.
+QString postScriptName(const QString& family, const QString& style);
+/// The face name an FLA keeps for a family's style: its PostScript name,
+/// or one made up from the names when the font has none.
+QString faceName(const QString& family, const QString& style);
 
 /// Every run's characters, one after another.
 QString joinedText(const fla::StaticText& text);

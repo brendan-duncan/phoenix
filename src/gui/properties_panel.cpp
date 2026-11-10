@@ -340,6 +340,46 @@ QLabel* fieldLabel(const QString& text, QWidget* parent)
     return label;
 }
 
+/// A font's family and, beside it, its styles (Regular, Bold, Black,
+/// Narrow...) as the font names them, set to \a face. Picking either tells
+/// \a changed the face name an FLA keeps for the pair.
+std::pair<QFontComboBox*, QComboBox*> makeFontPicker(
+    QWidget* parent, const QString& face, const std::function<void(const QString&)>& changed)
+{
+    QFontComboBox* family = new QFontComboBox(parent);
+    QComboBox* style = new QComboBox(parent);
+    style->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
+    style->setMinimumContentsLength(6);
+    style->setToolTip("The font's style: its weight, width and slant");
+    const auto fillStyles = [family, style](const QString& current) {
+        QSignalBlocker block(style);
+        style->clear();
+        QStringList styles = QFontDatabase::styles(family->currentFont().family());
+        if (styles.isEmpty())
+            styles << "Regular";
+        style->addItems(styles);
+        int index = style->findText(current, Qt::MatchFixedString);
+        if (index < 0)
+            index = std::max({style->findText("Regular", Qt::MatchFixedString),
+                style->findText("Normal", Qt::MatchFixedString), 0});
+        style->setCurrentIndex(index);
+    };
+    {
+        QSignalBlocker block(family);
+        family->setCurrentFont(QFont(TextLayout::familyOf(face)));
+    }
+    fillStyles(TextLayout::styleOf(face));
+    QObject::connect(family, &QFontComboBox::currentFontChanged, style, [family, style, fillStyles, changed]() {
+        // The same style in the new family when it has one.
+        fillStyles(style->currentText());
+        changed(TextLayout::faceName(family->currentFont().family(), style->currentText()));
+    });
+    QObject::connect(style, &QComboBox::currentIndexChanged, family, [family, style, changed]() {
+        changed(TextLayout::faceName(family->currentFont().family(), style->currentText()));
+    });
+    return {family, style};
+}
+
 } // namespace
 
 // ---------------------------------------------------------------------------
@@ -1344,23 +1384,14 @@ void PropertiesPanel::buildToolTab()
 
     addDrawingAidOptions(addOption);
 
-    // Text. The face is kept the way the FLA stores it, the family without
-    // its spaces.
-    QFontComboBox* textFont = new QFontComboBox(this);
-    textFont->setCurrentFont(QFont("Arial"));
-    connect(textFont, &QFontComboBox::currentFontChanged, this, [this](const QFont& font) {
-        // The FLA names a font by its PostScript name, so the common ones get
-        // the suffix their foundry gave them; the rest just lose their spaces.
-        static const QHash<QString, QString> postScriptNames = {
-            {"Arial", "ArialMT"},
-            {"Times New Roman", "TimesNewRomanPSMT"},
-            {"Courier New", "CourierNewPSMT"},
-        };
-        const QString family = font.family();
-        _pendingTextFace = postScriptNames.value(family, QString(family).remove(' ')).toStdString();
+    // Text. The face is kept the way the FLA stores it, by its PostScript
+    // name (ArialMT, Arial-Black).
+    const auto [textFont, textStyle] = makeFontPicker(this, QString::fromStdString(style.textFace), [this](const QString& face) {
+        _pendingTextFace = face.toStdString();
         emit toolSettingChanged("textFace");
     });
     addOption("Family", textFont, {IconTool::Text});
+    addOption("Style", textStyle, {IconTool::Text});
 
     HotText* textSize = makeHotText(1.0, 500.0, 1, " pt");
     textSize->setValue(style.textSize);
@@ -3741,16 +3772,18 @@ void PropertiesPanel::addTextSections(QVBoxLayout* page, const fla::StaticText& 
 
     // Character: the characters selected, or the whole field.
     PropertySection* character = addSection(page, "Character");
-    QFontComboBox* family = new QFontComboBox(this);
-    family->setCurrentFont(TextLayout::fontFor(run));
+    const auto [family, fontStyle] = makeFontPicker(this, QString::fromStdString(run.face.empty() ? "ArialMT" : run.face),
+        [request](const QString& face) { request("face", face); });
     family->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
     family->setMinimumContentsLength(8);
-    connect(family, &QFontComboBox::currentFontChanged, this, [request](const QFont& font) {
-        static const QHash<QString, QString> postScriptNames = {
-            {"Arial", "ArialMT"}, {"Times New Roman", "TimesNewRomanPSMT"}, {"Courier New", "CourierNewPSMT"}};
-        request("face", postScriptNames.value(font.family(), QString(font.family()).remove(' ')));
-    });
-    character->addLong(0, "Family", family);
+    family->setObjectName("propertiesTextFamily");
+    fontStyle->setObjectName("propertiesTextStyle");
+    QWidget* fontRow = new QWidget(this);
+    QHBoxLayout* fontLayout = new QHBoxLayout(fontRow);
+    fontLayout->setContentsMargins(0, 0, 0, 0);
+    fontLayout->addWidget(family, 3);
+    fontLayout->addWidget(fontStyle, 2);
+    character->addLong(0, "Family", fontRow);
     character->addField(1, 0, "Size", number("size", run.size > 0.0 ? run.size : 12.0, 1.0, 500.0, " pt", "Size in pixels"));
     QToolButton* color = makeSwatch(run.fillColor, "Text color");
     color->setObjectName("propertiesTextColor");

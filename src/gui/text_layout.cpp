@@ -9,6 +9,7 @@
 #include <QHash>
 #include <QImage>
 #include <QPainter>
+#include <QRawFont>
 #include <QScreen>
 #include <QSettings>
 
@@ -31,8 +32,15 @@ const double kGutter = 2.0;
 struct Face
 {
     QString family;
+    /// The installed face the name is, by Qt's style name ("Black",
+    /// "Narrow Bold"); empty when only the family was found.
+    QString styleName;
     bool bold = false;
     bool italic = false;
+    /// For a face not found by name: the weight its style says (0, none
+    /// said) and whether it is a narrow one.
+    int weight = 0;
+    bool narrow = false;
     /// Whether the family itself is installed, rather than mapped or
     /// standing in.
     bool installed = true;
@@ -86,6 +94,80 @@ QString metricTwin(const QString& family, const QStringList& installed)
     return QString();
 }
 
+/// A font's PostScript name (ArialMT, Arial-Black), from its name table;
+/// empty when the font does not say.
+QString postScriptNameOf(const QFont& font)
+{
+    const QByteArray table = QRawFont::fromFont(font).fontTable("name");
+    const auto u16 = [&table](int at) {
+        return at >= 0 && at + 1 < table.size()
+            ? (static_cast<quint8>(table[at]) << 8) | static_cast<quint8>(table[at + 1]) : 0;
+    };
+    const int count = u16(2);
+    const int strings = u16(4);
+    for (int i = 0; i < count; ++i)
+    {
+        const int record = 6 + i * 12;
+        if (record + 12 > table.size() || u16(record + 6) != 6)
+            continue;
+        const int platform = u16(record);
+        const QByteArray bytes = table.mid(strings + u16(record + 10), u16(record + 8));
+        if (platform == 1)
+            return QString::fromLatin1(bytes);
+        QString name;
+        for (int k = 0; k + 1 < bytes.size(); k += 2)
+            name += QChar((static_cast<quint8>(bytes[k]) << 8) | static_cast<quint8>(bytes[k + 1]));
+        return name;
+    }
+    return QString();
+}
+
+QString compact(const QString& name)
+{
+    return QString(name).remove(' ').toLower();
+}
+
+/// The installed family and style whose PostScript name is \a face
+/// (Arial-Black is Arial's Black, ArialNarrow-Bold its Narrow Bold), looked
+/// for among the families the name starts with, the shortest first.
+bool findInstalledFace(const QString& face, QString& family, QString& style)
+{
+    const int dash = face.indexOf('-');
+    const QString start = compact(dash < 0 ? face : face.left(dash));
+    QStringList candidates;
+    for (const QString& installed : QFontDatabase::families())
+    {
+        const QString c = compact(installed);
+        if (!c.isEmpty() && start.startsWith(c))
+            candidates.append(installed);
+    }
+    std::stable_sort(candidates.begin(), candidates.end(),
+        [](const QString& a, const QString& b) { return a.length() < b.length(); });
+    for (const QString& candidate : candidates)
+        for (const QString& candidateStyle : QFontDatabase::styles(candidate))
+            if (postScriptName(candidate, candidateStyle).compare(face, Qt::CaseInsensitive) == 0)
+            {
+                family = candidate;
+                style = candidateStyle;
+                return true;
+            }
+    return false;
+}
+
+/// How heavy a style's name says it is, as a QFont weight; 0 when it does
+/// not say.
+int weightOfStyle(const QString& style)
+{
+    const QString s = compact(style);
+    static const std::pair<const char*, int> weights[] = {{"extrablack", 950}, {"ultrablack", 950}, {"black", 900},
+        {"heavy", 900}, {"extrabold", 800}, {"ultrabold", 800}, {"semibold", 600}, {"demibold", 600}, {"bold", 700},
+        {"medium", 500}, {"semilight", 350}, {"extralight", 200}, {"ultralight", 200}, {"light", 300}, {"thin", 100}};
+    for (const auto& [word, weight] : weights)
+        if (s.contains(word))
+            return weight;
+    return 0;
+}
+
 /// FLA files carry PostScript-style names: the family run together, then a
 /// dash and the style, with MT or PS tacked on by the foundry. Taking that
 /// apart gives a family Qt can find.
@@ -109,6 +191,16 @@ Face resolveFace(const QString& face)
     }
 
     Face result;
+    // The name of a face that is installed: that face, exactly.
+    if (findInstalledFace(face, result.family, result.styleName))
+    {
+        result.bold = weightOfStyle(result.styleName) >= 600;
+        result.italic = result.styleName.contains("Italic", Qt::CaseInsensitive) ||
+            result.styleName.contains("Oblique", Qt::CaseInsensitive);
+        cache.insert(face, result);
+        return result;
+    }
+
     QString family = face;
     QString style;
     const int dash = face.indexOf('-');
@@ -140,6 +232,20 @@ Face resolveFace(const QString& face)
     result.bold = style.contains("Bold", Qt::CaseInsensitive) || family.endsWith("Bold");
     result.italic = style.contains("Italic", Qt::CaseInsensitive) ||
         style.contains("Oblique", Qt::CaseInsensitive);
+    // Black, Light, Semibold and the rest, as a weight, for a family that
+    // has such a face under another name.
+    QString styleWords = style;
+    for (const char* suffix : {"PSMT", "MT", "PS"})
+    {
+        if (styleWords.endsWith(suffix))
+        {
+            styleWords.chop(static_cast<int>(strlen(suffix)));
+            break;
+        }
+    }
+    result.weight = weightOfStyle(styleWords);
+    result.narrow = styleWords.contains("Narrow", Qt::CaseInsensitive) ||
+        styleWords.contains("Condensed", Qt::CaseInsensitive);
 
     const QStringList families = QFontDatabase::families();
     const QString mapped = mapping().value(face);
@@ -654,13 +760,73 @@ QString familyOf(const QString& face)
     return resolveFace(face).family;
 }
 
+QString styleOf(const QString& face)
+{
+    const Face resolved = resolveFace(face);
+    if (!resolved.styleName.isEmpty())
+        return resolved.styleName;
+    if (resolved.bold && resolved.italic)
+        return "Bold Italic";
+    if (resolved.bold)
+        return "Bold";
+    if (resolved.italic)
+        return "Italic";
+    return "Regular";
+}
+
+QString postScriptName(const QString& family, const QString& style)
+{
+    static QHash<QString, QString> cache;
+    const QString key = family + '\n' + style;
+    const auto cached = cache.find(key);
+    if (cached != cache.end())
+        return cached.value();
+    QFont font(family);
+    if (!style.isEmpty())
+        font.setStyleName(style);
+    const QString name = postScriptNameOf(font);
+    cache.insert(key, name);
+    return name;
+}
+
+QString faceName(const QString& family, const QString& style)
+{
+    const QString name = postScriptName(family, style);
+    if (!name.isEmpty())
+        return name;
+    // A font that does not say: its family run together, as the common ones
+    // are named, and the style after a dash.
+    static const QHash<QString, QString> postScriptNames = {
+        {"Arial", "ArialMT"}, {"Times New Roman", "TimesNewRomanPSMT"}, {"Courier New", "CourierNewPSMT"}};
+    const QString base = QString(family).remove(' ');
+    const QString styleWords = QString(style).remove(' ');
+    if (styleWords.isEmpty() || styleWords.compare("Regular", Qt::CaseInsensitive) == 0 ||
+        styleWords.compare("Normal", Qt::CaseInsensitive) == 0)
+        return postScriptNames.value(family, base);
+    return base + '-' + styleWords;
+}
+
 QFont fontFor(const fla::TextRun& run)
 {
     const Face face = resolveFace(run.face.empty() ? QString("Arial") : QString::fromStdString(run.face));
     QFont font(face.family);
-    // The face's own style, or the run's faux bold and italic.
-    font.setBold(face.bold || keptAttribute(run, "bold") == "true");
-    font.setItalic(face.italic || keptAttribute(run, "italic") == "true");
+    // The face's own style, with the run's faux bold and italic on top.
+    const bool fauxBold = keptAttribute(run, "bold") == "true" && !face.bold;
+    const bool fauxItalic = keptAttribute(run, "italic") == "true" && !face.italic;
+    if (!face.styleName.isEmpty() && !fauxBold && !fauxItalic)
+        font.setStyleName(face.styleName);
+    else
+    {
+        int weight = face.weight > 0 ? face.weight : face.bold ? 700 : 400;
+        if (!face.styleName.isEmpty())
+            weight = std::max(weight, weightOfStyle(face.styleName));
+        if (fauxBold)
+            weight = std::max(weight, 700);
+        font.setWeight(static_cast<QFont::Weight>(weight));
+        font.setItalic(face.italic || fauxItalic);
+        if (face.narrow || face.styleName.contains("Narrow", Qt::CaseInsensitive))
+            font.setStretch(QFont::Condensed);
+    }
     font.setKerning(run.autoKern);
     if (run.letterSpacing != 0.0)
         font.setLetterSpacing(QFont::AbsoluteSpacing, run.letterSpacing);
