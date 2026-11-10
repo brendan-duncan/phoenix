@@ -1388,7 +1388,7 @@ void TimelineGrid::paintEvent(QPaintEvent* event)
             for (int i = 0; i < maxFrames; ++i)
             {
                 const QRect cell(i * cellStride, y, frameWidth, frameHeight);
-                painter.fillRect(cell, (i + 1) % 5 == 0 && frameWidth >= 8 ? cellLight : cellDark);
+                painter.fillRect(cell, (i + 1) % 5 == 0 ? cellLight : cellDark);
             }
 
             if (layer->layerType == fla::Layer::Type::Folder)
