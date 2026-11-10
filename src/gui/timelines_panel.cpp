@@ -1374,7 +1374,8 @@ void TimelineGrid::paintEvent(QPaintEvent* event)
 
     painter.fillRect(event->rect(), background);
 
-    const int maxFrames = frameCount() + kSpareColumns;
+    // The cells go on across the whole panel, past the frames in use.
+    const int maxFrames = std::max(frameCount() + kSpareColumns, width() / cellStride + 1);
     int y = headerHeight;
 
     painter.setRenderHint(QPainter::Antialiasing, true);
