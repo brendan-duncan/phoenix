@@ -2,7 +2,7 @@
 
 What changed in each release of Phoenix, newest first.
 
-## Unreleased
+## 0.24.2
 
 - Text set in a font's other faces draws in that face: Arial Black, Arial Narrow, Segoe UI Semibold and the like no longer fall back to the regular one
 - The Properties panel picks a font's style beside its family (Regular, Italic, Bold, Black, Narrow...), as the font names them, for text and for the Text tool
