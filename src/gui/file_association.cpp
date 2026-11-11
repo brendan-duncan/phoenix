@@ -1,8 +1,21 @@
 #include "file_association.h"
 
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
+#include <QStandardPaths>
+#include <QTextStream>
+#if defined(Q_OS_LINUX)
+#include <QProcess>
+#endif
+
 #ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
 #define NOMINMAX
+#endif
 #include <windows.h>
 #include <shlobj.h>
 
@@ -14,6 +27,8 @@ const wchar_t* const kClasses = L"Software\\Classes\\";
 const wchar_t* const kDocumentProgId = L"Phoenix.Document";
 const wchar_t* const kFlaProgId = L"Phoenix.FLA";
 const wchar_t* const kViewerProgId = L"Phoenix.Viewer";
+/// phoenix:// links.
+const wchar_t* const kLinkScheme = L"phoenix";
 
 /// The files the viewer (Phoenix --view) shows: documents, SWF movies and
 /// the artwork Phoenix imports.
@@ -37,6 +52,17 @@ void setValue(const std::wstring& key, const wchar_t* name, const std::wstring& 
     RegCloseKey(handle);
 }
 
+/// The text of a value; empty when there is none.
+std::wstring getValue(const std::wstring& key, const wchar_t* name)
+{
+    wchar_t buffer[MAX_PATH * 4];
+    DWORD size = sizeof(buffer);
+    if (RegGetValueW(HKEY_CURRENT_USER, (kClasses + key).c_str(), name, RRF_RT_REG_SZ, nullptr, buffer, &size)
+        != ERROR_SUCCESS)
+        return {};
+    return std::wstring(buffer);
+}
+
 /// A program id: its name, its icon and how it opens a file.
 void registerProgId(const wchar_t* progId, const wchar_t* description)
 {
@@ -54,6 +80,27 @@ void deleteValue(const std::wstring& key, const wchar_t* name)
         RegDeleteValueW(handle, name);
         RegCloseKey(handle);
     }
+}
+
+/// phoenix:// links open in this Phoenix.
+void registerScheme()
+{
+    const std::wstring exe = exePath();
+    const std::wstring scheme = kLinkScheme;
+    setValue(scheme, nullptr, L"URL:Phoenix");
+    setValue(scheme, L"URL Protocol", L"");
+    setValue(scheme + L"\\DefaultIcon", nullptr, L"\"" + exe + L"\",0");
+    setValue(scheme + L"\\shell\\open\\command", nullptr, L"\"" + exe + L"\" \"%1\"");
+}
+
+/// The program phoenix:// links open with now; empty when none.
+QString registeredProgram()
+{
+    const std::wstring command = getValue(std::wstring(kLinkScheme) + L"\\shell\\open\\command", nullptr);
+    const QString text = QString::fromStdWString(command);
+    if (!text.startsWith('"'))
+        return text.section(' ', 0, 0);
+    return text.mid(1, text.indexOf('"', 1) - 1);
 }
 
 } // namespace
@@ -89,6 +136,8 @@ void registerTypes()
         setValue(verb + L"\\command", nullptr, view);
     }
 
+    registerScheme();
+
     SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
 }
 
@@ -112,6 +161,18 @@ void unregisterTypes()
         RegDeleteValueW(handle, kFlaProgId);
         RegCloseKey(handle);
     }
+    // Links go only if they were this Phoenix's.
+    if (QFileInfo(registeredProgram()) == QFileInfo(QString::fromStdWString(exePath())))
+        RegDeleteTreeW(HKEY_CURRENT_USER, (std::wstring(kClasses) + kLinkScheme).c_str());
+    SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
+}
+
+void registerLinks(bool always)
+{
+    const QString program = registeredProgram();
+    if (!always && !program.isEmpty() && QFileInfo::exists(program))
+        return;
+    registerScheme();
     SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
 }
 
@@ -126,6 +187,52 @@ namespace FileAssociation {
 void registerTypes() {}
 void unregisterTypes() {}
 
+void registerLinks(bool always)
+{
+#if defined(Q_OS_LINUX)
+    // An AppImage has no package to declare its links: a .desktop file in
+    // the person's applications does, pointing at the AppImage itself.
+    const QString appImage = qEnvironmentVariable("APPIMAGE");
+    if (appImage.isEmpty())
+        return;
+    const QString folder = QStandardPaths::writableLocation(QStandardPaths::ApplicationsLocation);
+    const QString file = QDir(folder).filePath("phoenix-links.desktop");
+    QString exec;
+    {
+        QFile existing(file);
+        if (existing.open(QIODevice::ReadOnly | QIODevice::Text))
+            for (const QString& line : QString::fromUtf8(existing.readAll()).split('\n'))
+                if (line.startsWith("Exec="))
+                    exec = line.mid(5).section(' ', 0, 0).remove('"');
+    }
+    if (!always && !exec.isEmpty() && QFileInfo::exists(exec))
+        return;
+    QDir().mkpath(folder);
+    QFile out(file);
+    if (!out.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text))
+        return;
+    QTextStream(&out) << "[Desktop Entry]\n"
+                      << "Type=Application\n"
+                      << "Name=Phoenix\n"
+                      << "Exec=\"" << appImage << "\" %u\n"
+                      << "NoDisplay=true\n"
+                      << "MimeType=x-scheme-handler/phoenix;\n";
+    out.close();
+    QProcess::startDetached("xdg-mime", {"default", "phoenix-links.desktop", "x-scheme-handler/phoenix"});
+#else
+    Q_UNUSED(always);
+#endif
+}
+
 } // namespace FileAssociation
 
 #endif
+
+namespace FileAssociation {
+
+bool isLink(const QString& text)
+{
+    return text.startsWith("phoenix:", Qt::CaseInsensitive);
+}
+
+} // namespace FileAssociation

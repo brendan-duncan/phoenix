@@ -209,6 +209,9 @@ public:
     /// Opens the document at \a path as an external library, beside this
     /// one, to copy items from (File > Import > Open External Library).
     void openExternalLibraryFile(const QString& path);
+    /// Opens a phoenix:// link: phoenix://open?doc=ID&server=ORIGIN, the
+    /// Open in Phoenix button on Phoenix Cloud's pages.
+    void openLink(const QString& link);
 #ifdef PHOENIX_CLOUD
     friend class CloudDocuments;
     /// The documents open in this window's tabs, by file.

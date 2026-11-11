@@ -25,6 +25,19 @@
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
 
+	<!-- phoenix:// links: Open in Phoenix on Phoenix Cloud's pages. -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.phoenixanimate.link</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>phoenix</string>
+			</array>
+		</dict>
+	</array>
+
 	<!-- Phoenix's own documents are Phoenix's; FLA it opens alongside Animate. -->
 	<key>CFBundleDocumentTypes</key>
 	<array>

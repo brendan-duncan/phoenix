@@ -1,6 +1,8 @@
 #include "gui/crash_dump.h"
 #include "gui/app_identity.h"
 #include "gui/command_line.h"
+#include "gui/file_association.h"
+#include "gui/start_dialog.h"
 #include "gui/web_page.h"
 #include "gui/mcp_server.h"
 #include "gui/script_runner.h"
@@ -57,7 +59,9 @@ protected:
     {
         if (event->type() == QEvent::FileOpen)
         {
-            openWhenIdle(static_cast<QFileOpenEvent*>(event)->file());
+            // A phoenix:// link arrives as a URL, with no file.
+            const auto* open = static_cast<QFileOpenEvent*>(event);
+            openWhenIdle(open->file().isEmpty() ? open->url().toString() : open->file());
             return true;
         }
         return QObject::eventFilter(watched, event);
@@ -69,6 +73,10 @@ private:
     /// them. It waits until nothing modal is up.
     void openWhenIdle(const QString& file)
     {
+        // For a link the start screen gives way: the link is what they chose.
+        if (FileAssociation::isLink(file))
+            if (auto* start = qobject_cast<StartDialog*>(QApplication::activeModalWidget()))
+                start->reject();
         if (QApplication::activeModalWidget() || QApplication::activePopupWidget())
         {
             QTimer::singleShot(500, this, [this, file]() { openWhenIdle(file); });
@@ -291,6 +299,16 @@ int main(int argc, char *argv[])
         return window.viewFromCommandLine(arguments.at(2));
     }
 
+    // Phoenix --register-links: phoenix:// links (Open in Phoenix on
+    // Phoenix Cloud's pages) open in this Phoenix, even with another
+    // installed.
+    if (arguments.size() == 2 && arguments.at(1) == "--register-links")
+    {
+        FileAssociation::registerLinks(true);
+        std::printf("phoenix:// links now open in %s\n", qPrintable(QDir::toNativeSeparators(QCoreApplication::applicationFilePath())));
+        return 0;
+    }
+
     if (arguments.size() >= 4 && arguments.at(1) == "--export-image")
     {
         MainWindow window(QString(), nullptr, false);
@@ -456,6 +474,18 @@ int main(int argc, char *argv[])
         MainWindow::setNoDownload();
     QString initialFile = launch.size() > 1 ? launch.at(1) : QString();
 
+    // Phoenix phoenix://open?doc=...: a Phoenix already running opens it;
+    // else this one does, once its window is up.
+    QString link;
+    if (FileAssociation::isLink(initialFile))
+    {
+        if (ScriptRunner::handLinkToRunning(initialFile))
+            return 0;
+        link = initialFile;
+        initialFile.clear();
+        MainWindow::skipStartScreen();
+    }
+
     // Phoenix script.jsfl (or script.py): a Phoenix already running runs
     // it; else this one does, once its window is up.
     QString script;
@@ -495,6 +525,11 @@ int main(int argc, char *argv[])
     if (hosted && !play)
         window.startDrafts();
 #else
+    // Links open here when no Phoenix is registered for them (one not
+    // installed, run from its folder). Settings kept apart (tests, demos)
+    // leave the system's alone.
+    if (!mcp && qEnvironmentVariableIsEmpty("PHOENIX_SETTINGS_DIR"))
+        FileAssociation::registerLinks(false);
     MainWindow window(initialFile);
 #endif
     window.show();
@@ -509,6 +544,8 @@ int main(int argc, char *argv[])
         QTimer::singleShot(300, &window, [&window, tutorial]() { window.startTutorial(tutorial); });
     if (play && !initialFile.isEmpty())
         QTimer::singleShot(300, &window, [&window]() { window.playMovie(); });
+    if (!link.isEmpty())
+        QTimer::singleShot(300, &window, [&window, link]() { window.openLink(link); });
     if (mcp)
         window.serveMcpOnStdio();
 
@@ -521,7 +558,12 @@ int main(int argc, char *argv[])
 #else
     // On macOS a file opened from Finder arrives as an event, not as an
     // argument.
-    FileOpenHandler fileOpen([&window](const QString& path) { window.openDocumentPath(path); });
+    FileOpenHandler fileOpen([&window](const QString& path) {
+        if (FileAssociation::isLink(path))
+            window.openLink(path);
+        else
+            window.openDocumentPath(path);
+    });
     a.installEventFilter(&fileOpen);
 
     return a.exec();

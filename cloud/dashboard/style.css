@@ -411,6 +411,7 @@ dialog.wide { width: min(640px, calc(100vw - 32px)); }
 .toasts { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); z-index: 200; display: flex; flex-direction: column; gap: 8px; align-items: center; }
 .toast { padding: 10px 16px; border-radius: 10px; background: var(--text); color: var(--bg); box-shadow: var(--shadow); max-width: min(560px, calc(100vw - 32px)); }
 .toast.error { background: var(--danger); color: #fff; }
+.toast a { color: inherit; text-decoration: underline; font-weight: 600; }
 
 /* ── Sign-in pages ────────────────────────────────────────────────────── */
 

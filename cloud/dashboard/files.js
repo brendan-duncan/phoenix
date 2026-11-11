@@ -50,6 +50,28 @@ function editorUrl(doc) {
   return `/editor/?doc=${encodeURIComponent(doc.id)}`;
 }
 
+/**
+ * Whether the document can open in Phoenix on this computer: one with
+ * something saved that may be opened, on a computer with a mouse (Phoenix
+ * is not on phones and tablets).
+ */
+function phoenixOpens(doc) {
+  return Boolean(doc.revision && doc.canOpen && !removed(doc) && window.matchMedia('(pointer: fine)').matches);
+}
+
+/**
+ * Opens the document in Phoenix on this computer, through its phoenix://
+ * link; Phoenix signs in to this Phoenix Cloud if it has not. A browser
+ * says nothing when no app takes the link, so a note says where to get one.
+ */
+function openInPhoenix(doc) {
+  const link = `phoenix://open?doc=${encodeURIComponent(doc.id)}&server=${encodeURIComponent(location.origin)}`;
+  location.href = link;
+  toast(h('span', {}, 'Opening in Phoenix… Nothing opened? ',
+    h('a', { href: 'https://phoenixanimate.com/get-started.html', target: '_blank', rel: 'noopener' }, 'Get Phoenix'),
+    ', run it once, then try again.'), { ms: 9000 });
+}
+
 /** The player page's address: anyone who may view can play (in the editor or as HTML5). */
 function playUrl(doc) {
   return doc.revision && !removed(doc) && (state.me.editor || state.me.converter) ? `/play/${encodeURIComponent(doc.id)}` : null;
@@ -388,6 +410,7 @@ function docMenu(doc, { view, onDone = rerender }) {
   const editor = atLeast(doc.role, 'editor');
   return [
     editorUrl(doc) ? { label: editor ? 'Edit' : 'Open in the editor', icon: 'edit', onclick: () => { location.href = editorUrl(doc); } } : null,
+    phoenixOpens(doc) ? { label: 'Open in Phoenix', icon: 'desktop', onclick: () => openInPhoenix(doc) } : null,
     playUrl(doc) ? { label: 'Play', icon: 'play', onclick: () => navigate(playUrl(doc)) } : null,
     { label: 'Details', icon: 'file', onclick: () => navigate(`/d/${doc.id}`) },
     doc.canDownload && doc.revision ? { label: 'Download', icon: 'download', onclick: () => download(`/api/documents/${doc.id}/download`) } : null,
@@ -1171,6 +1194,7 @@ export async function renderDocument(target, id) {
   const v = VISIBILITY[doc.visibility];
   const actions = h('div', { class: 'actions' },
     editorUrl(doc) ? h('a', { class: 'btn primary', href: editorUrl(doc) }, icon('edit'), editor ? 'Edit' : 'Open in the editor') : null,
+    phoenixOpens(doc) ? h('button', { type: 'button', class: 'btn', onclick: () => openInPhoenix(doc) }, icon('desktop'), 'Open in Phoenix') : null,
     playUrl(doc) ? h('a', { class: 'btn', href: playUrl(doc) }, icon('play'), 'Play') : null,
     doc.canDownload && doc.revision ? h('button', { type: 'button', class: 'btn', onclick: () => download(`/api/documents/${doc.id}/download`) }, icon('download'), 'Download') : null,
     editor && !removed(doc) ? h('button', { type: 'button', class: 'btn', onclick: () => shareDialog(doc) }, icon('share'), 'Share') : null,

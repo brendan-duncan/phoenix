@@ -1,4 +1,5 @@
 #include "script_runner.h"
+#include "file_association.h"
 #include "file_pick.h"
 #include "modal.h"
 
@@ -8,6 +9,7 @@
 #include "output_panel.h"
 #include "phoenix_view.h"
 #include "script_api.h"
+#include "start_dialog.h"
 #include "toolbox.h"
 #include "xul_dialog.h"
 
@@ -66,6 +68,8 @@
 #include <QUrl>
 #include <QUuid>
 #include <QVBoxLayout>
+
+#include <utility>
 
 #include <cstdio>
 #include <cstring>
@@ -1080,6 +1084,16 @@ QString ScriptRunner::commandsFolder()
 
 bool ScriptRunner::handToRunning(const QString& script)
 {
+    return leaveRequest(QFileInfo(script).absoluteFilePath());
+}
+
+bool ScriptRunner::handLinkToRunning(const QString& link)
+{
+    return leaveRequest(link);
+}
+
+bool ScriptRunner::leaveRequest(const QString& text)
+{
     QLockFile lock(lockPath());
     lock.setStaleLockTime(0);
     if (lock.tryLock(0))
@@ -1095,7 +1109,7 @@ bool ScriptRunner::handToRunning(const QString& script)
     QFile file(request + ".part");
     if (!file.open(QIODevice::WriteOnly))
         return false;
-    file.write(QFileInfo(script).absoluteFilePath().toUtf8());
+    file.write(text.toUtf8());
     file.close();
     // Named once it is whole, so the running Phoenix never reads half of it.
     return QFile::rename(request + ".part", request);
@@ -1112,9 +1126,31 @@ void ScriptRunner::takeRequests()
         const QString script = QString::fromUtf8(file.readAll()).trimmed();
         file.close();
         file.remove();
-        if (!script.isEmpty())
+        if (FileAssociation::isLink(script))
+            _links << script;
+        else if (!script.isEmpty())
             _pending << script;
     }
+    // Links (Open in Phoenix on Phoenix Cloud's pages) open when nothing
+    // modal is up.
+    if (!_links.isEmpty())
+        QTimer::singleShot(0, this, [this]() {
+            if (_links.isEmpty())
+                return;
+            // The start screen gives way: the link is what they chose.
+            if (auto* start = qobject_cast<StartDialog*>(QApplication::activeModalWidget()))
+                start->reject();
+            if (QApplication::activeModalWidget() || QApplication::activePopupWidget())
+            {
+                QTimer::singleShot(500, this, [this]() { takeRequests(); });
+                return;
+            }
+            const QStringList links = std::exchange(_links, {});
+            _window.raise();
+            _window.activateWindow();
+            for (const QString& link : links)
+                _window.openLink(link);
+        });
     if (_pending.isEmpty())
         return;
     // One at a time, when nothing modal is up.

@@ -19515,3 +19515,11 @@ double MainWindow::loudnessAt(const fla::Document& document, int frame)
     }
     return frame >= 0 && frame < static_cast<int>(_loudness.size()) ? _loudness[static_cast<size_t>(frame)] : 0.0;
 }
+
+#ifndef PHOENIX_CLOUD
+void MainWindow::openLink(const QString& link)
+{
+    // Phoenix Cloud links need the network, which this build has not.
+    QMessageBox::warning(this, "Phoenix", QString("This Phoenix cannot open Phoenix Cloud links: %1").arg(link));
+}
+#endif

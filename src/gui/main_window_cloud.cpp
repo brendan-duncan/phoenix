@@ -15,8 +15,75 @@
 #include <QMenu>
 #include <QMessageBox>
 #include <QStatusBar>
+#include <QRegularExpression>
 #include <QTemporaryDir>
 #include <QUrl>
+#include <QUrlQuery>
+
+namespace {
+
+/// A server a link may switch Phoenix to: HTTPS, or this computer's own
+/// for testing.
+bool trustedServer(const QUrl& url)
+{
+    if (url.scheme() == "https")
+        return true;
+    const QString host = url.host();
+    return url.scheme() == "http" && (host == "localhost" || host == "127.0.0.1" || host == "::1");
+}
+
+} // namespace
+
+void MainWindow::openLink(const QString& link)
+{
+    const QUrl url(link);
+    const QUrlQuery query(url);
+    const QString id = query.queryItemValue("doc", QUrl::FullyDecoded);
+    static const QRegularExpression idPattern("^[A-Za-z0-9_-]{1,64}$");
+    if (url.scheme().compare("phoenix", Qt::CaseInsensitive) != 0 || url.host().compare("open", Qt::CaseInsensitive) != 0
+        || !idPattern.match(id).hasMatch())
+    {
+        QMessageBox::warning(this, "Phoenix", QString("Phoenix cannot open this link:\n%1").arg(link));
+        return;
+    }
+
+    // The Phoenix Cloud it is on: Phoenix's, or another once they agree.
+    CloudClient& client = CloudClient::instance();
+    const QUrl given(query.queryItemValue("server", QUrl::FullyDecoded));
+    const QString server = given.isValid() && !given.host().isEmpty()
+        ? given.adjusted(QUrl::RemovePath | QUrl::RemoveQuery | QUrl::RemoveFragment | QUrl::RemoveUserInfo).toString()
+        : client.server();
+    if (server.compare(client.server(), Qt::CaseInsensitive) != 0)
+    {
+        if (!trustedServer(given))
+        {
+            QMessageBox::warning(this, "Phoenix Cloud",
+                QString("Phoenix opens documents only from a Phoenix Cloud on HTTPS, not from %1.").arg(server));
+            return;
+        }
+        if (!qEnvironmentVariableIsEmpty("PHOENIX_CLOUD_URL"))
+        {
+            QMessageBox::warning(this, "Phoenix Cloud",
+                QString("This document is on %1, but Phoenix is set to use %2 (PHOENIX_CLOUD_URL).").arg(server, client.server()));
+            return;
+        }
+        if (!CloudDocuments::instance().report().isEmpty())
+        {
+            QMessageBox::information(this, "Phoenix Cloud",
+                QString("This document is on %1. Close the documents open from %2 first, then open it again.")
+                    .arg(server, client.server()));
+            return;
+        }
+        const auto answer = QMessageBox::question(this, "Phoenix Cloud",
+            QString("This document is on the Phoenix Cloud at %1. Phoenix uses %2 now.\n\n"
+                    "Use %1 from now on? You sign in to it separately.")
+                .arg(server, client.server()));
+        if (answer != QMessageBox::Yes)
+            return;
+        client.setServer(server);
+    }
+    CloudDocuments::instance().open(id, this);
+}
 
 QStringList MainWindow::tabPaths() const
 {

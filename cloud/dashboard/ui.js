@@ -83,6 +83,7 @@ const ICONS = {
   play: '<path d="M7 4l13 8-13 8z"/>',
   chat: '<path d="M4 5h16v11H9l-5 4z"/>',
   send: '<path d="M3 11l18-8-8 18-2-8z"/>',
+  desktop: '<rect x="3" y="4" width="18" height="12" rx="1.5"/><path d="M8 20h8M12 16v4"/>',
   bell: '<path d="M6 9a6 6 0 0 1 12 0c0 6 3 7 3 7H3s3-1 3-7M10 20a2 2 0 0 0 4 0"/>',
 };
 

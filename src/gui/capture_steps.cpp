@@ -43,6 +43,8 @@
 #include <QSpinBox>
 #include <QTextStream>
 #include <QTimer>
+#include <QUrl>
+#include <QUrlQuery>
 
 #include <cstdio>
 
@@ -532,7 +534,8 @@ bool runCaptureSteps(MainWindow& window, const QString& path, QString& error)
         else if (step == "cloud")
         {
             // Phoenix Cloud checks: cloud wait-signin | open <id> |
-            // wait-saves | wait <ms> | report <file.json>.
+            // link <phoenix://...> | wait-open <id> | wait-saves |
+            // wait <ms> | report <file.json>.
             const QString what = first.toLower();
             const QString arg = words.value(2);
             const auto waitFor = [](const std::function<bool()>& done, int ms) {
@@ -547,12 +550,20 @@ bool runCaptureSteps(MainWindow& window, const QString& path, QString& error)
                 if (!waitFor([]() { return CloudClient::instance().signedIn(); }, 60000))
                     return fail("not signed in to Phoenix Cloud");
             }
-            else if (what == "open")
+            else if (what == "open" || what == "wait-open" || what == "link")
             {
-                CloudDocuments::instance().open(arg, &window);
-                const auto opened = [&arg]() {
+                // open <id> opens it; link <phoenix://...> opens a link
+                // (then wait-open <id>); wait-open <id> waits for one
+                // opened otherwise, as from a link another Phoenix handed
+                // over.
+                if (what == "open")
+                    CloudDocuments::instance().open(arg, &window);
+                else if (what == "link")
+                    window.openLink(arg);
+                const QString id = what == "link" ? QUrlQuery(QUrl(arg)).queryItemValue("doc") : arg;
+                const auto opened = [&id]() {
                     for (const QJsonValue& doc : CloudDocuments::instance().report())
-                        if (doc.toObject().value("id").toString() == arg)
+                        if (doc.toObject().value("id").toString() == id)
                             return true;
                     return false;
                 };

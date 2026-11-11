@@ -65,6 +65,9 @@ public:
     /// When another Phoenix is running and takes scripts, hands it
     /// \a script to run and returns true.
     static bool handToRunning(const QString& script);
+    /// When another Phoenix is running and takes requests, hands it the
+    /// phoenix:// \a link to open and returns true.
+    static bool handLinkToRunning(const QString& link);
 
     QDockWidget* outputDock() const { return _outputDock; }
     /// The host scripts reach the window through, for JSFL tools.
@@ -121,6 +124,9 @@ private:
     void manageExtensions();
     /// Takes the scripts other processes left in the requests folder.
     void takeRequests();
+    /// Leaves \a text in the requests folder for the Phoenix taking them;
+    /// false when there is none.
+    static bool leaveRequest(const QString& text);
     /// Runs \a path with the engine for its language.
     jsfl::RunResult run(const QString& path, const jsfl::RunOptions& options);
     void stop();
@@ -135,4 +141,6 @@ private:
     std::unique_ptr<QLockFile> _lock;
     QFileSystemWatcher* _watcher = nullptr;
     QStringList _pending;
+    /// phoenix:// links handed over, to open.
+    QStringList _links;
 };

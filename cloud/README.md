@@ -300,8 +300,21 @@ and unsaved work goes up as a draft every two minutes.
   in dev). For tests, `PHOENIX_CLOUD_SIGNIN_URL_FILE` writes the sign-in
   address to a file instead of opening the browser, and
   `PHOENIX_CLOUD_DRAFT_SECONDS` sends drafts sooner; `capture-window`'s
-  `cloud` steps (`wait-signin`, `open`, `new`, `upload`, `library`,
-  `wait-saves`, `report`) drive it with no window showing.
+  `cloud` steps (`wait-signin`, `open`, `link`, `wait-open`, `new`,
+  `upload`, `library`, `wait-saves`, `report`) drive it with no window
+  showing.
+- Open in Phoenix (a document's page, and its card's menu, on computers
+  with a mouse) goes to `phoenix://open?doc=ID&server=ORIGIN`. Phoenix
+  registers `phoenix://` for the current user: the installer's hooks do on
+  Windows (`src/gui/file_association.cpp`), `Info.plist` declares it on
+  macOS, and an AppImage writes `phoenix-links.desktop` to the person's
+  applications. A Phoenix run from its folder registers it only when no
+  other Phoenix has (`Phoenix --register-links` takes it over). A Phoenix
+  already running gets the link through the script requests folder
+  (`ScriptRunner::handLinkToRunning`), and the start screen closes for it.
+  A link to another server asks before switching Phoenix to it (HTTPS, or
+  this computer for testing), and not while documents from the first are
+  open.
 
 ## New documents and conversion
 
