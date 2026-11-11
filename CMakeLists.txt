@@ -790,6 +790,14 @@ if(TARGET Qt6::Network)
         target_compile_definitions(Phoenix PRIVATE PHOENIX_CLOUD)
     endif()
 endif()
+# Releases must have Phoenix Cloud: a Qt without its network module builds
+# a Phoenix with no File > Phoenix Cloud and no web for Test Movie.
+option(PHOENIX_CLOUD_REQUIRED "Fail when Qt has no network module (release builds)" OFF)
+if(PHOENIX_CLOUD_REQUIRED AND NOT PHOENIX_WEB AND NOT TARGET Qt6::Network)
+    message(FATAL_ERROR "PHOENIX_CLOUD_REQUIRED: the Qt found has no Network module, so Phoenix Cloud "
+        "would be left out. Use a Qt with it (the trimmed Qt archives keep it since tools/qt/make_qt_archive.py "
+        "added it).")
+endif()
 target_link_libraries(Phoenix PRIVATE qjs)
 if(PHOENIX_PYTHON)
     target_compile_definitions(Phoenix PRIVATE PHOENIX_PYTHON)

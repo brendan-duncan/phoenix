@@ -130,6 +130,7 @@ jobs:
           cmake -S . -B build ${{ matrix.generator }} \
             -DPHOENIX_USE_SYSTEM_QT=OFF \
             -DPHOENIX_QT_ARCHIVE_DIR="${GITHUB_WORKSPACE//\\//}/dist" \
+            -DPHOENIX_CLOUD_REQUIRED=ON \
             -DCMAKE_BUILD_TYPE=Release
           # A job count, always: with no number, --parallel on Makefiles is
           # `make -j` with no limit (see release.yml).

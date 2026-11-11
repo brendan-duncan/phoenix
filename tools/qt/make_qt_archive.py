@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Builds a trimmed Qt archive for Phoenix.
 
-Phoenix links Qt Widgets and Svg. A full Qt kit is several gigabytes, most
+Phoenix links Qt Widgets, Svg and Network. A full Qt kit is several gigabytes, most
 of it modules Phoenix never touches, so this cuts an installed kit down to
 what the build needs and packs it into one archive the CMake configure step
 can download (see cmake/PhoenixQt.cmake):
@@ -51,18 +51,23 @@ import tempfile
 import zipfile
 from pathlib import Path
 
-ROOT_MODULES = ["Core", "Gui", "Widgets", "Svg"]
+# Network is Phoenix Cloud on the desktop and Test Movie's URLLoader; the
+# build compiles them only when it finds the module's package.
+ROOT_MODULES = ["Core", "Gui", "Widgets", "Svg", "Network"]
 
-# Modules the build tools load at run time without Phoenix linking them:
-# windeployqt needs Network. Their libraries are shipped, not their
-# headers or package files.
-TOOL_RUNTIME_MODULES = ["Network"]
+# Modules the build tools load at run time without Phoenix linking them.
+# Their libraries are shipped, not their headers or package files.
+# (windeployqt needs Network, which is now a root module.)
+TOOL_RUNTIME_MODULES = []
 
 # Plugin folders a desktop Widgets application can need. Anything else under
 # plugins/ (sql drivers, multimedia, qml tooling...) is left out.
 PLUGIN_DIRS = [
     "platforms", "imageformats", "styles", "iconengines", "generic",
     "platformthemes", "platforminputcontexts", "xcbglintegrations",
+    # Network's TLS backends (schannel, Secure Transport, OpenSSL): without
+    # them HTTPS fails.
+    "tls",
     "wayland-decoration-client", "wayland-graphics-integration-client",
     "wayland-shell-integration",
 ]
