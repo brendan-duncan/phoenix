@@ -2,6 +2,10 @@
 
 What changed in each release of Phoenix, newest first.
 
+## 0.25.1
+
+- File > Phoenix Cloud is in the downloaded Phoenix: 0.25.0's downloads were built without it. Movies in Test Movie can load from the web there too
+
 ## 0.25.0
 
 - Phoenix Cloud on the desktop: File > Phoenix Cloud signs in through your browser, opens documents from your files, shared documents and groups, makes new ones (blank, from a template or for a lesson), uploads files and saves copies of open documents to the cloud. Saving a cloud document saves a new version; Phoenix holds its edit lock while it is open, sends unsaved changes as a draft every two minutes and offers them back when it is opened again, and offers Save a Copy when someone else saved or is editing. The status bar shows how the last save went
