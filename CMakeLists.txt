@@ -779,6 +779,16 @@ find_package(Qt6 QUIET OPTIONAL_COMPONENTS Network)
 if(TARGET Qt6::Network)
     target_link_libraries(Phoenix PRIVATE Qt6::Network)
     target_compile_definitions(Phoenix PRIVATE PHOENIX_NETWORK)
+    # Phoenix Cloud documents on the desktop (the web editor's page does
+    # this itself): signing in through the browser needs a local port.
+    if(NOT PHOENIX_WEB)
+        target_sources(Phoenix PRIVATE
+            src/gui/cloud_client.h src/gui/cloud_client.cpp
+            src/gui/cloud_documents.h src/gui/cloud_documents.cpp
+            src/gui/cloud_browser.h src/gui/cloud_browser.cpp
+            src/gui/main_window_cloud.cpp)
+        target_compile_definitions(Phoenix PRIVATE PHOENIX_CLOUD)
+    endif()
 endif()
 target_link_libraries(Phoenix PRIVATE qjs)
 if(PHOENIX_PYTHON)

@@ -209,6 +209,15 @@ public:
     /// Opens the document at \a path as an external library, beside this
     /// one, to copy items from (File > Import > Open External Library).
     void openExternalLibraryFile(const QString& path);
+#ifdef PHOENIX_CLOUD
+    friend class CloudDocuments;
+    /// The documents open in this window's tabs, by file.
+    QStringList tabPaths() const;
+    /// Writes the document open here at \a path to \a to, when it has
+    /// unsaved changes: a Phoenix Cloud draft. False when it has none, or
+    /// is not open here.
+    bool writeDraftOf(const QString& path, const QString& to);
+#endif
 #ifdef PHOENIX_WEB
     /// In a page that keeps the document: every two minutes, while there
     /// are unsaved changes, a copy goes to the page as a draft.
@@ -1459,6 +1468,22 @@ private:
 
     /// Whether Paste has something to paste.
     bool canPaste() const;
+#ifdef PHOENIX_CLOUD
+    /// Phoenix Cloud (main_window_cloud.cpp): File > Phoenix Cloud and
+    /// Import > Open Library from Phoenix Cloud.
+    void addCloudMenu(QMenu* fileMenu, QMenu* importMenu);
+    /// The document shown or the tabs changed: the status bar's cloud part
+    /// follows, and cloud documents no longer open let go of their locks.
+    void cloudDocumentShown();
+    /// A copy of a cloud document left on this computer, opened again: the
+    /// cloud's version opens instead. False for any other file.
+    bool openCloudCopy(const QString& path);
+    /// Waits for saves still going up to Phoenix Cloud.
+    void finishCloudSaves();
+    /// File > Phoenix Cloud > Save a Copy to Cloud.
+    void saveCopyToCloud();
+    class CloudStatus* _cloudStatus = nullptr;
+#endif
     QAction* _undoAction = nullptr;
     QAction* _redoAction = nullptr;
     /// Display name of the open file, without the modified marker.

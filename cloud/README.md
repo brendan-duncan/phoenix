@@ -267,6 +267,42 @@ a mark while there are unsaved changes.
   a title to rename it. An empty My Files welcomes new people with lessons
   and templates.
 
+## Phoenix on the desktop
+
+The desktop Phoenix opens and saves cloud documents too (File > Phoenix
+Cloud), with the editor page's rules: saves are new versions checked
+against the version opened, the edit lock is held while a document is open,
+and unsaved work goes up as a draft every two minutes.
+
+- Signing in (`lib/desktop.mjs`): Phoenix listens on a port of its own
+  computer and opens `/desktop?port=&state=&challenge=&name=` in the
+  browser. Signed in there as usual, the person allows it; the page asks
+  `POST /api/desktop/authorize` (a browser session only) for a one-time
+  code, good for five minutes, and sends the browser to
+  `http://127.0.0.1:<port>/callback?code=&state=`. Phoenix trades the code
+  and the secret its challenge was made from (PKCE, S256) for a token at
+  `POST /api/desktop/token`.
+- Tokens are stored as hashes in `app_tokens`, last 180 days from their last
+  use, and go with `Authorization: Bearer`. A token request needs no CSRF
+  token, has no admin powers, and reaches only what the editor uses
+  (`tokenMay`): who is signed in, groups, fonts, starters, folders, listing,
+  making and uploading documents, and a document's file, versions, draft,
+  lock and picture. Account > Where you are signed in lists them
+  (`/api/me/apps`) to sign out; Phoenix's Sign Out calls
+  `POST /api/desktop/signout`.
+- Phoenix's side: `src/gui/cloud_client.*` (sign-in and requests),
+  `cloud_documents.*` (open documents, saves, locks, drafts, the status
+  bar's part) and `cloud_browser.*` (the files window and New Cloud
+  Document). Documents are kept in Phoenix's `Cloud` folder (its local
+  app data) with a `cloud.json` naming the server and document; opening
+  one of those files again opens the cloud's version.
+- `PHOENIX_CLOUD_URL` points Phoenix at another server (`http://localhost:8792`
+  in dev). For tests, `PHOENIX_CLOUD_SIGNIN_URL_FILE` writes the sign-in
+  address to a file instead of opening the browser, and
+  `PHOENIX_CLOUD_DRAFT_SECONDS` sends drafts sooner; `capture-window`'s
+  `cloud` steps (`wait-signin`, `open`, `new`, `upload`, `library`,
+  `wait-saves`, `report`) drive it with no window showing.
+
 ## New documents and conversion
 
 `lib/convert.mjs` runs Phoenix with no window, one job at a time, in a

@@ -114,6 +114,9 @@
 #include "../edit/linked_assets.h"
 #include "command_line.h"
 #include "command_palette.h"
+#ifdef PHOENIX_CLOUD
+#include "cloud_documents.h"
+#endif
 #include "lottie_export.h"
 #include "swatches_panel.h"
 #include "swatch_popup.h"
@@ -1326,6 +1329,10 @@ void MainWindow::openInTab(const QString& path)
             }
         }
     }
+#ifdef PHOENIX_CLOUD
+    if (openCloudCopy(path))
+        return;
+#endif
     makeRoomForDocument();
     loadFLAFile(path);
 }
@@ -7300,6 +7307,13 @@ void MainWindow::setupMenus()
             [this](const QString& text) { statusBar()->showMessage(text, 8000); });
     });
 
+#ifdef PHOENIX_CLOUD
+    // Phoenix Cloud documents, opened and saved here (a page that keeps the
+    // document does this itself).
+    if (!s_hosted)
+        addCloudMenu(fileMenu, importMenu);
+#endif
+
     QAction* shareAction = fileMenu->addAction("S&hare...");
     web_page::desktopOnly(shareAction);
     shareAction->setStatusTip("Save the animation as a GIF, WebP, animated PNG, MP4 or WebM, sized for the web and social sites");
@@ -9070,7 +9084,17 @@ void MainWindow::saveToPath(const QString& filePath, std::function<void()> saved
         _flaDocument->fromBinary = false;
         updateEditState();
         addToRecentFiles(filePath);
+#ifdef PHOENIX_CLOUD
+        // A cloud document: up it goes as a new version, the status bar's
+        // cloud part saying how that goes (its file here is only a copy).
+        if (CloudDocuments::instance().owns(filePath))
+            CloudDocuments::instance().saved(filePath);
+        else
+            statusBar()->showMessage(QString("Saved %1").arg(filePath), 5000);
+        cloudDocumentShown();
+#else
         statusBar()->showMessage(QString("Saved %1").arg(filePath), 5000);
+#endif
 #ifdef PHOENIX_WEB
         // Written to the page's own file system. A page that keeps the
         // document itself takes it (and a save there is never a download);
@@ -11630,6 +11654,9 @@ void MainWindow::openScriptEditor(const QString& path)
 
 void MainWindow::updateEditState()
 {
+#ifdef PHOENIX_CLOUD
+    cloudDocumentShown();
+#endif
     // An edit that took out what is selected (a cleared keyframe, a deleted
     // layer) leaves it to the history: the selection lets go of it, so the
     // next edit is not made on it. Not part way through an edit, which may
@@ -11740,6 +11767,12 @@ void MainWindow::updateEditState()
 
 void MainWindow::updateWindowTitle()
 {
+#ifdef PHOENIX_CLOUD
+    // The document shown changed, or how it stands: so does the status bar's
+    // cloud part.
+    if (_cloudStatus)
+        _cloudStatus->setPath(_documentPath);
+#endif
     // "Phoenix 0.2.0 - D:\fla\file.fla", with the full path of a saved
     // document and the name of one not saved yet, and a * for unsaved changes.
     const QString app = QString("Phoenix %1").arg(QCoreApplication::applicationVersion());
@@ -11749,7 +11782,12 @@ void MainWindow::updateWindowTitle()
         return;
     }
 
-    const QString shown = _documentPath.isEmpty() ? _documentName : QDir::toNativeSeparators(_documentPath);
+    QString shown = _documentPath.isEmpty() ? _documentName : QDir::toNativeSeparators(_documentPath);
+#ifdef PHOENIX_CLOUD
+    // A cloud document by its name in the cloud, not its copy's file here.
+    if (const CloudDocuments::Doc* cloud = CloudDocuments::instance().doc(_documentPath))
+        shown = cloud->name + " (Phoenix Cloud)";
+#endif
     setWindowTitle(QString("%1 - %2%3")
         .arg(app)
         .arg(shown)
@@ -19261,6 +19299,10 @@ void MainWindow::closeEvent(QCloseEvent* event)
             return;
         }
     }
+#ifdef PHOENIX_CLOUD
+    // Saves still going up to Phoenix Cloud finish before the window goes.
+    finishCloudSaves();
+#endif
     // The last window to close says what to reopen next time.
     const bool last = s_windows.size() == 1 && s_windows.front() == this;
     if (!s_quitting && last)
@@ -19277,6 +19319,12 @@ void MainWindow::closeEvent(QCloseEvent* event)
             closeTab(static_cast<int>(_tabs.size()) - 1, false);
     }
     s_windows.removeAll(this);
+#ifdef PHOENIX_CLOUD
+    // Its cloud documents let go of their edit locks.
+    CloudDocuments::instance().tabsChanged();
+    if (s_windows.isEmpty())
+        CloudDocuments::instance().waitForRequests(2000);
+#endif
     event->accept();
     // An update the first window downloaded goes in once Phoenix has quit.
     if (!_secondary)

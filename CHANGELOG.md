@@ -4,6 +4,9 @@ What changed in each release of Phoenix, newest first.
 
 ## Unreleased
 
+- Phoenix Cloud on the desktop: File > Phoenix Cloud signs in through your browser, opens documents from your files, shared documents and groups, makes new ones (blank, from a template or for a lesson), uploads files and saves copies of open documents to the cloud. Saving a cloud document saves a new version; Phoenix holds its edit lock while it is open, sends unsaved changes as a draft every two minutes and offers them back when it is opened again, and offers Save a Copy when someone else saved or is editing. The status bar shows how the last save went
+- File > Import > Open Library from Phoenix Cloud opens another cloud document's library beside the one you are editing
+- Phoenix Cloud's account page lists Phoenix on your computers, to sign them out
 - File > Export > Export Lottie writes the movie as a Lottie animation (JSON) for web and app players: shapes, gradients, bitmaps and text as outlines; classic, shape and motion tweens, nested symbols, graphic loops and movie clips held at a stop(); masks as track mattes; color effects, blur and drop shadow. What Lottie cannot show (other filters, some blend modes, sounds, scripts) is listed after exporting
 - `Phoenix render <file> --out anim.json` exports a Lottie animation from the command line
 - Help > Find Command (Ctrl+Shift+P) finds any menu command or tool by typing part of its name and runs it, showing where it lives in the menus and its key; with nothing typed it lists the commands run from it last

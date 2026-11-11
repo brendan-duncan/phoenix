@@ -8,6 +8,12 @@
 #include "script_runner.h"
 #include "toolbox.h"
 #include "tutorial_runner.h"
+#ifdef PHOENIX_CLOUD
+#include "cloud_client.h"
+#include "cloud_documents.h"
+#include <QJsonDocument>
+#include <QJsonObject>
+#endif
 
 #include "../data/frame.h"
 #include "../edit/command_stack.h"
@@ -522,6 +528,76 @@ bool runCaptureSteps(MainWindow& window, const QString& path, QString& error)
                 dragIn(list->viewport(), QRectF(rect).center(), QRectF(rect).center(), {});
             }
         }
+#ifdef PHOENIX_CLOUD
+        else if (step == "cloud")
+        {
+            // Phoenix Cloud checks: cloud wait-signin | open <id> |
+            // wait-saves | wait <ms> | report <file.json>.
+            const QString what = first.toLower();
+            const QString arg = words.value(2);
+            const auto waitFor = [](const std::function<bool()>& done, int ms) {
+                QElapsedTimer clock;
+                clock.start();
+                while (!done() && clock.elapsed() < ms)
+                    pump(50);
+                return done();
+            };
+            if (what == "wait-signin")
+            {
+                if (!waitFor([]() { return CloudClient::instance().signedIn(); }, 60000))
+                    return fail("not signed in to Phoenix Cloud");
+            }
+            else if (what == "open")
+            {
+                CloudDocuments::instance().open(arg, &window);
+                const auto opened = [&arg]() {
+                    for (const QJsonValue& doc : CloudDocuments::instance().report())
+                        if (doc.toObject().value("id").toString() == arg)
+                            return true;
+                    return false;
+                };
+                if (!waitFor(opened, 30000))
+                    return fail("the cloud document did not open");
+                pump(500);
+            }
+            else if (what == "wait-saves")
+            {
+                pump(200);
+                if (!waitFor([]() { return !CloudDocuments::instance().busy(); }, 30000))
+                    return fail("saves to Phoenix Cloud did not finish");
+            }
+            else if (what == "new" || what == "upload")
+            {
+                // A new blank document named <arg>, or the file <arg> made
+                // one: made in the cloud, then opened.
+                const int before = CloudDocuments::instance().report().size();
+                if (what == "new")
+                    CloudDocuments::instance().create(QJsonObject{{"name", arg}, {"width", 640}, {"height", 360}}, &window);
+                else
+                    CloudDocuments::instance().upload(arg, QFileInfo(arg).fileName(), QString(), QString(), &window);
+                if (!waitFor([before]() { return CloudDocuments::instance().report().size() > before; }, 60000))
+                    return fail("the new cloud document did not open");
+                pump(500);
+            }
+            else if (what == "library")
+            {
+                CloudDocuments::instance().openLibrary(arg, &window);
+                pump(4000);
+            }
+            else if (what == "wait")
+                pump(arg.toInt());
+            else if (what == "report")
+            {
+                QFile out(arg);
+                const QJsonObject json{{"signedIn", CloudClient::instance().signedIn()},
+                    {"user", CloudClient::instance().userName()}, {"documents", CloudDocuments::instance().report()}};
+                if (!out.open(QIODevice::WriteOnly) || out.write(QJsonDocument(json).toJson()) < 0)
+                    return fail("could not write the report");
+            }
+            else
+                return fail("which cloud step?");
+        }
+#endif
         else if (step == "script")
         {
             if (!window.scripts() || !window.scripts()->runFile(QFileInfo(first).absoluteFilePath()))
