@@ -240,6 +240,7 @@ set(HEADERS
     src/gui/width_tool.h
     src/gui/preferences.h
     src/gui/shortcuts_dialog.h
+    src/gui/command_palette.h
     src/gui/movie_explorer.h
     src/gui/envelope_dialog.h
     src/gui/ease_curve_dialog.h
@@ -577,6 +578,7 @@ set(SOURCES
     src/gui/width_tool.cpp
     src/gui/preferences.cpp
     src/gui/shortcuts_dialog.cpp
+    src/gui/command_palette.cpp
     src/gui/movie_explorer.cpp
     src/gui/envelope_dialog.cpp
     src/gui/ease_curve_dialog.cpp

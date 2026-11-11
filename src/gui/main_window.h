@@ -808,6 +808,7 @@ private:
     QPointer<class BrushPropertiesDialog> _brushProperties;
     /// Window > Render Queue, made when first asked for and kept.
     QPointer<class RenderQueue> _renderQueue;
+    QPointer<class CommandPalette> _commandPalette;
     QPointer<class BrushLibraryDialog> _brushLibrary;
     /// The brush definitions the stage last laid strokes out with, so an
     /// edit or an undo that changes them draws the strokes again.

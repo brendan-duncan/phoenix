@@ -113,6 +113,7 @@
 #include "../parser/fla_doctor.h"
 #include "../edit/linked_assets.h"
 #include "command_line.h"
+#include "command_palette.h"
 #include "swatches_panel.h"
 #include "swatch_popup.h"
 #include "../edit/swatches.h"
@@ -8832,6 +8833,16 @@ void MainWindow::setupMenus()
     guideAction->setStatusTip("Open Phoenix's user guide in your browser");
     connect(guideAction, &QAction::triggered, this,
         []() { QDesktopServices::openUrl(QUrl("https://phoenixanimate.com/")); });
+    // Find Command: any command or tool by typing part of its name.
+    QAction* findCommandAction = helpMenu->addAction("&Find Command...");
+    findCommandAction->setObjectName("findCommand");
+    findCommandAction->setShortcut(QKeySequence("Ctrl+Shift+P"));
+    findCommandAction->setStatusTip("Find any command or tool by typing part of its name, and run it");
+    connect(findCommandAction, &QAction::triggered, this, [this]() {
+        if (!_commandPalette)
+            _commandPalette = new CommandPalette(this);
+        _commandPalette->open(_shortcuts);
+    });
     helpMenu->addSeparator();
     QAction* startAction = new QAction("&Start Screen...", this);
     startAction->setStatusTip("New from a preset, or open a recent file");

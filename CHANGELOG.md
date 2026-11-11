@@ -2,6 +2,10 @@
 
 What changed in each release of Phoenix, newest first.
 
+## Unreleased
+
+- Help > Find Command (Ctrl+Shift+P) finds any menu command or tool by typing part of its name and runs it, showing where it lives in the menus and its key; with nothing typed it lists the commands run from it last
+
 ## 0.24.2
 
 - Text set in a font's other faces draws in that face: Arial Black, Arial Narrow, Segoe UI Semibold and the like no longer fall back to the regular one
