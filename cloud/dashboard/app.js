@@ -4,7 +4,7 @@
 import { get, post, setCsrf, setLink } from './api.js';
 import { newDocumentDialog, renderDocument, renderListing, UPLOAD_TYPES, uploadFiles } from './files.js';
 import {
-  newGroupDialog, renderAccount, renderAdmin, renderAdminUser, renderConfirm, renderForgot, renderGroupPage, renderInvite, renderLocked, renderPlayer, renderRegister, renderReset, renderSignin,
+  newGroupDialog, renderAccount, renderAdmin, renderAdminUser, renderConfirm, renderDesktop, renderForgot, renderGroupPage, renderInvite, renderLocked, renderPlayer, renderRegister, renderReset, renderSignin,
 } from './pages.js';
 import { renderMessages, renderNotifications } from './messages.js';
 import { avatar, clear, closeMenu, h, icon, popup, promptDialog, showError, timeAgo, toast } from './ui.js';
@@ -303,7 +303,7 @@ async function route() {
     return;
   }
   if (!state.me.user) {
-    const back = path.startsWith('/d/') || path.startsWith('/play/') ? `${path}${location.search}` : path;
+    const back = path.startsWith('/d/') || path.startsWith('/play/') || path === '/desktop' ? `${path}${location.search}` : path;
     navigate(`/signin?return=${encodeURIComponent(back)}`, { replace: true });
     return;
   }
@@ -311,6 +311,13 @@ async function route() {
     shell = null;
     place.drop = false;
     clear(root, renderLocked(signOut));
+    return;
+  }
+  // Phoenix on the desktop asking to sign in.
+  if (path === '/desktop') {
+    shell = null;
+    place.drop = false;
+    clear(root, renderDesktop(params));
     return;
   }
   const player = /^\/play\/([^/]+)$/.exec(path);

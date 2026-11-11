@@ -422,6 +422,27 @@ CREATE TABLE known_devices (
   PRIMARY KEY (user_id, device_hash)
 ) WITHOUT ROWID;
 `,
+  // v10: Phoenix on the desktop signed in (lib/desktop.mjs): the tokens it
+  // calls the API with, and the one-time codes a browser hands it to get one.
+  `
+CREATE TABLE app_tokens (
+  id_hash TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  name TEXT NOT NULL DEFAULT '',
+  created_at INTEGER NOT NULL,
+  last_seen_at INTEGER NOT NULL,
+  expires_at INTEGER NOT NULL
+);
+CREATE INDEX app_tokens_user ON app_tokens (user_id);
+
+CREATE TABLE app_codes (
+  code_hash TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  challenge TEXT NOT NULL,
+  name TEXT NOT NULL DEFAULT '',
+  expires_at INTEGER NOT NULL
+);
+`,
 ];
 
 /** Settings an admin changes at runtime; stored as JSON in `settings`. */

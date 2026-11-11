@@ -27,6 +27,7 @@ import { createApp } from './lib/app.mjs';
 import { BlobStore } from './lib/blobs.mjs';
 import { CLOUD_DIR, editorAvailable, loadConfig } from './lib/config.mjs';
 import { Converter } from './lib/convert.mjs';
+import { purgeDesktop } from './lib/desktop.mjs';
 import { installStarterFonts, listFonts } from './lib/fonts.mjs';
 import { newId } from './lib/ids.mjs';
 import { Mailer } from './lib/mail.mjs';
@@ -99,7 +100,10 @@ async function serve(mode) {
   console.log(`[cloud] sign-in: passwords${providers.length ? `, ${providers.join(', ')}` : ''}`);
   console.log(`[cloud] editor: ${editorAvailable(config) ? config.editorDir : 'not built (python tools/web/build_web.py)'}`);
   console.log(`[cloud] new documents and conversion: ${config.phoenix ?? 'off (no Phoenix build; set PHOENIX_CLOUD_PHOENIX)'}`);
-  const tidy = () => app.sessions.purgeExpired();
+  const tidy = () => {
+    app.sessions.purgeExpired();
+    purgeDesktop(app.store);
+  };
   tidy();
   setInterval(tidy, HOUR).unref();
   const stop = () => {

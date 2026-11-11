@@ -6,6 +6,7 @@ import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { ensureDefaultAdmin, Sessions } from './accounts.mjs';
 import { registerAdmin } from './api/admin.mjs';
+import { bearerOf, registerDesktop, tokenAuth, tokenMay } from './desktop.mjs';
 import { registerAuth } from './api/auth.mjs';
 import { registerDocuments } from './api/documents.mjs';
 import { registerGroups } from './api/groups.mjs';
@@ -39,11 +40,14 @@ class Context {
     this.params = params;
     this.session = auth?.session ?? null;
     this.user = auth?.user ?? null;
+    // Phoenix on the desktop, signed in with a token (desktop.mjs).
+    this.appToken = auth?.token ?? null;
     // An admin who has not turned on two-step sign-in (while the setting
     // asks it of admins) has no admin powers until they do. In production;
     // in dev only when PHOENIX_CLOUD_TWO_STEP_IN_DEV says so (tests).
     this.adminNeedsTwoStep = Boolean(this.user?.is_admin && !this.user.totp_secret && app.config.twoStepForAdmins && app.store.settings.adminsNeedTwoStep);
-    if (this.adminNeedsTwoStep) {
+    // A token never has admin powers: those are only for the browser.
+    if (this.adminNeedsTwoStep || this.appToken) {
       this.user = { ...this.user, is_admin: 0 };
     }
     this.status = 200;
@@ -140,6 +144,7 @@ export function createApp({ config, store, blobs }) {
   registerGroups(router, app);
   registerAdmin(router, app);
   registerMessages(router, app);
+  registerDesktop(router, app);
   app.handle = (req, res) => handleCloud(app, req, res);
   app.handlePlay = (req, res) => handlePlay(app, req, res);
   return app;
@@ -240,7 +245,15 @@ async function handleApi(app, req, res, url) {
   if (!match) {
     throw notFound('No such API.');
   }
-  const auth = app.sessions.fromRequest(req);
+  // A token (Phoenix on the desktop) or the browser's session.
+  const bearer = bearerOf(req);
+  const auth = bearer ? tokenAuth(app.store, bearer) : app.sessions.fromRequest(req);
+  if (bearer && !auth) {
+    throw new HttpError(401, 'signed_out', 'Phoenix is signed out of Phoenix Cloud. Sign in again.');
+  }
+  if (auth?.token && !tokenMay(req.method, url.pathname)) {
+    throw new HttpError(403, 'browser_only', 'Do that in Phoenix Cloud in your browser.');
+  }
   const ctx = new Context(app, req, res, url, match.params, auth);
   // Locked (maintenance): only admins use the site; anyone can see that it
   // is locked, and admins can sign in.
@@ -254,9 +267,10 @@ async function handleApi(app, req, res, url) {
     if (origin && origin !== new URL(app.config.publicUrl).origin) {
       throw new HttpError(403, 'origin', 'That request came from another site.');
     }
-    if (auth) {
+    // A token has no cookie for another site to ride on: no CSRF token.
+    if (auth?.session) {
       app.sessions.checkCsrf(auth.session, req.headers['x-csrf-token']);
-    } else if (!match.handler.anonymous) {
+    } else if (!auth && !match.handler.anonymous) {
       throw new HttpError(401, 'signed_out', 'Sign in first.');
     }
   }

@@ -101,6 +101,47 @@ function twoStepCard(ticket, returnTo) {
   return card(logo(), h('h1', {}, 'Two-step sign-in'), box, form);
 }
 
+/**
+ * /desktop: Phoenix on this computer asks to use the account. Allowing it
+ * hands Phoenix a one-time code at the port it listens on (lib/desktop.mjs).
+ */
+export function renderDesktop(params) {
+  const me = state.me.user;
+  const port = Number(params.get('port'));
+  const stateValue = params.get('state') ?? '';
+  const challenge = params.get('challenge') ?? '';
+  const name = (params.get('name') ?? '').slice(0, 80) || 'Phoenix';
+  const valid = Number.isInteger(port) && port >= 1024 && port <= 65535 && /^[A-Za-z0-9_-]{16,128}$/.test(stateValue) &&
+    /^[A-Za-z0-9_-]{43}$/.test(challenge);
+  if (!valid) {
+    return card(logo(), h('h1', {}, 'Sign in from Phoenix'),
+      h('p', { class: 'muted' }, 'This page is opened by Phoenix on your computer: choose File › Phoenix Cloud › Sign In in Phoenix.'),
+      h('a', { class: 'btn wide', href: '/' }, 'Go to your files'));
+  }
+  const box = messageBox();
+  const back = (query) => {
+    location.href = `http://127.0.0.1:${port}/callback?${new URLSearchParams({ ...query, state: stateValue })}`;
+  };
+  const allow = h('button', {
+    type: 'button', class: 'btn primary wide', onclick: async () => {
+      allow.disabled = true;
+      try {
+        const { redirect } = await post('/api/desktop/authorize', { port, state: stateValue, challenge, name });
+        location.href = redirect;
+      } catch (err) {
+        allow.disabled = false;
+        say(box, err.message);
+      }
+    },
+  }, 'Allow');
+  return card(logo(), h('h1', {}, 'Sign in Phoenix on your computer?'),
+    h('p', {}, `${name} will open, save and make documents in Phoenix Cloud as `, h('strong', {}, me.name), '.'),
+    h('p', { class: 'muted small' }, 'It cannot change your account or use the admin tools. Account › Where you are signed in signs it out.'),
+    box,
+    allow,
+    h('button', { type: 'button', class: 'btn ghost wide', onclick: () => back({ error: 'cancelled' }) }, 'Cancel'));
+}
+
 export function renderSignin(params) {
   const me = state.me;
   const returnTo = params.get('return') || '/';
@@ -470,7 +511,8 @@ function pictureRow(me) {
 }
 
 export async function renderAccount(target) {
-  const [{ sessions }, { identities }] = await Promise.all([get('/api/me/sessions'), get('/api/me/identities')]);
+  const [{ sessions }, { identities }, { apps }] = await Promise.all([get('/api/me/sessions'), get('/api/me/identities'),
+    get('/api/me/apps').catch(() => ({ apps: [] }))]);
   if (!target.isConnected) {
     return;
   }
@@ -569,7 +611,11 @@ export async function renderAccount(target) {
     h('h2', {}, 'Where you are signed in'),
     sessions.map((s) => h('div', { class: 'row' },
       h('div', { class: 'grow' }, h('div', {}, s.userAgent || 'Unknown browser'), h('div', { class: 'muted small' }, `${s.current ? 'This browser · ' : ''}active ${timeAgo(s.lastSeenAt)} · signed in ${dateTime(s.createdAt)}`)),
-      s.current ? null : h('button', { type: 'button', class: 'btn ghost', onclick: async () => { await del(`/api/me/sessions/${s.id}`).catch(showError); rerender(); } }, 'Sign out'))));
+      s.current ? null : h('button', { type: 'button', class: 'btn ghost', onclick: async () => { await del(`/api/me/sessions/${s.id}`).catch(showError); rerender(); } }, 'Sign out'))),
+    // Phoenix on the desktop (lib/desktop.mjs).
+    apps.map((a) => h('div', { class: 'row' },
+      h('div', { class: 'grow' }, h('div', {}, `Phoenix on ${a.name}`), h('div', { class: 'muted small' }, `active ${timeAgo(a.lastSeenAt)} · signed in ${dateTime(a.createdAt)}`)),
+      h('button', { type: 'button', class: 'btn ghost', onclick: async () => { await del(`/api/me/apps/${a.id}`).catch(showError); rerender(); } }, 'Sign out'))));
 
   const plan = state.me.plan;
   const planPanel = h('div', { class: 'panel stack cards-form' },
