@@ -49,6 +49,13 @@ struct Settings
 bool run(const Settings& settings, PhoenixView& view, TimelineAudio* audio, const fla::Document& document,
     QStringList& written, QStringList& notes, QString& error);
 
+/// \a document's content (fla::html5::content) as \a view draws it, for
+/// exporting to formats other than the page (Lottie): text as outlines, its
+/// pictures each a file in \a folder (the content's images naming them
+/// relative to it), no sounds or scripts. \a notes gets what could not go
+/// as it is.
+std::string exportContent(PhoenixView& view, const fla::Document& document, const QString& folder, QStringList& notes);
+
 /// The runtime as one script: as3.js (libas3's runtime for translated
 /// ActionScript), then resources/html5's files in order.
 QByteArray runtime();

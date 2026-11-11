@@ -114,6 +114,7 @@
 #include "../edit/linked_assets.h"
 #include "command_line.h"
 #include "command_palette.h"
+#include "lottie_export.h"
 #include "swatches_panel.h"
 #include "swatch_popup.h"
 #include "../edit/swatches.h"
@@ -7368,6 +7369,11 @@ void MainWindow::setupMenus()
             });
     });
     exportMenu->addAction(exportSwfAction);
+    QAction* exportLottieAction = new QAction("Export &Lottie...", this);
+    exportLottieAction->setObjectName("exportLottie");
+    exportLottieAction->setStatusTip("The movie as a Lottie animation (JSON) for web and app players");
+    connect(exportLottieAction, &QAction::triggered, this, &MainWindow::exportLottie);
+    exportMenu->addAction(exportLottieAction);
 
     // Publish: Publish Settings, then the document's publish configurations,
     // the current one first (Shift+F12), each publishing as it says.
@@ -9207,6 +9213,38 @@ void MainWindow::saveFileAsThen(std::function<void()> saved)
     });
 }
 
+void MainWindow::exportLottie()
+{
+    const fla::Document* document = _flaDocument ? _flaDocument->document : nullptr;
+    if (!document || !_phoenixView)
+        return;
+    const QString base = _documentPath.isEmpty() ? QString("animation") : QFileInfo(_documentPath).completeBaseName();
+    const QString folder = _lastDirectory.isEmpty() ? QFileInfo(_documentPath).absolutePath() : _lastDirectory;
+    const fla::FLADocument* asked = _flaDocument;
+    file_pick::save(this, "Export Lottie", QDir(folder).filePath(base + ".json"), "Lottie Animation (*.json)",
+        [this, asked, document](const QString& path) {
+            if (_flaDocument != asked)
+                return;
+            QString error;
+            QStringList notes;
+            QApplication::setOverrideCursor(Qt::WaitCursor);
+            const bool written = LottieExport::write(*_phoenixView, *document, path, notes, error);
+            QApplication::restoreOverrideCursor();
+            _phoenixView->clearCaches();
+            _phoenixView->update();
+            if (!written)
+            {
+                modal::warning(this, "Export Failed", error);
+                return;
+            }
+            _lastDirectory = QFileInfo(path).absolutePath();
+            statusBar()->showMessage(QString("Exported %1").arg(QDir::toNativeSeparators(path)), 5000);
+            if (!notes.isEmpty())
+                modal::information(this, "Exported to Lottie",
+                    "The animation is exported. Some of it is not as Phoenix draws it:\n\n- " + notes.join("\n- "));
+        });
+}
+
 void MainWindow::exportSvg()
 {
     if (!_flaDocument || !_flaDocument->document)
@@ -9290,6 +9328,22 @@ int MainWindow::exportFromCommandLine(const QString& source, const QString& outp
         return 1;
     }
     const fla::Document* document = _flaDocument->document;
+    if (output.endsWith(".json", Qt::CaseInsensitive) && !perLayer)
+    {
+        // A Lottie animation.
+        QString error;
+        QStringList notes;
+        const QString path = QFileInfo(output).absoluteFilePath();
+        if (!LottieExport::write(*_phoenixView, *document, path, notes, error))
+        {
+            std::fprintf(stderr, "%s\n", qPrintable(error));
+            return 1;
+        }
+        for (const QString& note : notes)
+            std::fprintf(stderr, "%s\n", qPrintable(note));
+        std::printf("Exported a Lottie animation to %s\n", qPrintable(path));
+        return 0;
+    }
     if (output.endsWith(".swf", Qt::CaseInsensitive) && !perLayer)
     {
         // A movie with its scripts, or of vector shapes, with its soundtrack.
@@ -9843,6 +9897,23 @@ int MainWindow::renderCommand(const QString& source, const QStringList& options)
     {
         settings.format = MovieExportSettings::Format::SvgSequence;
         QDir().mkpath(QFileInfo(out).absolutePath());
+    }
+    else if (suffix == "json")
+    {
+        // A Lottie animation of the scene's frames.
+        QDir().mkpath(QFileInfo(out).absolutePath());
+        QStringList notes;
+        QString error;
+        if (!LottieExport::write(*_phoenixView, *document, QFileInfo(out).absoluteFilePath(), notes, error))
+        {
+            std::fprintf(stderr, "%s\n", qPrintable(error));
+            return 1;
+        }
+        for (const QString& note : notes)
+            std::fprintf(stderr, "%s\n", qPrintable(note));
+        std::printf("Exported %s as a Lottie animation to %s\n", qPrintable(source),
+            qPrintable(QFileInfo(out).absoluteFilePath()));
+        return 0;
     }
     else if (suffix == "html" || suffix == "htm")
     {

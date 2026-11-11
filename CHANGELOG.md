@@ -4,6 +4,8 @@ What changed in each release of Phoenix, newest first.
 
 ## Unreleased
 
+- File > Export > Export Lottie writes the movie as a Lottie animation (JSON) for web and app players: shapes, gradients, bitmaps and text as outlines; classic, shape and motion tweens, nested symbols, graphic loops and movie clips held at a stop(); masks as track mattes; color effects, blur and drop shadow. What Lottie cannot show (other filters, some blend modes, sounds, scripts) is listed after exporting
+- `Phoenix render <file> --out anim.json` exports a Lottie animation from the command line
 - Help > Find Command (Ctrl+Shift+P) finds any menu command or tool by typing part of its name and runs it, showing where it lives in the menus and its key; with nothing typed it lists the commands run from it last
 
 ## 0.24.2

@@ -241,6 +241,7 @@ set(HEADERS
     src/gui/preferences.h
     src/gui/shortcuts_dialog.h
     src/gui/command_palette.h
+    src/gui/lottie_export.h
     src/gui/movie_explorer.h
     src/gui/envelope_dialog.h
     src/gui/ease_curve_dialog.h
@@ -579,6 +580,7 @@ set(SOURCES
     src/gui/preferences.cpp
     src/gui/shortcuts_dialog.cpp
     src/gui/command_palette.cpp
+    src/gui/lottie_export.cpp
     src/gui/movie_explorer.cpp
     src/gui/envelope_dialog.cpp
     src/gui/ease_curve_dialog.cpp

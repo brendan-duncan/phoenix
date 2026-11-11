@@ -256,6 +256,8 @@ private slots:
     void downloadCopy();
 
     void exportSvg();
+    /// File > Export > Export Lottie: the movie as a Lottie animation.
+    void exportLottie();
     void exportMovie();
     /// File > Share: the movie for the web and social sites
     /// (main_window_share.cpp).

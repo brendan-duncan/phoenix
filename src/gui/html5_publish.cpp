@@ -150,6 +150,11 @@ public:
 
     QStringList written;
     QStringList notes;
+    /// For exporting to formats with no fonts of their own (Lottie): text
+    /// drawn as the outlines of its glyphs, and each frame picture a file of
+    /// its own rather than a part of a sheet.
+    bool outlineText = false;
+    bool loosePictures = false;
 
     /// The sounds scripts make by their linkage, whether or not a frame
     /// plays them.
@@ -403,6 +408,8 @@ private:
     /// to go on a sheet (packFrames).
     int frameIndex(const QImage& source)
     {
+        if (loosePictures)
+            return imageIndex(source);
         const QImage image = source.convertToFormat(QImage::Format_ARGB32_Premultiplied);
         QCryptographicHash hash(QCryptographicHash::Sha1);
         hash.addData(QByteArrayView(reinterpret_cast<const char*>(image.constBits()), image.sizeInBytes()));
@@ -688,6 +695,17 @@ private:
         {
             if (item.text.trimmed().isEmpty())
                 return std::string();
+            if (outlineText)
+            {
+                // The glyphs as the stage drew them, filled.
+                QPainterPath glyphs;
+                glyphs.addText(item.at, item.font, item.text);
+                RecordedItem area = item;
+                area.kind = RecordedItem::Kind::Fill;
+                area.path = item.transform.map(glyphs);
+                area.path.setFillRule(Qt::WindingFill);
+                return opJson(area, box);
+            }
             const std::string fill = fillJson(item.brush, alpha);
             if (fill.empty())
                 return std::string();
@@ -838,6 +856,21 @@ QByteArray actionScript2Runtime()
     return "// avm1.js (libas3): ActionScript 1 and 2's semantics for translated scripts.\n" +
         QByteArray::fromStdString(fla::html5as2::avm1Runtime()) + "\n// as2.js\n" + resource("as2.js") +
         "\n// as2components.js\n" + resource("as2components.js");
+}
+
+std::string exportContent(PhoenixView& view, const fla::Document& document, const QString& folder, QStringList& notes)
+{
+    ViewArt art(view, nullptr, document, QDir(folder), "images");
+    art.outlineText = true;
+    art.loosePictures = true;
+    fla::html5::Options options;
+    options.javaScript = fla::canvas::isCanvasDocument(document);
+    std::vector<std::string> found;
+    const std::string content = fla::html5::content(document, art, options, &found);
+    for (const std::string& note : found)
+        notes << QString::fromStdString(note);
+    notes << art.notes;
+    return content;
 }
 
 bool run(const Settings& settings, PhoenixView& view, TimelineAudio* audio, const fla::Document& document,
