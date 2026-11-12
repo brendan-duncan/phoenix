@@ -14,6 +14,10 @@ See [docs/building.md](docs/building.md) to build Phoenix from source and run it
 
 See [docs/README.md](docs/README.md) for a collection of design docs about how Phoenix was written.
 
+## AI Disclosure
+
+AI was used in the development of Phoenix: its code, tests and documentation were written with the help of AI coding assistants, including Claude.
+
 ## License
 
 Phoenix is released under the [MIT License](LICENSE).

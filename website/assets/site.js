@@ -246,7 +246,8 @@ function buildPager(content, page) {
 }
 
 // The footer every page ends with: the version, where to report a mistake,
-// the copyright, the privacy statement and how to reach the author.
+// how to reach the author, the AI disclosure, the copyright and the privacy
+// statement.
 function buildFooter(content) {
   const footer = document.createElement("footer");
   footer.className = "site-footer";
@@ -256,6 +257,7 @@ function buildFooter(content) {
     `<a href="mailto:${CONTACT.email}">${ICONS.mail}<span>${CONTACT.email}</span></a>` +
     //`<a href="${CONTACT.mastodon}" rel="me">${ICONS.mastodon}<span>Mastodon</span></a>` +
     `</p>` +
+    `<p class="ai-disclosure">AI was used in the development of Phoenix: its code, tests and documentation were written with the help of AI coding assistants, including Claude.</p>` +
     `<p class="copyright">Copyright &copy; 2026 Brendan Duncan. All rights reserved. <a href="privacy.html">Privacy</a></p>`;
   content.append(footer);
 }
